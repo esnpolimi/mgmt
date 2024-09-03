@@ -1,0 +1,13 @@
+{"email":"damiano.tomazzolli@esnpolimi.it","name":"damiano","surname":"tomazzolli","country":"IT","gender":"M","birthdate":"02/04/2001","course":"Engineering","phone":"+393333333333","person_code":"0","domicile":"lavis","residency":"lavis", "document-type":"Passport","document-number":"123a","document-expiration":"01/01/2034","matricola-number":"123","matricola-exchange_end":"01/07/2024"}
+
+{"email":"matteo.pompilio@esnpolimi.it","name":"matteo","surname":"pompilio","country":"IT","gender":"M","birthdate":"04/02/2001","course":"Engineering","phone":"+393333333333","person_code":"312312","domicile":"puglia","residency":"puglia", "document-type":"Passport","document-number":"123a123","document-expiration":"01/01/2034","matricola-number":"12343211","matricola-exchange_end":"01/07/2024"}
+
+{"profile":"4","type":"passport","number":"197662","expiration_date":"01/01/2099"}
+
+{"profile_id":"2","account":"Leonardo"}
+
+
+{"name":"Viaggio in Emilia","date":"10/27/2024","description":"viaggio in emiliaaa","enable_form":true,"tables":{"ML":55, "WL":20},"profile_fields":["name","surname"],"form_fields":{"i_valigie":{"office_view":true,"office_edit":true}, "m_kit":{"choices":{"A":"", "B":"", "C":""}, "office_view":true,"office_edit":true} }, "additional_fields":{"t_note":{"length":300, "office_view":true,"office_edit":true} } }
+
+
+{"profile":"1","event":"2","event_data":{"color":"","table":"ML"}}
