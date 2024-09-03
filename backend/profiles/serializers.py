@@ -1,0 +1,83 @@
+from rest_framework import serializers
+from django_countries.serializer_fields import CountryField
+from profiles.models import Profile, Document, Matricola
+from treasury.serializers import ESNCardSerializer
+
+#Serializer to view documents
+class DocumentViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Document
+        exclude = ['profile']
+
+#Serializer to view matricole
+class MatricolaViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Matricola
+        exclude = ['profile']
+
+# Serializer to create documents 
+class DocumentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Document
+        fields = '__all__'
+        read_only_fields = ['id','created_at','updated_at','enabled']
+
+# Serializer to create matricole
+class MatricolaCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Matricola
+        fields = '__all__'
+        read_only_fields = ['id','created_at','updated_at','enabled']
+
+# Serializer to edit documents 
+class DocumentEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Document
+        fields = ['number','expiration']
+
+# Serializer to edit matricole
+class MatricolaEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Matricola
+        exclude = ['number','exchange_end']
+        
+
+# Serializer to view a profile in detail (i.e. including all esncards, documents and matricole),  
+class ProfileDetailViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = '__all__'
+        read_only_views = ['id','created_at','updated_at','enabled','esncards','documents','matricole']
+
+    esncards = ESNCardSerializer(source='esncard_set',many=True)
+    documents = DocumentViewSerializer(source='document_set',many=True)
+    matricole = MatricolaViewSerializer(source='matricola_set',many=True)
+    country = CountryField()
+
+# Serializer to view a profile overview (i.e. including just the latest esncard, document, matricola)
+class ProfileListViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = '__all__'
+
+    country = CountryField()
+    latest_esncard = ESNCardSerializer()
+    latest_document = DocumentViewSerializer()
+    latest_matricola = MatricolaViewSerializer()
+
+# Serializer for editing a profile (except for id, created_at, updated_at and enabled fields).
+class ProfileFullEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        exclude = ['id','created_at','updated_at','enabled']
+
+# Serializer for editing a profile's person code.
+class ProfileBasicEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ['person_code']
+
+class ProfileCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        exclude = ['id','created_at','updated_at','enabled','email_is_verified']
