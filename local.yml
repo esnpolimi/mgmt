@@ -12,8 +12,8 @@ services:
     build: ./frontend
     volumes:
       - type: bind
-        source: ./frontend
-        target: /app
+        source: ./frontend/src
+        target: /app/src
     ports:
       - "3000:3000"
   
