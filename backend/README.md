@@ -1,3 +1,35 @@
+This is repository contains the code that implements the REST API for the  ESN management platform. It is written in python, using [Django](www.djangoproject.com) and [Django Rest Framework](https://www.django-rest-framework.org/).
+The code is divided into 4 apps that handle different functionalities 
+of the management platform.
+
+- **profiles**: manages the registration of new profiles (erasmus or esners), adding or editing documents or matricole, releasing esncards, retrieving data and search through it.
+
+- **events**: manages events, i.e. creation, editing, registering a profile to an event, etc. 
+
+- **treasury**: manages transactions (created when a payment is issued, for example when registering to an event or releasing an esncard) and accounts (i.e. casse)
+
+- **users**: handles authentication
+
+These modules are not isolated, but each one can access each other. It could not be otherwise, as, for example, events depend on profiles and on transactions.
+The structure of every app is as follows:
+
+- models.py contains the models, i.e. classes representing objects that are then automatically translated by django in database tables. 
+
+- serializers.py contains serializers, i.e. classes acting as a bridge between the database and the API. For example, they can:
+    - retrieve objects from the database and serialize it to JSON
+    - convert JSON into a database object
+    - edit fields of database object given JSON that describes them
+
+- views.py contains the functions that handle request to the different endpoints. They take as input the request, process it (for example using serializers) and return a response (for example json from a serializer)
+
+- urls.py binds the functions in views.py to the endpoints paths
+
+
+
+
+
+
+
 # Profile endpoints
 
 ### Create profile 
