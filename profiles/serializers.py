@@ -3,19 +3,29 @@ from django_countries.serializer_fields import CountryField
 from profiles.models import Profile, Document, Matricola
 from treasury.serializers import ESNCardSerializer
 
+# Serializers are classes that take an object from the database and 
+# turn it into json (or other formats) in order to be sent through the API.
+# Serializers can also do the opposite: they turn API data into database objects.
+# There are different serializers for different use cases. For example some fields cannot 
+# be edited, but just viewed. 
+#Recommended read: https://www.django-rest-framework.org/api-guide/serializers/
+
 #Serializer to view documents
+# Takes the document object and turns it into json, excluding the profile fields
 class DocumentViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         exclude = ['profile']
 
 #Serializer to view matricole
+# Takes the matricola object and turns it into json, excluding the profile fields
 class MatricolaViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Matricola
         exclude = ['profile']
 
 # Serializer to create documents 
+# Takes the data from API and creates an object
 class DocumentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
