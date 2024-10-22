@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from backend.settings import HOSTNAME
-from profiles.models import Profile, Document, Matricola
+from    profiles.models import Profile, Document, Matricola
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
 from profiles.serializers import MatricolaCreateSerializer, DocumentCreateSerializer, MatricolaEditSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
 from profiles.tokens import email_verification_token
