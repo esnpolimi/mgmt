@@ -12,6 +12,7 @@ from profiles.serializers import MatricolaCreateSerializer, DocumentCreateSerial
 from profiles.tokens import email_verification_token
 from users.auth_guard import login_required
 from users.managers import UserManager
+from users.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -53,29 +54,28 @@ def profile_creation(request):
                 document_serializer.save(profile=profile)
                 matricola_serializer.save(profile=profile)
 
-            # If ESN member, create an associated User
-            if is_esner:
-                user_manager = UserManager()  # Initialize your user manager
-                user = user_manager.create_user(
-                    email=profile.email,
-                    password=data.get('password'), # ('password', UserManager().make_random_password()) generates a password if none provided
-                    profile=profile  # Link user to profile
+                # If ESN member, create an associated User
+                if is_esner:
+                    user = User.objects.create_user(
+                        profile=profile, # Link user to profile
+                        password=data.get('password', UserManager().make_random_password())  # Generate a password if none provided
+                    )
+                    # Assign to the "Aspirant" group
+                    aspirant_group, created = Group.objects.get_or_create(name="Aspirant")
+                    user.groups.add(aspirant_group)
+
+                # Send email for email verification
+                token = email_verification_token.make_token(profile)
+                verification_link = HOSTNAME + '/profile/' + str(profile.pk) + '/verification/' + token
+
+                send_mail(
+                    "Email verification",
+                    verification_link,
+                    "noreply@" + HOSTNAME,
+                    [profile.email],
+                    fail_silently=False
                 )
 
-                # Assign to the "Aspirant" group
-                aspirant_group, created = Group.objects.get_or_create(name="Aspirant")
-                user.groups.add(aspirant_group)
-
-            # Send email for email verification
-            token = email_verification_token.make_token(profile)
-            verification_link = HOSTNAME + '/profile/' + str(profile.pk) + '/verification/' + token
-
-            send_mail(
-                "Email verification",
-                verification_link,
-                "noreply@" + HOSTNAME,
-                [profile.email],
-                fail_silently=False, )
             return Response({"message": "Profile created successfully."}, status=200)
 
         else:

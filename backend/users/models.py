@@ -9,12 +9,9 @@ from users.managers import UserManager
 # is_superuser, groups (), user_permissions
 class User(AbstractBaseUser, PermissionsMixin):
     profile = models.OneToOneField(Profile, to_field='email', primary_key=True, on_delete=models.CASCADE)
-
-    is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-
     date_joined = models.DateTimeField(auto_now_add=True)
-    # last_login = models.DateTimeField(auto_now=True)
+    last_login = models.DateTimeField(null=True, blank=True)  # Override last_login, to be NULL initially
 
     USERNAME_FIELD = 'profile'
     REQUIRED_FIELDS = []
