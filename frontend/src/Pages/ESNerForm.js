@@ -31,6 +31,7 @@ const ErasmusForm = () => {
         'document-expiration': dayjs(),
         'matricola-number': '',
         'matricola-exchange_end': dayjs(),
+        'is_esner': true
     });
 
     const [formErrors, setFormErrors] = React.useState({
@@ -54,6 +55,7 @@ const ErasmusForm = () => {
         'document-expiration': [false, ''],
         'matricola-number': [false, ''],
         'matricola-exchange_end': [false, ''],
+        'is_esner': [false, '']
     })
 
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -114,7 +116,7 @@ const ErasmusForm = () => {
             });
         }
 
-        var body = {
+        let body = {
             ...formData,
             'birthdate': formatDateString(formData['birthdate']),
             'document-expiration': formatDateString(formData['document-expiration']),
@@ -122,36 +124,36 @@ const ErasmusForm = () => {
         }
 
         
-        // fetch('http://localhost:8000/profile/', {
-        //     method: 'POST',
-        //     credentials: 'include',
-        //     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken') },
-        //     body: JSON.stringify(body),
-        // }).then(
-        //     (response) => {
-        //         if (response.ok) {
-        //             setSubmitted(true);
-        //         } else if (response.status === 400) {
-        //             response.json().then((json) => {
-        //                 var errors = Object.fromEntries(Object.keys(formErrors).map(
-        //                     (e) => {
-        //                         if (e in json) {
-        //                             return [e, [true, json[e]]];
-        //                         } else {
-        //                             return [e, [false, '']];
-        //                         }
-        //                     }
-        //                 ));
-        //                 setFormErrors(errors);
-        //             })
-        //             scrollUp();
-        //         } else {
-        //             throw new Error('Error while fetching /profiles/');
-        //         }
-        //     }
-        // ).catch((error) => {
-        //     console.log(error);
-        // })
+        fetch('http://localhost:8000/profile/', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken') },
+            body: JSON.stringify(body),
+        }).then(
+            (response) => {
+                if (response.ok) {
+                    setSubmitted(true);
+                } else if (response.status === 400) {
+                    scrollUp();
+                    response.json().then((json) => {
+                        let errors = Object.fromEntries(Object.keys(formErrors).map(
+                            (e) => {
+                                if (e in json) {
+                                    return [e, [true, json[e]]];
+                                } else {
+                                    return [e, [false, '']];
+                                }
+                            }
+                        ));
+                        setFormErrors(errors);
+                    })
+                } else {
+                    throw new Error('Error while fetching /profiles/');
+                }
+            }
+        ).catch((error) => {
+            console.log(error);
+        })
 
     };
 
@@ -275,9 +277,6 @@ const ErasmusForm = () => {
                             onChange={handleChange}
                             label="Gender"
                         >
-                            <MenuItem value="">
-                                {/* <em>None</em> */}
-                            </MenuItem>
                             <MenuItem value="M">Male</MenuItem>
                             <MenuItem value="F">Female</MenuItem>
                             <MenuItem value="O">Other</MenuItem>

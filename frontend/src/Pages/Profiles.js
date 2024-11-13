@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, {useEffect, useState, useMemo} from 'react';
 import Cookies from 'js-cookie';
-import { Box, Typography, Chip, MenuItem, ListItemIcon, CssBaseline, IconButton } from '@mui/material';
-import { AccountCircle, Send, People } from '@mui/icons-material';
+import {Box, Typography, Chip, MenuItem, ListItemIcon, CssBaseline, IconButton} from '@mui/material';
+import {AccountCircle, Send, People} from '@mui/icons-material';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
-import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
+import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.js'
 import ProfileDetail from '../Components/ProfileDetail.js';
 import dayjs from 'dayjs';
@@ -15,8 +15,8 @@ export default function Profiles() {
     const [loading, setLoading] = useState(true);
     const [drawerOpen, toggleDrawer] = useState(false);
 
-    const [modalOpen,toggleModal] = useState(false);
-    const[emissionProfile, setEmissionProfile] = useState({});
+    const [modalOpen, toggleModal] = useState(false);
+    const [emissionProfile, setEmissionProfile] = useState({});
 
     const formatDateString = (date) => {
         return dayjs(date).format('YYYY-MM-DD');
@@ -27,7 +27,7 @@ export default function Profiles() {
             try {
                 const response = await fetch('http://localhost:8000/profiles/', {
                     credentials: 'include',
-                    headers: { 'X-CSRFToken': Cookies.get('csrftoken') },
+                    headers: {'X-CSRFToken': Cookies.get('csrftoken')},
                 });
                 const json = await response.json();
                 setData(json.results);
@@ -66,12 +66,12 @@ export default function Profiles() {
             accessorKey: 'latest_esncard.number',
             header: 'Latest ESNcard',
             size: 50,
-            Cell: ({ cell }) => (
+            Cell: ({cell}) => (
                 <Box sx={{}}>
                     {cell.getValue() !== undefined ? (
-                        <Chip label={cell.getValue()} color="success" />
+                        <Chip label={cell.getValue()} color="success"/>
                     ) : (
-                        <Chip label="No ESNcard" color="error" />
+                        <Chip label="No ESNcard" color="error"/>
                     )}
                 </Box>
             ),
@@ -90,8 +90,8 @@ export default function Profiles() {
             accessorKey: 'gender',
             header: 'Gender',
             size: 50,
-            Cell: ({ cell }) => (
-                <Box sx={{ textAlign: 'center' }}>{cell.getValue()}</Box>
+            Cell: ({cell}) => (
+                <Box sx={{textAlign: 'center'}}>{cell.getValue()}</Box>
             ),
         },
         {
@@ -187,12 +187,12 @@ export default function Profiles() {
             shape: 'rounded',
             variant: 'outlined',
         },
-        renderDetailPanel: ({ row }) => {
+        renderDetailPanel: ({row}) => {
             return (
                 <ProfileDetail row={row} updateTableRow={(id, rowData) => {
                     setData(data.map((row) => {
-                        if (row.id == id) {
-                            var updatedRow = Object.fromEntries(Object.keys(row).map((e) => {
+                        if (row.id === id) {
+                            let updatedRow = Object.fromEntries(Object.keys(row).map((e) => {
                                 if (e in rowData) {
                                     return [e, rowData[e]];
                                 } else {
@@ -205,10 +205,10 @@ export default function Profiles() {
                             return row;
                         }
                     }));
-                }} />
+                }}/>
             );
         },
-        renderRowActionMenuItems: ({ closeMenu, row, table }) => [
+        renderRowActionMenuItems: ({closeMenu, row, table}) => [
             <MenuItem
                 key={1}
                 onClick={() => {
@@ -217,10 +217,10 @@ export default function Profiles() {
                     setEmissionProfile(row.original);
                     toggleModal(true);
                 }}
-                sx={{ m: 0 }}
+                sx={{m: 0}}
             >
                 <ListItemIcon>
-                    <CreditCardIcon />
+                    <CreditCardIcon/>
                 </ListItemIcon>
                 Release ESNcard
             </MenuItem>,
@@ -229,14 +229,14 @@ export default function Profiles() {
 
     return (
         <Box>
-            <Sidebar />
+            <Sidebar/>
             <ESNcardEmissionModal open={modalOpen} profile={emissionProfile} onClose={() => toggleModal(false)}/>
-            <Box sx={{ mx: '5%' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-                    <People sx={{ marginRight: '10px' }} />
+            <Box sx={{mx: '5%'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                    <People sx={{marginRight: '10px'}}/>
                     <Typography variant="h4">Profiles</Typography>
                 </Box>
-                <MaterialReactTable table={table} />
+                <MaterialReactTable table={table}/>
             </Box>
         </Box>
     );
