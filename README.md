@@ -1,90 +1,98 @@
-This is repository contains the code that implements the REST API for the  ESN management platform. It is written in python, using [Django](www.djangoproject.com) and [Django Rest Framework](https://www.django-rest-framework.org/).
-The code is divided into 4 apps that handle different functionalities 
+This is repository contains the code that implements the REST API for the ESN management platform. It is written in
+python, using [Django](https://www.djangoproject.com) and [Django Rest Framework](https://www.django-rest-framework.org/).
+The code is divided into 4 apps that handle different functionalities
 of the management platform.
 
-- **profiles**: manages the registration of new profiles (erasmus or esners), adding or editing documents or matricole, releasing esncards, retrieving data and search through it.
+- **profiles**: manages the registration of new profiles (erasmus or esners), adding or editing documents or matricole,
+  releasing esncards, retrieving data and search through it.
 
-- **events**: manages events, i.e. creation, editing, registering a profile to an event, etc. 
+- **events**: manages events, i.e. creation, editing, registering a profile to an event, etc.
 
-- **treasury**: manages transactions (created when a payment is issued, for example when registering to an event or releasing an esncard) and accounts (i.e. casse)
+- **treasury**: manages transactions (created when a payment is issued, for example when registering to an event or
+  releasing an esncard) and accounts (i.e. casse)
 
 - **users**: handles authentication
 
-These modules are not isolated, but each one can access each other. It could not be otherwise, as, for example, events depend on profiles and on transactions.
+These modules are not isolated, but each one can access each other. It could not be otherwise, as, for example, events
+depend on profiles and on transactions.
 The structure of every app is as follows:
 
-- models.py contains the models, i.e. classes representing objects that are then automatically translated by django in database tables. 
+- models.py contains the models, i.e. classes representing objects that are then automatically translated by django in
+  database tables.
 
-- serializers.py contains serializers, i.e. classes acting as a bridge between the database and the API. For example, they can:
+- serializers.py contains serializers, i.e. classes acting as a bridge between the database and the API. For example,
+  they can:
     - retrieve objects from the database and serialize it to JSON
     - convert JSON into a database object
     - edit fields of database object given JSON that describes them
 
-- views.py contains the functions that handle request to the different endpoints. They take as input the request, process it (for example using serializers) and return a response (for example json from a serializer)
+- views.py contains the functions that handle request to the different endpoints. They take as input the request,
+  process it (for example using serializers) and return a response (for example json from a serializer)
 
 - urls.py binds the functions in views.py to the endpoints paths
 
-
-
-
-
-
-
 # Profile endpoints
 
-### Create profile 
+### Create profile
+
 `POST /profiles`
 
-Creates a profile with related document and matricola. `verified` field is initialized to false. 
+Creates a profile with related document and matricola. `verified` field is initialized to false.
 
 #### **Parameters:**
-|name|type|mandatory|description|
-|-|-|-|-|
-|email|string|yes||
-|name|string|yes||
-|surname|string|yes|
-|gender|string|yes| Must be either 'M',F' or 'O'|
-|country|string|yes| Must be a vaid country|
-|course|string|yes||
-|phone|string|yes||
-|whatsapp|string|yes||
-|person_code|int|yes||
-|domicile|string|yes||
-|residency|string|yes||
-|matricola_number|int|yes|
-|matricola_expiration|date|yes|
-|document_type|string|yes|
-|document_number|string|yes|
-|document_expiration|date|yes|
+
+| name                 | type   | mandatory | description                    |
+|----------------------|--------|-----------|--------------------------------|
+| email                | string | yes       |                                |
+| name                 | string | yes       |                                |
+| surname              | string | yes       |
+| gender               | string | yes       | Must be either 'M', 'F' or 'O' |
+| country              | string | yes       | Must be a vaid country         |
+| course               | string | yes       |                                |
+| phone                | string | yes       |                                |
+| whatsapp             | string | yes       |                                |
+| person_code          | int    | yes       |                                |
+| domicile             | string | yes       |                                |
+| residency            | string | yes       |                                |
+| matricola_number     | int    | yes       |
+| matricola_expiration | date   | yes       |
+| document_type        | string | yes       |
+| document_number      | string | yes       |
+| document_expiration  | date   | yes       |
 
 ### Fetch all profiles *
+
 `GET /profiles`
 
 Returns all profiles without linked documents, matricole or ESNCards.
 
 ### Fetch specified profile *
+
 `GET /profiles/<str:pk>`
 
-If existing, returns detailed profile corresponding to the primary key (pk), including list of the profile's documents, matricole and ESNCards. 
+If existing, returns detailed profile corresponding to the primary key (pk), including list of the profile's documents,
+matricole and ESNCards.
 
 ### Update specified profile *
+
 `PATCH /profiles/<str:pk>`
 
-If existing, updates the profile corresponding to the primary key (pk) using the values of the parameters passed. 
+If existing, updates the profile corresponding to the primary key (pk) using the values of the parameters passed.
 
 #### **Parameters**
-|name|type|mandatory|description|
-|-|-|-|-|
-|name|string|no||
-|surname|string|no|
-|gender|string|no| Must be either 'M',F' or 'O'|
-|country|string|no|Must be a valid country|
-|course|string|no||
-|phone|string|no||
-|whatsapp|string|no||
-|person_code|int|no||
-|domicile|string|no||
-|residency|string|no||
+
+| name        | type   | mandatory | description                  |
+|-------------|--------|-----------|------------------------------|
+| name        | string | no        |                              |
+| surname     | string | no        |
+| gender      | string | no        | Must be either 'M',F' or 'O' |
+| country     | string | no        | Must be a valid country      |
+| course      | string | no        |                              |
+| phone       | string | no        |                              |
+| whatsapp    | string | no        |                              |
+| person_code | int    | no        |                              |
+| domicile    | string | no        |                              |
+| residency   | string | no        |                              |
 
 ### Delete specified profile *
 
@@ -93,6 +101,7 @@ If existing, updates the profile corresponding to the primary key (pk) using the
 If existing, deletes profile corresponding to the pk.
 
 ### Verify email
+
 `GET /profiles/verify/<str:email>/<str:token>`
 
 Verifies email address. `verified` field is set to true
@@ -101,17 +110,18 @@ Verifies email address. `verified` field is set to true
 
 ### Create document
 
-`POST /documents/` 
+`POST /documents/`
 
 Creates a new document associated to the specified profile.
 
 #### **Parameters**
-|name|type|mandatory|description|
-|-|-|-|-|
-|email|string|yes|email corresponding to the associated profile|
-|type|string|yes|document type|
-|number|string|yes|document number|
-|expiration|timestamp|yes|expiration date|
+
+| name       | type      | mandatory | description                                   |
+|------------|-----------|-----------|-----------------------------------------------|
+| email      | string    | yes       | email corresponding to the associated profile |
+| type       | string    | yes       | document type                                 |
+| number     | string    | yes       | document number                               |
+| expiration | timestamp | yes       | expiration date                               |
 
 ### Update document
 
@@ -119,11 +129,11 @@ Creates a new document associated to the specified profile.
 
 Updates the fields of the specified document.
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|type|string|no|document type|
-|number|string|no|document number|
-|expiration|timestamp|no|expiration date|
+| name       | type      | mandatory | description     |
+|------------|-----------|-----------|-----------------|
+| type       | string    | no        | document type   |
+| number     | string    | no        | document number |
+| expiration | timestamp | no        | expiration date |
 
 ### Delete document
 
@@ -140,11 +150,12 @@ Deletes the specified document.
 Creates a new matricola associated to the specified profile.
 
 #### **Parameters**
-|name|type|mandatory|description|
-|-|-|-|-|
-|email|string|yes|email corresponding to the associated profile|
-|number|string|yes|document number|
-|expiration|timestamp|yes|expiration date|
+
+| name       | type      | mandatory | description                                   |
+|------------|-----------|-----------|-----------------------------------------------|
+| email      | string    | yes       | email corresponding to the associated profile |
+| number     | string    | yes       | document number                               |
+| expiration | timestamp | yes       | expiration date                               |
 
 ### Update matricola
 
@@ -152,11 +163,10 @@ Creates a new matricola associated to the specified profile.
 
 Updates the fields of the specified matricola.
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|number|string|no|document number|
-|expiration|timestamp|no|expiration date|
-
+| name       | type      | mandatory | description     |
+|------------|-----------|-----------|-----------------|
+| number     | string    | no        | document number |
+| expiration | timestamp | no        | expiration date |
 
 ### Delete matricola
 
@@ -173,11 +183,12 @@ Deletes the specified
 Creates a new ESNCard associated to the specified profile.
 
 #### **Parameters**
-|name|type|mandatory|description|
-|-|-|-|-|
-|email|string|yes|email corresponding to the associated profile|
-|number|string|yes|document number|
-|expiration|timestamp|yes|expiration date|
+
+| name       | type      | mandatory | description                                   |
+|------------|-----------|-----------|-----------------------------------------------|
+| email      | string    | yes       | email corresponding to the associated profile |
+| number     | string    | yes       | document number                               |
+| expiration | timestamp | yes       | expiration date                               |
 
 ### Update ESNCard
 
@@ -186,39 +197,41 @@ Creates a new ESNCard associated to the specified profile.
 Updates the fields of the specified ESNCard.
 
 #### **Parameters**
-|name|type|mandatory|description|
-|-|-|-|-|
-|number|string|no|document number|
-|expiration|timestamp|no|expiration date|
+
+| name       | type      | mandatory | description     |
+|------------|-----------|-----------|-----------------|
+| number     | string    | no        | document number |
+| expiration | timestamp | no        | expiration date |
 
 # User endpoints
 
-### Create user 
+### Create user
 
 `POST /users`
 
 Creates a user and its associated profile, document and matricola. Profile's `verified` field is initialized to false.
 
 #### **Parameters:**
-|name|type|mandatory|description|
-|-|-|-|-|
-|email|string|yes||
-|password|string|yes| unhashed password|
-|name|string|no||
-|surname|string|no|
-|gender|string|no| Must be either 'M',F' or 'O'|
-|country|string|no| Must be a vaid country|
-|course|string|no||
-|phone|string|no||
-|whatsapp|string|no||
-|person_code|int|no||
-|domicile|string|no||
-|residency|string|no||
-|matricola_number|int|yes|
-|matricola_expiration|date|yes|
-|document_type|string|yes|
-|document_number|string|yes|
-|document_expiration|date|yes|
+
+| name                 | type   | mandatory | description                  |
+|----------------------|--------|-----------|------------------------------|
+| email                | string | yes       |                              |
+| password             | string | yes       | unhashed password            |
+| name                 | string | no        |                              |
+| surname              | string | no        |
+| gender               | string | no        | Must be either 'M',F' or 'O' |
+| country              | string | no        | Must be a vaid country       |
+| course               | string | no        |                              |
+| phone                | string | no        |                              |
+| whatsapp             | string | no        |                              |
+| person_code          | int    | no        |                              |
+| domicile             | string | no        |                              |
+| residency            | string | no        |                              |
+| matricola_number     | int    | yes       |
+| matricola_expiration | date   | yes       |
+| document_type        | string | yes       |
+| document_number      | string | yes       |
+| document_expiration  | date   | yes       |
 
 ### Change password *
 
@@ -227,9 +240,10 @@ Creates a user and its associated profile, document and matricola. Profile's `ve
 Changes the password of authenticated user.
 
 #### **Parameters**
-|name|type|mandatory|description|
-|-|-|-|-|
-|password|string|yes| unhashed password|
+
+| name     | type   | mandatory | description       |
+|----------|--------|-----------|-------------------|
+| password | string | yes       | unhashed password |
 
 # Event endpoints
 
@@ -241,13 +255,13 @@ Creates a new event.
 
 #### **Parameters**
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|name|string|yes||
-|date|date|yes||
-|description|string|yes||
-|fee|float|yes|
-|variable_fee|bool|yes||
+| name         | type   | mandatory | description |
+|--------------|--------|-----------|-------------|
+| name         | string | yes       |             |
+| date         | date   | yes       |             |
+| description  | string | yes       |             |
+| fee          | float  | yes       |
+| variable_fee | bool   | yes       |             |
 
 ### Fetch event list
 
@@ -269,13 +283,13 @@ Edits the specified event.
 
 #### **Parameters**
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|name|string|no||
-|date|date|no||
-|description|string|no||
-|fee|float|no|
-|variable_fee|bool|no||
+| name         | type   | mandatory | description |
+|--------------|--------|-----------|-------------|
+| name         | string | no        |             |
+| date         | date   | no        |             |
+| description  | string | no        |             |
+| fee          | float  | no        |
+| variable_fee | bool   | no        |             |
 
 ### Delete event
 
@@ -293,10 +307,10 @@ Creates a subscription of the specified profile to the specified event.
 
 #### **Parameters**
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|email|string|yes||
-|event_id|int|yes||
+| name     | type   | mandatory | description |
+|----------|--------|-----------|-------------|
+| email    | string | yes       |             |
+| event_id | int    | yes       |             |
 
 ### Fetch subscriptions
 
@@ -312,9 +326,9 @@ Fetches specified subscription. Detailed.
 
 #### **Parameters**
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|event_id|int|yes||
+| name     | type | mandatory | description |
+|----------|------|-----------|-------------|
+| event_id | int  | yes       |             |
 
 ### Update subscription
 
@@ -322,12 +336,12 @@ Fetches specified subscription. Detailed.
 
 Updates specific subscription.
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|refund|float|no|
-|refund_authorized|bool|no|
-|status|string|no|
-|tags|json|no|
+| name              | type   | mandatory | description |
+|-------------------|--------|-----------|-------------|
+| refund            | float  | no        |
+| refund_authorized | bool   | no        |
+| status            | string | no        |
+| tags              | json   | no        |
 
 ### Delete subscription
 
@@ -343,28 +357,25 @@ Deletes subscription. Possible only if there are no transactions related to the 
 
 Fetches all the existing accounts.
 
-
 # Transaction endpoints
 
 ### Create transaction
 
 `POST /transactions`
 
-Generates a generic deposit/withdrawal transaction. 
+Generates a generic deposit/withdrawal transaction.
 
 #### **Parameters**
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|account|string|yes||
-|email|string|yes|
-|email|string|yes|
-|account|string|yes|
-|event_id|string|no|
-|amount|float|yes|
-|reason|string|yes|
-
-
+| name     | type   | mandatory | description |
+|----------|--------|-----------|-------------|
+| account  | string | yes       |             |
+| email    | string | yes       |
+| email    | string | yes       |
+| account  | string | yes       |
+| event_id | string | no        |
+| amount   | float  | yes       |
+| reason   | string | yes       |
 
 ### Fetch transactions
 
@@ -378,7 +389,7 @@ Returns transaction. #TODO Specify pagination
 
 Returns details of specified transaction.
 
-### Update transaction 
+### Update transaction
 
 `PATCH /transactions/<int:pk>`
 
@@ -386,6 +397,6 @@ Returns details of specified transaction.
 
 #### **Parameters**
 
-|name|type|mandatory|description|
-|-|-|-|-|
-|event_id|string|yes||
+| name     | type   | mandatory | description |
+|----------|--------|-----------|-------------|
+| event_id | string | yes       |             |
