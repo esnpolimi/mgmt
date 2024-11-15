@@ -4,13 +4,15 @@ import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Cookies from 'js-cookie'
-import { useState } from 'react';
+import React, {useState} from 'react';
+import {useNavigate} from "react-router-dom";
 
 
-export default function Login()  {
+export default function Login() {
 
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
+    const navigate = useNavigate();  // Initialize navigate function from useNavigate
 
     const handleUsernameChange = (event) => {
         setUsername(event.target.value);
@@ -26,23 +28,31 @@ export default function Login()  {
             password: password
         }
         fetch('http://localhost:8000/login/', {
-                method: 'POST', 
-                credentials: 'include',
-                headers: {'Content-Type':'application/json', 'X-CSRFToken':Cookies.get('csrftoken')},
-                body: JSON.stringify(body),
-        }).then( (response) => {console.log(response)})
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken')},
+            body: JSON.stringify(body),
+        }).then((response) => {
+            if (response.ok) {
+                    navigate('/');
+                } else if (response.status === 400) {
+                    throw new Error('Error 400');
+                } else {
+                    throw new Error('Error while fetching /profiles/');
+                }
+        })
     }
 
-    return(
+    return (
         <Container component="main" maxWidth="xs">
-            <CssBaseline />
+            <CssBaseline/>
             <Box
                 sx={{
-                marginTop: 8,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-            }}
+                    marginTop: 8,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                }}
             >
                 <img alt='' src={require('../assets/esnpolimi-logo.png')} style={{height: '25vh'}}/>
                 <Box>
@@ -71,13 +81,13 @@ export default function Login()  {
                     <Button
                         fullWidth
                         variant="contained"
-                        sx={{ mt: 3, mb: 2, backgroundColor: 'black'}}
+                        sx={{mt: 3, mb: 2, backgroundColor: 'black'}}
                         onClick={attemptLogin}
                     >
-                    Log In
+                        Log In
                     </Button>
                 </Box>
-            </Box>  
+            </Box>
         </Container>
     )
 }

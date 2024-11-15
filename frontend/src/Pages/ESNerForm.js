@@ -138,11 +138,8 @@ const ErasmusForm = () => {
                     response.json().then((json) => {
                         let errors = Object.fromEntries(Object.keys(formErrors).map(
                             (e) => {
-                                if (e in json) {
-                                    return [e, [true, json[e]]];
-                                } else {
-                                    return [e, [false, '']];
-                                }
+                                if (e in json) return [e, [true, json[e]]];
+                                else return [e, [false, '']];
                             }
                         ));
                         setFormErrors(errors);

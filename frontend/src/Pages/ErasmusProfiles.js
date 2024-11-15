@@ -9,7 +9,7 @@ import ProfileDetail from '../Components/ProfileDetail.js';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
 
-export default function Profiles() {
+export default function ErasmusProfiles() {
 
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -25,7 +25,7 @@ export default function Profiles() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('http://localhost:8000/profiles/', {
+                const response = await fetch('http://localhost:8000/erasmus_profiles/', {
                     credentials: 'include',
                     headers: {'X-CSRFToken': Cookies.get('csrftoken')},
                 });
@@ -234,7 +234,7 @@ export default function Profiles() {
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <People sx={{marginRight: '10px'}}/>
-                    <Typography variant="h4">Profiles</Typography>
+                    <Typography variant="h4">Erasmus Profiles</Typography>
                 </Box>
                 <MaterialReactTable table={table}/>
             </Box>

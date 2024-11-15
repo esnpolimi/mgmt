@@ -1,9 +1,14 @@
+import logging
 from users.models import User
-from users.serializers import UserSerializer, LoginSerializer
+from rest_framework.pagination import PageNumberPagination
+from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer
 from users.auth_guard import is_logged, login_required
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.contrib.auth import authenticate, login
+
+logger = logging.getLogger(__name__)
+
 
 @api_view(['POST'])
 def log_in(request):
@@ -14,55 +19,71 @@ def log_in(request):
         user = authenticate(username=username, password=password)
 
         if user is not None:
-            login(request,user)
+            login(request, user)
             return Response(status=200)
 
         return Response({'detail': 'Invalid credentials'}, status=401)
-    
+
     return Response(serializer.errors, status=400)
+
 
 @api_view(['GET', 'POST'])
 def user_list(request):
     if request.method == 'GET':
         if not is_logged(request.user):
             return Response(status=401)
-    
+
         users = User.objects.all()
-        serializer = UserSerializer(users,many=True)
+        serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
-    
+
     if request.method == 'POST':
         data = request.data
         serializer = UserSerializer(data=data)
-        
+
         if serializer.is_valid():
             serializer.save()
             return Response(status=201)
-        return Response(serializer.errors,status=400)
-    
-    
-@api_view(['GET','PATCH','DELETE'])
+        return Response(serializer.errors, status=400)
+
+
+# Endpoint to retrieve a list of ESNers profiles. Pagination is implemented
+@api_view(['GET'])
 @login_required
-def user_detail(request,pk):
-    
+def user_with_profile_list(request):
+    try:
+        profiles = User.objects.filter(profile__is_esner=True).order_by('-profile__created_at')
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(profiles, request=request)
+        serializer = UserWithProfileAndGroupsSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response(status=500)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@login_required
+def user_detail(request, pk):
     try:
         user = User.objects.get(pk=pk)
     except User.DoesNotExist:
         return Response(status=404)
-    
+
     if request.method == 'GET':
         serializer = UserSerializer(user)
         return Response(serializer.data)
-    
+
     if request.method == 'PATCH':
         data = request.data
-        serializer = UserSerializer(user, data=data,partial=True)
+        serializer = UserSerializer(user, data=data, partial=True)
 
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
-    
+
     if request.method == 'DELETE':
         if request.user.has_perm('backend.delete_user'):
             user.delete()
