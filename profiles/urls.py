@@ -2,7 +2,7 @@ from django.urls import path
 from profiles import views
 
 urlpatterns = [
-    path('profiles/', views.profile_list),  # returns list of profiles, without related esncards, documents, matricole
+    path('erasmus_profiles/', views.erasmus_profile_list),  # returns list of Erasmus profiles, without related esncards, documents, matricole
 
     path('profile/', views.profile_creation),  # creates a profile
 

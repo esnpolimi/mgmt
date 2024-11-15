@@ -17,12 +17,12 @@ from users.models import User
 logger = logging.getLogger(__name__)
 
 
-# Endpoint to retrieve a list of the profiles. Pagination is implemented
+# Endpoint to retrieve a list of the Erasmus profiles. Pagination is implemented
 @api_view(['GET'])
 @login_required
-def profile_list(request):
+def erasmus_profile_list(request):
     try:
-        profiles = Profile.objects.all().order_by('-created_at')
+        profiles = Profile.objects.filter(is_esner=False).order_by('-created_at')
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(profiles, request=request)
         serializer = ProfileListViewSerializer(page, many=True)
@@ -32,6 +32,22 @@ def profile_list(request):
         logger.error(str(e))
         return Response(status=500)
 
+'''
+# Endpoint to retrieve a list of ESNers profiles. Pagination is implemented
+@api_view(['GET'])
+@login_required
+def esners_profile_list(request):
+    try:
+        profiles = Profile.objects.filter(is_esner=True).order_by('-created_at')
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(profiles, request=request)
+        serializer = ProfileListViewSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response(status=500)
+'''
 
 # Endpoint to create a profile, document and matricola together.
 @api_view(['POST'])
