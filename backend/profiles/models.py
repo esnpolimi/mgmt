@@ -62,7 +62,7 @@ class Profile(BaseEntity):
 
     # Return a string format of the profile object, contains only name, surname and email
     def __str__(self):
-        return "{} {} {}".format(self.name, self.surname, self.email)
+        return self.email
 
     # @property decorator serves for turning functions into field. For example,
     # instead of calling profile.latest_esncard() I can do profile.latest_esncard

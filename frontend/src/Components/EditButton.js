@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { CircularProgress, IconButton, Box} from '@mui/material';
+import React, {useState} from 'react';
+import {CircularProgress, IconButton, Box} from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 
-const EditButton = ({ onEdit, onCancel, onSave, saving}) => {
+const EditButton = ({onEdit, onCancel, onSave, saving}) => {
 
     const [isEditing, setIsEditing] = useState(false);
 
@@ -31,21 +31,21 @@ const EditButton = ({ onEdit, onCancel, onSave, saving}) => {
             {isEditing ? (
                 <Box sx={{display: 'inline-flex'}}>
                     <IconButton onClick={handleCancelClick} aria-label="Cancel">
-                        <CancelIcon />
+                        <CancelIcon/>
                     </IconButton>
                     {saving ? (
                         <IconButton>
-                            <CircularProgress size='1rem' />
+                            <CircularProgress size='1rem'/>
                         </IconButton>
                     ) : (
                         <IconButton onClick={handleSaveClick} aria-label="Save">
-                            <SaveIcon />
+                            <SaveIcon/>
                         </IconButton>
                     )}
                 </Box>
             ) : (
                 <IconButton onClick={handleEditClick} aria-label="Edit">
-                    <EditIcon />
+                    <EditIcon/>
                 </IconButton>
             )}
         </div>

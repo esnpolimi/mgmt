@@ -8,6 +8,7 @@ import Sidebar from '../Components/Sidebar.js'
 import ProfileDetail from '../Components/ProfileDetail.js';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
+import {fetchWithAuth} from "../api/api";
 
 export default function ErasmusProfiles() {
 
@@ -25,10 +26,7 @@ export default function ErasmusProfiles() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('http://localhost:8000/erasmus_profiles/', {
-                    credentials: 'include',
-                    headers: {'X-CSRFToken': Cookies.get('csrftoken')},
-                });
+                const response = await fetchWithAuth("GET", "http://localhost:8000/erasmus_profiles/");
                 const json = await response.json();
                 setData(json.results);
                 setLoading(false);
@@ -38,7 +36,7 @@ export default function ErasmusProfiles() {
             }
         };
 
-        fetchData();
+        fetchData().then();
     }, []);
 
     const columns = useMemo(() => [
@@ -214,6 +212,7 @@ export default function ErasmusProfiles() {
                 onClick={() => {
                     // Send email logic...
                     closeMenu();
+                    console.log('renderRowActionMenuItems:', row.original.email);
                     setEmissionProfile(row.original);
                     toggleModal(true);
                 }}

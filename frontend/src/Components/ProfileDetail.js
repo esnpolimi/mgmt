@@ -1,10 +1,7 @@
-
-
-import { Card, Box, Grid, TextField, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
-import { React, useState, useEffect, useMemo } from 'react';
-import Cookies from 'js-cookie';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import {Card, Box, Grid, TextField, FormControl, InputLabel, Select, MenuItem} from "@mui/material";
+import {React, useState, useEffect, useMemo} from 'react';
+import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
+import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {
     useMaterialReactTable,
@@ -13,8 +10,9 @@ import {
 
 import EditButton from "./EditButton";
 import CrudTable from "./CrudTable";
+import {fetchWithAuth} from "../api/api";
 
-export default function ProfileDetail({ row, updateTableRow }) {
+export default function ProfileDetail({row, updateTableRow}) {
 
 
     const [saving, setSaving] = useState(false); /* true when making api call to save data*/
@@ -105,7 +103,7 @@ export default function ProfileDetail({ row, updateTableRow }) {
         },
         {
             enableEditing: false,
-            accessorFn: (row) => row.created_at.substring(0,10),
+            accessorFn: (row) => row.created_at.substring(0, 10),
             header: 'Issue date',
             size: 100,
         }
@@ -113,17 +111,11 @@ export default function ProfileDetail({ row, updateTableRow }) {
 
     const saveESNcard = async (row, values) => {
         console.log(row);
-        const response = await fetch('http://localhost:8000/esncard/' + row.id + '/', {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken'), 'Content-Type': 'application/json' },
-            body: JSON.stringify(values)
-        });
-
+        const response = await fetchWithAuth("PATCH", 'http://localhost:8000/esncard/' + row.id + '/', JSON.stringify(values));
         if (response.ok) {
             setDocumentErrors({});
             return true;
-        } else if (response.status == 400) {
+        } else if (response.status === 400) {
             response.json().then((errors) => setDocumentErrors(errors))
             return false;
         } else {
@@ -173,19 +165,13 @@ export default function ProfileDetail({ row, updateTableRow }) {
 
     /* document creation */
     const createDocument = async (values) => {
-        let val = { ...values, profile: row.original.id }
+        let val = {...values, profile: row.original.id}
         console.log(val)
-        const response = await fetch('http://localhost:8000/document/', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken'), 'Content-Type': 'application/json' },
-            body: JSON.stringify(val)
-        });
-
+        const response = await fetchWithAuth("POST", 'http://localhost:8000/document/', JSON.stringify(val));
         if (response.ok) {
             setDocumentErrors({});
             return await response.json();
-        } else if (response.status == 400) {
+        } else if (response.status === 400) {
             response.json().then((errors) => setDocumentErrors(errors))
             return false;
         } else {
@@ -196,17 +182,12 @@ export default function ProfileDetail({ row, updateTableRow }) {
     /* save edited document */
     const saveDocument = async (row, values) => {
         console.log(row);
-        const response = await fetch('http://localhost:8000/document/' + row.id + '/', {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken'), 'Content-Type': 'application/json' },
-            body: JSON.stringify(values)
-        });
+        const response = await fetchWithAuth("PATCH", 'http://localhost:8000/document/' + row.id + '/', JSON.stringify(values));
 
         if (response.ok) {
             setDocumentErrors({});
             return true;
-        } else if (response.status == 400) {
+        } else if (response.status === 400) {
             response.json().then((errors) => setDocumentErrors(errors))
             return false;
         } else {
@@ -243,19 +224,14 @@ export default function ProfileDetail({ row, updateTableRow }) {
 
     /* matricola creation */
     const createMatricola = async (values) => {
-        let val = { ...values, profile: row.original.id }
+        let val = {...values, profile: row.original.id}
         console.log(val)
-        const response = await fetch('http://localhost:8000/matricola/', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken'), 'Content-Type': 'application/json' },
-            body: JSON.stringify(val)
-        });
+        const response = await fetchWithAuth("POST", 'http://localhost:8000/matricola/', JSON.stringify(val));
 
         if (response.ok) {
             setMatricolaErrors({});
             return await response.json();
-        } else if (response.status == 400) {
+        } else if (response.status === 400) {
             response.json().then((errors) => setMatricolaErrors(errors))
             return false;
         } else {
@@ -266,17 +242,11 @@ export default function ProfileDetail({ row, updateTableRow }) {
     /* save edited matricola */
     const saveMatricola = async (row, values) => {
         console.log(row);
-        const response = await fetch('http://localhost:8000/matricola/' + row.id + '/', {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken'), 'Content-Type': 'application/json' },
-            body: JSON.stringify(values)
-        });
-
+        const response = await fetchWithAuth("PATCH", 'http://localhost:8000/matricola/' + row.id + '/', JSON.stringify(values));
         if (response.ok) {
             setMatricolaErrors({});
             return true;
-        } else if (response.status == 400) {
+        } else if (response.status === 400) {
             response.json().then((errors) => setMatricolaErrors(errors))
             return false;
         } else {
@@ -338,13 +308,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
             ...updatedData,
             birthdate: formatDateString(updatedData.birthdate)
         }
-        fetch('http://localhost:8000/profile/' + row.original.id.toString() + '/', {
-            credentials: 'include',
-            method: 'PATCH',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken'), 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-
-        }).then((response) => {
+        fetchWithAuth("GET", 'http://localhost:8000/profile/' + row.original.id.toString() + '/', JSON.stringify(body)
+        ).then((response) => {
             setSaving(false);
             if (response.ok) {
                 setData(updatedData);
@@ -352,7 +317,7 @@ export default function ProfileDetail({ row, updateTableRow }) {
 
                 //update table row
                 updateTableRow(row.original.id, updatedData);
-            } else if (response.status == 400) {
+            } else if (response.status === 400) {
                 response.json().then((json) => {
                     var updatedErrors = Object.fromEntries(Object.keys(errors).map(
                         (e) => {
@@ -375,14 +340,10 @@ export default function ProfileDetail({ row, updateTableRow }) {
     };
 
 
-
-
     useEffect(() => {
         console.log('Fetching ' + row.original.id)
-        fetch('http://localhost:8000/profile/' + row.original.id.toString() + '/', {
-            credentials: 'include',
-            headers: { 'X-CSRFToken': Cookies.get('csrftoken') },
-        }).then((response) => {
+        fetchWithAuth("GET", 'http://localhost:8000/profile/' + row.original.id.toString() + '/'
+        ).then((response) => {
             if (response.ok) {
                 return response.json()
             } else {
@@ -401,9 +362,9 @@ export default function ProfileDetail({ row, updateTableRow }) {
     }, [])
 
     return (
-        <Box sx={{ flexGrow: 1, padding: 2, maxWidth: '80vw', position: 'sticky', left: 20 }}>
-            <Card sx={{ p: '20px' }}>
-                <Grid container spacing={2} >
+        <Box sx={{flexGrow: 1, padding: 2, maxWidth: '80vw', position: 'sticky', left: 20}}>
+            <Card sx={{p: '20px'}}>
+                <Grid container spacing={2}>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
                             label='Name'
@@ -411,11 +372,11 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             value={updatedData.name}
                             error={errors.name[0]}
                             helperText={errors.name[1]}
-                            InputProps={{ readOnly: readOnly.name }}
+                            InputProps={{readOnly: readOnly.name}}
                             onChange={handleChange}
-                            fullWidth />
+                            fullWidth/>
                     </Grid>
-                    <Grid item xs={12} md={4} lg={3} >
+                    <Grid item xs={12} md={4} lg={3}>
                         <TextField
                             label='Surname'
                             name='surname'
@@ -423,8 +384,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             error={errors.surname[0]}
                             helperText={errors.surname[1]}
                             onChange={handleChange}
-                            InputProps={{ readOnly: readOnly.surname }}
-                            fullWidth />
+                            InputProps={{readOnly: readOnly.surname}}
+                            fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
@@ -434,8 +395,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             value={updatedData.email}
                             error={errors.email[0]}
                             helperText={errors.email[1]}
-                            InputProps={{ readOnly: readOnly.email }}
-                            onChange={handleChange} fullWidth />
+                            InputProps={{readOnly: readOnly.email}}
+                            onChange={handleChange} fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
@@ -445,8 +406,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             error={errors.phone[0]}
                             helperText={errors.phone[1]}
                             onChange={handleChange}
-                            InputProps={{ readOnly: readOnly.phone }}
-                            fullWidth />
+                            InputProps={{readOnly: readOnly.phone}}
+                            fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
@@ -456,8 +417,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             error={errors.whatsapp[0]}
                             helperText={errors.whatsapp[1]}
                             onChange={handleChange}
-                            InputProps={{ readOnly: readOnly.whatsapp }}
-                            fullWidth />
+                            InputProps={{readOnly: readOnly.whatsapp}}
+                            fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
@@ -467,8 +428,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             error={errors.domicile[0]}
                             helperText={errors.domicile[1]}
                             onChange={handleChange}
-                            InputProps={{ readOnly: readOnly.domicile }}
-                            fullWidth />
+                            InputProps={{readOnly: readOnly.domicile}}
+                            fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
@@ -478,8 +439,8 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             error={errors.residency[0]}
                             helperText={errors.residency[1]}
                             onChange={handleChange}
-                            InputProps={{ readOnly: readOnly.residency }}
-                            fullWidth />
+                            InputProps={{readOnly: readOnly.residency}}
+                            fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
                         <TextField
@@ -489,19 +450,19 @@ export default function ProfileDetail({ row, updateTableRow }) {
                             error={errors.person_code[0]}
                             helperText={errors.person_code[1]}
                             onChange={handleChange}
-                            InputProps={{ readOnly: readOnly.person_code }}
-                            fullWidth />
+                            InputProps={{readOnly: readOnly.person_code}}
+                            fullWidth/>
                     </Grid>
                     <Grid item xs={12} md={4} lg={3}>
-                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb' >
+                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                             <DatePicker
                                 label="Birthdate"
                                 value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
                                 readOnly={readOnly.birthdate}
                                 onChange={(date) => handleDateChange('birthdate', date)}
                                 renderInput={(params) => <TextField {...params}
-                                    fullWidth
-                                    required
+                                                                    fullWidth
+                                                                    required
                                 />}
                             />
                         </LocalizationProvider>
@@ -519,7 +480,7 @@ export default function ProfileDetail({ row, updateTableRow }) {
                                 value={updatedData.country}
                                 error={errors.country[0]}
                                 onChange={handleChange}
-                                inputProps={{ readOnly: readOnly.country }}
+                                inputProps={{readOnly: readOnly.country}}
                             >
                                 <MenuItem value="">
                                     <em>None</em>
@@ -542,7 +503,7 @@ export default function ProfileDetail({ row, updateTableRow }) {
                                 label="Gender"
                                 value={updatedData.gender}
                                 onChange={handleChange}
-                                inputProps={{ readOnly: readOnly.gender }}
+                                inputProps={{readOnly: readOnly.gender}}
                             >
                                 <MenuItem value="M">Male</MenuItem>
                                 <MenuItem value="F">Female</MenuItem>
@@ -563,7 +524,7 @@ export default function ProfileDetail({ row, updateTableRow }) {
                                 label="Course"
                                 value={updatedData.course}
                                 onChange={handleChange}
-                                inputProps={{ readOnly: readOnly.course }}
+                                inputProps={{readOnly: readOnly.course}}
                             >
                                 <MenuItem value="Engineering">Engineering</MenuItem>
                                 <MenuItem value="Design">Design</MenuItem>
@@ -585,21 +546,21 @@ export default function ProfileDetail({ row, updateTableRow }) {
                     </Grid>
                 </Grid>
             </Card>
-            <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '30px' }} >
+            <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '30px'}}>
                 <CrudTable
                     cols={document_columns}
                     canCreate
                     onCreate={createDocument}
                     onSave={saveDocument}
                     initialData={data.documents}
-                    title={'Documents'} />
+                    title={'Documents'}/>
                 <CrudTable
                     cols={matricola_columns}
                     canCreate
                     initialData={data.matricole}
                     onCreate={createMatricola}
                     onSave={saveMatricola}
-                    title={'Matricole'} />
+                    title={'Matricole'}/>
                 <CrudTable
                     cols={esncard_columns}
                     initialData={data.esncards}

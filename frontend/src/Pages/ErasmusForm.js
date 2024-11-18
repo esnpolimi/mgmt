@@ -4,10 +4,10 @@ import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Checkbox, FormControlLabel} from '@mui/material';
-import Cookies from 'js-cookie'
 import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import {fetchWithAuth} from "../api/api";
 
 const ESNerForm = () => {
     const [formData, setFormData] = React.useState({
@@ -105,12 +105,7 @@ const ESNerForm = () => {
             'matricola-exchange_end': formatDateString(formData['matricola-exchange_end']),
         }
 
-        fetch('http://localhost:8000/profile/', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken')},
-            body: JSON.stringify(body),
-        }).then(
+        fetchWithAuth("POST", 'http://localhost:8000/profile/', JSON.stringify(body)).then(
             (response) => {
                 if (response.ok) {
                     setSubmitted(true);

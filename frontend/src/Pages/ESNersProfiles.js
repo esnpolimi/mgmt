@@ -1,5 +1,4 @@
 import React, {useEffect, useState, useMemo} from 'react';
-import Cookies from 'js-cookie';
 import {Box, Typography, Chip, MenuItem, ListItemIcon, CssBaseline, IconButton} from '@mui/material';
 import {AccountCircle, Send, People} from '@mui/icons-material';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -8,6 +7,7 @@ import Sidebar from '../Components/Sidebar.js'
 import ProfileDetail from '../Components/ProfileDetail.js';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
+import {fetchWithAuth} from "../api/api";
 
 export default function ESNersProfiles() {
 
@@ -25,10 +25,7 @@ export default function ESNersProfiles() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('http://localhost:8000/user_profiles/', {
-                    credentials: 'include',
-                    headers: {'X-CSRFToken': Cookies.get('csrftoken')},
-                });
+                const response = await fetchWithAuth("GET", 'http://localhost:8000/user_profiles/');
                 const json = await response.json();
                 const formattedData = json.results.map((item) => ({
                     ...item,

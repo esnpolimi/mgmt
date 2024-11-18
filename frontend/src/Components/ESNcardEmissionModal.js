@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useState} from "react";
 import Cookies from 'js-cookie';
-import { Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography } from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import {fetchWithAuth} from "../api/api";
 
-export default function ESNCardEmissionModal({ open, profile, onClose }) {
+export default function ESNCardEmissionModal({open, profile, onClose}) {
 
     const style = {
         position: 'absolute',
@@ -31,22 +32,16 @@ export default function ESNCardEmissionModal({ open, profile, onClose }) {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const accountsResponse = await fetch('http://localhost:8000/accounts/', {
-                    credentials: 'include',
-                    headers: { 'X-CSRFToken': Cookies.get('csrftoken') },
-                });
+                const accountsResponse = await fetchWithAuth("GET", 'http://localhost:8000/accounts/');
                 if (!accountsResponse.ok) {
                     throw new Error('Error while fetching accounts');
                 }
                 const accountsJson = await accountsResponse.json();
-                console.log('mannaggiaaddio')
+                console.log('ESNcardEmissionModal accountsJson:');
                 setAccounts(accountsJson.results);
                 console.log(accounts)
 
-                const profileResponse = await fetch(`http://localhost:8000/profile/${profile.id}/`, {
-                    credentials: 'include',
-                    headers: { 'X-CSRFToken': Cookies.get('csrftoken') },
-                });
+                const profileResponse = await fetchWithAuth("GET", `http://localhost:8000/profile/${profile.id}/`);
                 if (!profileResponse.ok) {
                     throw new Error('Error while fetching profile');
                 }
@@ -69,29 +64,30 @@ export default function ESNCardEmissionModal({ open, profile, onClose }) {
     return (
         <Modal
             open={open}
-            onClose={() => { }} // Close modal function
+            onClose={() => {
+            }} // Close modal function
             aria-labelledby="modal-modal-title"
             aria-describedby="modal-modal-description"
         >
 
             <Box sx={style}>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: -2 }}>
-                    <Button onClick={onClose} sx={{ minWidth: 0 }}>
-                        <CloseIcon />
+                <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
+                    <Button onClick={onClose} sx={{minWidth: 0}}>
+                        <CloseIcon/>
                     </Button>
                 </Box>
                 <Typography variant="h4" component="h2" gutterBottom>
                     ESNcard Emission
                 </Typography>
-                <Divider sx={{ mb: 2 }} />
+                <Divider sx={{mb: 2}}/>
                 <Typography variant="subtitle1" gutterBottom>
                     <b>To:</b> {profile.name} {profile.surname}
                 </Typography>
                 <Typography variant="subtitle1" gutterBottom>
                     <b>Amount:</b> {amount}€
                 </Typography>
-                <FormControl fullWidth sx={{ mt: 2 }}>
-                    <InputLabel htmlFor="account-selector" sx={{ mb: 2 }}>Select Account</InputLabel>
+                <FormControl fullWidth sx={{mt: 2}}>
+                    <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Select Account</InputLabel>
                     <Select
                         labelId="account-selector-label"
                         id="account-selector"
@@ -105,12 +101,10 @@ export default function ESNCardEmissionModal({ open, profile, onClose }) {
                         ))}
                     </Select>
                 </FormControl>
-                <Button variant="contained" fullWidth sx={{ mt: 2 }} onClick={() => {
-                    fetch('http://localhost:8000/esncard_emission/', {
-                        credentials: 'include',
-                        headers: { 'X-CSRFToken': Cookies.get('csrftoken') },
-                    }).then()
-                }}>
+                <Button variant="contained" fullWidth sx={{mt: 2}} onClick={
+                    async () => {
+                        await fetchWithAuth("GET", 'http://localhost:8000/esncard_emission/');
+                    }}>
                     Confirm
                 </Button>
             </Box>

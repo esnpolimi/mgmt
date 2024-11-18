@@ -1,13 +1,13 @@
 import React from 'react';
-import { Box, Button, FormControl, Grid, InputLabel, MenuItem, Select, TextField, Typography } from '@mui/material';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import {Box, Button, FormControl, Grid, InputLabel, MenuItem, Select, TextField, Typography} from '@mui/material';
+import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
+import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import { Checkbox, FormControlLabel } from '@mui/material';
-import Cookies from 'js-cookie'
+import {Checkbox, FormControlLabel} from '@mui/material';
 import 'dayjs/locale/en-gb';
-import { green } from '@mui/material/colors';
+import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import {fetchWithAuth} from "../api/api";
 
 const ErasmusForm = () => {
     const [formData, setFormData] = React.useState({
@@ -123,13 +123,8 @@ const ErasmusForm = () => {
             'matricola-exchange_end': formatDateString(formData['matricola-exchange_end']),
         }
 
-        
-        fetch('http://localhost:8000/profile/', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken') },
-            body: JSON.stringify(body),
-        }).then(
+
+        fetchWithAuth("POST", 'http://localhost:8000/profile/', JSON.stringify(body)).then(
             (response) => {
                 if (response.ok) {
                     setSubmitted(true);
@@ -164,7 +159,7 @@ const ErasmusForm = () => {
                 height="100vh"
                 bgcolor="#fff"
             >
-                <CheckCircleOutlineIcon style={{ fontSize: 100, color: green[500] }} />
+                <CheckCircleOutlineIcon style={{fontSize: 100, color: green[500]}}/>
                 <Typography variant="h4" align="center" gutterBottom>
                     Your response has been sent.
                 </Typography>
@@ -178,7 +173,7 @@ const ErasmusForm = () => {
     return (
         <Box
             component="form"
-            sx={{ maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4 }}
+            sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
             onSubmit={handleSubmit}
         >
             <Typography variant="h4" align="center" gutterBottom mb={5}>
@@ -281,14 +276,14 @@ const ErasmusForm = () => {
                     </FormControl>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb' >
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Birthdate"
                             value={formData.birthdate}
                             onChange={(date) => handleDateChange('birthdate', date)}
                             renderInput={(params) => <TextField {...params}
-                                fullWidth
-                                required
+                                                                fullWidth
+                                                                required
                             />}
                         />
                     </LocalizationProvider>
@@ -350,7 +345,7 @@ const ErasmusForm = () => {
                         variant="outlined"
                         name="person_code"
                         type="number"
-                        inputProps={{ min: 0 }}
+                        inputProps={{min: 0}}
                         value={formData['person_code']}
                         onChange={handleChange}
                         fullWidth
@@ -365,7 +360,7 @@ const ErasmusForm = () => {
                         variant="outlined"
                         name="matricola-number"
                         type="number"
-                        inputProps={{ min: 0 }}
+                        inputProps={{min: 0}}
                         value={formData['matricola-number']}
                         onChange={handleChange}
                         fullWidth
@@ -454,7 +449,7 @@ const ErasmusForm = () => {
                             label="Expiration Date"
                             value={formData['document-expiration']}
                             onChange={(date) => handleDateChange('document-expiration', date)}
-                            renderInput={(params) => <TextField {...params} fullWidth required />}
+                            renderInput={(params) => <TextField {...params} fullWidth required/>}
                         />
                     </LocalizationProvider>
                 </Grid>
@@ -462,32 +457,32 @@ const ErasmusForm = () => {
             <Grid container spacing={2} mt={3}>
                 <Grid item xs={12}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptTerms" required />}
+                        control={<Checkbox name="acceptTerms" required/>}
                         label="I declare that I read and have accepted the ESN Politecnico Milano Charter"
                     />
                 </Grid>
                 <Grid item xs={12}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptPrivacyPolicy" required />}
+                        control={<Checkbox name="acceptPrivacyPolicy" required/>}
                         label="I declare that I fully share the aims of the Association (ref. Article 2 of the Charter)"
                     />
                 </Grid>
                 <Grid item xs={12}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptPrivacyPolicy" required />}
+                        control={<Checkbox name="acceptPrivacyPolicy" required/>}
                         label="I declare that I accept all the terms stated in the Charter, the Internal Rules and all subsequent changes and additions"
                     />
                 </Grid>
                 <Grid item xs={12}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptPrivacyPolicy" required />}
+                        control={<Checkbox name="acceptPrivacyPolicy" required/>}
                         label="I declare that I have read the attached disclaimer about Privacy and that I agree to the usage of my personal data according to the Regulation EU 2016/679 (GDPR) and to be aware of my guaranteed rights by the afore-mentioned law"
                     />
                 </Grid>
             </Grid>
 
 
-            <Button type="submit" variant="contained" color="primary" fullWidth sx={{ mt: 4 }}>
+            <Button type="submit" variant="contained" color="primary" fullWidth sx={{mt: 4}}>
                 Submit
             </Button>
         </Box>

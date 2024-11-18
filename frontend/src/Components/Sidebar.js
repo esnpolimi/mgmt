@@ -1,12 +1,12 @@
 import React, {useState} from 'react';
 import {Link} from 'react-router-dom';
-import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, IconButton, Typography} from '@mui/material';
+import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, IconButton, Typography, Button} from '@mui/material';
 import {Menu as MenuIcon, Home as HomeIcon, AccountCircle as AccountCircleIcon, Settings as SettingsIcon} from '@mui/icons-material';
-
-
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'; // Treasury icon
 import EventIcon from '@mui/icons-material/Event'; // Events icon
-import PersonIcon from '@mui/icons-material/Person'; // ErasmusProfiles icon
+import PersonIcon from '@mui/icons-material/Person';
+import Logout from "../Pages/Logout";
+// ErasmusProfiles icon
 
 export default function Sidebar() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -24,24 +24,28 @@ export default function Sidebar() {
     ];
 
     const drawer = (
-        <Box
-            sx={{width: 250}}
-            role="presentation"
-            onClick={toggleDrawer(false)}
-            onKeyDown={toggleDrawer(false)}
-        >
-            <List>
-                {menuItems.map((item, index) => (
-                    <ListItem button component={Link} to={item.path} key={index}>
-                        <ListItemIcon>
-                            {item.icon}
-                        </ListItemIcon>
-                        <ListItemText primary={item.text}/>
-                    </ListItem>
-                ))}
-            </List>
-        </Box>
-    );
+            <Box
+                sx={{width: 250}}
+                role="presentation"
+                onClick={toggleDrawer(false)}
+                onKeyDown={toggleDrawer(false)}
+            >
+                <List>
+                    {menuItems.map((item, index) => (
+                        <ListItem component={Link} to={item.path} key={index}>
+                            <ListItemIcon>
+                                {item.icon}
+                            </ListItemIcon>
+                            <ListItemText primary={item.text}/>
+                        </ListItem>
+                    ))}
+                    <Box>
+                        <Logout/>
+                    </Box>
+                </List>
+            </Box>
+        )
+    ;
 
     return (
         <Box sx={{display: 'flex'}}>

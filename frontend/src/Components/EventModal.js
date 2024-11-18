@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
-    Modal, Box, TextField, FormControlLabel, Switch, Button, Grid, Checkbox, FormGroup, FormControl,
+    Modal, Box, TextField, FormControlLabel, Switch, Button, Grid, Checkbox, FormControl,
     InputLabel, Select, MenuItem, IconButton, Paper, Typography
 } from '@mui/material';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
+import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
 import Cookies from 'js-cookie';
+import {fetchWithAuth} from "../api/api";
 
 const style = {
     position: 'absolute',
@@ -25,25 +26,25 @@ const style = {
 };
 
 const colorOptions = [
-    { label: 'Red', value: '#FF0000' },
-    { label: 'Green', value: '#00FF00' },
-    { label: 'Blue', value: '#0000FF' },
-    { label: 'Yellow', value: '#FFFF00' },
-    { label: 'Cyan', value: '#00FFFF' },
-    { label: 'Magenta', value: '#FF00FF' },
-    { label: 'Black', value: '#000000' },
-    { label: 'White', value: '#FFFFFF' },
-    { label: 'Orange', value: '#FFA500' },
-    { label: 'Purple', value: '#800080' },
-    { label: 'Pink', value: '#FFC0CB' },
-    { label: 'Brown', value: '#A52A2A' },
-    { label: 'Gray', value: '#808080' },
-    { label: 'Lime', value: '#00FF00' },
-    { label: 'Maroon', value: '#800000' },
-    { label: 'Navy', value: '#000080' }
+    {label: 'Red', value: '#FF0000'},
+    {label: 'Green', value: '#00FF00'},
+    {label: 'Blue', value: '#0000FF'},
+    {label: 'Yellow', value: '#FFFF00'},
+    {label: 'Cyan', value: '#00FFFF'},
+    {label: 'Magenta', value: '#FF00FF'},
+    {label: 'Black', value: '#000000'},
+    {label: 'White', value: '#FFFFFF'},
+    {label: 'Orange', value: '#FFA500'},
+    {label: 'Purple', value: '#800080'},
+    {label: 'Pink', value: '#FFC0CB'},
+    {label: 'Brown', value: '#A52A2A'},
+    {label: 'Gray', value: '#808080'},
+    {label: 'Lime', value: '#00FF00'},
+    {label: 'Maroon', value: '#800000'},
+    {label: 'Navy', value: '#000080'}
 ];
 
-const FormModal = ({ open, handleClose }) => {
+const FormModal = ({open, handleClose}) => {
     const [formData, setFormData] = useState({
         name: '',
         date: dayjs(),
@@ -116,7 +117,7 @@ const FormModal = ({ open, handleClose }) => {
     const profileFieldOptions = ['name', 'surname', 'email', 'phone', 'whatsapp', 'gender', 'birthdate', 'latest_esncard', 'latest_document', 'latest_matricola', 'person_code', 'domicile', 'residency'];
 
     const handleInputChange = (event) => {
-        const { name, value, type, checked } = event.target;
+        const {name, value, type, checked} = event.target;
         setFormData({
             ...formData,
             [name]: type === 'checkbox' ? checked : value,
@@ -124,7 +125,7 @@ const FormModal = ({ open, handleClose }) => {
     };
 
     const handleProfileFieldChange = (event) => {
-        const { value } = event.target;
+        const {value} = event.target;
         setFormData({
             ...formData,
             profileFields: value,
@@ -134,16 +135,16 @@ const FormModal = ({ open, handleClose }) => {
     const handleAddTable = () => {
         setFormData({
             ...formData,
-            tables: [...formData.tables, { name: '', capacity: '' }],
+            tables: [...formData.tables, {name: '', capacity: ''}],
         });
     };
 
     const handleTableChange = (index, event) => {
-        const { name, value } = event.target;
+        const {name, value} = event.target;
         const updatedTables = formData.tables.map((table, i) =>
-            i === index ? { ...table, [name]: value } : table
+            i === index ? {...table, [name]: value} : table
         );
-        setFormData({ ...formData, tables: updatedTables });
+        setFormData({...formData, tables: updatedTables});
     };
 
     const handleDeleteTable = (index) => {
@@ -156,16 +157,16 @@ const FormModal = ({ open, handleClose }) => {
     const handleAddField = (fieldType) => {
         setFormData({
             ...formData,
-            [fieldType]: [...formData[fieldType], { name: '', editableByOffice: false, visibleByOffice: false, type: '', choices: [], length: '' }],
+            [fieldType]: [...formData[fieldType], {name: '', editableByOffice: false, visibleByOffice: false, type: '', choices: [], length: ''}],
         });
     };
 
     const handleFieldChange = (fieldType, index, event) => {
-        const { name, value, type, checked } = event.target;
+        const {name, value, type, checked} = event.target;
         const updatedFields = formData[fieldType].map((field, i) =>
-            i === index ? { ...field, [name]: type === 'checkbox' ? checked : value } : field
+            i === index ? {...field, [name]: type === 'checkbox' ? checked : value} : field
         );
-        setFormData({ ...formData, [fieldType]: updatedFields });
+        setFormData({...formData, [fieldType]: updatedFields});
     };
 
     const handleDeleteField = (fieldType, index) => {
@@ -177,37 +178,37 @@ const FormModal = ({ open, handleClose }) => {
 
     const handleAddChoice = (fieldType, index) => {
         const updatedFields = formData[fieldType].map((field, i) =>
-            i === index ? { ...field, choices: [...field.choices, { value: '', color: '#FFFFFF' }] } : field
+            i === index ? {...field, choices: [...field.choices, {value: '', color: '#FFFFFF'}]} : field
         );
-        setFormData({ ...formData, [fieldType]: updatedFields });
+        setFormData({...formData, [fieldType]: updatedFields});
     };
 
     const handleChoiceChange = (fieldType, fieldIndex, choiceIndex, event) => {
-        const { name, value } = event.target;
+        const {name, value} = event.target;
         const updatedFields = formData[fieldType].map((field, i) => {
             if (i === fieldIndex) {
                 const updatedChoices = field.choices.map((choice, j) =>
-                    j === choiceIndex ? { ...choice, [name]: value } : choice
+                    j === choiceIndex ? {...choice, [name]: value} : choice
                 );
-                return { ...field, choices: updatedChoices };
+                return {...field, choices: updatedChoices};
             }
             return field;
         });
-        setFormData({ ...formData, [fieldType]: updatedFields });
+        setFormData({...formData, [fieldType]: updatedFields});
     };
 
     const handleColorChange = (fieldType, fieldIndex, choiceIndex, event) => {
-        const { value } = event.target;
+        const {value} = event.target;
         const updatedFields = formData[fieldType].map((field, i) => {
             if (i === fieldIndex) {
                 const updatedChoices = field.choices.map((choice, j) =>
-                    j === choiceIndex ? { ...choice, color: value } : choice
+                    j === choiceIndex ? {...choice, color: value} : choice
                 );
-                return { ...field, choices: updatedChoices };
+                return {...field, choices: updatedChoices};
             }
             return field;
         });
-        setFormData({ ...formData, [fieldType]: updatedFields });
+        setFormData({...formData, [fieldType]: updatedFields});
     };
 
     return (
@@ -229,14 +230,14 @@ const FormModal = ({ open, handleClose }) => {
                             />
                         </Grid>
                         <Grid item xs={12} md={6}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb' >
+                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                 <DatePicker
                                     label="Date"
                                     value={formData.date}
                                     onChange={(date) => handleDateChange('date', date)}
                                     renderInput={(params) => <TextField {...params}
-                                        fullWidth
-                                        required
+                                                                        fullWidth
+                                                                        required
                                     />}
                                 />
                             </LocalizationProvider>
@@ -272,7 +273,7 @@ const FormModal = ({ open, handleClose }) => {
                             </Grid>
                             <Grid item>
                                 <IconButton onClick={handleAddTable}>
-                                    <AddIcon />
+                                    <AddIcon/>
                                 </IconButton>
                             </Grid>
                         </Grid>
@@ -297,7 +298,7 @@ const FormModal = ({ open, handleClose }) => {
                                 </Grid>
                                 <Grid item xs={2}>
                                     <IconButton onClick={() => handleDeleteTable(index)}>
-                                        <DeleteIcon />
+                                        <DeleteIcon/>
                                     </IconButton>
                                 </Grid>
                             </Grid>
@@ -310,7 +311,7 @@ const FormModal = ({ open, handleClose }) => {
                                 <Typography variant="h6" gutterBottom>
                                     Profile Fields
                                 </Typography>
-                                <FormControl sx={{ minWidth: '100%' }}>
+                                <FormControl sx={{minWidth: '100%'}}>
                                     <Select
                                         multiple
                                         value={formData.profileFields}
@@ -319,7 +320,7 @@ const FormModal = ({ open, handleClose }) => {
                                     >
                                         {profileFieldOptions.map((option) => (
                                             <MenuItem key={option} value={option}>
-                                                <Checkbox checked={formData.profileFields.indexOf(option) > -1} />
+                                                <Checkbox checked={formData.profileFields.indexOf(option) > -1}/>
                                                 {option}
                                             </MenuItem>
                                         ))}
@@ -339,12 +340,12 @@ const FormModal = ({ open, handleClose }) => {
                                 </Grid>
                                 <Grid item xs={6} textAlign="right">
                                     <IconButton onClick={() => handleAddField(fieldType)}>
-                                        <AddIcon />
+                                        <AddIcon/>
                                     </IconButton>
                                 </Grid>
                             </Grid>
                             {formData[fieldType].map((field, index) => (
-                                <Paper key={index} sx={{ p: 2, mb: 1 }}>
+                                <Paper key={index} sx={{p: 2, mb: 1}}>
                                     <Grid container spacing={2} alignItems="center">
                                         <Grid item xs={4}>
                                             <TextField
@@ -397,7 +398,7 @@ const FormModal = ({ open, handleClose }) => {
                                         </Grid>
                                         <Grid item xs={1}>
                                             <IconButton onClick={() => handleDeleteField(fieldType, index)}>
-                                                <DeleteIcon />
+                                                <DeleteIcon/>
                                             </IconButton>
                                         </Grid>
                                     </Grid>
@@ -440,7 +441,7 @@ const FormModal = ({ open, handleClose }) => {
                                                                 >
                                                                     {colorOptions.map((option) => (
                                                                         <MenuItem key={option.value} value={option.value}>
-                                                                            <div style={{ backgroundColor: option.value, width: 20, height: 20, display: 'inline-block', marginRight: 8 }}></div>
+                                                                            <div style={{backgroundColor: option.value, width: 20, height: 20, display: 'inline-block', marginRight: 8}}></div>
                                                                             {option.label}
                                                                         </MenuItem>
                                                                     ))}
@@ -460,12 +461,7 @@ const FormModal = ({ open, handleClose }) => {
                     <Box mt={2}>
                         <Button variant="contained" color="primary" onClick={
                             () => {
-                                fetch('http://localhost:8000/event/', {
-                                    method: 'POST',
-                                    credentials: 'include',
-                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken') },
-                                    body: JSON.stringify(convert(formData)),
-                                })
+                                fetchWithAuth("POST", 'http://localhost:8000/event/', JSON.stringify(convert(formData)))
                             }}>Submit</Button>
                     </Box>
                 </form>

@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
-import { MRT_Table, useMaterialReactTable, MaterialReactTable } from 'material-react-table';
+import {useState, useMemo, useEffect} from 'react';
+import {MRT_Table, useMaterialReactTable, MaterialReactTable} from 'material-react-table';
 import EditButton from "./EditButton";
 
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
+import {Box, Button, IconButton, Tooltip, Typography} from '@mui/material';
 
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -14,10 +14,10 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
     Same goes for the create function.
 */
 
-export default function CrudTable({ cols, initialData, title, onSave, onCreate, canCreate, canDelete }) {
+export default function CrudTable({cols, initialData, title, onSave, onCreate, canCreate, canDelete}) {
 
     const columns = useMemo(() => cols);
-    const [data,setData] = useState([])
+    const [data, setData] = useState([])
 
     useEffect(() => {
         setData(initialData);
@@ -38,16 +38,17 @@ export default function CrudTable({ cols, initialData, title, onSave, onCreate, 
         enableDensityToggle: false,
         enableHiding: false,
         enablePagination: false,
-        onCreatingRowCancel: () => {},
-        onCreatingRowSave: async ({values, table}) => { 
+        onCreatingRowCancel: () => {
+        },
+        onCreatingRowSave: async ({values, table}) => {
             let new_doc = await onCreate(values);
-            if(new_doc){
+            if (new_doc) {
                 setData([...data, new_doc]);
                 table.setCreatingRow(false);
             }
         },
         onEditingRowSave: async ({row, values}) => {
-            if(await onSave(row.original,values)){
+            if (await onSave(row.original, values)) {
                 const updatedData = data.map((item, index) =>
                     index === row.index ? {...row.original, ...values} : item
                 );
@@ -56,20 +57,22 @@ export default function CrudTable({ cols, initialData, title, onSave, onCreate, 
                 table.setEditingRow(null);
             }
         },
-        onEditingRowCancel: () => { },
+        onEditingRowCancel: () => {
+        },
         getRowId: (row) => row.id,
-        renderRowActions: ({ row, table }) => {
+        renderRowActions: ({row, table}) => {
             return (
-                <Box sx={{ display: 'flex', gap: '1rem' }}>
+                <Box sx={{display: 'flex', gap: '1rem'}}>
                     <Tooltip title="Edit">
                         <IconButton onClick={() => table.setEditingRow(row)}>
-                            <EditIcon />
+                            <EditIcon/>
                         </IconButton>
                     </Tooltip>
                     {canDelete && (
                         <Tooltip title="Delete">
-                            <IconButton onClick={() => { }}>
-                                <DeleteIcon />
+                            <IconButton onClick={() => {
+                            }}>
+                                <DeleteIcon/>
                             </IconButton>
                         </Tooltip>
                     )}
@@ -77,17 +80,17 @@ export default function CrudTable({ cols, initialData, title, onSave, onCreate, 
             );
         },
 
-        renderTopToolbarCustomActions: ({ table }) => {
+        renderTopToolbarCustomActions: ({table}) => {
             return (
-                <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Box sx={{display: 'flex', flexDirection: 'row'}}>
                     {canCreate ? (<IconButton
                         onClick={() => {
                             table.setCreatingRow(true);
                         }}
                     >
-                        <AddCircleOutlineIcon />
+                        <AddCircleOutlineIcon/>
                     </IconButton>) : (<></>)}
-                    <Box sx={{ ml: '30px' }}>
+                    <Box sx={{ml: '30px'}}>
                         <h3>{title}</h3>
                     </Box>
                 </Box>
@@ -97,6 +100,6 @@ export default function CrudTable({ cols, initialData, title, onSave, onCreate, 
     })
 
     return (
-        <MaterialReactTable table={table} />
+        <MaterialReactTable table={table}/>
     );
 };

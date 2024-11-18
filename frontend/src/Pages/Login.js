@@ -3,15 +3,15 @@ import CssBaseline from '@mui/material/CssBaseline';
 import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
-import Cookies from 'js-cookie'
 import React, {useState} from 'react';
 import {useNavigate} from "react-router-dom";
+import {useAuth} from "../Context/AuthContext";
 
 
 export default function Login() {
-
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
+    const {login} = useAuth(); // Use login from AuthContext
     const navigate = useNavigate();  // Initialize navigate function from useNavigate
 
     const handleUsernameChange = (event) => {
@@ -22,26 +22,20 @@ export default function Login() {
         setPassword(event.target.value);
     }
 
-    const attemptLogin = () => {
-        const body = {
-            username: username,
-            password: password
+    const handleLogin = async () => {
+        try {
+            const success = await login(username, password);
+            if (success) {
+                navigate("/");
+            } else {
+                alert("Invalid credentials. Please check your email and password.");
+            }
+        } catch (error) {
+            console.error("Login error:", error);
+            alert("An unexpected error occurred. Please try again later.");
         }
-        fetch('http://localhost:8000/login/', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': Cookies.get('csrftoken')},
-            body: JSON.stringify(body),
-        }).then((response) => {
-            if (response.ok) {
-                    navigate('/');
-                } else if (response.status === 400) {
-                    throw new Error('Error 400');
-                } else {
-                    throw new Error('Error while fetching /profiles/');
-                }
-        })
-    }
+    };
+
 
     return (
         <Container component="main" maxWidth="xs">
@@ -82,7 +76,7 @@ export default function Login() {
                         fullWidth
                         variant="contained"
                         sx={{mt: 3, mb: 2, backgroundColor: 'black'}}
-                        onClick={attemptLogin}
+                        onClick={handleLogin}
                     >
                         Log In
                     </Button>
