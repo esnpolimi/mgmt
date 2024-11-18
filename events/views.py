@@ -1,19 +1,19 @@
 import logging
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from profiles.models import Profile
 from events.models import Event, Subscription
 from events.serializers import EventListViewSerializer, SubscriptionSerializer, EventEditSerializer, EventDetailViewSerializer, EventCreationSerializer
-from events.forms import EventCreationForm, FormSubscriptionForm, ManualSubscriptionForm, ProfileLookUpForm, JSONFieldsValidationForm
-from users.auth_guard import login_required
+from events.forms import FormSubscriptionForm, ManualSubscriptionForm, ProfileLookUpForm
 
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['GET'])
-@login_required
+@permission_classes([IsAuthenticated])
 def events_list(request):
     try:
         events = Event.objects.all().order_by('-created_at')
@@ -28,7 +28,7 @@ def events_list(request):
 
 
 @api_view(['POST'])
-@login_required
+@permission_classes([IsAuthenticated])
 def event_creation(request):
     try:
         event_serializer = EventCreationSerializer(data=request.data)
@@ -45,7 +45,7 @@ def event_creation(request):
 
 
 @api_view(['GET','PATCH','DELETE'])
-@login_required
+@permission_classes([IsAuthenticated])
 def event_detail(request,pk):
     try:
         event = Event.objects.get(pk=pk)
@@ -82,6 +82,7 @@ def event_detail(request,pk):
         return Response(status=500)
     
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def profile_lookup(request):
     try:
         form = ProfileLookUpForm(request.data)
@@ -104,6 +105,7 @@ def profile_lookup(request):
         return Response(status=500)
  
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def form_subscription_creation(request):
     try:
         form = FormSubscriptionForm(request.data)
@@ -138,7 +140,7 @@ def form_subscription_creation(request):
     
     
 @api_view(['POST'])
-@login_required
+@permission_classes([IsAuthenticated])
 def manual_subscription_creation(request):
     try:
         form = ManualSubscriptionForm(request.data)
@@ -154,7 +156,7 @@ def manual_subscription_creation(request):
 
 
 @api_view(['PATCH','DELETE'])
-@login_required
+@permission_classes([IsAuthenticated])
 def subscription_detail(request, pk):
     try:
         sub = Subscription.objects.get(pk=pk)

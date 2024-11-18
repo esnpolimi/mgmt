@@ -2,15 +2,15 @@ import logging
 from django.core.mail import send_mail
 from django.db import transaction
 from django.contrib.auth.models import Group
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from backend.settings import HOSTNAME
 from profiles.models import Profile, Document, Matricola
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
 from profiles.serializers import MatricolaCreateSerializer, DocumentCreateSerializer, MatricolaEditSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
 from profiles.tokens import email_verification_token
-from users.auth_guard import login_required
 from users.managers import UserManager
 from users.models import User
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Endpoint to retrieve a list of the Erasmus profiles. Pagination is implemented
 @api_view(['GET'])
-@login_required
+@permission_classes([IsAuthenticated])
 def erasmus_profile_list(request):
     try:
         profiles = Profile.objects.filter(is_esner=False).order_by('-created_at')
@@ -32,22 +32,6 @@ def erasmus_profile_list(request):
         logger.error(str(e))
         return Response(status=500)
 
-'''
-# Endpoint to retrieve a list of ESNers profiles. Pagination is implemented
-@api_view(['GET'])
-@login_required
-def esners_profile_list(request):
-    try:
-        profiles = Profile.objects.filter(is_esner=True).order_by('-created_at')
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(profiles, request=request)
-        serializer = ProfileListViewSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-
-    except Exception as e:
-        logger.error(str(e))
-        return Response(status=500)
-'''
 
 # Endpoint to create a profile, document and matricola together.
 @api_view(['POST'])
@@ -112,7 +96,7 @@ def profile_creation(request):
 
 # Endpoint to view in detail, edit, delete a profile
 @api_view(['GET', 'PATCH', 'DELETE'])
-@login_required
+@permission_classes([IsAuthenticated])
 def profile_detail(request, pk):
     try:
         profile = Profile.objects.get(pk=pk)
@@ -171,7 +155,7 @@ def profile_verification(request, pk, token):
 
 # Endpoint to create document
 @api_view(['POST'])
-@login_required
+@permission_classes([IsAuthenticated])
 def document_creation(request):
     try:
         document_serializer = DocumentCreateSerializer(data=request.data, partial=True)
@@ -189,7 +173,7 @@ def document_creation(request):
 
 
 @api_view(['PATCH'])
-@login_required
+@permission_classes([IsAuthenticated])
 def document_detail(request, pk):
     try:
         document = Document.objects.get(pk=pk)
@@ -210,7 +194,7 @@ def document_detail(request, pk):
 
 
 @api_view(['POST'])
-@login_required
+@permission_classes([IsAuthenticated])
 def matricola_creation(request):
     try:
         matricola_serializer = MatricolaCreateSerializer(data=request.data)
@@ -227,7 +211,7 @@ def matricola_creation(request):
 
 
 @api_view(['PATCH'])
-@login_required
+@permission_classes([IsAuthenticated])
 def matricola_detail(request, pk):
     try:
         matricola = Matricola.objects.get(pk=pk)
