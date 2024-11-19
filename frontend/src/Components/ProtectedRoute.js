@@ -1,10 +1,13 @@
 import {useAuth} from "../Context/AuthContext";
 import {useNavigate} from "react-router-dom";
-import {useEffect} from "react";
+import {useEffect, useState} from "react";
 
 const ProtectedRoute = ({children}) => {
     const {accessToken, refreshAccessToken} = useAuth();
     const navigate = useNavigate();
+
+    //Avoid displaying content before token is checked
+    const [displayContent, setDisplayContent] = useState(false)
 
     useEffect(() => {
         const checkAccessToken = async () => {
@@ -17,11 +20,12 @@ const ProtectedRoute = ({children}) => {
             } else {
                 console.log("Token not expired");
             }
+            setDisplayContent(true);
         };
         (async () => await checkAccessToken())();
     }, [accessToken, refreshAccessToken, navigate]);
 
-    return children;
+    return displayContent ? children : <></>
 };
 
 export default ProtectedRoute;

@@ -5,7 +5,7 @@ import {Menu as MenuIcon, Home as HomeIcon, AccountCircle as AccountCircleIcon, 
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'; // Treasury icon
 import EventIcon from '@mui/icons-material/Event'; // Events icon
 import PersonIcon from '@mui/icons-material/Person';
-import Logout from "../Pages/Logout";
+import LogoutButton from "./LogoutButton";
 // ErasmusProfiles icon
 
 export default function Sidebar() {
@@ -36,11 +36,11 @@ export default function Sidebar() {
                             <ListItemIcon>
                                 {item.icon}
                             </ListItemIcon>
-                            <ListItemText primary={item.text}/>
+                            <ListItemText primary={item.text} primaryTypographyProps={{ style: {color: 'black'} }}/>
                         </ListItem>
                     ))}
-                    <Box>
-                        <Logout/>
+                    <Box style={{ display: 'flex', justifyContent: 'center'}}>
+                        <LogoutButton/>
                     </Box>
                 </List>
             </Box>

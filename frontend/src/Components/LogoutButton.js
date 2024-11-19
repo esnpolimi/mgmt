@@ -3,7 +3,7 @@ import {Button} from "@mui/material";
 import {useAuth} from "../Context/AuthContext";
 import {useNavigate} from "react-router-dom";
 
-const Logout = () => {
+const LogoutButton = () => {
     const {logout} = useAuth();
     const navigate = useNavigate();
 
@@ -23,4 +23,4 @@ const Logout = () => {
     );
 };
 
-export default Logout;
+export default LogoutButton;
