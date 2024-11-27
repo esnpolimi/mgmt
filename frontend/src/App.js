@@ -21,8 +21,8 @@ function App() {
                     <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
                     <Route path='/erasmus_profiles' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
                     <Route path='/esners_profiles' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
-                    <Route path='/erasmus_form' element={<ProtectedRoute><ErasmusForm/></ProtectedRoute>}/>
-                    <Route path='/esner_form' element={<ProtectedRoute><ESNerForm/></ProtectedRoute>}/>
+                    <Route path='/erasmus_form' element={<ErasmusForm/>}/>
+                    <Route path='/esner_form' element={<ESNerForm/>}/>
                     <Route path='/treasury' element={<ProtectedRoute><Treasury/></ProtectedRoute>}/>
                     <Route path='/events' element={<ProtectedRoute><Events/></ProtectedRoute>}/>
                 </Routes>
