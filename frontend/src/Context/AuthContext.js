@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useEffect, useState} from "react";
+import React, {createContext, useCallback, useContext, useEffect, useState} from "react";
 import {fetchWithAuth} from "../api/api";
 import {jwtDecode} from "jwt-decode";
 
@@ -7,22 +7,44 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({children}) => {
         const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken"));
 
-        useEffect(() => {
-            const scheduleTokenRefresh = () => {
-                if (accessToken) {
-                    const {exp} = jwtDecode(accessToken);
-                    const now = Math.floor(Date.now() / 1000);
-                    const refreshTime = (exp - now - 30) * 1000 * 2; // Refresh 30 seconds before expiry (2 minutes)
-
-                    if (refreshTime > 0) {
-                        const timer = setTimeout(refreshAccessToken, refreshTime);
-                        return () => clearTimeout(timer); // Clear on unmount
+        const logout = useCallback(async () => {
+            console.log("Logout function called");
+            try {
+                await fetchWithAuth("POST", "http://localhost:8000/logout/").then(
+                    () => {
+                        localStorage.removeItem("accessToken");
+                        setAccessToken(null);
+                        console.log("Logged out successfully");
                     }
-                }
-            };
+                )
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
+        }, []);
 
-            scheduleTokenRefresh();
-        }, [accessToken]);
+        const refreshAccessToken = useCallback(async () => {
+            try {
+                const response = await fetch("http://localhost:8000/api/token/refresh/", {
+                    method: "POST",
+                    credentials: "include",
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem("accessToken", data.access);
+                    setAccessToken(data.access);
+                    //console.log("Token refreshed successfully");
+                    return true;
+                } else {
+                    console.warn("Token refresh failed. Logging out...");
+                    await logout();
+                    return false;
+                }
+            } catch (error) {
+                console.error("Refresh token error:", error);
+                await logout();
+                return false;
+            }
+        }, [logout]);
 
         const login = async (username, password) => {
             try {
@@ -46,44 +68,40 @@ export const AuthProvider = ({children}) => {
             }
         };
 
-        const logout = async () => {
-            console.log("Logout function called");
-            try {
-                await fetchWithAuth("POST", "http://localhost:8000/logout/").then(
-                    () => {
-                        localStorage.removeItem("accessToken");
-                        setAccessToken(null);
-                        console.log("Logged out successfully");
-                    }
-                )
-            } catch (error) {
-                console.error("Logout error:", error);
-            }
-        };
+        useEffect(() => {
+            const scheduleTokenRefresh = () => {
+                if (accessToken) {
+                    //console.log("Access token found, scheduling refresh...");
+                    const {exp} = jwtDecode(accessToken);
+                    const now = Math.floor(Date.now() / 1000);
+                    const ACCESS_TOKEN_LIFETIME_MINUTES = 1;
+                    const refreshTime = (exp - now - 30) * 1000 * ACCESS_TOKEN_LIFETIME_MINUTES; // Refresh 30 seconds before expiry
 
-        const refreshAccessToken = async () => {
-            try {
-                const response = await fetch("http://localhost:8000/api/token/refresh/", {
-                    method: "POST",
-                    credentials: "include",
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    localStorage.setItem("accessToken", data.access);
-                    setAccessToken(data.access);
-                    console.log("Token refreshed successfully");
-                    return true;
+                    const expDate = new Date(exp * 1000);
+                    const nowDate = new Date(now * 1000);
+                    console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
+
+                    if (refreshTime > 0) {
+                        const timer = setTimeout(() => {
+                            console.log("Refreshing access token...");
+                            refreshAccessToken().then();
+                        }, refreshTime);
+                        //console.log("Refresh timer set");
+
+                        return () => {
+                            console.log("Clearing refresh timer");
+                            clearTimeout(timer); // Clear on unmount
+                        };
+                    } else {
+                        console.log("Refresh time is not valid, no timer set");
+                    }
                 } else {
-                    console.warn("Token refresh failed. Logging out...");
-                    await logout();
-                    return false;
+                    console.log("No access token found, skipping refresh scheduling");
                 }
-            } catch (error) {
-                console.error("Refresh token error:", error);
-                await logout();
-                return false;
-            }
-        };
+            };
+
+            scheduleTokenRefresh();
+        }, [accessToken, refreshAccessToken]);
 
         return (
             <AuthContext.Provider value={{accessToken, refreshAccessToken, login, logout}}>

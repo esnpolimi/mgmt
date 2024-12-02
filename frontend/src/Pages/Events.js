@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import Cookies from 'js-cookie';
-import { Box, Typography, Chip, Button, IconButton } from '@mui/material';
-import { MaterialReactTable, useMaterialReactTable } from 'material-react-table';
+import React, {useEffect, useState, useMemo} from 'react';
+import {Box, Typography, Chip, Button, IconButton} from '@mui/material';
+import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.js'
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
@@ -17,7 +16,7 @@ export default function Events() {
     const [loading, setLoading] = useState(true);
     const [drawerOpen, toggleDrawer] = useState(false);
 
-    const [modalOpen, toggleModal] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
     const [emissionProfile, setEmissionProfile] = useState({});
 
     const formatDateString = (date) => {
@@ -37,7 +36,7 @@ export default function Events() {
             }
         };
 
-        fetchData();
+        fetchData().then();
     }, []);
 
     const columns = useMemo(() => [
@@ -65,12 +64,12 @@ export default function Events() {
             accessorKey: 'enable_form',
             header: 'Form',
             size: 50,
-            Cell: ({ cell }) => (
+            Cell: ({cell}) => (
                 <Box sx={{}}>
                     {cell.getValue() ? (
-                        <Chip label="Yes" color="success" />
+                        <Chip label="Yes" color="success"/>
                     ) : (
-                        <Chip label="No" color="error" />
+                        <Chip label="No" color="error"/>
                     )}
                 </Box>
             ),
@@ -128,17 +127,17 @@ export default function Events() {
             shape: 'rounded',
             variant: 'outlined',
         },
-        renderRowActions: ({ row }) => {
+        renderRowActions: ({row}) => {
             return (
                 <IconButton>
-                    <EditIcon />
+                    <EditIcon/>
                 </IconButton>
             )
         },
-        renderTopToolbarCustomActions: ({ table }) => {
+        renderTopToolbarCustomActions: ({table}) => {
             return (
-                <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                    <Button variant='contained'>
+                <Box sx={{display: 'flex', flexDirection: 'row'}}>
+                    <Button variant='contained' onClick={() => setModalOpen(true)}>
                         Create
                     </Button>
                 </Box>
@@ -149,14 +148,14 @@ export default function Events() {
 
     return (
         <Box>
-            <Sidebar />
-            <FormModal open={true}/>
-            <Box sx={{ mx: '5%' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-                    <EventIcon sx={{ marginRight: '10px' }} />
+            <Sidebar/>
+            <FormModal open={modalOpen} handleClose={() => setModalOpen(false)} />
+            <Box sx={{mx: '5%'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                    <EventIcon sx={{marginRight: '10px'}}/>
                     <Typography variant="h4">Events</Typography>
                 </Box>
-                <MaterialReactTable table={table} />
+                <MaterialReactTable table={table}/>
             </Box>
         </Box>
     );

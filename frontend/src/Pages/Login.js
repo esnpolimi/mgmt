@@ -22,6 +22,12 @@ export default function Login() {
         setPassword(event.target.value);
     }
 
+    const handleKeyDown = (event) => {
+        if (event.key === 'Enter') {
+            handleLogin().then();
+        }
+    };
+
     const handleLogin = async () => {
         try {
             const success = await login(username, password);
@@ -60,6 +66,7 @@ export default function Login() {
                         autoComplete="email"
                         autoFocus
                         onChange={handleUsernameChange}
+                        onKeyDown={handleKeyDown}
                     />
                     <TextField
                         margin="normal"
@@ -71,6 +78,7 @@ export default function Login() {
                         id="password"
                         autoComplete="current-password"
                         onChange={handlePasswordChange}
+                        onKeyDown={handleKeyDown}
                     />
                     <Button
                         fullWidth

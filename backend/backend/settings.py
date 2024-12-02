@@ -141,7 +141,7 @@ REST_FRAMEWORK = {
 
 # JWT settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=2),  # Adjust as needed
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=1),  # Adjust as needed and remember to set it also in AuthContext.js (useEffect())
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,

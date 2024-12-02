@@ -32,7 +32,7 @@ def log_in(request):
         if user is not None:
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
-            print(f"User {user} logged in with token {access_token}")
+            print(f"User {user} logged in")
 
             response = Response({'access': access_token}, status=200)
             # Set refresh token as HTTP-only cookie
@@ -65,11 +65,12 @@ def refresh_token_view(request):
     refresh_token = request.COOKIES.get('refresh_token')
 
     if not refresh_token:
+        print("Refresh token not found")
         return Response({'detail': 'Refresh token not found'}, status=400)
 
     try:
-        refresh = RefreshToken(refresh_token)
-        print(f"Refresh token expires at: {refresh.payload['exp']}")
+        refresh = RefreshToken(str(refresh_token))
+        print("Refresh token validated")
         access_token = str(refresh.access_token)
         return Response({'access': access_token}, status=200)
     except TokenError as e:

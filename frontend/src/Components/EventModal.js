@@ -459,9 +459,10 @@ const FormModal = ({open, handleClose}) => {
                     ))}
 
                     <Box mt={2}>
+                        <Button variant="contained" color="grey" onClick={handleClose}>Close</Button>
                         <Button variant="contained" color="primary" onClick={
                             () => {
-                                fetchWithAuth("POST", 'http://localhost:8000/event/', JSON.stringify(convert(formData)))
+                                fetchWithAuth("POST", 'http://localhost:8000/event/', JSON.stringify(convert(formData))).then()
                             }}>Submit</Button>
                     </Box>
                 </form>
