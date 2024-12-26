@@ -1,4 +1,4 @@
-import React, {createContext, useCallback, useContext, useEffect, useState} from "react";
+import React, {createContext, useCallback, useContext, useEffect, useState, useRef} from "react";
 import {fetchWithAuth} from "../api/api";
 import {jwtDecode} from "jwt-decode";
 
@@ -6,9 +6,19 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({children}) => {
         const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken"));
+        const [isLoggedOut, setIsLoggedOut] = useState(false);
+        const refreshTimer = useRef(null);
 
         const logout = useCallback(async () => {
             console.log("Logout function called");
+            setIsLoggedOut(true);
+
+            if (refreshTimer.current) {
+                console.log("Aborting refresh timer...");
+                clearTimeout(refreshTimer.current);
+                refreshTimer.current = null;
+            }
+
             try {
                 await fetchWithAuth("POST", "http://localhost:8000/logout/").then(
                     () => {
@@ -32,7 +42,7 @@ export const AuthProvider = ({children}) => {
                     const data = await response.json();
                     localStorage.setItem("accessToken", data.access);
                     setAccessToken(data.access);
-                    //console.log("Token refreshed successfully");
+                    setIsLoggedOut(false);
                     return true;
                 } else {
                     console.warn("Token refresh failed. Logging out...");
@@ -58,9 +68,10 @@ export const AuthProvider = ({children}) => {
                     const data = await response.json();
                     localStorage.setItem("accessToken", data.access);
                     setAccessToken(data.access);
+                    setIsLoggedOut(false);
                     return true;
                 } else {
-                    throw new Error("Invalid credentials");
+                    console.error("Invalid credentials");
                 }
             } catch (error) {
                 console.error("Login error:", error);
@@ -70,7 +81,7 @@ export const AuthProvider = ({children}) => {
 
         useEffect(() => {
             const scheduleTokenRefresh = () => {
-                if (accessToken) {
+                if (accessToken && !isLoggedOut) {
                     //console.log("Access token found, scheduling refresh...");
                     const {exp} = jwtDecode(accessToken);
                     const now = Math.floor(Date.now() / 1000);
@@ -82,15 +93,21 @@ export const AuthProvider = ({children}) => {
                     console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
 
                     if (refreshTime > 0) {
-                        const timer = setTimeout(() => {
+                        if (refreshTimer.current) {
+                            clearTimeout(refreshTimer.current);
+                        }
+
+                        refreshTimer.current = setTimeout(() => {
                             console.log("Refreshing access token...");
                             refreshAccessToken().then();
                         }, refreshTime);
-                        //console.log("Refresh timer set");
 
                         return () => {
                             console.log("Clearing refresh timer");
-                            clearTimeout(timer); // Clear on unmount
+                            if (refreshTimer.current) {
+                                clearTimeout(refreshTimer.current);
+                                refreshTimer.current = null;
+                            }
                         };
                     } else {
                         console.log("Refresh time is not valid, no timer set");
@@ -101,7 +118,7 @@ export const AuthProvider = ({children}) => {
             };
 
             scheduleTokenRefresh();
-        }, [accessToken, refreshAccessToken]);
+        }, [accessToken, refreshAccessToken, isLoggedOut]);
 
         return (
             <AuthContext.Provider value={{accessToken, refreshAccessToken, login, logout}}>
