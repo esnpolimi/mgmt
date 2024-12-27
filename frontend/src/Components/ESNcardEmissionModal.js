@@ -2,7 +2,7 @@ import React, {useEffect, useState} from "react";
 import Cookies from 'js-cookie';
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 
 export default function ESNCardEmissionModal({open, profile, onClose}) {
 
@@ -32,7 +32,7 @@ export default function ESNCardEmissionModal({open, profile, onClose}) {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const accountsResponse = await fetchWithAuth("GET", 'http://localhost:8000/accounts/');
+                const accountsResponse = await fetchCustom("GET", '/accounts/');
                 if (!accountsResponse.ok) {
                     throw new Error('Error while fetching accounts');
                 }
@@ -41,7 +41,7 @@ export default function ESNCardEmissionModal({open, profile, onClose}) {
                 setAccounts(accountsJson.results);
                 console.log(accounts)
 
-                const profileResponse = await fetchWithAuth("GET", `http://localhost:8000/profile/${profile.id}/`);
+                const profileResponse = await fetchCustom("GET", `/profile/${profile.id}/`);
                 if (!profileResponse.ok) {
                     throw new Error('Error while fetching profile');
                 }
@@ -103,7 +103,7 @@ export default function ESNCardEmissionModal({open, profile, onClose}) {
                 </FormControl>
                 <Button variant="contained" fullWidth sx={{mt: 2}} onClick={
                     async () => {
-                        await fetchWithAuth("GET", 'http://localhost:8000/esncard_emission/');
+                        await fetchCustom("GET", '/esncard_emission/');
                     }}>
                     Confirm
                 </Button>

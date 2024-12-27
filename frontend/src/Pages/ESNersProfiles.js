@@ -7,7 +7,7 @@ import Sidebar from '../Components/Sidebar.js'
 import ProfileDetail from '../Components/ProfileDetail.js';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 
 export default function ESNersProfiles() {
 
@@ -25,7 +25,7 @@ export default function ESNersProfiles() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetchWithAuth("GET", 'http://localhost:8000/user_profiles/');
+                const response = await fetchCustom("GET", '/user_profiles/');
                 const json = await response.json();
                 const formattedData = json.results.map((item) => ({
                     ...item,

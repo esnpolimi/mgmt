@@ -8,7 +8,7 @@ import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
 import Cookies from 'js-cookie';
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 
 const style = {
     position: 'absolute',
@@ -462,7 +462,7 @@ const FormModal = ({open, handleClose}) => {
                         <Button variant="contained" color="grey" onClick={handleClose}>Close</Button>
                         <Button variant="contained" color="primary" onClick={
                             () => {
-                                fetchWithAuth("POST", 'http://localhost:8000/event/', JSON.stringify(convert(formData))).then()
+                                fetchCustom("POST", '/event/', convert(formData)).then()
                             }}>Submit</Button>
                     </Box>
                 </form>

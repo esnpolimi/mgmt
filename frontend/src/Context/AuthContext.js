@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useEffect, useState, useRef} from "react";
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 import {jwtDecode} from "jwt-decode";
 
 const AuthContext = createContext(null);
@@ -20,7 +20,7 @@ export const AuthProvider = ({children}) => {
             }
 
             try {
-                await fetchWithAuth("POST", "http://localhost:8000/logout/").then(
+                await fetchCustom("POST", "/logout/").then(
                     () => {
                         localStorage.removeItem("accessToken");
                         setAccessToken(null);
@@ -34,10 +34,7 @@ export const AuthProvider = ({children}) => {
 
         const refreshAccessToken = useCallback(async () => {
             try {
-                const response = await fetch("http://localhost:8000/api/token/refresh/", {
-                    method: "POST",
-                    credentials: "include",
-                });
+                const response = await fetchCustom("POST", "/api/token/refresh/",  null, {}, false);
                 if (response.ok) {
                     const data = await response.json();
                     localStorage.setItem("accessToken", data.access);
@@ -58,12 +55,9 @@ export const AuthProvider = ({children}) => {
 
         const login = async (username, password) => {
             try {
-                const response = await fetch("http://localhost:8000/login/", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    credentials: "include", // Include cookies
-                    body: JSON.stringify({username, password}),
-                });
+                const response = await fetchCustom("POST", "/login/",
+                    {username, password}, {}, false
+                );
                 if (response.ok) {
                     const data = await response.json();
                     localStorage.setItem("accessToken", data.access);

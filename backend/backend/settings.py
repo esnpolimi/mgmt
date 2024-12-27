@@ -162,7 +162,8 @@ else:
 
 # Allow your frontend origin
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Add your React frontend's URL
+    "http://localhost:3000",  # Development origin for React
+    "https://your-production-site.com",  # Production origin
 ]
 
 # Allow credentials (cookies) in CORS requests

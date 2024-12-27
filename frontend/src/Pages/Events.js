@@ -7,7 +7,7 @@ import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
 import EventIcon from '@mui/icons-material/Event'; // Events icon
 import EditIcon from '@mui/icons-material/Edit';
 import FormModal from '../Components/EventModal.js';
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 
 
 export default function Events() {
@@ -26,7 +26,7 @@ export default function Events() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetchWithAuth("GET", 'http://localhost:8000/events/');
+                const response = await fetchCustom("GET", '/events/');
                 const json = await response.json();
                 setData(json.results);
                 setLoading(false);

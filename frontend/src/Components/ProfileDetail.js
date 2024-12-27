@@ -10,7 +10,7 @@ import {
 
 import EditButton from "./EditButton";
 import CrudTable from "./CrudTable";
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 
 export default function ProfileDetail({row, updateTableRow}) {
 
@@ -111,7 +111,7 @@ export default function ProfileDetail({row, updateTableRow}) {
 
     const saveESNcard = async (row, values) => {
         console.log(row);
-        const response = await fetchWithAuth("PATCH", 'http://localhost:8000/esncard/' + row.id + '/', JSON.stringify(values));
+        const response = await fetchCustom("PATCH", `/esncard/${row.id}/`, values);
         if (response.ok) {
             setDocumentErrors({});
             return true;
@@ -167,7 +167,7 @@ export default function ProfileDetail({row, updateTableRow}) {
     const createDocument = async (values) => {
         let val = {...values, profile: row.original.id}
         console.log(val)
-        const response = await fetchWithAuth("POST", 'http://localhost:8000/document/', JSON.stringify(val));
+        const response = await fetchCustom("POST", '/document/', val);
         if (response.ok) {
             setDocumentErrors({});
             return await response.json();
@@ -182,7 +182,7 @@ export default function ProfileDetail({row, updateTableRow}) {
     /* save edited document */
     const saveDocument = async (row, values) => {
         console.log(row);
-        const response = await fetchWithAuth("PATCH", 'http://localhost:8000/document/' + row.id + '/', JSON.stringify(values));
+        const response = await fetchCustom("PATCH", `/document/${row.id}/`, values);
 
         if (response.ok) {
             setDocumentErrors({});
@@ -226,7 +226,7 @@ export default function ProfileDetail({row, updateTableRow}) {
     const createMatricola = async (values) => {
         let val = {...values, profile: row.original.id}
         console.log(val)
-        const response = await fetchWithAuth("POST", 'http://localhost:8000/matricola/', JSON.stringify(val));
+        const response = await fetchCustom("POST", '/matricola/', val);
 
         if (response.ok) {
             setMatricolaErrors({});
@@ -242,7 +242,7 @@ export default function ProfileDetail({row, updateTableRow}) {
     /* save edited matricola */
     const saveMatricola = async (row, values) => {
         console.log(row);
-        const response = await fetchWithAuth("PATCH", 'http://localhost:8000/matricola/' + row.id + '/', JSON.stringify(values));
+        const response = await fetchCustom("PATCH", `/matricola/${row.id}/`, values);
         if (response.ok) {
             setMatricolaErrors({});
             return true;
@@ -308,7 +308,7 @@ export default function ProfileDetail({row, updateTableRow}) {
             ...updatedData,
             birthdate: formatDateString(updatedData.birthdate)
         }
-        fetchWithAuth("GET", 'http://localhost:8000/profile/' + row.original.id.toString() + '/', JSON.stringify(body)
+        fetchCustom("GET", `/profile/${row.original.id.toString()}/`, body
         ).then((response) => {
             setSaving(false);
             if (response.ok) {
@@ -342,7 +342,7 @@ export default function ProfileDetail({row, updateTableRow}) {
 
     useEffect(() => {
         console.log('Fetching ' + row.original.id)
-        fetchWithAuth("GET", 'http://localhost:8000/profile/' + row.original.id.toString() + '/'
+        fetchCustom("GET", `/profile/${row.original.id.toString()}/`
         ).then((response) => {
             if (response.ok) {
                 return response.json()

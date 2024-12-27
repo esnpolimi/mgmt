@@ -7,7 +7,7 @@ import {Checkbox, FormControlLabel} from '@mui/material';
 import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import {fetchWithAuth} from "../api/api";
+import {fetchCustom} from "../api/api";
 
 const ErasmusForm = () => {
     const [formData, setFormData] = React.useState({
@@ -124,7 +124,7 @@ const ErasmusForm = () => {
         }
 
 
-        fetchWithAuth("POST", 'http://localhost:8000/profile/', JSON.stringify(body)).then(
+        fetchCustom("POST", '/profile/', body).then(
             (response) => {
                 if (response.ok) {
                     setSubmitted(true);
