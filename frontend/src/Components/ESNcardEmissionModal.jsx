@@ -4,7 +4,7 @@ import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, 
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../api/api";
 
-export default function ESNCardEmissionModal({open, profile, onClose}) {
+export default function ESNcardEmissionModal({open, profile, onClose}) {
 
     const style = {
         position: 'absolute',

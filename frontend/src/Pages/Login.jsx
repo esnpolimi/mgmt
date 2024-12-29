@@ -6,7 +6,7 @@ import Container from '@mui/material/Container';
 import React, {useState} from 'react';
 import {useNavigate} from "react-router-dom";
 import {useAuth} from "../Context/AuthContext";
-
+import logo from '../assets/esnpolimi-logo.png';
 
 export default function Login() {
     const [username, setUsername] = useState('')
@@ -54,7 +54,7 @@ export default function Login() {
                     alignItems: 'center',
                 }}
             >
-                <img alt='' src={require('../assets/esnpolimi-logo.png')} style={{height: '25vh'}}/>
+                <img alt='' src={logo} style={{height: '25vh'}}/>
                 <Box>
                     <TextField
                         margin="normal"

@@ -1,12 +1,12 @@
 import React, {useEffect, useState, useMemo} from 'react';
 import {Box, Typography, Chip, Button, IconButton} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import Sidebar from '../Components/Sidebar.js'
+import Sidebar from '../Components/Sidebar.jsx'
 import dayjs from 'dayjs';
-import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
+import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
 import EventIcon from '@mui/icons-material/Event'; // Events icon
 import EditIcon from '@mui/icons-material/Edit';
-import FormModal from '../Components/EventModal.js';
+import FormModal from '../Components/EventModal.jsx';
 import {fetchCustom} from "../api/api";
 
 

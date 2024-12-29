@@ -1,15 +1,16 @@
 import React, {useEffect, useState, useMemo} from 'react';
+import Cookies from 'js-cookie';
 import {Box, Typography, Chip, MenuItem, ListItemIcon, CssBaseline, IconButton} from '@mui/material';
 import {AccountCircle, Send, People} from '@mui/icons-material';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import Sidebar from '../Components/Sidebar.js'
-import ProfileDetail from '../Components/ProfileDetail.js';
+import Sidebar from '../Components/Sidebar.jsx'
+import ProfileDetail from '../Components/ProfileDetail.jsx';
 import dayjs from 'dayjs';
-import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.js'
+import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
 import {fetchCustom} from "../api/api";
 
-export default function ESNersProfiles() {
+export default function ErasmusProfiles() {
 
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -25,28 +26,9 @@ export default function ESNersProfiles() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetchCustom("GET", '/user_profiles/');
+                const response = await fetchCustom("GET", "/erasmus_profiles/");
                 const json = await response.json();
-                const formattedData = json.results.map((item) => ({
-                    ...item,
-                    id: item.profile.id,  // Bring profile.id to top level
-                    name: item.profile.name,
-                    surname: item.profile.surname,
-                    email: item.profile.email,
-                    whatsapp: item.profile.whatsapp,
-                    country: item.profile.country,
-                    gender: item.profile.gender,
-                    birthdate: item.profile.birthdate,
-                    course: item.profile.course,
-                    phone: item.profile.phone,
-                    person_code: item.profile.person_code,
-                    domicile: item.profile.domicile,
-                    residency: item.profile.residency,
-                    latest_document: item.profile.latest_document,
-                    latest_matricola: item.profile.latest_matricola,
-                    latest_esncard: item.profile.latest_esncard,
-                }));
-                setData(formattedData);
+                setData(json.results);
                 setLoading(false);
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -54,7 +36,7 @@ export default function ESNersProfiles() {
             }
         };
 
-        fetchData();
+        fetchData().then();
     }, []);
 
     const columns = useMemo(() => [
@@ -71,11 +53,6 @@ export default function ESNersProfiles() {
         {
             accessorKey: 'surname',
             header: 'Surname',
-            size: 150,
-        },
-        {
-            accessorKey: 'groups',
-            header: 'Group',
             size: 150,
         },
         {
@@ -182,10 +159,9 @@ export default function ESNersProfiles() {
                 id: true,
                 name: true,
                 surname: true,
-                groups: true,
                 email: true,
                 whatsapp: true,
-                country: true,
+                country: false,
                 gender: false,
                 birthdate: false,
                 course: false,
@@ -213,10 +189,13 @@ export default function ESNersProfiles() {
             return (
                 <ProfileDetail row={row} updateTableRow={(id, rowData) => {
                     setData(data.map((row) => {
-                        if (row.profile.id === id) {
+                        if (row.id === id) {
                             let updatedRow = Object.fromEntries(Object.keys(row).map((e) => {
-                                if (e in rowData) return [e, rowData[e]];
-                                else return [e, row[e]]
+                                if (e in rowData) {
+                                    return [e, rowData[e]];
+                                } else {
+                                    return [e, row[e]]
+                                }
                             }));
                             updatedRow.birthdate = formatDateString(rowData.birthdate);
                             return updatedRow;
@@ -233,6 +212,7 @@ export default function ESNersProfiles() {
                 onClick={() => {
                     // Send email logic...
                     closeMenu();
+                    console.log('renderRowActionMenuItems:', row.original.email);
                     setEmissionProfile(row.original);
                     toggleModal(true);
                 }}
@@ -253,7 +233,7 @@ export default function ESNersProfiles() {
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <People sx={{marginRight: '10px'}}/>
-                    <Typography variant="h4">ESNers Profiles</Typography>
+                    <Typography variant="h4">Erasmus Profiles</Typography>
                 </Box>
                 <MaterialReactTable table={table}/>
             </Box>

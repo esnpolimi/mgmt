@@ -6,7 +6,7 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({children}) => {
         const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken"));
-        const [isLoggedOut, setIsLoggedOut] = useState(false);
+        const [isLoggedOut, setIsLoggedOut] = useState(true);
         const refreshTimer = useRef(null);
 
         const logout = useCallback(async () => {
@@ -33,22 +33,27 @@ export const AuthProvider = ({children}) => {
         }, []);
 
         const refreshAccessToken = useCallback(async () => {
-            try {
-                const response = await fetchCustom("POST", "/api/token/refresh/",  null, {}, false);
-                if (response.ok) {
-                    const data = await response.json();
-                    localStorage.setItem("accessToken", data.access);
-                    setAccessToken(data.access);
-                    setIsLoggedOut(false);
-                    return true;
-                } else {
-                    console.warn("Token refresh failed. Logging out...");
+            if (accessToken) {
+                try {
+                    const response = await fetchCustom("POST", "/api/token/refresh/", null, {}, false);
+                    if (response.ok) {
+                        const data = await response.json();
+                        localStorage.setItem("accessToken", data.access);
+                        setAccessToken(data.access);
+                        setIsLoggedOut(false);
+                        return true;
+                    } else {
+                        console.warn("Token refresh failed. Logging out...");
+                        await logout();
+                        return false;
+                    }
+                } catch (error) {
+                    console.error("Refresh token error:", error);
                     await logout();
                     return false;
                 }
-            } catch (error) {
-                console.error("Refresh token error:", error);
-                await logout();
+            } else {
+                console.log("Skipping token refresh, user is not logged in");
                 return false;
             }
         }, [logout]);
@@ -76,7 +81,6 @@ export const AuthProvider = ({children}) => {
         useEffect(() => {
             const scheduleTokenRefresh = () => {
                 if (accessToken && !isLoggedOut) {
-                    //console.log("Access token found, scheduling refresh...");
                     const {exp} = jwtDecode(accessToken);
                     const now = Math.floor(Date.now() / 1000);
                     const ACCESS_TOKEN_LIFETIME_MINUTES = 1;

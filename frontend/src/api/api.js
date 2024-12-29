@@ -1,6 +1,6 @@
 export const fetchCustom = async (method, path, body = null, options = {}, auth = true) => {
     const accessToken = localStorage.getItem("accessToken");
-    const API_HOST = process.env.REACT_APP_API_HOST;
+    const API_HOST = import.meta.env.VITE_API_HOST;
     const url = `${API_HOST}${path}`;
     //console.log('Url', url);
 
@@ -11,7 +11,7 @@ export const fetchCustom = async (method, path, body = null, options = {}, auth 
     // Set default headers
     const headers = {
         "Content-Type": "application/json", // Default content type for JSON requests
-        ...(auth && { Authorization: `Bearer ${accessToken}` }), // Include Authorization header only when auth is true
+        ...(auth && {Authorization: `Bearer ${accessToken}`}), // Include Authorization header only when auth is true
         ...options.headers, // Merge with additional headers if provided
     };
 

@@ -12,7 +12,7 @@ const ProtectedRoute = ({children}) => {
     useEffect(() => {
         const checkAccessToken = async () => {
             if (!accessToken) {
-                console.log("Access token is missing or expired!!");
+                console.log("Access token is missing or expired!");
                 const refreshed = await refreshAccessToken();
                 if (!refreshed) {
                     navigate("/login");

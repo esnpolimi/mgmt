@@ -1,15 +1,15 @@
 import {HashRouter as Router, Routes, Route} from 'react-router-dom';
 import './App.css';
-import Login from './Pages/Login.js'
-import ErasmusForm from './Pages/ErasmusForm.js';
-import ESNerForm from './Pages/ESNerForm.js';
-import ErasmusProfiles from './Pages/ErasmusProfiles.js';
-import ESNersProfiles from './Pages/ESNersProfiles.js';
-import Home from './Pages/Home.js'
-import Treasury from './Pages/Treasury.js';
-import Events from './Pages/Events.js';
-import {AuthProvider} from "./Context/AuthContext";
-import ProtectedRoute from "./Components/ProtectedRoute";
+import Login from './Pages/Login.jsx'
+import ErasmusForm from './Pages/ErasmusForm.jsx';
+import ESNerForm from './Pages/ESNerForm.jsx';
+import ErasmusProfiles from './Pages/ErasmusProfiles.jsx';
+import ESNersProfiles from './Pages/ESNersProfiles.jsx';
+import Home from './Pages/Home.jsx'
+import Treasury from './Pages/Treasury.jsx';
+import Events from './Pages/Events.jsx';
+import {AuthProvider} from "./Context/AuthContext.jsx";
+import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 
 
 function App() {
