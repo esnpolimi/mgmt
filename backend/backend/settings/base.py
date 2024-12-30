@@ -9,24 +9,28 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
+import os
 from datetime import timedelta
+from decouple import Config, RepositoryEnv
+from corsheaders.defaults import default_headers
 from pathlib import Path
 
-from corsheaders.defaults import default_headers
+# Determine the environment (default to development)
+ENVIRONMENT = os.getenv("DJANGO_ENV").lower()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+if ENVIRONMENT == "production":
+    env_file = ".env.production"
+else:
+    env_file = ".env.development"
+
+# Load the .env file
+env = Config(RepositoryEnv(env_file))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-*%2b=z8*v&575f8#dy%ysf=sdm4=ade7c7qx^1%s@q%2)yxb*f"
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Application definition
 
@@ -79,16 +83,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "backend.wsgi.application"
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -146,25 +140,15 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': 'SETTAMI',  # Keep this secret
+    'SIGNING_KEY': env('SIMPLE_JWT_SIGNING_KEY'),
     'USER_ID_FIELD': 'profile',  # Use 'profile' because it references the user's email
     'USER_ID_CLAIM': 'user_id',
 }
 
-SECURE_COOKIES = False  # Set to True in production (requires HTTPS)
-
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-if DEBUG:
-    HOSTNAME = 'localhost'
-else:
-    HOSTNAME = 'mgmt.esnpolimi.it'
-
 # Allow your frontend origin
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Development origin for React
-    "https://your-production-site.com",  # Production origin
-]
+CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS').split(",")
 
 # Allow credentials (cookies) in CORS requests
 CORS_ALLOW_CREDENTIALS = True
