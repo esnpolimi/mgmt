@@ -4,6 +4,11 @@ import os
 import sys
 
 
+# Just a verification that the environment variables are correctly exported/set
+# print("DJANGO_ENV:", os.getenv("DJANGO_ENV"))
+# print("DJANGO_SETTINGS_MODULE:", os.getenv("DJANGO_SETTINGS_MODULE"))
+
+
 def main():
     """Run administrative tasks."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
