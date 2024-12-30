@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from backend.settings import HOSTNAME
+from django.conf import settings
 from profiles.models import Profile, Document, Matricola
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
 from profiles.serializers import MatricolaCreateSerializer, DocumentCreateSerializer, MatricolaEditSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
@@ -15,6 +15,7 @@ from users.managers import UserManager
 from users.models import User
 
 logger = logging.getLogger(__name__)
+HOSTNAME = settings.HOSTNAME
 
 
 # Endpoint to retrieve a list of the Erasmus profiles. Pagination is implemented
