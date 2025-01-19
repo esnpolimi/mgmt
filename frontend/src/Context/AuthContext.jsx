@@ -3,15 +3,14 @@ import {fetchCustom} from "../api/api";
 import {jwtDecode} from "jwt-decode";
 
 const AuthContext = createContext(null);
+const ACCESS_TOKEN_LIFETIME_MINUTES = import.meta.env.VITE_ACCESS_TOKEN_LIFETIME_MINUTES;
 
 export const AuthProvider = ({children}) => {
         const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken"));
-        const [isLoggedOut, setIsLoggedOut] = useState(true);
         const refreshTimer = useRef(null);
 
         const logout = useCallback(async () => {
             console.log("Logout function called");
-            setIsLoggedOut(true);
 
             if (refreshTimer.current) {
                 console.log("Aborting refresh timer...");
@@ -40,7 +39,6 @@ export const AuthProvider = ({children}) => {
                         const data = await response.json();
                         localStorage.setItem("accessToken", data.access);
                         setAccessToken(data.access);
-                        setIsLoggedOut(false);
                         return true;
                     } else {
                         console.warn("Token refresh failed. Logging out...");
@@ -67,7 +65,6 @@ export const AuthProvider = ({children}) => {
                     const data = await response.json();
                     localStorage.setItem("accessToken", data.access);
                     setAccessToken(data.access);
-                    setIsLoggedOut(false);
                     return true;
                 } else {
                     console.error("Invalid credentials");
@@ -80,12 +77,10 @@ export const AuthProvider = ({children}) => {
 
         useEffect(() => {
             const scheduleTokenRefresh = () => {
-                if (accessToken && !isLoggedOut) {
+                if (accessToken) {
                     const {exp} = jwtDecode(accessToken);
                     const now = Math.floor(Date.now() / 1000);
-                    const ACCESS_TOKEN_LIFETIME_MINUTES = 1;
                     const refreshTime = (exp - now - 30) * 1000 * ACCESS_TOKEN_LIFETIME_MINUTES; // Refresh 30 seconds before expiry
-
                     const expDate = new Date(exp * 1000);
                     const nowDate = new Date(now * 1000);
                     console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
@@ -93,8 +88,8 @@ export const AuthProvider = ({children}) => {
                     if (refreshTime > 0) {
                         if (refreshTimer.current) {
                             clearTimeout(refreshTimer.current);
+                            refreshTimer.current = null;
                         }
-
                         refreshTimer.current = setTimeout(() => {
                             console.log("Refreshing access token...");
                             refreshAccessToken().then();
@@ -109,6 +104,7 @@ export const AuthProvider = ({children}) => {
                         };
                     } else {
                         console.log("Refresh time is not valid, no timer set");
+                        setAccessToken(null);
                     }
                 } else {
                     console.log("No access token found, skipping refresh scheduling");
@@ -116,10 +112,10 @@ export const AuthProvider = ({children}) => {
             };
 
             scheduleTokenRefresh();
-        }, [accessToken, refreshAccessToken, isLoggedOut]);
+        }, [accessToken, refreshAccessToken]);
 
         return (
-            <AuthContext.Provider value={{accessToken, refreshAccessToken, login, logout}}>
+            <AuthContext.Provider value={{accessToken, refreshAccessToken, logout, login}}>
                 {children}
             </AuthContext.Provider>
         );

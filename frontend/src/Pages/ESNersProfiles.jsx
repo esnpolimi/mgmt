@@ -4,7 +4,7 @@ import {AccountCircle, Send, People} from '@mui/icons-material';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.jsx'
-import ProfileDetail from '../Components/ProfileDetail.jsx';
+import ProfileModal from '../Components/ProfileModal.jsx';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
 import {fetchCustom} from "../api/api";
@@ -211,7 +211,7 @@ export default function ESNersProfiles() {
         },
         renderDetailPanel: ({row}) => {
             return (
-                <ProfileDetail row={row} updateTableRow={(id, rowData) => {
+                <ProfileModal row={row} updateTableRow={(id, rowData) => {
                     setData(data.map((row) => {
                         if (row.profile.id === id) {
                             let updatedRow = Object.fromEntries(Object.keys(row).map((e) => {

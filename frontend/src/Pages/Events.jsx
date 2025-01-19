@@ -16,7 +16,7 @@ export default function Events() {
     const [loading, setLoading] = useState(true);
     const [drawerOpen, toggleDrawer] = useState(false);
 
-    const [modalOpen, setModalOpen] = useState(false);
+    const [modalOpen, toggleModal] = useState(false);
     const [emissionProfile, setEmissionProfile] = useState({});
 
     const formatDateString = (date) => {
@@ -137,7 +137,7 @@ export default function Events() {
         renderTopToolbarCustomActions: ({table}) => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                    <Button variant='contained' onClick={() => setModalOpen(true)}>
+                    <Button variant='contained' onClick={() => toggleModal(true)}>
                         Create
                     </Button>
                 </Box>
@@ -149,7 +149,7 @@ export default function Events() {
     return (
         <Box>
             <Sidebar/>
-            <FormModal open={modalOpen} handleClose={() => setModalOpen(false)} />
+            <FormModal open={modalOpen} handleClose={() => toggleModal(false)} />
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <EventIcon sx={{marginRight: '10px'}}/>

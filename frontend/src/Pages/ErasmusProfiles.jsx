@@ -1,14 +1,14 @@
 import React, {useEffect, useState, useMemo} from 'react';
-import Cookies from 'js-cookie';
 import {Box, Typography, Chip, MenuItem, ListItemIcon, CssBaseline, IconButton} from '@mui/material';
 import {AccountCircle, Send, People} from '@mui/icons-material';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.jsx'
-import ProfileDetail from '../Components/ProfileDetail.jsx';
+import ProfileModal from '../Components/ProfileModal.jsx';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
 import {fetchCustom} from "../api/api";
+import EditIcon from "@mui/icons-material/Edit";
 
 export default function ErasmusProfiles() {
 
@@ -185,9 +185,9 @@ export default function ErasmusProfiles() {
             shape: 'rounded',
             variant: 'outlined',
         },
-        renderDetailPanel: ({row}) => {
+        /*renderDetailPanel: ({row}) => {
             return (
-                <ProfileDetail row={row} updateTableRow={(id, rowData) => {
+                <ProfileModal row={row} updateTableRow={(id, rowData) => {
                     setData(data.map((row) => {
                         if (row.id === id) {
                             let updatedRow = Object.fromEntries(Object.keys(row).map((e) => {
@@ -205,8 +205,8 @@ export default function ErasmusProfiles() {
                     }));
                 }}/>
             );
-        },
-        renderRowActionMenuItems: ({closeMenu, row, table}) => [
+        },*/
+        /*renderRowActionMenuItems: ({closeMenu, row, table}) => [
             <MenuItem
                 key={1}
                 onClick={() => {
@@ -223,13 +223,23 @@ export default function ErasmusProfiles() {
                 </ListItemIcon>
                 Release ESNcard
             </MenuItem>,
-        ],
+        ],*/
+
+        renderRowActions: ({row}) => {
+            return (
+                <IconButton variant='contained' onClick={() => {
+                    setEmissionProfile(row.original);
+                    toggleModal(true);
+                }}>
+                    <EditIcon/>
+                </IconButton>
+            )
+        },
     });
 
     return (
         <Box>
             <Sidebar/>
-            <ESNcardEmissionModal open={modalOpen} profile={emissionProfile} onClose={() => toggleModal(false)}/>
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <People sx={{marginRight: '10px'}}/>
@@ -237,6 +247,13 @@ export default function ErasmusProfiles() {
                 </Box>
                 <MaterialReactTable table={table}/>
             </Box>
+            {modalOpen && (
+                <ProfileModal
+                    profile={emissionProfile}
+                    open={modalOpen}
+                    handleClose={() => toggleModal(false)}
+                />
+            )}
         </Box>
     );
 }
