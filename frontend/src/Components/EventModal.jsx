@@ -1,13 +1,13 @@
 import React, {useState} from 'react';
 import {
-    Modal, Box, TextField, FormControlLabel, Switch, Button, Grid, Checkbox, FormControl,
+    Modal, Box, TextField, FormControlLabel, Switch, Button, Checkbox, FormControl,
     InputLabel, Select, MenuItem, IconButton, Paper, Typography
 } from '@mui/material';
+import Grid from '@mui/material/Grid2';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
-import Cookies from 'js-cookie';
 import {fetchCustom} from "../api/api";
 
 const style = {
@@ -214,258 +214,259 @@ const FormModal = ({open, handleClose}) => {
     return (
         <Modal open={open} onClose={handleClose}>
             <Box sx={style}>
-                <form>
-                    <Typography variant="h5" gutterBottom align="center">
-                        New Event
-                    </Typography>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                fullWidth
-                                label="Name"
-                                name="name"
-                                value={formData.name}
-                                onChange={handleInputChange}
+                <Typography variant="h5" gutterBottom align="center">
+                    New Event
+                </Typography>
+                <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            fullWidth
+                            label="Name"
+                            name="name"
+                            value={formData.name}
+                            onChange={handleInputChange}
 
+                        />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                            <DatePicker
+                                label="Date"
+                                value={formData.date}
+                                onChange={(date) => handleDateChange('date', date)}
+                                renderInput={(params) => <TextField {...params}
+                                                                    fullWidth
+                                                                    required
+                                />}
                             />
+                        </LocalizationProvider>
+                    </Grid>
+                </Grid>
+                <TextField
+                    fullWidth
+                    label="Description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    margin="normal"
+                    multiline
+                    rows={4}
+                />
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={formData.enableForm}
+                            onChange={handleInputChange}
+                            name="enableForm"
+                            color="primary"
+                        />
+                    }
+                    label="Enable Form"
+                />
+                <Box my={2}>
+                    <Grid container spacing={2} alignItems="center">
+                        <Grid item>
+                            <Typography variant="h6" gutterBottom>
+                                Tables
+                            </Typography>
                         </Grid>
-                        <Grid item xs={12} md={6}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                <DatePicker
-                                    label="Date"
-                                    value={formData.date}
-                                    onChange={(date) => handleDateChange('date', date)}
-                                    renderInput={(params) => <TextField {...params}
-                                                                        fullWidth
-                                                                        required
-                                    />}
-                                />
-                            </LocalizationProvider>
+                        <Grid item>
+                            <IconButton onClick={handleAddTable}>
+                                <AddIcon/>
+                            </IconButton>
                         </Grid>
                     </Grid>
-                    <TextField
-                        fullWidth
-                        label="Description"
-                        name="description"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                        margin="normal"
-                        multiline
-                        rows={4}
-                    />
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={formData.enableForm}
-                                onChange={handleInputChange}
-                                name="enableForm"
-                                color="primary"
-                            />
-                        }
-                        label="Enable Form"
-                    />
-                    <Box my={2}>
-                        <Grid container spacing={2} alignItems="center">
+                    {formData.tables.map((table, index) => (
+                        <Grid container spacing={2} alignItems="center" mb={2} key={index}>
                             <Grid item>
-                                <Typography variant="h6" gutterBottom>
-                                    Tables
-                                </Typography>
+                                <TextField
+                                    label="Name"
+                                    name="name"
+                                    value={table.name}
+                                    onChange={(e) => handleTableChange(index, e)}
+                                />
                             </Grid>
                             <Grid item>
-                                <IconButton onClick={handleAddTable}>
+                                <TextField
+                                    label="Capacity"
+                                    name="capacity"
+                                    type="number"
+                                    value={table.capacity}
+                                    onChange={(e) => handleTableChange(index, e)}
+                                />
+                            </Grid>
+                            <Grid item xs={2}>
+                                <IconButton onClick={() => handleDeleteTable(index)}>
+                                    <DeleteIcon/>
+                                </IconButton>
+                            </Grid>
+                        </Grid>
+                    ))}
+                </Box>
+
+                <Box my={2}>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="h6" gutterBottom>
+                                Profile Fields
+                            </Typography>
+                            <FormControl sx={{minWidth: '100%'}}>
+                                <Select
+                                    variant="outlined"
+                                    multiple
+                                    value={formData.profileFields}
+                                    onChange={handleProfileFieldChange}
+                                    renderValue={(selected) => selected.join(', ')}
+                                >
+                                    {profileFieldOptions.map((option) => (
+                                        <MenuItem key={option} value={option}>
+                                            <Checkbox checked={formData.profileFields.indexOf(option) > -1}/>
+                                            {option}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                    </Grid>
+                </Box>
+
+                {['additionalFields', 'formFields'].map((fieldType) => (
+                    <Box my={2} key={fieldType}>
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={6}>
+                                <Typography variant="h6" gutterBottom>
+                                    {fieldType === 'additionalFields' ? 'Additional Fields' : 'Form Fields'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={6} textAlign="right">
+                                <IconButton onClick={() => handleAddField(fieldType)}>
                                     <AddIcon/>
                                 </IconButton>
                             </Grid>
                         </Grid>
-                        {formData.tables.map((table, index) => (
-                            <Grid container spacing={2} alignItems="center" mb={2} key={index}>
-                                <Grid item>
-                                    <TextField
-                                        label="Name"
-                                        name="name"
-                                        value={table.name}
-                                        onChange={(e) => handleTableChange(index, e)}
-                                    />
+                        {formData[fieldType].map((field, index) => (
+                            <Paper key={index} sx={{p: 2, mb: 1}}>
+                                <Grid container spacing={2} alignItems="center">
+                                    <Grid item xs={4}>
+                                        <TextField
+                                            fullWidth
+                                            label="Name"
+                                            name="name"
+                                            value={field.name}
+                                            onChange={(e) => handleFieldChange(fieldType, index, e)}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={2}>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={field.editableByOffice}
+                                                    onChange={(e) => handleFieldChange(fieldType, index, e)}
+                                                    name="editableByOffice"
+                                                />
+                                            }
+                                            label="Editable"
+                                        />
+                                    </Grid>
+                                    <Grid item xs={2}>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={field.visibleByOffice}
+                                                    onChange={(e) => handleFieldChange(fieldType, index, e)}
+                                                    name="visibleByOffice"
+                                                />
+                                            }
+                                            label="Visible"
+                                        />
+                                    </Grid>
+                                    <Grid item xs={3}>
+                                        <FormControl fullWidth>
+                                            <InputLabel>Type</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                name="type"
+                                                value={field.type}
+                                                onChange={(e) => handleFieldChange(fieldType, index, e)}
+                                            >
+                                                <MenuItem value="text">Text</MenuItem>
+                                                <MenuItem value="integer">Integer</MenuItem>
+                                                <MenuItem value="float">Float</MenuItem>
+                                                <MenuItem value="single choice">Single Choice</MenuItem>
+                                                <MenuItem value="multiple choice">Multiple Choice</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                    <Grid item xs={1}>
+                                        <IconButton onClick={() => handleDeleteField(fieldType, index)}>
+                                            <DeleteIcon/>
+                                        </IconButton>
+                                    </Grid>
                                 </Grid>
-                                <Grid item>
-                                    <TextField
-                                        label="Capacity"
-                                        name="capacity"
-                                        type="number"
-                                        value={table.capacity}
-                                        onChange={(e) => handleTableChange(index, e)}
-                                    />
-                                </Grid>
-                                <Grid item xs={2}>
-                                    <IconButton onClick={() => handleDeleteTable(index)}>
-                                        <DeleteIcon/>
-                                    </IconButton>
-                                </Grid>
-                            </Grid>
-                        ))}
-                    </Box>
-
-                    <Box my={2}>
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} md={6}>
-                                <Typography variant="h6" gutterBottom>
-                                    Profile Fields
-                                </Typography>
-                                <FormControl sx={{minWidth: '100%'}}>
-                                    <Select
-                                        multiple
-                                        value={formData.profileFields}
-                                        onChange={handleProfileFieldChange}
-                                        renderValue={(selected) => selected.join(', ')}
-                                    >
-                                        {profileFieldOptions.map((option) => (
-                                            <MenuItem key={option} value={option}>
-                                                <Checkbox checked={formData.profileFields.indexOf(option) > -1}/>
-                                                {option}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-                        </Grid>
-                    </Box>
-
-                    {['additionalFields', 'formFields'].map((fieldType) => (
-                        <Box my={2} key={fieldType}>
-                            <Grid container spacing={2} alignItems="center">
-                                <Grid item xs={6}>
-                                    <Typography variant="h6" gutterBottom>
-                                        {fieldType === 'additionalFields' ? 'Additional Fields' : 'Form Fields'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={6} textAlign="right">
-                                    <IconButton onClick={() => handleAddField(fieldType)}>
-                                        <AddIcon/>
-                                    </IconButton>
-                                </Grid>
-                            </Grid>
-                            {formData[fieldType].map((field, index) => (
-                                <Paper key={index} sx={{p: 2, mb: 1}}>
+                                {field.type === 'text' && (
                                     <Grid container spacing={2} alignItems="center">
                                         <Grid item xs={4}>
                                             <TextField
                                                 fullWidth
-                                                label="Name"
-                                                name="name"
-                                                value={field.name}
+                                                label="Length"
+                                                name="length"
+                                                value={field.length}
                                                 onChange={(e) => handleFieldChange(fieldType, index, e)}
+                                                type="number"
                                             />
-                                        </Grid>
-                                        <Grid item xs={2}>
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={field.editableByOffice}
-                                                        onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                                        name="editableByOffice"
-                                                    />
-                                                }
-                                                label="Editable"
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2}>
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={field.visibleByOffice}
-                                                        onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                                        name="visibleByOffice"
-                                                    />
-                                                }
-                                                label="Visible"
-                                            />
-                                        </Grid>
-                                        <Grid item xs={3}>
-                                            <FormControl fullWidth>
-                                                <InputLabel>Type</InputLabel>
-                                                <Select
-                                                    name="type"
-                                                    value={field.type}
-                                                    onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                                >
-                                                    <MenuItem value="text">Text</MenuItem>
-                                                    <MenuItem value="integer">Integer</MenuItem>
-                                                    <MenuItem value="float">Float</MenuItem>
-                                                    <MenuItem value="single choice">Single Choice</MenuItem>
-                                                    <MenuItem value="multiple choice">Multiple Choice</MenuItem>
-                                                </Select>
-                                            </FormControl>
-                                        </Grid>
-                                        <Grid item xs={1}>
-                                            <IconButton onClick={() => handleDeleteField(fieldType, index)}>
-                                                <DeleteIcon/>
-                                            </IconButton>
                                         </Grid>
                                     </Grid>
-                                    {field.type === 'text' && (
-                                        <Grid container spacing={2} alignItems="center">
-                                            <Grid item xs={4}>
-                                                <TextField
-                                                    fullWidth
-                                                    label="Length"
-                                                    name="length"
-                                                    value={field.length}
-                                                    onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                                    type="number"
-                                                />
-                                            </Grid>
-                                        </Grid>
-                                    )}
-                                    {(field.type === 'single choice' || field.type === 'multiple choice') && (
-                                        <Box mt={2} ml={2}>
-                                            <Grid container spacing={2}>
-                                                <Grid item xs={12}><Button onClick={() => handleAddChoice(fieldType, index)}>Add Choice</Button></Grid>
-                                                {field.choices.map((choice, choiceIndex) => (
-                                                    <Grid container spacing={2} key={choiceIndex} alignItems="center">
-                                                        <Grid item xs={5}>
-                                                            <TextField
-                                                                fullWidth
-                                                                label="Value"
-                                                                name="value"
-                                                                value={choice.value}
-                                                                onChange={(e) => handleChoiceChange(fieldType, index, choiceIndex, e)}
-                                                            />
-                                                        </Grid>
-                                                        <Grid item xs={5}>
-                                                            <FormControl fullWidth>
-                                                                <InputLabel>Color</InputLabel>
-                                                                <Select
-                                                                    name="color"
-                                                                    value={choice.color}
-                                                                    onChange={(e) => handleColorChange(fieldType, index, choiceIndex, e)}
-                                                                >
-                                                                    {colorOptions.map((option) => (
-                                                                        <MenuItem key={option.value} value={option.value}>
-                                                                            <div style={{backgroundColor: option.value, width: 20, height: 20, display: 'inline-block', marginRight: 8}}></div>
-                                                                            {option.label}
-                                                                        </MenuItem>
-                                                                    ))}
-                                                                </Select>
-                                                            </FormControl>
-                                                        </Grid>
+                                )}
+                                {(field.type === 'single choice' || field.type === 'multiple choice') && (
+                                    <Box mt={2} ml={2}>
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={12}><Button onClick={() => handleAddChoice(fieldType, index)}>Add Choice</Button></Grid>
+                                            {field.choices.map((choice, choiceIndex) => (
+                                                <Grid container spacing={2} key={choiceIndex} alignItems="center">
+                                                    <Grid item xs={5}>
+                                                        <TextField
+                                                            fullWidth
+                                                            label="Value"
+                                                            name="value"
+                                                            value={choice.value}
+                                                            onChange={(e) => handleChoiceChange(fieldType, index, choiceIndex, e)}
+                                                        />
                                                     </Grid>
-                                                ))}
-                                            </Grid>
-                                        </Box>
-                                    )}
-                                </Paper>
-                            ))}
-                        </Box>
-                    ))}
-
-                    <Box mt={2}>
-                        <Button variant="contained" color="grey" onClick={handleClose}>Close</Button>
-                        <Button variant="contained" color="primary" onClick={
-                            () => {
-                                fetchCustom("POST", '/event/', convert(formData)).then()
-                            }}>Submit</Button>
+                                                    <Grid item xs={5}>
+                                                        <FormControl fullWidth>
+                                                            <InputLabel>Color</InputLabel>
+                                                            <Select
+                                                                variant="outlined"
+                                                                name="color"
+                                                                value={choice.color}
+                                                                onChange={(e) => handleColorChange(fieldType, index, choiceIndex, e)}
+                                                            >
+                                                                {colorOptions.map((option) => (
+                                                                    <MenuItem key={option.value} value={option.value}>
+                                                                        <div style={{backgroundColor: option.value, width: 20, height: 20, display: 'inline-block', marginRight: 8}}></div>
+                                                                        {option.label}
+                                                                    </MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+                                                    </Grid>
+                                                </Grid>
+                                            ))}
+                                        </Grid>
+                                    </Box>
+                                )}
+                            </Paper>
+                        ))}
                     </Box>
-                </form>
+                ))}
+
+                <Box mt={2}>
+                    <Button variant="contained" color="grey" onClick={handleClose}>Close</Button>
+                    <Button variant="contained" color="primary" onClick={
+                        () => {
+                            fetchCustom("POST", '/event/', convert(formData)).then()
+                        }}>Submit</Button>
+                </Box>
             </Box>
         </Modal>
     );
