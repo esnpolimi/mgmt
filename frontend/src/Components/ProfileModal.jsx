@@ -12,44 +12,12 @@ import {
 import EditButton from "./EditButton";
 import CrudTable from "./CrudTable";
 import {fetchCustom} from "../api/api";
+import {style, colorOptions} from '../utils/sharedStyles'
 
-const style = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '80%',
-    maxWidth: 1200,
-    maxHeight: '90vh',
-    bgcolor: 'background.paper',
-    border: '2px solid #000',
-    boxShadow: 24,
-    p: 4,
-    overflow: 'auto',
-};
 
-const colorOptions = [
-    {label: 'Red', value: '#FF0000'},
-    {label: 'Green', value: '#00FF00'},
-    {label: 'Blue', value: '#0000FF'},
-    {label: 'Yellow', value: '#FFFF00'},
-    {label: 'Cyan', value: '#00FFFF'},
-    {label: 'Magenta', value: '#FF00FF'},
-    {label: 'Black', value: '#000000'},
-    {label: 'White', value: '#FFFFFF'},
-    {label: 'Orange', value: '#FFA500'},
-    {label: 'Purple', value: '#800080'},
-    {label: 'Pink', value: '#FFC0CB'},
-    {label: 'Brown', value: '#A52A2A'},
-    {label: 'Gray', value: '#808080'},
-    {label: 'Lime', value: '#00FF00'},
-    {label: 'Maroon', value: '#800000'},
-    {label: 'Navy', value: '#000080'}
-];
-
-const ProfileModal = ({open, handleClose, profile}) => {
+const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
-    console.log("Profile:", profile);
+    //console.log("Profile:", profile);
 
     const [data, setData] = useState({  /* profile fields */
         email: '',
@@ -335,31 +303,24 @@ const ProfileModal = ({open, handleClose, profile}) => {
         resetErrors();
     };
 
-
     const handleSave = () => {
         setSaving(true);
         const body = {
             ...updatedData,
             birthdate: formatDateString(updatedData.birthdate)
         }
-        fetchCustom("GET", `/profile/${profile.id.toString()}/`, body
+        fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body
         ).then((response) => {
             setSaving(false);
             if (response.ok) {
-                setData(updatedData);
-                resetErrors();
-
-                //update table row
-                updateTableRow(profile.id, updatedData);
+                // Reload updated profile from the server
+                return fetchCustom("GET", `/profile/${profile.id.toString()}/`);
             } else if (response.status === 400) {
                 response.json().then((json) => {
-                    var updatedErrors = Object.fromEntries(Object.keys(errors).map(
+                    const updatedErrors = Object.fromEntries(Object.keys(errors).map(
                         (e) => {
-                            if (e in json) {
-                                return [e, [true, json[e]]];
-                            } else {
-                                return [e, [false, '']];
-                            }
+                            if (e in json) return [e, [true, json[e]]];
+                            else return [e, [false, '']];
                         }
                     ));
                     setErrors(updatedErrors);
@@ -367,10 +328,31 @@ const ProfileModal = ({open, handleClose, profile}) => {
             } else {
                 throw new Error('Error while patching profile ' + profile.id.toString())
             }
-        }).catch((error) => {
-            setUpdatedData(data);
-            console.log(error);
+        }).then((response) => {
+            if (response && response.ok) {
+                return response.json();
+            }
         })
+            .then((newData) => {
+                if (newData) {
+                    // Update local modal data
+                    setData(newData);
+                    setUpdatedData(newData);
+
+                    // Notify parent component with the updated profile
+                    if (updateProfile) {
+                        updateProfile(newData); // Calls the callback provided by the parent
+                    }
+
+                    resetErrors();
+                }
+                setSaving(false);
+            })
+            .catch((error) => {
+                console.log(error);
+                setUpdatedData(data);
+                setSaving(false);
+            });
     };
 
 
@@ -403,7 +385,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                 </Typography>
                 <Card sx={{p: '20px'}}>
                     <Grid container spacing={2}>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
                                 label='Name'
                                 name='name'
@@ -416,7 +398,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 onChange={handleChange}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Surname'
                                 name='surname'
@@ -429,7 +411,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Email'
                                 name='email'
@@ -442,7 +424,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 onChange={handleChange} fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Phone number'
                                 name='phone'
@@ -455,7 +437,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Whatsapp number'
                                 name='whatsapp'
@@ -468,7 +450,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Domicile'
                                 name='domicile'
@@ -481,7 +463,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Residency'
                                 name='residency'
@@ -494,7 +476,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <TextField
                                 label='Person code'
                                 name='person_code'
@@ -507,7 +489,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                 <DatePicker
                                     label="Birthdate"
@@ -521,7 +503,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 />
                             </LocalizationProvider>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <FormControl
                                 fullWidth
                                 required
@@ -538,7 +520,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                     slotProps={{
                                         input: {readOnly: readOnly.country}
                                     }}
-                                 >
+                                >
                                     <MenuItem value="">
                                         <em>None</em>
                                     </MenuItem>
@@ -548,7 +530,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <FormControl
                                 fullWidth
                                 required
@@ -564,7 +546,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                     slotProps={{
                                         input: {readOnly: readOnly.gender}
                                     }}
-                                 >
+                                >
                                     <MenuItem value="M">Male</MenuItem>
                                     <MenuItem value="F">Female</MenuItem>
                                     <MenuItem value="O">Other</MenuItem>
@@ -572,7 +554,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <FormControl
                                 fullWidth
                                 required
@@ -588,7 +570,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                     slotProps={{
                                         input: {readOnly: readOnly.course}
                                     }}
-                                 >
+                                >
                                     <MenuItem value="Engineering">Engineering</MenuItem>
                                     <MenuItem value="Design">Design</MenuItem>
                                     <MenuItem value="Architecture">Architecture</MenuItem>
@@ -596,7 +578,7 @@ const ProfileModal = ({open, handleClose, profile}) => {
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item xs={12} md={4} lg={3}>
+                        <Grid item={undefined} xs={12} md={4} lg={3}>
                             <EditButton
                                 onEdit={() => toggleEdit(true)}
                                 onCancel={() => {

@@ -237,6 +237,14 @@ export default function ErasmusProfiles() {
         },
     });
 
+    const updateProfile = (newData) => {
+        setData((prevProfiles) =>
+            prevProfiles.map((profile) =>
+                profile.id === newData.id ? newData : profile
+            )
+        );
+    };
+
     return (
         <Box>
             <Sidebar/>
@@ -252,6 +260,7 @@ export default function ErasmusProfiles() {
                     profile={emissionProfile}
                     open={modalOpen}
                     handleClose={() => toggleModal(false)}
+                    updateProfile={updateProfile}
                 />
             )}
         </Box>

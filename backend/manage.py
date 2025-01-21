@@ -4,14 +4,15 @@ import os
 import sys
 
 
-# Just a verification that the environment variables are correctly exported/set
-# print("DJANGO_ENV:", os.getenv("DJANGO_ENV"))
-# print("DJANGO_SETTINGS_MODULE:", os.getenv("DJANGO_SETTINGS_MODULE"))
+# Set a default DJANGO_ENV to "dev" if not already set
+DJANGO_ENV = os.getenv("DJANGO_ENV", "dev")
+
+# Dynamically load the appropriate settings file
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", f"backend.settings.{DJANGO_ENV}")
 
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
