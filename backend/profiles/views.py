@@ -101,18 +101,18 @@ def profile_creation(request):
 def profile_detail(request, pk):
     try:
         profile = Profile.objects.get(pk=pk)
-
         if request.method == 'GET':
             serializer = ProfileDetailViewSerializer(profile)
             return Response(serializer.data)
 
         elif request.method == 'PATCH':
-            if request.user.has_perm('profiles.profile.can_change_profile'):
+            print(request.user.groups.all())
+            if request.user.has_perm('profiles.change_profile'):
                 serializer = ProfileFullEditSerializer(profile, data=request.data, partial=True)
-            elif request.user.has_perm('profiles.profile.can_change_person_code'):
+            elif request.user.has_perm('profiles.change_person_code'): # TODO: permission to define via Meta in the model
                 serializer = ProfileBasicEditSerializer(profile, data=request.data, partial=True)
             else:
-                return Response(status=401)
+                return Response({'error': 'You do not have permission to delete this profile.'}, status=403)
 
             if serializer.is_valid():
                 serializer.save()
@@ -120,7 +120,7 @@ def profile_detail(request, pk):
             return Response(serializer.errors, status=400)
 
         elif request.method == 'DELETE':
-            if request.user.has_perm('profiles.profile.can_delete_profile'):
+            if request.user.has_perm('profiles.delete_profile'):
                 profile.enabled = False
                 profile.save()
                 return Response(status=200)

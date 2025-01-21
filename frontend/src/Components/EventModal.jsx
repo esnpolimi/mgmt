@@ -9,40 +9,8 @@ import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
 import {fetchCustom} from "../api/api";
+import {style, colorOptions} from '../utils/sharedStyles'
 
-const style = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '80%',
-    maxWidth: 1200,
-    maxHeight: '90vh',
-    bgcolor: 'background.paper',
-    border: '2px solid #000',
-    boxShadow: 24,
-    p: 4,
-    overflow: 'auto',
-};
-
-const colorOptions = [
-    {label: 'Red', value: '#FF0000'},
-    {label: 'Green', value: '#00FF00'},
-    {label: 'Blue', value: '#0000FF'},
-    {label: 'Yellow', value: '#FFFF00'},
-    {label: 'Cyan', value: '#00FFFF'},
-    {label: 'Magenta', value: '#FF00FF'},
-    {label: 'Black', value: '#000000'},
-    {label: 'White', value: '#FFFFFF'},
-    {label: 'Orange', value: '#FFA500'},
-    {label: 'Purple', value: '#800080'},
-    {label: 'Pink', value: '#FFC0CB'},
-    {label: 'Brown', value: '#A52A2A'},
-    {label: 'Gray', value: '#808080'},
-    {label: 'Lime', value: '#00FF00'},
-    {label: 'Maroon', value: '#800000'},
-    {label: 'Navy', value: '#000080'}
-];
 
 const FormModal = ({open, handleClose}) => {
     const [formData, setFormData] = useState({
@@ -218,7 +186,7 @@ const FormModal = ({open, handleClose}) => {
                     New Event
                 </Typography>
                 <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
+                    <Grid item={undefined} xs={12} md={6}>
                         <TextField
                             fullWidth
                             label="Name"
@@ -228,7 +196,7 @@ const FormModal = ({open, handleClose}) => {
 
                         />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid item={undefined} xs={12} md={6}>
                         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                             <DatePicker
                                 label="Date"
@@ -265,12 +233,12 @@ const FormModal = ({open, handleClose}) => {
                 />
                 <Box my={2}>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item>
+                        <Grid item={undefined}>
                             <Typography variant="h6" gutterBottom>
                                 Tables
                             </Typography>
                         </Grid>
-                        <Grid item>
+                        <Grid item={undefined}>
                             <IconButton onClick={handleAddTable}>
                                 <AddIcon/>
                             </IconButton>
@@ -278,7 +246,7 @@ const FormModal = ({open, handleClose}) => {
                     </Grid>
                     {formData.tables.map((table, index) => (
                         <Grid container spacing={2} alignItems="center" mb={2} key={index}>
-                            <Grid item>
+                            <Grid item={undefined}>
                                 <TextField
                                     label="Name"
                                     name="name"
@@ -286,7 +254,7 @@ const FormModal = ({open, handleClose}) => {
                                     onChange={(e) => handleTableChange(index, e)}
                                 />
                             </Grid>
-                            <Grid item>
+                            <Grid item={undefined}>
                                 <TextField
                                     label="Capacity"
                                     name="capacity"
@@ -295,7 +263,7 @@ const FormModal = ({open, handleClose}) => {
                                     onChange={(e) => handleTableChange(index, e)}
                                 />
                             </Grid>
-                            <Grid item xs={2}>
+                            <Grid item={undefined} xs={2}>
                                 <IconButton onClick={() => handleDeleteTable(index)}>
                                     <DeleteIcon/>
                                 </IconButton>
@@ -306,7 +274,7 @@ const FormModal = ({open, handleClose}) => {
 
                 <Box my={2}>
                     <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}>
+                        <Grid item={undefined} xs={12} md={6}>
                             <Typography variant="h6" gutterBottom>
                                 Profile Fields
                             </Typography>
@@ -333,12 +301,12 @@ const FormModal = ({open, handleClose}) => {
                 {['additionalFields', 'formFields'].map((fieldType) => (
                     <Box my={2} key={fieldType}>
                         <Grid container spacing={2} alignItems="center">
-                            <Grid item xs={6}>
+                            <Grid item={undefined} xs={6}>
                                 <Typography variant="h6" gutterBottom>
                                     {fieldType === 'additionalFields' ? 'Additional Fields' : 'Form Fields'}
                                 </Typography>
                             </Grid>
-                            <Grid item xs={6} textAlign="right">
+                            <Grid item={undefined} xs={6} textAlign="right">
                                 <IconButton onClick={() => handleAddField(fieldType)}>
                                     <AddIcon/>
                                 </IconButton>
@@ -347,7 +315,7 @@ const FormModal = ({open, handleClose}) => {
                         {formData[fieldType].map((field, index) => (
                             <Paper key={index} sx={{p: 2, mb: 1}}>
                                 <Grid container spacing={2} alignItems="center">
-                                    <Grid item xs={4}>
+                                    <Grid item={undefined} xs={4}>
                                         <TextField
                                             fullWidth
                                             label="Name"
@@ -356,7 +324,7 @@ const FormModal = ({open, handleClose}) => {
                                             onChange={(e) => handleFieldChange(fieldType, index, e)}
                                         />
                                     </Grid>
-                                    <Grid item xs={2}>
+                                    <Grid item={undefined} xs={2}>
                                         <FormControlLabel
                                             control={
                                                 <Checkbox
@@ -368,7 +336,7 @@ const FormModal = ({open, handleClose}) => {
                                             label="Editable"
                                         />
                                     </Grid>
-                                    <Grid item xs={2}>
+                                    <Grid item={undefined} xs={2}>
                                         <FormControlLabel
                                             control={
                                                 <Checkbox
@@ -380,7 +348,7 @@ const FormModal = ({open, handleClose}) => {
                                             label="Visible"
                                         />
                                     </Grid>
-                                    <Grid item xs={3}>
+                                    <Grid item={undefined} xs={3}>
                                         <FormControl fullWidth>
                                             <InputLabel>Type</InputLabel>
                                             <Select
@@ -397,7 +365,7 @@ const FormModal = ({open, handleClose}) => {
                                             </Select>
                                         </FormControl>
                                     </Grid>
-                                    <Grid item xs={1}>
+                                    <Grid item={undefined} xs={1}>
                                         <IconButton onClick={() => handleDeleteField(fieldType, index)}>
                                             <DeleteIcon/>
                                         </IconButton>
@@ -405,7 +373,7 @@ const FormModal = ({open, handleClose}) => {
                                 </Grid>
                                 {field.type === 'text' && (
                                     <Grid container spacing={2} alignItems="center">
-                                        <Grid item xs={4}>
+                                        <Grid item={undefined} xs={4}>
                                             <TextField
                                                 fullWidth
                                                 label="Length"
@@ -420,10 +388,10 @@ const FormModal = ({open, handleClose}) => {
                                 {(field.type === 'single choice' || field.type === 'multiple choice') && (
                                     <Box mt={2} ml={2}>
                                         <Grid container spacing={2}>
-                                            <Grid item xs={12}><Button onClick={() => handleAddChoice(fieldType, index)}>Add Choice</Button></Grid>
+                                            <Grid item={undefined} xs={12}><Button onClick={() => handleAddChoice(fieldType, index)}>Add Choice</Button></Grid>
                                             {field.choices.map((choice, choiceIndex) => (
                                                 <Grid container spacing={2} key={choiceIndex} alignItems="center">
-                                                    <Grid item xs={5}>
+                                                    <Grid item={undefined} xs={5}>
                                                         <TextField
                                                             fullWidth
                                                             label="Value"
@@ -432,7 +400,7 @@ const FormModal = ({open, handleClose}) => {
                                                             onChange={(e) => handleChoiceChange(fieldType, index, choiceIndex, e)}
                                                         />
                                                     </Grid>
-                                                    <Grid item xs={5}>
+                                                    <Grid item={undefined} xs={5}>
                                                         <FormControl fullWidth>
                                                             <InputLabel>Color</InputLabel>
                                                             <Select
