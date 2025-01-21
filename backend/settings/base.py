@@ -16,7 +16,7 @@ from corsheaders.defaults import default_headers
 from pathlib import Path
 
 # Determine the environment (default to development)
-ENVIRONMENT = os.getenv("DJANGO_ENV").lower()
+ENVIRONMENT = os.getenv("DJANGO_ENV")
 
 if ENVIRONMENT == "production":
     env_file = ".env.production"
@@ -62,6 +62,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     'simple_history.middleware.HistoryRequestMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 ROOT_URLCONF = "backend.urls"
