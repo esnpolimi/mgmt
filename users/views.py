@@ -25,6 +25,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 def log_in(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
+
         username = serializer.validated_data['username']
         password = serializer.validated_data['password']
         user = authenticate(username=username, password=password)
@@ -46,7 +47,7 @@ def log_in(request):
             )
             return response
         else:
-            return Response({'detail': 'Invalid credentials'}, status=401)
+            return Response({'detail': 'Invalid credentials'}, status=403)
 
     return Response(serializer.errors, status=400)
 
@@ -133,7 +134,7 @@ def user_detail(request, pk):
         return Response(serializer.errors, status=400)
 
     if request.method == 'DELETE':
-        if request.user.has_perm('backend.delete_user'):
+        if request.user.has_perm('users.delete_user'):
             user.delete()
             return Response(status=204)
         return Response(status=401)

@@ -71,7 +71,7 @@ def transaction_add(request):
             return Response(transaction_serializer.errors, status=400)
 
         if transaction_serializer.validated_data['subscription'] is None:
-            if not request.user.has_perm('can_withdraw_deposit'):
+            if not request.user.has_perm('treasury.withdraw_deposit'): #TODO: add permission via Meta in model
                 return Response(status=401)
 
         transaction_serializer.save()
@@ -135,7 +135,7 @@ def accounts_list(request):
 @permission_classes([IsAuthenticated])
 def account_creation(request):
     try:
-        if not request.user.has_perm('can_add_account'):
+        if not request.user.has_perm('treasury.add_account'):
             return Response(status=401)
 
         account_serializer = AccountCreateSerializer(request.data)
@@ -162,7 +162,7 @@ def account_detail(request, pk):
 
         if request.method == 'PATCH':
 
-            if not request.user.has_perm('can_edit_acconut'):
+            if not request.user.has_perm('treasury.change_acconut'):
                 return Response(status=401)
 
             data = request.data
