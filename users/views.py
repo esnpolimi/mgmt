@@ -2,9 +2,10 @@ import logging
 
 from rest_framework_simplejwt.exceptions import TokenError
 
+from profiles.models import Profile
 from users.models import User
 from rest_framework.pagination import PageNumberPagination
-from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer
+from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer, UserReactSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth import authenticate
@@ -32,6 +33,11 @@ def log_in(request):
 
         if user is not None:
             refresh = RefreshToken.for_user(user)
+
+            # Add custom payload fields to the token
+            user_data = UserReactSerializer(user).data  # Serialize the user object
+            refresh['user'] = user_data
+
             access_token = str(refresh.access_token)
             print(f"User {user} logged in")
 
@@ -64,18 +70,24 @@ def log_out(request):
 @api_view(['POST'])
 def refresh_token_view(request):
     refresh_token = request.COOKIES.get('refresh_token')
-
     if not refresh_token:
         print("Refresh token not found")
         return Response({'detail': 'Refresh token not found'}, status=400)
 
-    try:
-        refresh = RefreshToken(str(refresh_token))
-        print("Refresh token validated")
-        access_token = str(refresh.access_token)
-        return Response({'access': access_token}, status=200)
-    except TokenError as e:
-        return Response({'detail': str(e)}, status=401)
+    profile = Profile(email=request.data.get('profile'))
+    user = User(profile=profile)
+
+    if user is not None:
+        try:
+            refresh = RefreshToken(str(refresh_token))
+            user_data = UserReactSerializer(user).data
+            refresh['user'] = user_data
+            access_token = str(refresh.access_token)
+            return Response({'access': access_token}, status=200)
+        except TokenError as e:
+            return Response({'detail': str(e)}, status=401)
+    else:
+        return Response({'detail': 'Invalid user profile'}, status=403)
 
 
 @api_view(['GET', 'POST'])
