@@ -17,7 +17,6 @@ import {style, colorOptions} from '../utils/sharedStyles'
 
 const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
-    //console.log("Profile:", profile);
 
     const [data, setData] = useState({  /* profile fields */
         email: '',
