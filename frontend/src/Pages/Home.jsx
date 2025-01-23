@@ -1,6 +1,7 @@
 import Sidebar from "../Components/Sidebar";
 import {Box, Typography} from "@mui/material"
 import logo from '../assets/esnpolimi-logo.png';
+import {useAuth} from "../Context/AuthContext";
 
 const style = {
     display: 'flex',
@@ -11,7 +12,7 @@ const style = {
 };
 
 export default function Home() {
-
+    const {user} = useAuth(); // Access logged-in user info
     return (
         <Box>
             <Sidebar/>
@@ -20,6 +21,7 @@ export default function Home() {
                     Sistema di Gestione
                 </Typography>
                 <img src={logo} alt="ESN Polimi Logo" style={{height: '25vh', marginTop: '20px'}}/>
+                <h1>Welcome, {user ? "Sir " + user.profile : "Sir!"}!</h1>
             </Box>
         </Box>
     );

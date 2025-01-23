@@ -6,39 +6,67 @@ const AuthContext = createContext(null);
 const ACCESS_TOKEN_LIFETIME_MINUTES = import.meta.env.VITE_ACCESS_TOKEN_LIFETIME_MINUTES;
 
 export const AuthProvider = ({children}) => {
-        const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken"));
+        const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken")); // Needed for api.jsx
         const refreshTimer = useRef(null);
+        const [user, setUser] = useState(null); // Store user information here
+
+        const login = async (username, password) => {
+            try {
+                const response = await fetchCustom("POST", "/login/",
+                    {username, password}, {}, false
+                );
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log("Login successful");
+                    const decodedToken = jwtDecode(data.access);
+                    setUser(decodedToken.user);
+                    console.log("Decoded User token:", decodedToken.user);
+                    setAccessToken(data.access);
+                    localStorage.setItem("accessToken", data.access);
+                    return true;
+                } else {
+                    console.error("Invalid credentials");
+                }
+            } catch (error) {
+                console.error("Login error:", error);
+                return false;
+            }
+        };
 
         const logout = useCallback(async () => {
             console.log("Logout function called");
-
             if (refreshTimer.current) {
                 console.log("Aborting refresh timer...");
                 clearTimeout(refreshTimer.current);
                 refreshTimer.current = null;
             }
-
             try {
                 await fetchCustom("POST", "/logout/").then(
                     () => {
                         localStorage.removeItem("accessToken");
                         setAccessToken(null);
+                        setUser(null); // Clear user data on logout
                         console.log("Logged out successfully");
                     }
                 )
             } catch (error) {
                 console.error("Logout error:", error);
             }
-        }, []);
+        }, [refreshTimer]);
 
         const refreshAccessToken = useCallback(async () => {
             if (accessToken) {
                 try {
-                    const response = await fetchCustom("POST", "/api/token/refresh/", null, {}, false);
+                    const profile = user.profile; // Include user email to retrieve updated user data
+                    const response = await fetchCustom("POST", "/api/token/refresh/",
+                        {profile}, {}, false);
                     if (response.ok) {
                         const data = await response.json();
-                        localStorage.setItem("accessToken", data.access);
+                        const decodedToken = jwtDecode(data.access);
+                        //console.log("Decoded User token:", decodedToken.user);
+                        setUser(decodedToken.user);
                         setAccessToken(data.access);
+                        localStorage.setItem("accessToken", data.access);
                         return true;
                     } else {
                         console.warn("Token refresh failed. Logging out...");
@@ -54,26 +82,8 @@ export const AuthProvider = ({children}) => {
                 console.log("Skipping token refresh, user is not logged in");
                 return false;
             }
-        }, [logout]);
+        }, [user, accessToken, logout]);
 
-        const login = async (username, password) => {
-            try {
-                const response = await fetchCustom("POST", "/login/",
-                    {username, password}, {}, false
-                );
-                if (response.ok) {
-                    const data = await response.json();
-                    localStorage.setItem("accessToken", data.access);
-                    setAccessToken(data.access);
-                    return true;
-                } else {
-                    console.error("Invalid credentials");
-                }
-            } catch (error) {
-                console.error("Login error:", error);
-                return false;
-            }
-        };
 
         useEffect(() => {
             const scheduleTokenRefresh = () => {
@@ -112,10 +122,10 @@ export const AuthProvider = ({children}) => {
             };
 
             scheduleTokenRefresh();
-        }, [accessToken, refreshAccessToken]);
+        }, [refreshTimer, accessToken, refreshAccessToken]);
 
         return (
-            <AuthContext.Provider value={{accessToken, refreshAccessToken, logout, login}}>
+            <AuthContext.Provider value={{user, accessToken, refreshAccessToken, logout, login}}>
                 {children}
             </AuthContext.Provider>
         );
