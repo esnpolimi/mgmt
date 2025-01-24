@@ -74,8 +74,8 @@ def refresh_token_view(request):
         print("Refresh token not found")
         return Response({'detail': 'Refresh token not found'}, status=400)
 
-    profile = Profile(email=request.data.get('profile'))
-    user = User(profile=profile)
+    profile, _ = Profile.objects.get_or_create(email=request.data.get('email'))
+    user, _ = User.objects.get_or_create(profile=profile)
 
     if user is not None:
         try:
