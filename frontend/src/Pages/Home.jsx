@@ -13,6 +13,7 @@ const style = {
 
 export default function Home() {
     const {user} = useAuth(); // Access logged-in user info
+    console.log(user);
     return (
         <Box>
             <Sidebar/>
@@ -21,7 +22,7 @@ export default function Home() {
                     Sistema di Gestione
                 </Typography>
                 <img src={logo} alt="ESN Polimi Logo" style={{height: '25vh', marginTop: '20px'}}/>
-                <h1>Welcome, {user ? "Sir " + user.profile : "Sir!"}!</h1>
+                <h1>Benvenuto, {user ? user.profile.name : "Sir"}!</h1>
             </Box>
         </Box>
     );

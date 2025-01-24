@@ -6,10 +6,18 @@ const AuthContext = createContext(null);
 const ACCESS_TOKEN_LIFETIME_MINUTES = import.meta.env.VITE_ACCESS_TOKEN_LIFETIME_MINUTES;
 
 export const AuthProvider = ({children}) => {
-        const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken")); // Needed for api.jsx
+        const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken")); // localStorage needed for when refreshing page
         const refreshTimer = useRef(null);
-        const [user, setUser] = useState(null); // Store user information here
-
+        const [user, setUser] = useState(() => {
+            try {
+                const storedUser = localStorage.getItem("user");
+                //console.log("User from localStorage:", storedUser);
+                return storedUser ? JSON.parse(storedUser) : null;
+            } catch (error) {
+                console.error("Failed to parse user from localStorage:", error);
+                return null;
+            }
+        });
         const login = async (username, password) => {
             try {
                 const response = await fetchCustom("POST", "/login/",
@@ -17,12 +25,13 @@ export const AuthProvider = ({children}) => {
                 );
                 if (response.ok) {
                     const data = await response.json();
-                    console.log("Login successful");
                     const decodedToken = jwtDecode(data.access);
-                    setUser(decodedToken.user);
+                    console.log("Login successful");
                     console.log("Decoded User token:", decodedToken.user);
+                    setUser(decodedToken.user);
                     setAccessToken(data.access);
                     localStorage.setItem("accessToken", data.access);
+                    localStorage.setItem("user", JSON.stringify(decodedToken.user));
                     return true;
                 } else {
                     console.error("Invalid credentials");
@@ -44,6 +53,7 @@ export const AuthProvider = ({children}) => {
                 await fetchCustom("POST", "/logout/").then(
                     () => {
                         localStorage.removeItem("accessToken");
+                        localStorage.removeItem("user");
                         setAccessToken(null);
                         setUser(null); // Clear user data on logout
                         console.log("Logged out successfully");
@@ -57,9 +67,9 @@ export const AuthProvider = ({children}) => {
         const refreshAccessToken = useCallback(async () => {
             if (accessToken) {
                 try {
-                    const profile = user.profile; // Include user email to retrieve updated user data
+                    const email = user.profile.email; // Include user email to retrieve updated user data
                     const response = await fetchCustom("POST", "/api/token/refresh/",
-                        {profile}, {}, false);
+                        {email}, {}, false);
                     if (response.ok) {
                         const data = await response.json();
                         const decodedToken = jwtDecode(data.access);
@@ -67,6 +77,7 @@ export const AuthProvider = ({children}) => {
                         setUser(decodedToken.user);
                         setAccessToken(data.access);
                         localStorage.setItem("accessToken", data.access);
+                        localStorage.setItem("user", JSON.stringify(decodedToken.user));
                         return true;
                     } else {
                         console.warn("Token refresh failed. Logging out...");
