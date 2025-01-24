@@ -9,6 +9,9 @@ import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
 import {fetchCustom} from "../api/api";
 import EditIcon from "@mui/icons-material/Edit";
+import SnowboardingIcon from '@mui/icons-material/Snowboarding';
+import {MRT_Localization_IT} from 'material-react-table/locales/it';
+
 
 export default function ErasmusProfiles() {
 
@@ -47,12 +50,12 @@ export default function ErasmusProfiles() {
         },
         {
             accessorKey: 'name',
-            header: 'Name',
+            header: 'Nome',
             size: 150,
         },
         {
             accessorKey: 'surname',
-            header: 'Surname',
+            header: 'Cognome',
             size: 150,
         },
         {
@@ -62,7 +65,7 @@ export default function ErasmusProfiles() {
         },
         {
             accessorKey: 'latest_esncard.number',
-            header: 'Latest ESNcard',
+            header: 'Ultima ESNcard',
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{}}>
@@ -76,17 +79,17 @@ export default function ErasmusProfiles() {
         },
         {
             accessorKey: 'whatsapp',
-            header: 'Whatsapp number',
+            header: 'Numero WhatsApp',
             size: 150,
         },
         {
             accessorKey: 'country',
-            header: 'Country',
+            header: 'Nazione',
             size: 150,
         },
         {
             accessorKey: 'gender',
-            header: 'Gender',
+            header: 'Genere',
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{textAlign: 'center'}}>{cell.getValue()}</Box>
@@ -94,37 +97,37 @@ export default function ErasmusProfiles() {
         },
         {
             accessorKey: 'birthdate',
-            header: 'Birthdate',
+            header: 'Data di nascita',
             size: 100,
         },
         {
             accessorKey: 'course',
-            header: 'Course',
+            header: 'Corso',
             size: 100,
         },
         {
             accessorKey: 'phone',
-            header: 'Phone number',
+            header: 'Numero di telefono',
             size: 150,
         },
         {
             accessorKey: 'person_code',
-            header: 'Person code',
+            header: 'Codice persona',
             size: 150,
         },
         {
             accessorKey: 'domicile',
-            header: 'Domicile',
+            header: 'Domicilio',
             size: 200,
         },
         {
             accessorKey: 'residency',
-            header: 'Residency',
+            header: 'Residenza',
             size: 200,
         },
         {
             accessorKey: 'latest_document.number',
-            header: 'Latest document',
+            header: 'Ultimo documento',
             size: 50,
         },
         {
@@ -185,45 +188,7 @@ export default function ErasmusProfiles() {
             shape: 'rounded',
             variant: 'outlined',
         },
-        /*renderDetailPanel: ({row}) => {
-            return (
-                <ProfileModal row={row} updateTableRow={(id, rowData) => {
-                    setData(data.map((row) => {
-                        if (row.id === id) {
-                            let updatedRow = Object.fromEntries(Object.keys(row).map((e) => {
-                                if (e in rowData) {
-                                    return [e, rowData[e]];
-                                } else {
-                                    return [e, row[e]]
-                                }
-                            }));
-                            updatedRow.birthdate = formatDateString(rowData.birthdate);
-                            return updatedRow;
-                        } else {
-                            return row;
-                        }
-                    }));
-                }}/>
-            );
-        },*/
-        /*renderRowActionMenuItems: ({closeMenu, row, table}) => [
-            <MenuItem
-                key={1}
-                onClick={() => {
-                    // Send email logic...
-                    closeMenu();
-                    console.log('renderRowActionMenuItems:', row.original.email);
-                    setEmissionProfile(row.original);
-                    toggleModal(true);
-                }}
-                sx={{m: 0}}
-            >
-                <ListItemIcon>
-                    <CreditCardIcon/>
-                </ListItemIcon>
-                Release ESNcard
-            </MenuItem>,
-        ],*/
+        localization: MRT_Localization_IT,
 
         renderRowActions: ({row}) => {
             return (
@@ -250,8 +215,8 @@ export default function ErasmusProfiles() {
             <Sidebar/>
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                    <People sx={{marginRight: '10px'}}/>
-                    <Typography variant="h4">Erasmus Profiles</Typography>
+                    <SnowboardingIcon sx={{marginRight: '10px'}}/>
+                    <Typography variant="h4">Profili Erasmus</Typography>
                 </Box>
                 <MaterialReactTable table={table}/>
             </Box>

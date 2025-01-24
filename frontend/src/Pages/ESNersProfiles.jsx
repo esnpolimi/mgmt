@@ -8,6 +8,7 @@ import ProfileModal from '../Components/ProfileModal.jsx';
 import dayjs from 'dayjs';
 import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
 import {fetchCustom} from "../api/api";
+import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
 
 export default function ESNersProfiles() {
 
@@ -252,7 +253,7 @@ export default function ESNersProfiles() {
             <ESNcardEmissionModal open={modalOpen} profile={emissionProfile} onClose={() => toggleModal(false)}/>
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                    <People sx={{marginRight: '10px'}}/>
+                    <BabyChangingStationIcon sx={{marginRight: '10px'}}/>
                     <Typography variant="h4">ESNers Profiles</Typography>
                 </Box>
                 <MaterialReactTable table={table}/>
