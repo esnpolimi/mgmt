@@ -36,17 +36,13 @@ class UserWithProfileAndGroupsSerializer(serializers.ModelSerializer):
 
 # Serializer for React, fetched at login time
 class UserReactSerializer(serializers.ModelSerializer):
-    groups = serializers.SerializerMethodField()
+    groups = serializers.StringRelatedField(many=True)
     permissions = serializers.SerializerMethodField()
+    profile = ProfileListViewSerializer(read_only=True)
 
     class Meta:
         model = User
-        exclude = ['password']
-
-    @classmethod
-    def get_groups(cls, obj):
-        """ Get all groups the user belongs to. """
-        return [group.name for group in obj.groups.all()]
+        exclude = ['password', 'user_permissions']
 
     @classmethod
     def get_permissions(cls, obj):
