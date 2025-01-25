@@ -22,7 +22,8 @@ const EditButton = ({onEdit, onCancel, onSave, saving}) => {
 
     const handleSaveClick = () => {
         if (onSave) {
-            onSave()
+            onSave();
+            setIsEditing(false);
         }
     };
 
@@ -38,7 +39,7 @@ const EditButton = ({onEdit, onCancel, onSave, saving}) => {
                             <CircularProgress size='1rem'/>
                         </IconButton>
                     ) : (
-                        <IconButton onClick={handleSaveClick} aria-label="Save">
+                        <IconButton onClick={handleSaveClick} aria-label="Save" sx={{ color: '#0288d1' }}>
                             <SaveIcon/>
                         </IconButton>
                     )}

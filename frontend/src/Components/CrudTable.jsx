@@ -1,12 +1,10 @@
 import {useState, useMemo, useEffect} from 'react';
-import {MRT_Table, useMaterialReactTable, MaterialReactTable} from 'material-react-table';
-import EditButton from "./EditButton";
-
-import {Box, Button, IconButton, Tooltip, Typography} from '@mui/material';
-
+import {useMaterialReactTable, MaterialReactTable} from 'material-react-table';
+import {Box, IconButton, Tooltip} from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import {MRT_Localization_IT} from 'material-react-table/locales/it';
 
 
 /*  The save function must receive as parameter the row object. 
@@ -14,10 +12,13 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
     Same goes for the create function.
 */
 
-export default function CrudTable({cols, initialData, title, onSave, onCreate, canCreate, canDelete}) {
+export default function CrudTable({cols, initialData, title, onSave, onCreate, canCreate, canDelete, canEdit}) {
 
     const columns = useMemo(() => cols);
     const [data, setData] = useState([])
+    const canEditText = <span style={{color: 'green'}}>(Hai i permessi per eseguire modifiche)</span>;
+    const cannotEditText = <span style={{color: 'red'}}>(Non hai i permessi per eseguire modifiche)</span>;
+    const editText = canEdit ? canEditText : cannotEditText;
 
     useEffect(() => {
         setData(initialData);
@@ -26,7 +27,7 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
     const table = useMaterialReactTable({
         columns,
         data: data,
-        enableEditing: true,
+        enableEditing: canEdit,
         editDisplayMode: 'row',
         createDisplayMode: 'row',
         enableColumnFilters: false,
@@ -38,64 +39,73 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
         enableDensityToggle: false,
         enableHiding: false,
         enablePagination: false,
-        onCreatingRowCancel: () => {
-        },
-        onCreatingRowSave: async ({values, table}) => {
-            let new_doc = await onCreate(values);
-            if (new_doc) {
-                setData([...data, new_doc]);
-                table.setCreatingRow(false);
-            }
-        },
-        onEditingRowSave: async ({row, values}) => {
-            if (await onSave(row.original, values)) {
-                const updatedData = data.map((item, index) =>
-                    index === row.index ? {...row.original, ...values} : item
-                );
-                setData(updatedData);
-                console.log(updatedData);
-                table.setEditingRow(null);
-            }
-        },
-        onEditingRowCancel: () => {
-        },
-        getRowId: (row) => row.id,
-        renderRowActions: ({row, table}) => {
-            return (
-                <Box sx={{display: 'flex', gap: '1rem'}}>
-                    <Tooltip title="Edit">
-                        <IconButton onClick={() => table.setEditingRow(row)}>
-                            <EditIcon/>
-                        </IconButton>
-                    </Tooltip>
-                    {canDelete && (
-                        <Tooltip title="Delete">
-                            <IconButton onClick={() => {
-                            }}>
-                                <DeleteIcon/>
+        localization: MRT_Localization_IT,
+        onCreatingRowCancel:
+            () => {
+            },
+        onCreatingRowSave:
+            async ({values, table}) => {
+                let new_doc = await onCreate(values);
+                if (new_doc) {
+                    setData([...data, new_doc]);
+                    table.setCreatingRow(false);
+                }
+            },
+        onEditingRowSave:
+            async ({row, values}) => {
+                if (await onSave(row.original, values)) {
+                    const updatedData = data.map((item, index) =>
+                        index === row.index ? {...row.original, ...values} : item
+                    );
+                    setData(updatedData);
+                    console.log(updatedData);
+                    table.setEditingRow(null);
+                }
+            },
+        onEditingRowCancel:
+            () => {
+            },
+        getRowId:
+            (row) => row.id,
+        renderRowActions:
+            ({row, table}) => {
+                return (
+                    <Box sx={{display: 'flex', gap: '1rem'}}>
+                        <Tooltip title="Edit">
+                            <IconButton onClick={() => table.setEditingRow(row)}>
+                                <EditIcon/>
                             </IconButton>
                         </Tooltip>
-                    )}
-                </Box>
-            );
-        },
-
-        renderTopToolbarCustomActions: ({table}) => {
-            return (
-                <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                    {canCreate ? (<IconButton
-                        onClick={() => {
-                            table.setCreatingRow(true);
-                        }}
-                    >
-                        <AddCircleOutlineIcon/>
-                    </IconButton>) : (<></>)}
-                    <Box sx={{ml: '30px'}}>
-                        <h3>{title}</h3>
+                        {canDelete && (
+                            <Tooltip title="Delete">
+                                <IconButton onClick={() => {
+                                }}>
+                                    <DeleteIcon/>
+                                </IconButton>
+                            </Tooltip>
+                        )}
                     </Box>
-                </Box>
-            );
-        },
+                );
+            },
+
+        renderTopToolbarCustomActions:
+            ({table}) => {
+                return (
+                    <Box sx={{display: 'flex', flexDirection: 'row'}}>
+                        {canCreate ? (<IconButton
+                            onClick={() => {
+                                table.setCreatingRow(true);
+                            }}
+                        >
+                            <AddCircleOutlineIcon/>
+                        </IconButton>) : (<></>)}
+                        <Box sx={{ml: '20px'}}>
+                            <h3>{title}</h3>
+                            <h5>{editText}</h5>
+                        </Box>
+                    </Box>
+                );
+            },
 
     })
 

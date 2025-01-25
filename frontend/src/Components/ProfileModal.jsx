@@ -4,19 +4,20 @@ import {useState, useEffect, useMemo} from 'react';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import {
-    useMaterialReactTable,
-} from 'material-react-table';
-
-
+import {useMaterialReactTable} from 'material-react-table';
 import EditButton from "./EditButton";
 import CrudTable from "./CrudTable";
 import {fetchCustom} from "../api/api";
 import {style, colorOptions} from '../utils/sharedStyles'
+import {useAuth} from "../Context/AuthContext";
+import SuccessPopup from './Popup'
 
 
 const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
+    const {user} = useAuth();
+    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    //console.log("Permissions: ", user.permissions)
 
     const [data, setData] = useState({  /* profile fields */
         email: '',
@@ -88,7 +89,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
     const esncard_columns = useMemo(() => [
         {
             accessorKey: 'number',
-            header: 'Number',
+            header: 'Numero',
             size: 100,
             muiEditTextFieldProps: {
                 required: true,
@@ -99,13 +100,13 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
         {
             accessorKey: 'expiration',
             enableEditing: false,
-            header: 'Expiration',
+            header: 'Scadenza',
             size: 100,
         },
         {
             enableEditing: false,
             accessorFn: (profile) => profile.created_at.substring(0, 10),
-            header: 'Issue date',
+            header: 'Data rilascio',
             size: 100,
         }
     ]);
@@ -131,7 +132,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
     const document_columns = useMemo(() => [
         {
             accessorKey: 'type',
-            header: 'Type',
+            header: 'Tipo',
             size: 80,
             editVariant: 'select',
             editSelectOptions: ['Passport', 'Identity Card'],
@@ -143,7 +144,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
         },
         {
             accessorKey: 'number',
-            header: 'Number',
+            header: 'Numero',
             size: 100,
             muiEditTextFieldProps: {
                 required: true,
@@ -153,7 +154,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
         },
         {
             accessorKey: 'expiration',
-            header: 'Expiration',
+            header: 'Scadenza',
             size: 100,
             muiEditTextFieldProps: {
                 required: true,
@@ -203,8 +204,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
     const matricola_columns = useMemo(() => [
         {
             accessorKey: 'number',
-            header: 'Number',
-            size: 100,
+            header: 'Numero',
+            size: 80,
             muiEditTextFieldProps: {
                 required: true,
                 helperText: matricolaErrors?.number,
@@ -213,7 +214,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
         },
         {
             accessorKey: 'exchange_end',
-            header: 'Exchange end',
+            header: 'Fine scambio',
             size: 100,
             muiEditTextFieldProps: {
                 required: true,
@@ -312,7 +313,6 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
         ).then((response) => {
             setSaving(false);
             if (response.ok) {
-                // Reload updated profile from the server
                 return fetchCustom("GET", `/profile/${profile.id.toString()}/`);
             } else if (response.status === 400) {
                 response.json().then((json) => {
@@ -328,22 +328,17 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                 throw new Error('Error while patching profile ' + profile.id.toString())
             }
         }).then((response) => {
-            if (response && response.ok) {
-                return response.json();
-            }
+            if (response && response.ok) return response.json();
         })
             .then((newData) => {
                 if (newData) {
-                    // Update local modal data
                     setData(newData);
                     setUpdatedData(newData);
-
-                    // Notify parent component with the updated profile
-                    if (updateProfile) {
-                        updateProfile(newData); // Calls the callback provided by the parent
-                    }
-
+                    if (updateProfile) updateProfile(newData); // Calls the callback provided by the parent
                     resetErrors();
+                    setShowSuccessPopup({message: "Profile updated successfully!", state: "success"});
+                    toggleEdit(false);
+                    setTimeout(() => setShowSuccessPopup(null), 2000);
                 }
                 setSaving(false);
             })
@@ -351,9 +346,11 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                 console.log(error);
                 setUpdatedData(data);
                 setSaving(false);
+                setShowSuccessPopup({message: "Error while updating profile", state: "error"});
+                toggleEdit(false);
+                setTimeout(() => setShowSuccessPopup(null), 2000);
             });
     };
-
 
     useEffect(() => {
         console.log('Fetching ' + profile.id)
@@ -380,13 +377,13 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
         <Modal open={open} onClose={handleClose}>
             <Box sx={style}>
                 <Typography variant="h5" gutterBottom align="center">
-                    Edit Erasmus Profile
+                    Modifica profilo Erasmus
                 </Typography>
                 <Card sx={{p: '20px'}}>
                     <Grid container spacing={2}>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Name'
+                                label='Nome'
                                 name='name'
                                 value={updatedData.name}
                                 error={errors.name[0]}
@@ -397,9 +394,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 onChange={handleChange}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Surname'
+                                label='Cognome'
                                 name='surname'
                                 value={updatedData.surname}
                                 error={errors.surname[0]}
@@ -410,7 +407,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
                                 label='Email'
                                 name='email'
@@ -423,9 +420,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 onChange={handleChange} fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Phone number'
+                                label='Numero di telefono'
                                 name='phone'
                                 value={updatedData.phone}
                                 error={errors.phone[0]}
@@ -436,9 +433,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Whatsapp number'
+                                label='Numero WhatsApp'
                                 name='whatsapp'
                                 value={updatedData.whatsapp}
                                 error={errors.whatsapp[0]}
@@ -449,9 +446,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Domicile'
+                                label='Domicilio'
                                 name='domicile'
                                 value={updatedData.domicile}
                                 error={errors.domicile[0]}
@@ -462,9 +459,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Residency'
+                                label='Residenza'
                                 name='residency'
                                 value={updatedData.residency}
                                 error={errors.residency[0]}
@@ -475,9 +472,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Person code'
+                                label='Codice persona'
                                 name='person_code'
                                 value={updatedData.person_code}
                                 error={errors.person_code[0]}
@@ -488,10 +485,10 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 }}
                                 fullWidth/>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                 <DatePicker
-                                    label="Birthdate"
+                                    label="Data di nascita"
                                     value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
                                     readOnly={readOnly.birthdate}
                                     onChange={(date) => handleDateChange('birthdate', date)}
@@ -502,17 +499,17 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 />
                             </LocalizationProvider>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <FormControl
                                 fullWidth
                                 required
                             >
-                                <InputLabel id="country-label">Country</InputLabel>
+                                <InputLabel id="country-label">Nazione</InputLabel>
                                 <Select
                                     variant="outlined"
                                     labelId="country-label"
                                     name="country"
-                                    label="Country"
+                                    label="Nazione"
                                     value={updatedData.country}
                                     error={errors.country[0]}
                                     onChange={handleChange}
@@ -525,59 +522,58 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                     </MenuItem>
                                     <MenuItem value="US">USA</MenuItem>
                                     <MenuItem value="Canada">Canada</MenuItem>
-                                    {/* Add more countries here */}
+                                    {/* TODO Add more countries here */}
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <FormControl
                                 fullWidth
                                 required
                             >
-                                <InputLabel id="gender-label">Gender</InputLabel>
+                                <InputLabel id="gender-label">Genere</InputLabel>
                                 <Select
                                     variant="outlined"
                                     labelId="gender-label"
                                     name="gender"
-                                    label="Gender"
+                                    label="Genere"
                                     value={updatedData.gender}
                                     onChange={handleChange}
                                     slotProps={{
                                         input: {readOnly: readOnly.gender}
                                     }}
                                 >
-                                    <MenuItem value="M">Male</MenuItem>
-                                    <MenuItem value="F">Female</MenuItem>
-                                    <MenuItem value="O">Other</MenuItem>
-                                    {/* Add more countries here */}
+                                    <MenuItem value="M">Maschio</MenuItem>
+                                    <MenuItem value="F">Femmina</MenuItem>
+                                    <MenuItem value="O">Altro</MenuItem>
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <FormControl
                                 fullWidth
                                 required
                             >
-                                <InputLabel id="course-label">Course</InputLabel>
+                                <InputLabel id="course-label">Corso</InputLabel>
                                 <Select
                                     variant="outlined"
                                     labelId="course-label"
                                     name="course"
-                                    label="Course"
+                                    label="Corso"
                                     value={updatedData.course}
                                     onChange={handleChange}
                                     slotProps={{
                                         input: {readOnly: readOnly.course}
                                     }}
                                 >
-                                    <MenuItem value="Engineering">Engineering</MenuItem>
+                                    <MenuItem value="Engineering">Ingegneria</MenuItem>
                                     <MenuItem value="Design">Design</MenuItem>
-                                    <MenuItem value="Architecture">Architecture</MenuItem>
-                                    {/* Add more countries here */}
+                                    <MenuItem value="Architecture">Architettura</MenuItem>
+                                    {/* TODO Add more values here */}
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid item={undefined} xs={12} md={4} lg={3}>
+                        <Grid xs={12} md={4} lg={3}>
                             <EditButton
                                 onEdit={() => toggleEdit(true)}
                                 onCancel={() => {
@@ -590,27 +586,29 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                         </Grid>
                     </Grid>
                 </Card>
-                <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '30px'}}>
+                <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '20px'}}>
                     <CrudTable
                         cols={document_columns}
                         canCreate
                         onCreate={createDocument}
                         onSave={saveDocument}
                         initialData={data.documents}
-                        title={'Documents'}/>
+                        title={'Documenti'}/>
                     <CrudTable
                         cols={matricola_columns}
                         canCreate
+                        canEdit
                         initialData={data.matricole}
                         onCreate={createMatricola}
                         onSave={saveMatricola}
                         title={'Matricole'}/>
                     <CrudTable
                         cols={esncard_columns}
+                        canEdit={user.permissions.includes('change_esncard')}
                         initialData={data.esncards}
-
-                        title={'ESNcard'}/>
+                        title={'ESNcards'}/>
                 </Box>
+                {showSuccessPopup && <SuccessPopup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
         </Modal>
     );
