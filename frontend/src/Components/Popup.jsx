@@ -1,12 +1,18 @@
 import {useEffect} from 'react';
-
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const SuccessPopup = ({message, state, duration = 2000}) => {
     useEffect(() => {
         const popup = document.createElement('div');
+        const copyIcon = document.createElement('span');
+
         popup.innerText = message;
+        copyIcon.innerHTML = state === 'error' ? ContentCopyIcon().props.children : null;
+        copyIcon.style.marginLeft = '10px';
+        popup.appendChild(copyIcon);
+
         popup.style.position = 'fixed';
-        popup.style.top = '20px';
+        popup.style.top = '-100px'; // Start off-screen
         popup.style.left = '50%';
         popup.style.transform = 'translateX(-50%)';
         popup.style.backgroundColor = state === 'success' ? 'green' : 'red';
@@ -14,36 +20,36 @@ const SuccessPopup = ({message, state, duration = 2000}) => {
         popup.style.padding = '10px';
         popup.style.borderRadius = '5px';
         popup.style.zIndex = '9999'; // Ensure the popup is in front of any layer/modal
-        popup.style.opacity = '1';
-        popup.style.transition = 'opacity 0.5s ease-in-out';
-        popup.style.userSelect = 'text'; // Make text selectable
+        popup.style.transition = 'opacity 0.5s ease-in-out, top 0.5s ease-in-out';
         document.body.appendChild(popup);
 
+
         let timer;
+        requestAnimationFrame(() => {
+            popup.style.top = '20px';
+        });
+
+        const animateOut = () => {
+            popup.style.top = '-100px';
+            setTimeout(() => {
+                popup.removeEventListener('mouseenter', handleMouseEnter);
+                popup.removeEventListener('mouseleave', handleMouseLeave);
+                if (document.body.contains(popup)) document.body.removeChild(popup);
+            }, duration / 4);
+        };
+
         const handleMouseEnter = () => {
             clearTimeout(timer);
-            popup.style.opacity = '1';
         };
+
         const handleMouseLeave = () => {
-            timer = setTimeout(() => {
-                popup.style.opacity = '0';
-                setTimeout(() => {
-                    document.body.removeChild(popup);
-                }, 500); // Match the transition duration
-            }, duration);
+            timer = setTimeout(animateOut, duration);
         };
 
         popup.addEventListener('mouseenter', handleMouseEnter);
         popup.addEventListener('mouseleave', handleMouseLeave);
 
         handleMouseLeave();
-
-        return () => {
-            clearTimeout(timer);
-            popup.removeEventListener('mouseenter', handleMouseEnter);
-            popup.removeEventListener('mouseleave', handleMouseLeave);
-            document.body.removeChild(popup);
-        };
     }, [message, state, duration]);
 
     return null;

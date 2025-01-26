@@ -5,6 +5,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
+import SuccessPopup from './Popup'; // Add this line
 
 
 /*  The save function must receive as parameter the row object. 
@@ -13,7 +14,7 @@ import {MRT_Localization_IT} from 'material-react-table/locales/it';
 */
 
 export default function CrudTable({cols, initialData, title, onSave, onCreate, canCreate, canDelete, canEdit}) {
-
+    const [popupMessage, setPopupMessage] = useState(null); // Add this line
     const columns = useMemo(() => cols);
     const [data, setData] = useState([])
     const canEditText = <span style={{color: 'green'}}>(Hai i permessi per eseguire modifiche)</span>;
@@ -60,6 +61,9 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
                     setData(updatedData);
                     console.log(updatedData);
                     table.setEditingRow(null);
+                    setPopupMessage({message: 'Save successful!', state: 'success'}); // Add this line
+                } else {
+                    setPopupMessage({message: 'Save failed!', state: 'error'}); // Add this line
                 }
             },
         onEditingRowCancel:
@@ -71,7 +75,7 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
             ({row, table}) => {
                 return (
                     <Box sx={{display: 'flex', gap: '1rem'}}>
-                        <Tooltip title="Edit">
+                        <Tooltip title="Modifica">
                             <IconButton onClick={() => table.setEditingRow(row)}>
                                 <EditIcon/>
                             </IconButton>
@@ -79,11 +83,13 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
                         {canDelete && (
                             <Tooltip title="Delete">
                                 <IconButton onClick={() => {
+
                                 }}>
                                     <DeleteIcon/>
                                 </IconButton>
                             </Tooltip>
                         )}
+                        {popupMessage && <SuccessPopup message={popupMessage.message} state={popupMessage.state} />}
                     </Box>
                 );
             },
@@ -92,11 +98,9 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
             ({table}) => {
                 return (
                     <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                        {canCreate ? (<IconButton
-                            onClick={() => {
-                                table.setCreatingRow(true);
-                            }}
-                        >
+                        {canCreate ? (<IconButton onClick={() => {
+                            table.setCreatingRow(true);
+                        }}>
                             <AddCircleOutlineIcon/>
                         </IconButton>) : (<></>)}
                         <Box sx={{ml: '20px'}}>
@@ -106,10 +110,7 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
                     </Box>
                 );
             },
-
     })
 
-    return (
-        <MaterialReactTable table={table}/>
-    );
+    return (<MaterialReactTable table={table}/>);
 };
