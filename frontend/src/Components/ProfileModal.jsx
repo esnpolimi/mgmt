@@ -309,7 +309,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
             ...updatedData,
             birthdate: formatDateString(updatedData.birthdate)
         }
-        fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body
+        return fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body
         ).then((response) => {
             setSaving(false);
             if (response.ok) {
@@ -581,7 +581,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                     setUpdatedData(data);
                                 }}
                                 saving={saving}
-                                onSave={handleSave}
+                                onSave={() => handleSave()}
                             />
                         </Grid>
                     </Grid>
@@ -590,6 +590,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                     <CrudTable
                         cols={document_columns}
                         canCreate
+                        canEdit={user.permissions.includes('change_document')}
                         onCreate={createDocument}
                         onSave={saveDocument}
                         initialData={data.documents}
@@ -597,7 +598,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                     <CrudTable
                         cols={matricola_columns}
                         canCreate
-                        canEdit
+                        canEdit={user.permissions.includes('change_matricola')}
                         initialData={data.matricole}
                         onCreate={createMatricola}
                         onSave={saveMatricola}
