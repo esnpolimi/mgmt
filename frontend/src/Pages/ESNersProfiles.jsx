@@ -1,62 +1,9 @@
-import React, {useEffect, useState, useMemo} from 'react';
-import {Box, Typography, Chip, MenuItem, ListItemIcon, CssBaseline, IconButton} from '@mui/material';
-import {AccountCircle, Send, People} from '@mui/icons-material';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
-import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import Sidebar from '../Components/Sidebar.jsx'
-import ProfileModal from '../Components/ProfileModal.jsx';
-import dayjs from 'dayjs';
-import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
-import {fetchCustom} from "../api/api";
+import React, {useMemo} from 'react';
+import ProfileList from '../Components/ProfileList.jsx';
+import {Box, Chip} from "@mui/material";
 import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
 
 export default function ESNersProfiles() {
-
-    const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [drawerOpen, toggleDrawer] = useState(false);
-
-    const [modalOpen, toggleModal] = useState(false);
-    const [emissionProfile, setEmissionProfile] = useState({});
-
-    const formatDateString = (date) => {
-        return dayjs(date).format('YYYY-MM-DD');
-    };
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const response = await fetchCustom("GET", '/user_profiles/');
-                const json = await response.json();
-                const formattedData = json.results.map((item) => ({
-                    ...item,
-                    id: item.profile.id,  // Bring profile.id to top level
-                    name: item.profile.name,
-                    surname: item.profile.surname,
-                    email: item.profile.email,
-                    whatsapp: item.profile.whatsapp,
-                    country: item.profile.country,
-                    gender: item.profile.gender,
-                    birthdate: item.profile.birthdate,
-                    course: item.profile.course,
-                    phone: item.profile.phone,
-                    person_code: item.profile.person_code,
-                    domicile: item.profile.domicile,
-                    residency: item.profile.residency,
-                    latest_document: item.profile.latest_document,
-                    latest_matricola: item.profile.latest_matricola,
-                    latest_esncard: item.profile.latest_esncard,
-                }));
-                setData(formattedData);
-                setLoading(false);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);
 
     const columns = useMemo(() => [
         {
@@ -158,106 +105,32 @@ export default function ESNersProfiles() {
         },
     ], []);
 
-    const table = useMaterialReactTable({
-        columns,
-        data,
-        enableStickyHeader: true,
-        enableStickyFooter: true,
-        enableColumnFilterModes: true,
-        enableColumnOrdering: true,
-        enableGrouping: true,
-        enableColumnPinning: true,
-        enableFacetedValues: true,
-        enableRowActions: true,
-        enableRowSelection: false,
-        enableRowPinning: true,
-        enableExpandAll: false,
-        initialState: {
-            showColumnFilters: false,
-            showGlobalFilter: true,
-            columnPinning: {
-                left: ['mrt-row-expand', 'mrt-row-select'],
-                right: ['mrt-row-actions'],
-            },
-            columnVisibility: {
-                id: true,
-                name: true,
-                surname: true,
-                groups: true,
-                email: true,
-                whatsapp: true,
-                country: true,
-                gender: false,
-                birthdate: false,
-                course: false,
-                phone: false,
-                person_code: false,
-                domicile: false,
-                residency: false,
-                'latest_document.number': false,
-                'latest_matricola.number': false,
-            },
-        },
-        paginationDisplayMode: 'pages',
-        positionToolbarAlertBanner: 'bottom',
-        muiSearchTextFieldProps: {
-            size: 'small',
-            variant: 'outlined',
-        },
-        muiPaginationProps: {
-            color: 'secondary',
-            rowsPerPageOptions: [10, 20, 30],
-            shape: 'rounded',
-            variant: 'outlined',
-        },
-        /*renderDetailPanel: ({row}) => {
-            return (
-                <ProfileModal row={row} updateTableRow={(id, rowData) => {
-                    setData(data.map((row) => {
-                        if (row.profile.id === id) {
-                            let updatedRow = Object.fromEntries(Object.keys(row).map((e) => {
-                                if (e in rowData) return [e, rowData[e]];
-                                else return [e, row[e]]
-                            }));
-                            updatedRow.birthdate = formatDateString(rowData.birthdate);
-                            return updatedRow;
-                        } else {
-                            return row;
-                        }
-                    }));
-                }}/>
-            );
-        },*/
-        renderRowActionMenuItems: ({closeMenu, row, table}) => [
-            <MenuItem
-                key={1}
-                onClick={() => {
-                    // Send email logic...
-                    closeMenu();
-                    setEmissionProfile(row.original);
-                    toggleModal(true);
-                }}
-                sx={{m: 0}}
-            >
-                <ListItemIcon>
-                    <CreditCardIcon/>
-                </ListItemIcon>
-                Release ESNcard
-            </MenuItem>,
-        ],
-    });
+    const columnVisibility = {
+        id: true,
+        name: true,
+        surname: true,
+        groups: true,
+        email: true,
+        whatsapp: true,
+        country: true,
+        gender: false,
+        birthdate: false,
+        course: false,
+        phone: false,
+        person_code: false,
+        domicile: false,
+        residency: false,
+        'latest_document.number': false,
+        'latest_matricola.number': false,
+    }
 
     return (
-        <Box>
-            <Sidebar/>
-            <ESNcardEmissionModal open={modalOpen} profile={emissionProfile} onClose={() => toggleModal(false)}/>
-            <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                    <BabyChangingStationIcon sx={{marginRight: '10px'}}/>
-                    <Typography variant="h4">ESNers Profiles</Typography>
-                </Box>
-                <MaterialReactTable table={table}/>
-            </Box>
-        </Box>
+        <ProfileList
+            apiEndpoint="/user_profiles/"
+            columns={columns}
+            columnVisibility={columnVisibility}
+            icon={BabyChangingStationIcon}
+            title="ESNers"
+        />
     );
 }

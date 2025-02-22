@@ -8,17 +8,18 @@ import {
     Event as EventIcon,
     Person as PersonIcon,
     Snowboarding as SnowboardingIcon,
-    ChildCare as ChildCareIcon,
     BabyChangingStation as BabyChangingStationIcon,
     ExpandLess,
     ExpandMore,
 } from "@mui/icons-material";
-import LogoutButton from "./LogoutButton";
+import ProfileBox from './ProfileBox';
+import {useAuth} from "../Context/AuthContext";
 
 
 export default function Sidebar() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [expandedSection, setExpandedSection] = useState(null);
+    const {user} = useAuth();
 
     const toggleDrawer = (open) => () => {
         setIsDrawerOpen(open);
@@ -33,7 +34,6 @@ export default function Sidebar() {
             icon: <PersonIcon/>,
             children: [
                 {text: 'Erasmus', icon: <SnowboardingIcon/>, path: '/erasmus_profiles'},
-                {text: 'Aspiranti', icon: <ChildCareIcon/>, path: "/aspirants_profiles"},
                 {text: 'ESNers', icon: <BabyChangingStationIcon/>, path: '/esners_profiles'},
             ],
         },
@@ -48,12 +48,16 @@ export default function Sidebar() {
 
     const drawer = (
         <Box
-            sx={{width: 250}}
+            sx={{
+                width: 250,
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%'
+            }}
             role="presentation"
-            //onClick={toggleDrawer(false)}
             onKeyDown={toggleDrawer(false)}
         >
-            <List>
+            <Box sx={{flexGrow: 1}}>
                 {menuItems.map((item) => (
                     <React.Fragment key={item.text}>
                         {!item.children ? (
@@ -65,7 +69,6 @@ export default function Sidebar() {
                                 />
                             </ListItem>
                         ) : (
-                            // Parent Section (e.g., Profiles)
                             <React.Fragment key={item.text}>
                                 <ListItem button="true" onClick={() => handleExpand(item.text)}>
                                     <ListItemIcon>{item.icon}</ListItemIcon>
@@ -102,11 +105,11 @@ export default function Sidebar() {
                             </React.Fragment>
                         )}
                     </React.Fragment>
-                )) || []}
-                <Box style={{display: "flex", justifyContent: "center"}}>
-                    <LogoutButton/>
-                </Box>
-            </List>
+                ))}
+            </Box>
+            <Box sx={{mt: 'auto', mb: 2}}>
+                <ProfileBox user={user}/>
+            </Box>
         </Box>
     );
 

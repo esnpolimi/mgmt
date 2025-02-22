@@ -5,7 +5,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
-import SuccessPopup from './Popup'; // Add this line
+import Popup from './Popup'; // Add this line
 
 
 /*  The save function must receive as parameter the row object. 
@@ -89,7 +89,7 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
                                 </IconButton>
                             </Tooltip>
                         )}
-                        {popupMessage && <SuccessPopup message={popupMessage.message} state={popupMessage.state} />}
+                        {popupMessage && <Popup message={popupMessage.message} state={popupMessage.state} />}
                     </Box>
                 );
             },
