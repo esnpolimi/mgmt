@@ -210,7 +210,7 @@ export default function ESNersProfiles() {
             shape: 'rounded',
             variant: 'outlined',
         },
-        renderDetailPanel: ({row}) => {
+        /*renderDetailPanel: ({row}) => {
             return (
                 <ProfileModal row={row} updateTableRow={(id, rowData) => {
                     setData(data.map((row) => {
@@ -227,7 +227,7 @@ export default function ESNersProfiles() {
                     }));
                 }}/>
             );
-        },
+        },*/
         renderRowActionMenuItems: ({closeMenu, row, table}) => [
             <MenuItem
                 key={1}

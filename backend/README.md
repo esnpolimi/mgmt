@@ -1,4 +1,4 @@
-This is repository contains the code that implements the REST API for the ESN management platform. It is written in
+This repository contains the code that implements the REST API for the ESN management platform. It is written in
 python, using [Django](https://www.djangoproject.com) and [Django Rest Framework](https://www.django-rest-framework.org/).
 The code is divided into 4 apps that handle different functionalities
 of the management platform.
