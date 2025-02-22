@@ -10,14 +10,14 @@ import CrudTable from "./CrudTable";
 import {fetchCustom} from "../api/api";
 import {style, colorOptions} from '../utils/sharedStyles'
 import {useAuth} from "../Context/AuthContext";
-import SuccessPopup from './Popup'
+import Popup from './Popup'
 
-
-const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
+export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const {user} = useAuth();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-    //console.log("Permissions: ", user.permissions)
+    //console.log("Received profile: ", profile)
+    //console.log("Received profile type: ", profileType)
 
     const [data, setData] = useState({  /* profile fields */
         email: '',
@@ -336,7 +336,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                     setUpdatedData(newData);
                     if (updateProfile) updateProfile(newData); // Calls the callback provided by the parent
                     resetErrors();
-                    setShowSuccessPopup({message: "Profile updated successfully!", state: "success"});
+                    setShowSuccessPopup({message: "Profilo aggiornato con successo!", state: "success"});
                     toggleEdit(false);
                     setTimeout(() => setShowSuccessPopup(null), 2000);
                 }
@@ -346,7 +346,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                 console.log(error);
                 setUpdatedData(data);
                 setSaving(false);
-                setShowSuccessPopup({message: "Error while updating profile", state: "error"});
+                setShowSuccessPopup({message: "Errore nell'aggiornamento del profilo", state: "error"});
                 toggleEdit(false);
                 setTimeout(() => setShowSuccessPopup(null), 2000);
             });
@@ -375,9 +375,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
 
     return (
         <Modal open={open} onClose={handleClose}>
-            <Box sx={style}>
+            <Box sx={style} onKeyDown={(e) => e.stopPropagation()}>
                 <Typography variant="h5" gutterBottom align="center">
-                    Modifica profilo Erasmus
+                    Profilo {profileType}
                 </Typography>
                 <Card sx={{p: '20px'}}>
                     <Grid container spacing={2}>
@@ -388,10 +388,9 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 value={updatedData.name}
                                 error={errors.name[0]}
                                 helperText={errors.name[1]}
-                                slotProps={{
-                                    input: {readOnly: readOnly.name}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.name}}}
                                 onChange={handleChange}
+                                sx={{backgroundColor: readOnly.name ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -402,9 +401,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 error={errors.surname[0]}
                                 helperText={errors.surname[1]}
                                 onChange={handleChange}
-                                slotProps={{
-                                    input: {readOnly: readOnly.surname}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.surname}}}
+                                sx={{backgroundColor: readOnly.surname ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -415,9 +413,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 value={updatedData.email}
                                 error={errors.email[0]}
                                 helperText={errors.email[1]}
-                                slotProps={{
-                                    input: {readOnly: readOnly.email}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.email}}}
+                                sx={{backgroundColor: readOnly.email ? 'grey.200' : 'white'}}
                                 onChange={handleChange} fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -428,9 +425,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 error={errors.phone[0]}
                                 helperText={errors.phone[1]}
                                 onChange={handleChange}
-                                slotProps={{
-                                    input: {readOnly: readOnly.phone}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.phone}}}
+                                sx={{backgroundColor: readOnly.phone ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -441,9 +437,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 error={errors.whatsapp[0]}
                                 helperText={errors.whatsapp[1]}
                                 onChange={handleChange}
-                                slotProps={{
-                                    input: {readOnly: readOnly.whatsapp}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.whatsapp}}}
+                                sx={{backgroundColor: readOnly.whatsapp ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -454,9 +449,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 error={errors.domicile[0]}
                                 helperText={errors.domicile[1]}
                                 onChange={handleChange}
-                                slotProps={{
-                                    input: {readOnly: readOnly.domicile}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.domicile}}}
+                                sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -467,9 +461,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 error={errors.residency[0]}
                                 helperText={errors.residency[1]}
                                 onChange={handleChange}
-                                slotProps={{
-                                    input: {readOnly: readOnly.residency}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.residency}}}
+                                sx={{backgroundColor: readOnly.residency ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -480,9 +473,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                 error={errors.person_code[0]}
                                 helperText={errors.person_code[1]}
                                 onChange={handleChange}
-                                slotProps={{
-                                    input: {readOnly: readOnly.person_code}
-                                }}
+                                slotProps={{input: {readOnly: readOnly.person_code}}}
+                                sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -492,6 +484,7 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                     value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
                                     readOnly={readOnly.birthdate}
                                     onChange={(date) => handleDateChange('birthdate', date)}
+                                    sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
                                     renderInput={(params) => <TextField {...params}
                                                                         fullWidth
                                                                         required
@@ -513,9 +506,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                     value={updatedData.country}
                                     error={errors.country[0]}
                                     onChange={handleChange}
-                                    slotProps={{
-                                        input: {readOnly: readOnly.country}
-                                    }}
+                                    slotProps={{input: {readOnly: readOnly.country}}}
+                                    sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}
                                 >
                                     <MenuItem value="">
                                         <em>None</em>
@@ -539,9 +531,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                     label="Genere"
                                     value={updatedData.gender}
                                     onChange={handleChange}
-                                    slotProps={{
-                                        input: {readOnly: readOnly.gender}
-                                    }}
+                                    slotProps={{input: {readOnly: readOnly.gender}}}
+                                    sx={{backgroundColor: readOnly.gender ? 'grey.200' : 'white'}}
                                 >
                                     <MenuItem value="M">Maschio</MenuItem>
                                     <MenuItem value="F">Femmina</MenuItem>
@@ -562,9 +553,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                                     label="Corso"
                                     value={updatedData.course}
                                     onChange={handleChange}
-                                    slotProps={{
-                                        input: {readOnly: readOnly.course}
-                                    }}
+                                    slotProps={{input: {readOnly: readOnly.course}}}
+                                    sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
                                 >
                                     <MenuItem value="Engineering">Ingegneria</MenuItem>
                                     <MenuItem value="Design">Design</MenuItem>
@@ -609,10 +599,8 @@ const ProfileModal = ({open, handleClose, profile, updateProfile}) => {
                         initialData={data.esncards}
                         title={'ESNcards'}/>
                 </Box>
-                {showSuccessPopup && <SuccessPopup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
         </Modal>
     );
-};
-
-export default ProfileModal;
+}
