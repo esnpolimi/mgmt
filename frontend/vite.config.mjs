@@ -5,7 +5,10 @@ export default defineConfig({
     plugins: [react()],
     server: {
         port: 3000, // You can use the same port as CRA
-        open: true, // Opens the browser automatically
+        open: false, // Opens the browser automatically. Set to false to avoid errors when containerized
+                     // in docker.
+
+        host: true, // needed for docker
     },
     build: {
         outDir: "build", // Ensures compatibility with CRA's build directory
