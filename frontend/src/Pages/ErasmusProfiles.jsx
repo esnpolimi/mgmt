@@ -1,7 +1,8 @@
 import React, {useMemo} from 'react';
-import ProfileList from '../Components/ProfileList.jsx';
-import {Box, Chip} from "@mui/material";
+import ProfilesList from '../Components/ProfilesList.jsx';
+import {Box, Chip, Typography} from "@mui/material";
 import SnowboardingIcon from '@mui/icons-material/Snowboarding';
+import Sidebar from "../Components/Sidebar";
 
 export default function ErasmusProfiles() {
 
@@ -119,12 +120,20 @@ export default function ErasmusProfiles() {
     }
 
     return (
-        <ProfileList
-            apiEndpoint="/erasmus_profiles/"
-            columns={columns}
-            columnVisibility={columnVisibility}
-            icon={SnowboardingIcon}
-            title="Erasmus"
-        />
+        <Box>
+            <Sidebar/>
+            <Box sx={{mx: '5%'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                    <SnowboardingIcon sx={{marginRight: '10px'}}/>
+                    <Typography variant="h4">Profili Erasmus</Typography>
+                </Box>
+            </Box>
+            <ProfilesList
+                apiEndpoint="/erasmus_profiles/"
+                columns={columns}
+                columnVisibility={columnVisibility}
+                profileType="Erasmus"
+            />
+        </Box>
     );
 }

@@ -4,7 +4,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import LogoutButton from './LogoutButton';
 import ProfileModal from './ProfileModal';
 
-export default function ProfileBox({user}) {
+export default function ProfileSidebarBox({user}) {
     const [modalOpen, setModalOpen] = useState(false);
 
     const handleProfileOpen = useCallback(() => {

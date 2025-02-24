@@ -1,13 +1,12 @@
-import React, {useEffect, useState, useMemo} from 'react';
-import {Box, Typography, IconButton} from '@mui/material';
+import React, {useEffect, useState} from 'react';
+import {Box, IconButton} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import EditIcon from '@mui/icons-material/Edit';
 import {fetchCustom} from '../api/api';
-import Sidebar from './Sidebar.jsx';
 import ProfileModal from './ProfileModal.jsx';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 
-export default function ProfileList({apiEndpoint, columns, columnVisibility, icon: Icon, title}) {
+export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modalOpen, toggleModal] = useState(false);
@@ -25,8 +24,7 @@ export default function ProfileList({apiEndpoint, columns, columnVisibility, ico
                         id: profile.id,
                     }));
                     setData(formattedData);
-                }
-                else setData(json.results);
+                } else setData(json.results);
                 setLoading(false);
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -99,19 +97,12 @@ export default function ProfileList({apiEndpoint, columns, columnVisibility, ico
     };
 
     return (
-        <Box>
-            <Sidebar/>
-            <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                    {Icon && <Icon sx={{marginRight: '10px'}}/>}
-                    <Typography variant="h4">Profili {title}</Typography>
-                </Box>
-                <MaterialReactTable table={table}/>
-            </Box>
+        <Box sx={{mx: '5%'}}>
+            <MaterialReactTable table={table}/>
             {modalOpen && (
                 <ProfileModal
                     profile={selectedProfile}
-                    profileType={title}
+                    profileType={profileType}
                     open={modalOpen}
                     handleClose={handleProfileClose}
                     updateProfile={updateProfile}
