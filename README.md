@@ -1,3 +1,30 @@
+# Guida Workflow Git
+
+## Branch principali
+
+#### `main`: Codice stabile e pronto per la produzione, usato solo per il codice già testato e approvato.
+#### `develop`: Area di staging per integrare nuove funzionalità e fix; Tutto il codice completato e testato si unisce prima qui.
+
+## Branch per nuove modifiche
+
+1. **Crea un branch**:
+   - Per ogni nuova funzionalità o fix, crea un branch.
+   - Convenzioni di nome:
+     - Funzionalità: `feature/nome-funzionalita`
+     - Correzione bug: `fix/nome-bug`
+
+2. **Sviluppa**:
+   - Effettua le modifiche, chiedendo eventuale supporto agli altri membri del team :)
+   - Testa i cambiamenti in locale.
+
+3. **Richiedi una Pull Request (PR)**:
+   - Al termine del lavoro, richiedi una PR verso il branch `develop`.
+
+4. **Revisione**:
+   - La PR sarà revisionata e, una volta approvata, il codice sarà unito a `develop`.
+
+---
+
 # Run Backend + Frontend on Local with Docker
 After having installed Docker (Docker Desktop on Windows) you can start the deamon (just open Docker Desktop on Windows) and execute (from the folder in which local.yml is located):
 
