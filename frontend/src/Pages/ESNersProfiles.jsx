@@ -1,7 +1,9 @@
 import React, {useMemo} from 'react';
-import ProfileList from '../Components/ProfileList.jsx';
-import {Box, Chip} from "@mui/material";
+import ProfilesList from '../Components/ProfilesList.jsx';
+import {Box, Chip, Typography} from "@mui/material";
 import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
+import Sidebar from "../Components/Sidebar";
+import SnowboardingIcon from "@mui/icons-material/Snowboarding";
 
 export default function ESNersProfiles() {
 
@@ -125,12 +127,20 @@ export default function ESNersProfiles() {
     }
 
     return (
-        <ProfileList
-            apiEndpoint="/user_profiles/"
-            columns={columns}
-            columnVisibility={columnVisibility}
-            icon={BabyChangingStationIcon}
-            title="ESNers"
-        />
+        <Box>
+            <Sidebar/>
+            <Box sx={{mx: '5%'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                    <BabyChangingStationIcon sx={{marginRight: '10px'}}/>
+                    <Typography variant="h4">Profili ESNers</Typography>
+                </Box>
+            </Box>
+            <ProfilesList
+                apiEndpoint="/user_profiles/"
+                columns={columns}
+                columnVisibility={columnVisibility}
+                profileType="ESNer"
+            />
+        </Box>
     );
 }

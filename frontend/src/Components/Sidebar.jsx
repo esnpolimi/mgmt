@@ -12,7 +12,7 @@ import {
     ExpandLess,
     ExpandMore,
 } from "@mui/icons-material";
-import ProfileBox from './ProfileBox';
+import ProfileSidebarBox from './ProfileSidebarBox';
 import {useAuth} from "../Context/AuthContext";
 
 
@@ -108,7 +108,7 @@ export default function Sidebar() {
                 ))}
             </Box>
             <Box sx={{mt: 'auto', mb: 2}}>
-                <ProfileBox user={user}/>
+                <ProfileSidebarBox user={user}/>
             </Box>
         </Box>
     );
