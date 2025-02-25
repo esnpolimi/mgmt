@@ -12,7 +12,7 @@ import {fetchCustom} from "../api/api";
 import {style, colorOptions} from '../utils/sharedStyles'
 
 
-const FormModal = ({open, handleClose}) => {
+export default function FormModal({open, handleClose}) {
     const [formData, setFormData] = useState({
         name: '',
         date: dayjs(),
@@ -438,6 +438,4 @@ const FormModal = ({open, handleClose}) => {
             </Box>
         </Modal>
     );
-};
-
-export default FormModal;
+}
