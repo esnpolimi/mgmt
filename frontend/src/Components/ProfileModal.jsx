@@ -353,24 +353,26 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     };
 
     useEffect(() => {
-        console.log('Fetching ' + profile.id)
-        fetchCustom("GET", `/profile/${profile.id.toString()}/`
-        ).then((response) => {
-            if (response.ok) {
-                return response.json()
-            } else {
-                throw new Error('Error while fetching profile ' + profile.id.toString())
-            }
-        }).then((json) => {
-            var update = {}
-            Object.keys(data).map((key) => {
-                update[key] = json[key];
+        if (open) {
+            console.log('Fetching ' + profile.id)
+            fetchCustom("GET", `/profile/${profile.id.toString()}/`)
+                .then((response) => {
+                    if (response.ok) {
+                        return response.json()
+                    } else {
+                        throw new Error('Error while fetching profile ' + profile.id.toString())
+                    }
+                }).then((json) => {
+                const update = {};
+                Object.keys(data).map((key) => {
+                    update[key] = json[key];
+                });
+                setData(update)
+                setUpdatedData(update)
+            }).catch((error) => {
+                console.log(error);
             });
-            setData(update)
-            setUpdatedData(update)
-        }).catch((error) => {
-            console.log(error);
-        });
+        }
     }, [])
 
     return (

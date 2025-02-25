@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import ProfilesList from '../Components/ProfilesList.jsx';
+import ProfilesList from './ProfilesList.jsx';
 import {Box, Chip, Typography} from "@mui/material";
 import SnowboardingIcon from '@mui/icons-material/Snowboarding';
 import Sidebar from "../Components/Sidebar";
