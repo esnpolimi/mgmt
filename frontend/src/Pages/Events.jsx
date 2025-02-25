@@ -137,7 +137,7 @@ export default function Events() {
         renderTopToolbarCustomActions: ({table}) => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                    <Button variant='contained' onClick={() => toggleModal(true)}>
+                    <Button variant='contained' onClick={() => toggleModal(true)} sx={{width: '150px'}}>
                         Create
                     </Button>
                 </Box>
