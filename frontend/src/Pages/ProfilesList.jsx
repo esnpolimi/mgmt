@@ -105,13 +105,13 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     return (
         <Box sx={{mx: '5%'}}>
             <MaterialReactTable table={table}/>
-            <ProfileModal
+            {modalOpen && <ProfileModal
                 open={modalOpen}
                 profile={selectedProfile}
                 profileType={profileType}
                 handleClose={handleProfileClose}
                 updateProfile={updateProfile}
-            />
+            />}
         </Box>
     );
 }
