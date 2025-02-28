@@ -3,63 +3,63 @@ import ProfilesList from './ProfilesList.jsx';
 import {Box, Chip, Typography} from "@mui/material";
 import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
 import Sidebar from "../Components/Sidebar";
-import SnowboardingIcon from "@mui/icons-material/Snowboarding";
+import {profileDisplayNames as names} from '../utils/displayAttributes';
 
 export default function ESNersProfiles() {
 
     const columns = useMemo(() => [
         {
             accessorKey: 'id',
-            header: 'Id',
+            header: names.id,
             size: 50,
         },
         {
             accessorKey: 'name',
-            header: 'Name',
+            header: names.name,
             size: 150,
         },
         {
             accessorKey: 'surname',
-            header: 'Surname',
+            header: names.surname,
             size: 150,
         },
         {
             accessorKey: 'groups',
-            header: 'Group',
+            header: names.groups,
             size: 150,
         },
         {
             accessorKey: 'email',
-            header: 'Email',
+            header: names.email,
             size: 150,
         },
         {
             accessorKey: 'latest_esncard.number',
-            header: 'Latest ESNcard',
+            header: names.latest_esncard,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{}}>
                     {cell.getValue() !== undefined ? (
                         <Chip label={cell.getValue()} color="success"/>
                     ) : (
-                        <Chip label="No ESNcard" color="error"/>
+                        <Chip label="Nessuna ESNcard" color="error"/>
                     )}
                 </Box>
             ),
         },
         {
             accessorKey: 'whatsapp',
-            header: 'Whatsapp number',
+            header: names.whatsapp,
             size: 150,
         },
         {
             accessorKey: 'country',
-            header: 'Country',
+            header: names.country,
             size: 150,
         },
         {
             accessorKey: 'gender',
-            header: 'Gender',
+            header: names.gender,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{textAlign: 'center'}}>{cell.getValue()}</Box>
@@ -67,42 +67,42 @@ export default function ESNersProfiles() {
         },
         {
             accessorKey: 'birthdate',
-            header: 'Birthdate',
+            header: names.birthdate,
             size: 100,
         },
         {
             accessorKey: 'course',
-            header: 'Course',
+            header: names.course,
             size: 100,
         },
         {
             accessorKey: 'phone',
-            header: 'Phone number',
+            header: names.phone,
             size: 150,
         },
         {
             accessorKey: 'person_code',
-            header: 'Person code',
+            header: names.person_code,
             size: 150,
         },
         {
             accessorKey: 'domicile',
-            header: 'Domicile',
+            header: names.domicile,
             size: 200,
         },
         {
             accessorKey: 'residency',
-            header: 'Residency',
+            header: names.residency,
             size: 200,
         },
         {
             accessorKey: 'latest_document.number',
-            header: 'Latest document',
+            header: names.latest_document,
             size: 50,
         },
         {
             accessorKey: 'latest_matricola.number',
-            header: 'Matricola',
+            header: names.latest_matricola,
             size: 50,
         },
     ], []);
