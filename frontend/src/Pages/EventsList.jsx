@@ -1,27 +1,20 @@
 import React, {useEffect, useState, useMemo} from 'react';
-import {Box, Typography, Chip, Button, IconButton} from '@mui/material';
+import {Box, Typography, Chip, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.jsx'
-import dayjs from 'dayjs';
-import ESNcardEmissionModal from '../Components/ESNcardEmissionModal.jsx'
-import EventIcon from '@mui/icons-material/Event'; // Events icon
-import EditIcon from '@mui/icons-material/Edit';
+import EventIcon from '@mui/icons-material/Event';
 import FormModal from '../Components/EventModal.jsx';
 import {fetchCustom} from "../api/api";
+import {MRT_Localization_IT} from "material-react-table/locales/it";
+import {useNavigate} from "react-router-dom";
+import {eventDisplayNames as names} from "../utils/displayAttributes";
 
 
-export default function Events() {
-
+export default function EventsList() {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [drawerOpen, toggleDrawer] = useState(false);
-
     const [modalOpen, toggleModal] = useState(false);
-    const [emissionProfile, setEmissionProfile] = useState({});
-
-    const formatDateString = (date) => {
-        return dayjs(date).format('YYYY-MM-DD');
-    };
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -29,6 +22,7 @@ export default function Events() {
                 const response = await fetchCustom("GET", '/events/');
                 const json = await response.json();
                 setData(json.results);
+                console.log("Data: ", json.results);
                 setLoading(false);
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -42,32 +36,32 @@ export default function Events() {
     const columns = useMemo(() => [
         {
             accessorKey: 'id',
-            header: 'Id',
+            header: names.id,
             size: 50,
         },
         {
             accessorKey: 'name',
-            header: 'Name',
+            header: names.name,
             size: 150,
         },
         {
             accessorKey: 'date',
-            header: 'Date',
+            header: names.date,
             size: 150,
         },
         {
             accessorKey: 'description',
-            header: 'Description',
+            header: names.description,
             size: 150,
         },
         {
             accessorKey: 'enable_form',
-            header: 'Form',
+            header: names.enable_form,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{}}>
                     {cell.getValue() ? (
-                        <Chip label="Yes" color="success"/>
+                        <Chip label="Sì" color="success"/>
                     ) : (
                         <Chip label="No" color="error"/>
                     )}
@@ -86,7 +80,7 @@ export default function Events() {
         enableGrouping: true,
         enableColumnPinning: true,
         enableFacetedValues: true,
-        enableRowActions: true,
+        enableRowActions: false,
         enableRowSelection: false,
         enableRowPinning: true,
         enableExpandAll: false,
@@ -100,19 +94,9 @@ export default function Events() {
             columnVisibility: {
                 id: true,
                 name: true,
-                surname: true,
-                email: true,
-                whatsapp: true,
-                country: false,
-                gender: false,
-                birthdate: false,
-                course: false,
-                phone: false,
-                person_code: false,
-                domicile: false,
-                residency: false,
-                'latest_document.number': false,
-                'latest_matricola.number': false,
+                date: true,
+                description: true,
+                enable_form: true,
             },
         },
         paginationDisplayMode: 'pages',
@@ -127,18 +111,17 @@ export default function Events() {
             shape: 'rounded',
             variant: 'outlined',
         },
-        renderRowActions: ({row}) => {
-            return (
-                <IconButton>
-                    <EditIcon/>
-                </IconButton>
-            )
-        },
+        localization: MRT_Localization_IT,
+        muiTableBodyRowProps: ({row}) => ({
+            onClick: () => {
+                navigate('/event', {state: {event: row.original}});
+            },
+        }),
         renderTopToolbarCustomActions: ({table}) => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
                     <Button variant='contained' onClick={() => toggleModal(true)} sx={{width: '150px'}}>
-                        Create
+                        Crea
                     </Button>
                 </Box>
             );
@@ -149,11 +132,11 @@ export default function Events() {
     return (
         <Box>
             <Sidebar/>
-            <FormModal open={modalOpen} handleClose={() => toggleModal(false)} />
+            <FormModal open={modalOpen} handleClose={() => toggleModal(false)}/>
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <EventIcon sx={{marginRight: '10px'}}/>
-                    <Typography variant="h4">Events</Typography>
+                    <Typography variant="h4">Eventi</Typography>
                 </Box>
                 <MaterialReactTable table={table}/>
             </Box>

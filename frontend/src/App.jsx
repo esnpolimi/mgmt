@@ -7,7 +7,8 @@ import ErasmusProfiles from './Pages/ErasmusProfiles.jsx';
 import ESNersProfiles from './Pages/ESNersProfiles.jsx';
 import Home from './Pages/Home.jsx'
 import Treasury from './Pages/Treasury.jsx';
-import Events from './Pages/Events.jsx';
+import EventsList from './Pages/EventsList.jsx';
+import Event from './Pages/Event.jsx';
 import {AuthProvider} from "./Context/AuthContext.jsx";
 import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 
@@ -24,7 +25,9 @@ function App() {
                     <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                     <Route path='/esner_form' element={<ESNerForm/>}/>
                     <Route path='/treasury' element={<ProtectedRoute><Treasury/></ProtectedRoute>}/>
-                    <Route path='/events' element={<ProtectedRoute><Events/></ProtectedRoute>}/>
+                    <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
+                    <Route path='/event' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
+
                 </Routes>
             </Router>
         </AuthProvider>
