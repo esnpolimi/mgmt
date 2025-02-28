@@ -8,9 +8,10 @@ import {useMaterialReactTable} from 'material-react-table';
 import EditButton from "./EditButton";
 import CrudTable from "./CrudTable";
 import {fetchCustom} from "../api/api";
-import {style, colorOptions} from '../utils/sharedStyles'
+import {style} from '../utils/sharedStyles'
 import {useAuth} from "../Context/AuthContext";
 import Popup from './Popup'
+import {profileDisplayNames as names} from '../utils/displayAttributes';
 
 export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
@@ -354,15 +355,15 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
 
     useEffect(() => {
         console.log('Fetching ' + profile.id)
-        fetchCustom("GET", `/profile/${profile.id.toString()}/`
-        ).then((response) => {
-            if (response.ok) {
-                return response.json()
-            } else {
-                throw new Error('Error while fetching profile ' + profile.id.toString())
-            }
-        }).then((json) => {
-            var update = {}
+        fetchCustom("GET", `/profile/${profile.id.toString()}/`)
+            .then((response) => {
+                if (response.ok) {
+                    return response.json()
+                } else {
+                    throw new Error('Error while fetching profile ' + profile.id.toString())
+                }
+            }).then((json) => {
+            const update = {};
             Object.keys(data).map((key) => {
                 update[key] = json[key];
             });
@@ -383,7 +384,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                     <Grid container spacing={2}>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Nome'
+                                label={names.name}
                                 name='name'
                                 value={updatedData.name}
                                 error={errors.name[0]}
@@ -395,7 +396,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Cognome'
+                                label={names.surname}
                                 name='surname'
                                 value={updatedData.surname}
                                 error={errors.surname[0]}
@@ -407,7 +408,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Email'
+                                label={names.email}
                                 name='email'
                                 type='email'
                                 value={updatedData.email}
@@ -419,7 +420,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Numero di telefono'
+                                label={names.phone}
                                 name='phone'
                                 value={updatedData.phone}
                                 error={errors.phone[0]}
@@ -431,7 +432,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Numero WhatsApp'
+                                label={names.whatsapp}
                                 name='whatsapp'
                                 value={updatedData.whatsapp}
                                 error={errors.whatsapp[0]}
@@ -443,7 +444,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Domicilio'
+                                label={names.domicile}
                                 name='domicile'
                                 value={updatedData.domicile}
                                 error={errors.domicile[0]}
@@ -455,7 +456,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Residenza'
+                                label={names.residency}
                                 name='residency'
                                 value={updatedData.residency}
                                 error={errors.residency[0]}
@@ -467,7 +468,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
                             <TextField
-                                label='Codice persona'
+                                label={names.person_code}
                                 name='person_code'
                                 value={updatedData.person_code}
                                 error={errors.person_code[0]}
@@ -480,7 +481,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         <Grid xs={12} md={4} lg={3}>
                             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                 <DatePicker
-                                    label="Data di nascita"
+                                    label={names.birthdate}
                                     value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
                                     readOnly={readOnly.birthdate}
                                     onChange={(date) => handleDateChange('birthdate', date)}
@@ -497,12 +498,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                 fullWidth
                                 required
                             >
-                                <InputLabel id="country-label">Nazione</InputLabel>
+                                <InputLabel id="country-label">{names.country}</InputLabel>
                                 <Select
                                     variant="outlined"
                                     labelId="country-label"
                                     name="country"
-                                    label="Nazione"
+                                    label={names.country}
                                     value={updatedData.country}
                                     error={errors.country[0]}
                                     onChange={handleChange}
@@ -523,12 +524,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                 fullWidth
                                 required
                             >
-                                <InputLabel id="gender-label">Genere</InputLabel>
+                                <InputLabel id="gender-label">{names.gender}</InputLabel>
                                 <Select
                                     variant="outlined"
                                     labelId="gender-label"
                                     name="gender"
-                                    label="Genere"
+                                    label={names.gender}
                                     value={updatedData.gender}
                                     onChange={handleChange}
                                     slotProps={{input: {readOnly: readOnly.gender}}}
@@ -545,12 +546,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                 fullWidth
                                 required
                             >
-                                <InputLabel id="course-label">Corso</InputLabel>
+                                <InputLabel id="course-label">{names.course}</InputLabel>
                                 <Select
                                     variant="outlined"
                                     labelId="course-label"
                                     name="course"
-                                    label="Corso"
+                                    label={names.course}
                                     value={updatedData.course}
                                     onChange={handleChange}
                                     slotProps={{input: {readOnly: readOnly.course}}}

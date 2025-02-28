@@ -1,59 +1,60 @@
 import React, {useMemo} from 'react';
-import ProfilesList from '../Components/ProfilesList.jsx';
+import ProfilesList from './ProfilesList.jsx';
 import {Box, Chip, Typography} from "@mui/material";
 import SnowboardingIcon from '@mui/icons-material/Snowboarding';
 import Sidebar from "../Components/Sidebar";
+import {profileDisplayNames as names} from "../utils/displayAttributes";
 
 export default function ErasmusProfiles() {
 
     const columns = useMemo(() => [
         {
             accessorKey: 'id',
-            header: 'Id',
+            header: names.id,
             size: 50,
         },
         {
             accessorKey: 'name',
-            header: 'Nome',
+            header: names.name,
             size: 150,
         },
         {
             accessorKey: 'surname',
-            header: 'Cognome',
+            header: names.surname,
             size: 150,
         },
         {
             accessorKey: 'email',
-            header: 'Email',
+            header: names.email,
             size: 150,
         },
         {
             accessorKey: 'latest_esncard.number',
-            header: 'Ultima ESNcard',
+            header: names.latest_esncard,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{}}>
                     {cell.getValue() !== undefined ? (
                         <Chip label={cell.getValue()} color="success"/>
                     ) : (
-                        <Chip label="No ESNcard" color="error"/>
+                        <Chip label="Nessuna ESNcard" color="error"/>
                     )}
                 </Box>
             ),
         },
         {
             accessorKey: 'whatsapp',
-            header: 'Numero WhatsApp',
+            header: names.whatsapp,
             size: 150,
         },
         {
             accessorKey: 'country',
-            header: 'Nazione',
+            header: names.country,
             size: 150,
         },
         {
             accessorKey: 'gender',
-            header: 'Genere',
+            header: names.gender,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{textAlign: 'center'}}>{cell.getValue()}</Box>
@@ -61,42 +62,42 @@ export default function ErasmusProfiles() {
         },
         {
             accessorKey: 'birthdate',
-            header: 'Data di nascita',
+            header: names.birthdate,
             size: 100,
         },
         {
             accessorKey: 'course',
-            header: 'Corso',
+            header: names.course,
             size: 100,
         },
         {
             accessorKey: 'phone',
-            header: 'Numero di telefono',
+            header: names.phone,
             size: 150,
         },
         {
             accessorKey: 'person_code',
-            header: 'Codice persona',
+            header: names.person_code,
             size: 150,
         },
         {
             accessorKey: 'domicile',
-            header: 'Domicilio',
+            header: names.domicile,
             size: 200,
         },
         {
             accessorKey: 'residency',
-            header: 'Residenza',
+            header: names.residency,
             size: 200,
         },
         {
             accessorKey: 'latest_document.number',
-            header: 'Ultimo documento',
+            header: names.latest_document,
             size: 50,
         },
         {
             accessorKey: 'latest_matricola.number',
-            header: 'Matricola',
+            header: names.latest_matricola,
             size: 50,
         },
     ], []);
