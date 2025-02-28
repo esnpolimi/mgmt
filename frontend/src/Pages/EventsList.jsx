@@ -1,13 +1,13 @@
 import React, {useEffect, useState, useMemo} from 'react';
-import {Box, Typography, Chip, Button, IconButton} from '@mui/material';
+import {Box, Typography, Chip, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.jsx'
-import EventIcon from '@mui/icons-material/Event'; // EventsList icon
-import EditIcon from '@mui/icons-material/Edit';
+import EventIcon from '@mui/icons-material/Event';
 import FormModal from '../Components/EventModal.jsx';
 import {fetchCustom} from "../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
+import {eventDisplayNames as names} from "../utils/displayAttributes";
 
 
 export default function EventsList() {
@@ -36,27 +36,27 @@ export default function EventsList() {
     const columns = useMemo(() => [
         {
             accessorKey: 'id',
-            header: 'Id',
+            header: names.id,
             size: 50,
         },
         {
             accessorKey: 'name',
-            header: 'Nome',
+            header: names.name,
             size: 150,
         },
         {
             accessorKey: 'date',
-            header: 'Data',
+            header: names.date,
             size: 150,
         },
         {
             accessorKey: 'description',
-            header: 'Descrizione',
+            header: names.description,
             size: 150,
         },
         {
             accessorKey: 'enable_form',
-            header: 'Form',
+            header: names.enable_form,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{}}>
@@ -114,14 +114,14 @@ export default function EventsList() {
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {
-                navigate('/event', { state: { event: row.original } });
+                navigate('/event', {state: {event: row.original}});
             },
         }),
         renderTopToolbarCustomActions: ({table}) => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
                     <Button variant='contained' onClick={() => toggleModal(true)}>
-                        Create
+                        Crea
                     </Button>
                 </Box>
             );
