@@ -1,25 +1,10 @@
 import React, {useEffect, useState} from "react";
-import Cookies from 'js-cookie';
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../api/api";
+import {styleESNcardModal as style} from "../utils/sharedStyles";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
-
-    const style = {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 400,
-        bgcolor: 'background.paper',
-        boxShadow: 24,
-        p: 4,
-        outline: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-    };
-
     const [accounts, setAccounts] = useState([]);
     const [latestESNcard, setLatestESNcard] = useState({});
     const [amount, setAmount] = useState(0);
@@ -58,7 +43,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             }
         };
 
-        fetchData();
+        fetchData().then();
     }, [profile, latestESNcard]); // Ensure dependencies are included in the dependency array
 
     return (
@@ -77,17 +62,17 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                     </Button>
                 </Box>
                 <Typography variant="h4" component="h2" gutterBottom>
-                    ESNcard Emission
+                    Emissione ESNcard
                 </Typography>
                 <Divider sx={{mb: 2}}/>
                 <Typography variant="subtitle1" gutterBottom>
-                    <b>To:</b> {profile.name} {profile.surname}
+                    <b>A:</b> {profile.name} {profile.surname}
                 </Typography>
                 <Typography variant="subtitle1" gutterBottom>
-                    <b>Amount:</b> {amount}€
+                    <b>Importo:</b> {amount}€
                 </Typography>
                 <FormControl fullWidth sx={{mt: 2}}>
-                    <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Select Account</InputLabel>
+                    <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Account</InputLabel>
                     <Select
                         labelId="account-selector-label"
                         id="account-selector"
@@ -105,7 +90,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                     async () => {
                         await fetchCustom("GET", '/esncard_emission/');
                     }}>
-                    Confirm
+                    Conferma
                 </Button>
             </Box>
 
