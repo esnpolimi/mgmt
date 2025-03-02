@@ -1,8 +1,23 @@
 # This file is needed for administrating models from django admin
 
 from django.contrib import admin
-from .models import Profile
+from .models import Profile, Document
 
+@admin.register(Document)
+class DocumentAdmin(admin.ModelAdmin):
+    list_display = ('number', 'profile', 'type', 'expiration', 'is_valid', 'is_enabled')
+    search_fields = ('number', 'profile__name', 'type')
+    list_filter = ('type', 'expiration')
+
+    def is_valid(self, obj):
+        return obj.is_valid
+    is_valid.boolean = True
+    is_valid.short_description = 'Is Valid'
+
+    def is_enabled(self, obj):
+        return obj.enabled
+    is_enabled.boolean = True
+    is_enabled.short_description = 'Is Enabled'
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):

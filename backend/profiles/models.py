@@ -1,3 +1,4 @@
+from cgitb import enable
 from datetime import date
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -70,17 +71,20 @@ class Profile(BaseEntity):
     # Returns latest esncard released to the profile
     @property
     def latest_esncard(self):
-        return self.esncard_set.latest('created_at') if self.esncard_set.exists() else None
+        enabled_esncards = self.esncard_set.filter(enabled=True)
+        return enabled_esncards.latest('created_at') if enabled_esncards.exists() else None
 
     # Returns latest document of the profile
     @property
     def latest_document(self):
-        return self.document_set.latest('created_at') if self.document_set.exists() else None
+        enabled_documents = self.document_set.filter(enabled=True)
+        return enabled_documents.latest('created_at') if enabled_documents.exists() else None
 
     # Returns latest matricola of the profile
     @property
     def latest_matricola(self):
-        return self.matricola_set.latest('created_at') if self.matricola_set.exists() else None
+        enabled_matricole = self.matricola_set.filter(enabled=True)
+        return enabled_matricole.latest('created_at') if enabled_matricole.exists() else None
 
 
 # Class that describes document object
