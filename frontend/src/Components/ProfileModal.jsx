@@ -16,9 +16,9 @@ import {profileDisplayNames as names} from '../utils/displayAttributes';
 export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const {user} = useAuth();
+    // Qua puoi disattivare manualmente i permessi degli utenti
+    // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-    //console.log("Received profile: ", profile)
-    //console.log("Received profile type: ", profileType)
 
     const [data, setData] = useState({  /* profile fields */
         email: '',
@@ -140,7 +140,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             muiEditTextFieldProps: {
                 select: true,
                 helperText: documentErrors?.type,
-                error: !!documentErrors?.type
+                error: !!documentErrors?.type,
             }
         },
         {
@@ -162,9 +162,31 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 helperText: documentErrors?.expiration,
                 error: !!documentErrors?.expiration
             },
+            Cell: ({cell}) => {
+                const expirationDate = new Date(cell.getValue());
+                const today = new Date();
+                const isExpired = expirationDate < today;
+                return (
+                    <span style={{color: isExpired ? 'red' : 'green'}}>
+                    {cell.getValue()}
+                </span>
+                );
+            }
         },
 
-    ]);
+
+    ], []);
+
+    const deleteDocument = async (row) => {
+        const response = await fetchCustom("DELETE", `/document/${row.id}/`);
+        if (response.ok) {
+            setDocumentErrors({});
+            setShowSuccessPopup({message: "Documento eliminato con successo!", state: "success"});
+        } else {
+            response.json().then((errors) => setDocumentErrors(errors))
+            setShowSuccessPopup({message: "Errore nell'eliminazione del Documento", state: "error"});
+        }
+    };
 
     /* document creation */
     const createDocument = async (values) => {
@@ -185,13 +207,16 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     /* save edited document */
     const saveDocument = async (row, values) => {
         console.log(row);
-        const response = await fetchCustom("PATCH", `/document/${profile.id}/`, values);
+        const response = await fetchCustom("PATCH", `/document/${row.id}/`, values);
 
         if (response.ok) {
             setDocumentErrors({});
+            setShowSuccessPopup({message: "Documento aggiornato con successo!", state: "success"});
             return true;
         } else if (response.status === 400) {
             response.json().then((errors) => setDocumentErrors(errors))
+            console.log(response);
+            setShowSuccessPopup({message: "Errore aggiornamento Documento: " + response.errors, state: "error"});
             return false;
         } else {
             return false;
@@ -339,7 +364,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                     resetErrors();
                     setShowSuccessPopup({message: "Profilo aggiornato con successo!", state: "success"});
                     toggleEdit(false);
-                    setTimeout(() => setShowSuccessPopup(null), 2000);
                 }
                 setSaving(false);
             })
@@ -349,7 +373,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 setSaving(false);
                 setShowSuccessPopup({message: "Errore nell'aggiornamento del profilo", state: "error"});
                 toggleEdit(false);
-                setTimeout(() => setShowSuccessPopup(null), 2000);
             });
     };
 
@@ -580,12 +603,15 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '20px'}}>
                     <CrudTable
                         cols={document_columns}
-                        canCreate
+                        canCreate={user.permissions.includes('add_document')}
                         canEdit={user.permissions.includes('change_document')}
+                        canDelete={user.permissions.includes('delete_document')}
                         onCreate={createDocument}
                         onSave={saveDocument}
+                        onDelete={deleteDocument}
                         initialData={data.documents}
-                        title={'Documenti'}/>
+                        title={'Documenti'}
+                        sortColumn={'expiration'}/>
                     <CrudTable
                         cols={matricola_columns}
                         canCreate

@@ -5,21 +5,18 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
-import Popup from './Popup'; // Add this line
-
 
 /*  The save function must receive as parameter the row object. 
     It must return true if creating was successful, false otherwise.
     Same goes for the create function.
 */
 
-export default function CrudTable({cols, initialData, title, onSave, onCreate, canCreate, canDelete, canEdit}) {
-    const [popupMessage, setPopupMessage] = useState(null); // Add this line
-    const columns = useMemo(() => cols);
+export default function CrudTable({cols, initialData, title, onSave, onDelete, onCreate, canCreate, canDelete, canEdit, sortColumn}) {
+    const columns = useMemo(() => cols, [cols]);
     const [data, setData] = useState([])
-    const canEditText = <span style={{color: 'green'}}>(Hai i permessi per eseguire modifiche)</span>;
-    const cannotEditText = <span style={{color: 'red'}}>(Non hai i permessi per eseguire modifiche)</span>;
-    const editText = canEdit ? canEditText : cannotEditText;
+    const canEditText = <span style={{color: 'green'}}>(Hai tutti i permessi per eseguire modifiche)</span>;
+    const cannotEditText = <span style={{color: 'red'}}>(Non hai tutti i permessi per eseguire modifiche)</span>;
+    const editText = canCreate && canEdit && canDelete? canEditText : cannotEditText;
 
     useEffect(() => {
         setData(initialData);
@@ -33,7 +30,7 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
         createDisplayMode: 'row',
         enableColumnFilters: false,
         enableGlobalFilter: false,
-        enableSorting: false,
+        enableSorting: sortColumn != null,
         enableFullScreenToggle: false,
         enableColumnOrdering: false,
         enableColumnActions: false,
@@ -41,6 +38,9 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
         enableHiding: false,
         enablePagination: false,
         localization: MRT_Localization_IT,
+        initialState: {
+            sorting: [{id: sortColumn, desc: true}],
+        },
         onCreatingRowCancel:
             () => {
             },
@@ -61,9 +61,6 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
                     setData(updatedData);
                     console.log(updatedData);
                     table.setEditingRow(null);
-                    setPopupMessage({message: 'Save successful!', state: 'success'}); // Add this line
-                } else {
-                    setPopupMessage({message: 'Save failed!', state: 'error'}); // Add this line
                 }
             },
         onEditingRowCancel:
@@ -81,15 +78,14 @@ export default function CrudTable({cols, initialData, title, onSave, onCreate, c
                             </IconButton>
                         </Tooltip>
                         {canDelete && (
-                            <Tooltip title="Delete">
-                                <IconButton onClick={() => {
-
-                                }}>
-                                    <DeleteIcon/>
+                            <Tooltip title="Elimina">
+                                <IconButton onClick={async () => {
+                                    await onDelete(row.original);
+                                    setData(data.filter(item => item.id !== row.id));
+                                }}> <DeleteIcon/>
                                 </IconButton>
                             </Tooltip>
                         )}
-                        {popupMessage && <Popup message={popupMessage.message} state={popupMessage.state} />}
                     </Box>
                 );
             },

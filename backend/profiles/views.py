@@ -58,7 +58,7 @@ def profile_creation(request):
                 # If ESN member, create an associated User
                 if is_esner:
                     user = User.objects.create_user(
-                        profile=profile, # Link user to profile
+                        profile=profile,  # Link user to profile
                         password=data.get('password', UserManager().make_random_password())  # Generate a password if none provided
                     )
                     # Assign to the "Aspirant" group
@@ -106,13 +106,12 @@ def profile_detail(request, pk):
             return Response(serializer.data)
 
         elif request.method == 'PATCH':
-            print(request.user.groups.all())
             if request.user.has_perm('profiles.change_profile'):
                 serializer = ProfileFullEditSerializer(profile, data=request.data, partial=True)
-            elif request.user.has_perm('profiles.change_person_code'): # TODO: permission to define via Meta in the model
+            elif request.user.has_perm('profiles.change_person_code'):  # TODO: permission to define via Meta in the model
                 serializer = ProfileBasicEditSerializer(profile, data=request.data, partial=True)
             else:
-                return Response({'error': 'You do not have permission to delete this profile.'}, status=403)
+                return Response({'error': 'You do not have permissions to delete this profile.'}, status=403)
 
             if serializer.is_valid():
                 serializer.save()
@@ -173,25 +172,36 @@ def document_creation(request):
         return Response(status=500)
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def document_detail(request, pk):
     try:
         document = Document.objects.get(pk=pk)
-        document_serializer = DocumentEditSerializer(document, data=request.data, partial=True)
+        if request.method == 'PATCH':
+            if request.user.has_perm('profiles.change_document'):
+                document_serializer = DocumentEditSerializer(document, data=request.data, partial=True)
+                if document_serializer.is_valid():
+                    document_serializer.save()
+                    return Response(status=200)
+                else:
+                    return Response(document_serializer.errors, status=400)
+            else:
+                return Response({'error': 'You do not have permissions to edit this document.'}, status=403)
 
-        if document_serializer.is_valid():
-            document_serializer.save()
-            return Response(status=200)
-        else:
-            return Response(document_serializer.errors, status=400)
+        elif request.method == 'DELETE':
+            if request.user.has_perm('profiles.delete_document'):
+                document.enabled = False
+                document.save()
+                return Response(status=200)
+            else:
+                return Response({'error': 'You do not have permissions to delete this document.'}, status=403)
 
     except Document.DoesNotExist:
         return Response('Document does not exist', status=400)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response(str(e), status=500)
 
 
 @api_view(['POST'])
