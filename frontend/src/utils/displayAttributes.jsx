@@ -11,7 +11,8 @@ export const profileDisplayNames = {
     birthdate: 'Data di Nascita',
     latest_esncard: 'ESN Card',
     latest_document: 'Documento',
-    latest_matricola: 'Matricola',
+    matricola_number: 'Matricola',
+    matricola_expiration: 'Scadenza Matricola',
     course: 'Corso di Studi',
     person_code: 'Codice Persona',
     domicile: 'Domicilio',
@@ -23,14 +24,5 @@ export const eventDisplayNames = {
     name: 'Nome',
     date: 'Data Evento',
     description: 'Descrizione',
-    enable_form: 'Abilita Form',
-    whatsapp: 'WhatsApp',
-    gender: 'Gender',
-    birthdate: 'Birthdate',
-    latest_esncard: 'Latest ESN Card',
-    latest_document: 'Latest Document',
-    latest_matricola: 'Latest Matricola',
-    person_code: 'Person Code',
-    domicile: 'Domicile',
-    residency: 'Residency'
+    enable_form: 'Abilita Form'
 };

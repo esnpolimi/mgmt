@@ -91,15 +91,21 @@ export default function ErasmusProfiles() {
             size: 200,
         },
         {
+            accessorKey: 'matricola_number',
+            header: names.matricola_number,
+            size: 50,
+        },
+        {
+            accessorKey: 'matricola_expiration',
+            header: names.matricola_expiration,
+            size: 50,
+        },
+        {
             accessorKey: 'latest_document.number',
             header: names.latest_document,
             size: 50,
         },
-        {
-            accessorKey: 'latest_matricola.number',
-            header: names.latest_matricola,
-            size: 50,
-        },
+
     ], []);
 
     const columnVisibility = {
@@ -116,8 +122,9 @@ export default function ErasmusProfiles() {
         person_code: false,
         domicile: false,
         residency: false,
+        matricola_number: false,
+        matricola_expiration: false,
         'latest_document.number': false,
-        'latest_matricola.number': false,
     }
 
     return (

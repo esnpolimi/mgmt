@@ -96,13 +96,18 @@ export default function ESNersProfiles() {
             size: 200,
         },
         {
-            accessorKey: 'latest_document.number',
-            header: names.latest_document,
+            accessorKey: 'matricola_number',
+            header: names.matricola_number,
             size: 50,
         },
         {
-            accessorKey: 'latest_matricola.number',
-            header: names.latest_matricola,
+            accessorKey: 'matricola_expiration',
+            header: names.matricola_expiration,
+            size: 50,
+        },
+        {
+            accessorKey: 'latest_document.number',
+            header: names.latest_document,
             size: 50,
         },
     ], []);
@@ -122,8 +127,9 @@ export default function ESNersProfiles() {
         person_code: false,
         domicile: false,
         residency: false,
+        matricola_number: false,
+        matricola_expiration: false,
         'latest_document.number': false,
-        'latest_matricola.number': false,
     }
 
     return (

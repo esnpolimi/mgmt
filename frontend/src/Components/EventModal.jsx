@@ -83,7 +83,7 @@ export default function FormModal({open, handleClose}) {
         })
     }
 
-    const profileFieldOptions = ['name', 'surname', 'email', 'phone', 'whatsapp', 'gender', 'birthdate', 'latest_esncard', 'latest_document', 'latest_matricola', 'person_code', 'domicile', 'residency'];
+    const profileFieldOptions = ['name', 'surname', 'email', 'phone', 'whatsapp', 'gender', 'birthdate', 'latest_esncard', 'latest_document', 'matricola-number', 'matricola-expiration', 'person_code', 'domicile', 'residency'];
 
     const handleInputChange = (event) => {
         const {name, value, type, checked} = event.target;

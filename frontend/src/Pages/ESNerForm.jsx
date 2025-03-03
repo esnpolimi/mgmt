@@ -30,7 +30,7 @@ const ErasmusForm = () => {
         'document-number': '',
         'document-expiration': dayjs(),
         'matricola-number': '',
-        'matricola-exchange_end': dayjs(),
+        'matricola-expiration': dayjs(),
         'is_esner': true
     });
 
@@ -54,7 +54,7 @@ const ErasmusForm = () => {
         'document-number': [false, ''],
         'document-expiration': [false, ''],
         'matricola-number': [false, ''],
-        'matricola-exchange_end': [false, ''],
+        'matricola-expiration': [false, ''],
         'is_esner': [false, '']
     })
 
@@ -120,7 +120,7 @@ const ErasmusForm = () => {
             ...formData,
             'birthdate': formatDateString(formData['birthdate']),
             'document-expiration': formatDateString(formData['document-expiration']),
-            'matricola-exchange_end': formatDateString(formData['matricola-exchange_end']),
+            'matricola-expiration': formatDateString(formData['matricola-expiration']),
         }
 
 

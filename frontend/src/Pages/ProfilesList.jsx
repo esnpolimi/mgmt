@@ -77,16 +77,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                     toggleModal(true);
                 },
             }),
-            /*renderRowActions: ({row}) => {
-                return (
-                    <IconButton variant='contained' onClick={() => {
-                        setSelectedProfile(row.original);
-                        toggleModal(true);
-                    }}>
-                        <EditIcon/>
-                    </IconButton>
-                )
-            },*/
         })
     ;
 
