@@ -105,7 +105,7 @@ const ESNerForm = () => {
             'matricola-expiration': formatDateString(formData['matricola-expiration']),
         }
 
-        fetchCustom("POST", '/profile/', body).then(
+        fetchCustom("POST", '/profile/', body, {}, false).then(
             (response) => {
                 if (response.ok) {
                     setSubmitted(true);
