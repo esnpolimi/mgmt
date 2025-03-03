@@ -7,9 +7,9 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
-from profiles.models import Profile, Document, Matricola
+from profiles.models import Profile, Document
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
-from profiles.serializers import MatricolaCreateSerializer, DocumentCreateSerializer, MatricolaEditSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
+from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
 from profiles.tokens import email_verification_token
 from users.managers import UserManager
 from users.models import User
@@ -45,15 +45,13 @@ def profile_creation(request):
         # Create profile
         profile_serializer = ProfileCreateSerializer(data=data)
         document_serializer = DocumentCreateSerializer(data={k[9:]: v for k, v in data.items() if k.startswith('document-')}, partial=True)
-        matricola_serializer = MatricolaCreateSerializer(data={k[10:]: v for k, v in data.items() if k.startswith('matricola-')}, partial=True)
 
-        if profile_serializer.is_valid() and document_serializer.is_valid() and matricola_serializer.is_valid():
+        if profile_serializer.is_valid() and document_serializer.is_valid():
 
             # Data is valid: create objects
             with transaction.atomic():
                 profile = profile_serializer.save()
                 document_serializer.save(profile=profile)
-                matricola_serializer.save(profile=profile)
 
                 # If ESN member, create an associated User
                 if is_esner:
@@ -83,11 +81,9 @@ def profile_creation(request):
             # Calling is_valid() is needed to access errors. In the 'if' statement they may not have been called
             profile_serializer.is_valid()
             document_serializer.is_valid()
-            matricola_serializer.is_valid()
             # Data is invalid: return bad request (400) and errors
             errors = {k: v[0] for k, v in profile_serializer.errors.items()}
             errors.update({'document-' + k: v[0] for k, v in document_serializer.errors.items()})
-            errors.update({'matricola-' + k: v[0] for k, v in matricola_serializer.errors.items()})
             return Response(errors, status=400)
 
     except Exception as e:
@@ -202,41 +198,3 @@ def document_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         return Response(str(e), status=500)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def matricola_creation(request):
-    try:
-        matricola_serializer = MatricolaCreateSerializer(data=request.data)
-
-        if matricola_serializer.is_valid():
-            matricola_serializer.save()
-            return Response(matricola_serializer.data, status=200)
-        else:
-            return Response(matricola_serializer.errors, status=400)
-
-    except Exception as e:
-        logger.error(str(e))
-        return Response(status=500)
-
-
-@api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
-def matricola_detail(request, pk):
-    try:
-        matricola = Matricola.objects.get(pk=pk)
-        matricola_serializer = MatricolaEditSerializer(matricola, data=request.data, partial=True)
-
-        if matricola_serializer.is_valid():
-            matricola_serializer.save()
-            return Response(status=200)
-        else:
-            return Response(matricola_serializer.errors, status=400)
-
-    except Matricola.DoesNotExist:
-        return Response('Matricola does not exist', status=400)
-
-    except Exception as e:
-        logger.error(str(e))
-        return Response(status=500)

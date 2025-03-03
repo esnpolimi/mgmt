@@ -24,7 +24,7 @@ class ProfileAdmin(admin.ModelAdmin):
     list_display = [
         'email', 'name', 'birthdate', 'country', 'course', 'created_at', 'is_esner',
         'enabled', 'email_is_verified', 'gender', 'person_code', 'phone', 'residency',
-        'surname', 'updated_at', 'whatsapp'
+        'surname', 'updated_at', 'whatsapp', 'matricola_number', 'matricola_expiration'
     ]
     search_fields = ('email', 'name', 'surname', 'person_code')
     list_filter = ('is_esner', 'enabled', 'country', 'created_at')
@@ -33,7 +33,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fields = [
         'email', 'name', 'birthdate', 'country', 'course', 'is_esner',
         'enabled', 'email_is_verified', 'gender', 'person_code', 'phone', 'residency',
-        'surname', 'whatsapp', 'created_at', 'updated_at'
+        'surname', 'whatsapp', 'matricola_number', 'matricola_expiration', 'created_at', 'updated_at'
     ]  # Ensure all fields are included here
 
     readonly_fields = ('created_at', 'updated_at')  # Make only certain fields read-only
