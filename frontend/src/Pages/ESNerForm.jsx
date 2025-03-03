@@ -124,7 +124,7 @@ const ErasmusForm = () => {
         }
 
 
-        fetchCustom("POST", '/profile/', body).then(
+        fetch("POST", '/profile/', body).then(
             (response) => {
                 if (response.ok) {
                     setSubmitted(true);

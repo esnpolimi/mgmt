@@ -81,6 +81,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     ;
 
     const updateProfile = (newData) => {
+        console.log("New data: ", newData);
         setData((prevProfiles) =>
             prevProfiles.map((profile) =>
                 profile.id === newData.id ? newData : profile

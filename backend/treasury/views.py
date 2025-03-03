@@ -6,8 +6,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from treasury.models import Transaction, Account
-from treasury.serializers import TransactionViewSerializer, AccountViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNCardEmissionSerializer, TransactionCreateSerializer
+from treasury.models import Transaction, Account, ESNcard
+from treasury.serializers import TransactionViewSerializer, AccountViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
+    ESNcardSerializer
 from events.models import Event, Subscription
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def esncard_emission(request):
     try:
-        esncard_serializer = ESNCardEmissionSerializer(data=request.data)
+        esncard_serializer = ESNcardEmissionSerializer(data=request.data)
         if not esncard_serializer.is_valid():
             return Response(esncard_serializer.errors, status=400)
 
@@ -60,6 +61,28 @@ def esncard_emission(request):
         logger.error(str(e))
         return Response(status=500)
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def esncard_detail(request, pk):
+    try:
+        esncard = ESNcard.objects.get(pk=pk)
+        if request.method == 'PATCH':
+            if request.user.has_perm('treasury.change_esncard'):
+                esncard_serializer = ESNcardSerializer(esncard, data=request.data, partial=True)
+                if esncard_serializer.is_valid():
+                    esncard_serializer.save()
+                    return Response(status=200)
+                else:
+                    return Response(esncard_serializer.errors, status=400)
+            else:
+                return Response({'error': 'You do not have permissions to edit this ESNcard.'}, status=403)
+
+    except ESNcard.DoesNotExist:
+        return Response('ESNcard does not exist', status=400)
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response(str(e), status=500)
 
 #   Endpoint for adding a transaction
 @api_view(['POST'])

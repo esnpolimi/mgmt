@@ -1,19 +1,19 @@
 from rest_framework import serializers
-from treasury.models import ESNCard, Transaction, Account
+from treasury.models import ESNcard, Transaction, Account
 from profiles.models import Profile
 
 # Serializer for ESNcard emission
-class ESNCardEmissionSerializer(serializers.ModelSerializer):
+class ESNcardEmissionSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ESNCard
+        model = ESNcard
         fields = ['profile','number']
     
     account = serializers.ChoiceField(choices=Account.objects.all())
 
 # Serializer to view ESNcard
-class ESNCardSerializer(serializers.ModelSerializer):
+class ESNcardSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ESNCard
+        model = ESNcard
         exclude = ['profile']
     
     expiration = serializers.ReadOnlyField()
