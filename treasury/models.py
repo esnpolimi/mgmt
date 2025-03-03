@@ -10,7 +10,7 @@ from djmoney.money import Money
 from simple_history.models import HistoricalRecords
 
     
-class ESNCard(BaseEntity):
+class ESNcard(BaseEntity):
     id = models.AutoField(primary_key=True)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     number = models.CharField(max_length=11, unique=True)
