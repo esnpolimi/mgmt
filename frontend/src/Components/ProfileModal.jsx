@@ -20,6 +20,9 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
 
+    const [esncardErrors, setESNcardErrors] = useState({})
+    const [documentErrors, setDocumentErrors] = useState({})
+
     const [data, setData] = useState({  /* profile fields */
         email: '',
         name: '',
@@ -38,7 +41,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         documents: [],
         esncards: [],
     });
-
     const [updatedData, setUpdatedData] = useState({    /* profile fields when edited */
         email: '',
         name: '',
@@ -55,7 +57,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         matricola_number: '',
         matricola_expiration: '',
     });
-
     const [errors, setErrors] = useState({  /* validation errors */
         email: [false, ''],
         name: [false, ''],
@@ -72,7 +73,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         matricola_number: [false, ''],
         matricola_expiration: [false, ''],
     });
-
     const [readOnly, setReadOnly] = useState({  /* readonly states for profile fields */
         email: true,
         name: true,
@@ -90,15 +90,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         matricola_expiration: true,
     });
 
-    /* esncard validation errors */
-    const [esncardErrors, setESNcardErrors] = useState({})
-
     /* columns for esncard table */
     const esncard_columns = useMemo(() => [
         {
             accessorKey: 'number',
             header: 'Numero',
-            size: 100,
+            size: 150,
             muiEditTextFieldProps: {
                 required: true,
                 helperText: esncardErrors?.number,
@@ -106,35 +103,50 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             },
         },
         {
+            accessorKey: 'created_at',
+            enableEditing: false,
+            header: 'Rilascio',
+            size: 100,
+            Cell: ({cell}) => {
+                const date = new Date(cell.getValue());
+                return date == null ? 'Null' : date.toISOString().split('T')[0];
+            }
+        },
+        {
             accessorKey: 'expiration',
             enableEditing: false,
             header: 'Scadenza',
             size: 100,
+            Cell: ({cell}) => {
+                const expirationDate = new Date(cell.getValue());
+                const today = new Date();
+                const isExpired = expirationDate < today;
+                return (
+                    <span style={{color: isExpired ? 'orange' : 'green'}}>
+                        {cell.getValue()}
+                    </span>
+                );
+            }
         },
-        {
-            enableEditing: false,
-            accessorFn: (profile) => profile.created_at.substring(0, 10),
-            header: 'Data rilascio',
-            size: 100,
-        }
     ]);
 
     const saveESNcard = async (row, values) => {
         console.log(row);
-        const response = await fetchCustom("PATCH", `/esncard/${profile.id}/`, values);
+        const response = await fetchCustom("PATCH", `/esncard/${row.id}/`, values);
+
         if (response.ok) {
-            setDocumentErrors({});
+            setESNcardErrors({});
+            setShowSuccessPopup({message: "ESNcard aggiornata con successo!", state: "success"});
+            // TODO: Get the updated ESNcard information to the parent
             return true;
         } else if (response.status === 400) {
-            response.json().then((errors) => setDocumentErrors(errors))
+            response.json().then((errors) => setESNcardErrors(errors))
+            setShowSuccessPopup({message: "Errore aggiornamento ESNcard: " + response.errors, state: "error"});
             return false;
         } else {
             return false;
         }
     }
-
-    /* document validation error */
-    const [documentErrors, setDocumentErrors] = useState({})
 
     /* columns for documents table */
     const document_columns = useMemo(() => [
@@ -167,16 +179,17 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             muiEditTextFieldProps: {
                 required: true,
                 helperText: documentErrors?.expiration,
-                error: !!documentErrors?.expiration
+                error: !!documentErrors?.expiration,
+                type: 'date'
             },
             Cell: ({cell}) => {
                 const expirationDate = new Date(cell.getValue());
                 const today = new Date();
                 const isExpired = expirationDate < today;
                 return (
-                    <span style={{color: isExpired ? 'red' : 'green'}}>
-                    {cell.getValue()}
-                </span>
+                    <span style={{color: isExpired ? 'orange' : 'green'}}>
+                        {cell.getValue()}
+                    </span>
                 );
             }
         },
@@ -229,15 +242,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             return false;
         }
     }
-
-    const esncard_table = useMaterialReactTable({
-        columns: esncard_columns,
-        data: [],
-        enableColumnActions: false,
-        enableColumnFilters: false,
-        enablePagination: false,
-        enableSorting: false,
-    });
 
     const formatDateString = (date) => {
         return dayjs(date).format('YYYY-MM-DD');
@@ -594,9 +598,13 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         sortColumn={'expiration'}/>
                     <CrudTable
                         cols={esncard_columns}
+                        canCreate={user.permissions.includes('add_esncard')}
                         canEdit={user.permissions.includes('change_esncard')}
+                        //onCreate={createESNcard}
+                        onSave={saveESNcard}
                         initialData={data.esncards}
-                        title={'ESNcards'}/>
+                        title={'ESNcards'}
+                        sortColumn={'expiration'}/>
                 </Box>
                 {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>

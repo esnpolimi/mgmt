@@ -3,7 +3,7 @@ from django_countries.serializer_fields import CountryField
 from rest_framework.fields import SerializerMethodField
 
 from profiles.models import Profile, Document
-from treasury.serializers import ESNCardSerializer
+from treasury.serializers import ESNcardSerializer
 
 # Serializers are classes that take an object from the database and
 # turn it into json (or other formats) in order to be sent through the API.
@@ -47,7 +47,7 @@ class ProfileDetailViewSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_esncards(obj):
         enabled_esncards = obj.esncard_set.filter(enabled=True)
-        return ESNCardSerializer(enabled_esncards, many=True).data
+        return ESNcardSerializer(enabled_esncards, many=True).data
 
     @staticmethod
     def get_documents(obj):
@@ -61,7 +61,7 @@ class ProfileListViewSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     country = CountryField()
-    latest_esncard = ESNCardSerializer()
+    latest_esncard = ESNcardSerializer()
     latest_document = DocumentViewSerializer()
 
 # Serializer for editing a profile (except for id, created_at, updated_at and enabled fields).
