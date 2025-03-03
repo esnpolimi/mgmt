@@ -28,7 +28,7 @@ const ESNerForm = () => {
         'document-number': '',
         'document-expiration': dayjs(),
         'matricola-number': '',
-        'matricola-exchange_end': dayjs(),
+        'matricola-expiration': dayjs(),
         'is_esner': false
     });
 
@@ -50,7 +50,7 @@ const ESNerForm = () => {
         'document-number': [false, ''],
         'document-expiration': [false, ''],
         'matricola-number': [false, ''],
-        'matricola-exchange_end': [false, ''],
+        'matricola-expiration': [false, ''],
         'is_esner': [false, '']
     })
 
@@ -102,7 +102,7 @@ const ESNerForm = () => {
             ...formData,
             'birthdate': formatDateString(formData['birthdate']),
             'document-expiration': formatDateString(formData['document-expiration']),
-            'matricola-exchange_end': formatDateString(formData['matricola-exchange_end']),
+            'matricola-expiration': formatDateString(formData['matricola-expiration']),
         }
 
         fetchCustom("POST", '/profile/', body).then(
@@ -418,8 +418,8 @@ const ESNerForm = () => {
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Exchange end"
-                            value={formData['matricola-exchange_end']}
-                            onChange={(date) => handleDateChange('matricola-exchange_end', date)}
+                            value={formData['matricola-expiration']}
+                            onChange={(date) => handleDateChange('matricola-expiration', date)}
                             renderInput={(params) => <TextField {...params} fullWidth required/>}
                         />
                     </LocalizationProvider>

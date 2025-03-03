@@ -33,8 +33,9 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         domicile: '',
         residency: '',
         course: '',
+        matricola_number: '',
+        matricola_expiration: '',
         documents: [],
-        matricole: [],
         esncards: [],
     });
 
@@ -51,6 +52,8 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         domicile: '',
         residency: '',
         course: '',
+        matricola_number: '',
+        matricola_expiration: '',
     });
 
     const [errors, setErrors] = useState({  /* validation errors */
@@ -66,6 +69,8 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         domicile: [false, ''],
         residency: [false, ''],
         course: [false, ''],
+        matricola_number: [false, ''],
+        matricola_expiration: [false, ''],
     });
 
     const [readOnly, setReadOnly] = useState({  /* readonly states for profile fields */
@@ -81,6 +86,8 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         domicile: true,
         residency: true,
         course: true,
+        matricola_number: true,
+        matricola_expiration: true,
     });
 
     /* esncard validation errors */
@@ -223,65 +230,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         }
     }
 
-    /* matricola validation errors */
-    const [matricolaErrors, setMatricolaErrors] = useState({});
-
-    /* columns for matricola table */
-    const matricola_columns = useMemo(() => [
-        {
-            accessorKey: 'number',
-            header: 'Numero',
-            size: 80,
-            muiEditTextFieldProps: {
-                required: true,
-                helperText: matricolaErrors?.number,
-                error: !!matricolaErrors?.number
-            },
-        },
-        {
-            accessorKey: 'exchange_end',
-            header: 'Fine scambio',
-            size: 100,
-            muiEditTextFieldProps: {
-                required: true,
-                helperText: matricolaErrors?.exchange_end,
-                error: !!matricolaErrors?.exchange_end
-            },
-        }
-    ]);
-
-    /* matricola creation */
-    const createMatricola = async (values) => {
-        let val = {...values, profile: profile.id}
-        console.log(val)
-        const response = await fetchCustom("POST", '/matricola/', val);
-
-        if (response.ok) {
-            setMatricolaErrors({});
-            return await response.json();
-        } else if (response.status === 400) {
-            response.json().then((errors) => setMatricolaErrors(errors))
-            return false;
-        } else {
-            return false;
-        }
-    }
-
-    /* save edited matricola */
-    const saveMatricola = async (row, values) => {
-        console.log(row);
-        const response = await fetchCustom("PATCH", `/matricola/${profile.id}/`, values);
-        if (response.ok) {
-            setMatricolaErrors({});
-            return true;
-        } else if (response.status === 400) {
-            response.json().then((errors) => setMatricolaErrors(errors))
-            return false;
-        } else {
-            return false;
-        }
-    }
-
     const esncard_table = useMaterialReactTable({
         columns: esncard_columns,
         data: [],
@@ -290,15 +238,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         enablePagination: false,
         enableSorting: false,
     });
-
-    const matricola_table = useMaterialReactTable({
-        columns: matricola_columns,
-        data: data.matricole,
-        enableColumnActions: false,
-        enableColumnFilters: false,
-        enablePagination: false,
-        enableSorting: false,
-    })
 
     const formatDateString = (date) => {
         return dayjs(date).format('YYYY-MM-DD');
@@ -331,10 +270,23 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
 
     const handleSave = () => {
         setSaving(true);
+
+        // Check if matricola_number is provided and verify it's exactly 6 digits
+        if (updatedData.matricola_number && !/^\d{6}$/.test(updatedData.matricola_number)) {
+            setErrors((prevErrors) => ({
+                ...prevErrors,
+                matricola_number: [true, 'La Matricola deve essere composta da 6 cifre'],
+            }));
+            setSaving(false);
+            return false;
+        }
+
         const body = {
             ...updatedData,
-            birthdate: formatDateString(updatedData.birthdate)
+            birthdate: formatDateString(updatedData.birthdate),
+            matricola_expiration: formatDateString(updatedData.matricola_expiration)
         }
+
         return fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body
         ).then((response) => {
             setSaving(false);
@@ -485,8 +437,8 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                 error={errors.residency[0]}
                                 helperText={errors.residency[1]}
                                 onChange={handleChange}
-                                slotProps={{input: {readOnly: readOnly.residency}}}
                                 sx={{backgroundColor: readOnly.residency ? 'grey.200' : 'white'}}
+                                slotProps={{input: {readOnly: readOnly.residency}}}
                                 fullWidth/>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
@@ -508,7 +460,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                     value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
                                     readOnly={readOnly.birthdate}
                                     onChange={(date) => handleDateChange('birthdate', date)}
-                                    sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
+                                    sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
                                     renderInput={(params) => <TextField {...params}
                                                                         fullWidth
                                                                         required
@@ -588,6 +540,34 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                             </FormControl>
                         </Grid>
                         <Grid xs={12} md={4} lg={3}>
+                            <TextField
+                                label={names.matricola_number}
+                                name='matricola_number'
+                                value={updatedData.matricola_number || ''}
+                                error={errors.matricola_number[0]}
+                                helperText={errors.matricola_number[1]}
+                                onChange={handleChange}
+                                sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
+                                type="number"
+                                slotProps={{input: {readOnly: readOnly.matricola_number}}}
+                                fullWidth/>
+                        </Grid>
+                        <Grid xs={12} md={4} lg={3}>
+                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                <DatePicker
+                                    label={names.matricola_expiration}
+                                    value={dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD')}
+                                    readOnly={readOnly.matricola_expiration}
+                                    onChange={(date) => handleDateChange('matricola_expiration', date)}
+                                    sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
+                                    renderInput={(params) => <TextField {...params}
+                                                                        fullWidth
+                                                                        required
+                                    />}
+                                />
+                            </LocalizationProvider>
+                        </Grid>
+                        <Grid xs={12} md={4} lg={3}>
                             <EditButton
                                 onEdit={() => toggleEdit(true)}
                                 onCancel={() => {
@@ -612,14 +592,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         initialData={data.documents}
                         title={'Documenti'}
                         sortColumn={'expiration'}/>
-                    <CrudTable
-                        cols={matricola_columns}
-                        canCreate
-                        canEdit={user.permissions.includes('change_matricola')}
-                        initialData={data.matricole}
-                        onCreate={createMatricola}
-                        onSave={saveMatricola}
-                        title={'Matricole'}/>
                     <CrudTable
                         cols={esncard_columns}
                         canEdit={user.permissions.includes('change_esncard')}

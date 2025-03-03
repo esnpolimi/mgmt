@@ -61,6 +61,10 @@ class Profile(BaseEntity):
     # Useful for rolling back to previous versions of the object. 
     history = HistoricalRecords()
 
+    # Matricola fields: expiration tightly coupled with the number, and with the exchange end date
+    matricola_number = models.IntegerField(unique=True, null=True)
+    matricola_expiration = models.DateField(null=True)
+
     # Return a string format of the profile object, contains only name, surname and email
     def __str__(self):
         return self.email
@@ -79,12 +83,6 @@ class Profile(BaseEntity):
     def latest_document(self):
         enabled_documents = self.document_set.filter(enabled=True)
         return enabled_documents.latest('created_at') if enabled_documents.exists() else None
-
-    # Returns latest matricola of the profile
-    @property
-    def latest_matricola(self):
-        enabled_matricole = self.matricola_set.filter(enabled=True)
-        return enabled_matricole.latest('created_at') if enabled_matricole.exists() else None
 
 
 # Class that describes document object
@@ -107,14 +105,3 @@ class Document(BaseEntity):
     @property
     def is_valid(self):
         return date.today() < self.expiration
-
-
-# Class that describes matricola object
-class Matricola(BaseEntity):
-    id = models.AutoField(primary_key=True)
-
-    # foreign key to profile, because each matricola is linked to a profile,
-    # but a profile may have multiple matricole
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    number = models.IntegerField(unique=True)
-    exchange_end = models.DateField()
