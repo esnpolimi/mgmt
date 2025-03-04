@@ -6,9 +6,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from treasury.models import Transaction, Account, ESNcard
-from treasury.serializers import TransactionViewSerializer, AccountViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
-    ESNcardSerializer
+from treasury.models import Transaction, Account, ESNcard, Settings
+from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
+    ESNcardSerializer, AccountListViewSerializer
 from events.models import Event, Subscription
 
 logger = logging.getLogger(__name__)
@@ -146,8 +146,18 @@ def accounts_list(request):
         accounts = Account.objects.all()
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(accounts, request=request)
-        serializer = AccountViewSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
+        serializer = AccountListViewSerializer(page, many=True)
+
+        # Get the paginated response
+        response_data = paginator.get_paginated_response(serializer.data).data
+
+        # Get the settings and add fee information
+        settings = Settings.get()
+        response_data['esncard_fees'] = {
+            'esncard_release_fee': str(settings.esncard_release_fee),
+            'esncard_renewal_fee': str(settings.esncard_renewal_fee)
+        }
+        return Response(response_data)
     except Exception as e:
         logger.error(str(e))
         return Response(status=500)
@@ -180,7 +190,7 @@ def account_detail(request, pk):
         account = Account.objects.get(pk=pk)
 
         if request.method == 'GET':
-            serializer = AccountViewSerializer(account)
+            serializer = AccountDetailedViewSerializer(account)
             return Response(serializer.data, status=200)
 
         if request.method == 'PATCH':
