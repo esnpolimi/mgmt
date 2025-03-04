@@ -1,60 +1,107 @@
 import React, {useEffect, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../api/api";
 import {styleESNcardModal as style} from "../utils/sharedStyles";
+import Grid from '@mui/material/Grid2';
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
     const [accounts, setAccounts] = useState([]);
-    const [latestESNcard, setLatestESNcard] = useState({});
     const [amount, setAmount] = useState(0);
-    const [selectedAccount, setSelectedAccount] = useState('');
 
-    const handleAccountChange = (event) => {
-        setSelectedAccount(event.target.value);
-    };
+    const [data, setData] = useState({  /* profile fields */
+        esncard_number: '',
+        account_id: ''
+    });
+    const [errors, setErrors] = useState({  /* validation errors */
+        esncard_number: [false, ''],
+        account_id: [false, '']
+    });
+    const fieldsToValidate = [
+        {field: 'esncard_number', value: data.esncard_number, message: "Inserire il numero di ESNcard"},
+        {field: 'account_id', value: data.account_id, message: "Selezionare una Cassa"}
+    ];
 
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchAccounts = async () => {
             try {
-                const accountsResponse = await fetchCustom("GET", '/accounts/');
-                if (!accountsResponse.ok) {
-                    throw new Error('Error while fetching accounts');
-                }
-                const accountsJson = await accountsResponse.json();
-                console.log('ESNcardEmissionModal accountsJson:');
-                setAccounts(accountsJson.results);
-                console.log(accounts)
+                const response = await fetchCustom("GET", '/accounts/');
+                if (!response.ok) throw new Error('Error fetching accounts');
 
-                const profileResponse = await fetchCustom("GET", `/profile/${profile.id}/`);
-                if (!profileResponse.ok) {
-                    throw new Error('Error while fetching profile');
-                }
-                const profileJson = await profileResponse.json();
-                setLatestESNcard(profileJson.esncards.slice(-1)[0]); // Use slice(-1)[0] to get the last element
+                const json = await response.json();
+                console.log('ESNcardEmissionModal accounts json:', json);
+                setAccounts(json.results);
 
-                if (latestESNcard && latestESNcard.is_valid) {
-                    setAmount(2.5);
-                } else {
-                    setAmount(10.0);
-                }
+                const feeKey = profile.latest_esncard ? 'esncard_renewal_fee' : 'esncard_release_fee';
+                const feeAmount = json.esncard_fees[feeKey];
+                setAmount(parseFloat(feeAmount.replace('€', '')));
             } catch (error) {
                 console.error('Error in fetching data:', error);
             }
         };
+        fetchAccounts().then();
+    }, []);
 
-        fetchData().then();
-    }, [profile, latestESNcard]); // Ensure dependencies are included in the dependency array
+    const resetErrors = () => {
+        const resetObj = {};
+        Object.keys(errors).forEach(key => {
+            errors[key] = [false, ''];
+        });
+        setErrors(resetObj);
+        return resetObj;
+    };
+
+    const handleSubmit = async () => {
+        let hasErrors = false;
+        const newErrors = resetErrors();
+        fieldsToValidate.forEach(item => {
+            if (!item.value) {
+                newErrors[item.field] = [true, item.message];
+                hasErrors = true;
+            }
+        });
+
+        if (hasErrors) {
+            setErrors(newErrors);
+            return;
+        }
+
+        try {
+            // TODO: Make the API call with the proper data
+            const response = await fetchCustom("POST", '/esncard_emission/', {
+                profile_id: profile.id,
+                account_id: data.account_id,
+                esncard_number: data.esncard_number,
+                amount: amount
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Errore durante l\'emissione della ESNcard');
+            }
+
+            onClose();
+        } catch (error) {
+            console.error('Error emitting ESNcard:', error);
+            alert(`Errore: ${error.message}`);
+        }
+    }
+
+    const handleChange = (e) => {
+        setData({
+            ...data,
+            [e.target.name]: e.target.value,
+        });
+    };
 
     return (
         <Modal
             open={open}
             onClose={() => {
-            }} // Close modal function
+            }}
             aria-labelledby="modal-modal-title"
             aria-describedby="modal-modal-description"
         >
-
             <Box sx={style}>
                 <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
                     <Button onClick={onClose} sx={{minWidth: 0}}>
@@ -62,7 +109,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                     </Button>
                 </Box>
                 <Typography variant="h4" component="h2" gutterBottom>
-                    Emissione ESNcard
+                    {!profile.latest_esncard ? 'Emissione' : 'Rinnovo'} ESNcard
                 </Typography>
                 <Divider sx={{mb: 2}}/>
                 <Typography variant="subtitle1" gutterBottom>
@@ -71,25 +118,43 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                 <Typography variant="subtitle1" gutterBottom>
                     <b>Importo:</b> {amount}€
                 </Typography>
-                <FormControl fullWidth sx={{mt: 2}}>
-                    <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Account</InputLabel>
-                    <Select
-                        labelId="account-selector-label"
-                        id="account-selector"
-                        value={selectedAccount}
-                        onChange={handleAccountChange}
-                    >
-                        {accounts.map((account) => (
-                            <MenuItem key={account.id} value={account.id}>
-                                {account.name}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-                <Button variant="contained" fullWidth sx={{mt: 2}} onClick={
-                    async () => {
-                        await fetchCustom("GET", '/esncard_emission/');
-                    }}>
+
+                <Grid container spacing={2} direction="column">
+                    <Grid xs={12}>
+                        <TextField
+                            required
+                            label='Numero ESNcard'
+                            name='esncard_number'
+                            value={data.esncard_number}
+                            error={errors.esncard_number[0]}
+                            helperText={errors.esncard_number[1]}
+                            onChange={handleChange}
+                            fullWidth/>
+                    </Grid>
+                    <Grid xs={12}>
+                        <FormControl fullWidth required error={errors.account_id[0]}>
+                            <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
+                            <Select
+                                variant="outlined"
+                                label="Seleziona Cassa"
+                                labelId="account-selector-label"
+                                id="account-selector"
+                                name="account_id"
+                                value={data.account_id}
+                                error={errors.account_id[0]}
+                                onChange={handleChange}>
+                                {accounts.map((account) => (
+                                    <MenuItem key={account.id} value={account.id}>
+                                        {account.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errors.account_id[0] && <FormHelperText>{errors.account_id[1]}</FormHelperText>}
+                        </FormControl>
+                    </Grid>
+                </Grid>
+
+                <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>
                     Conferma
                 </Button>
             </Box>

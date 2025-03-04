@@ -1,10 +1,9 @@
-import {Card, Box, TextField, FormControl, InputLabel, Select, MenuItem, Modal, Typography} from "@mui/material";
+import {Card, Box, TextField, FormControl, InputLabel, Select, MenuItem, Modal, Typography, Button, Toolbar} from "@mui/material";
 import Grid from '@mui/material/Grid2';
 import {useState, useEffect, useMemo} from 'react';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import {useMaterialReactTable} from 'material-react-table';
 import EditButton from "./EditButton";
 import CrudTable from "./CrudTable";
 import {fetchCustom} from "../api/api";
@@ -12,6 +11,7 @@ import {style} from '../utils/sharedStyles'
 import {useAuth} from "../Context/AuthContext";
 import Popup from './Popup'
 import {profileDisplayNames as names} from '../utils/displayAttributes';
+import ESNcardEmissionModal from "./ESNcardEmissionModal";
 
 export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
@@ -20,6 +20,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
 
+    const [esncardModalOpen, setEsncardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
 
@@ -89,6 +90,14 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         matricola_number: true,
         matricola_expiration: true,
     });
+
+    const handleOpenESNcardModal = () => {
+        setEsncardModalOpen(true);
+    };
+
+    const handleCloseESNcardModal = () => {
+        setEsncardModalOpen(false);
+    };
 
     /* columns for esncard table */
     const esncard_columns = useMemo(() => [
@@ -262,7 +271,11 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     };
 
     const resetErrors = () => {
-        setErrors(Object.fromEntries(Object.keys(errors).map((e) => [e, [false, '']])));
+        const resetObj = {};
+        Object.keys(errors).forEach(key => {
+            errors[key] = [false, ''];
+        });
+        setErrors(resetObj);
     };
 
     const toggleEdit = (edit) => {
@@ -341,16 +354,18 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 } else {
                     throw new Error('Error while fetching profile ' + profile.id.toString())
                 }
-            }).then((json) => {
-            const update = {};
-            Object.keys(data).map((key) => {
-                update[key] = json[key];
+            })
+            .then((json) => {
+                const update = {};
+                Object.keys(data).map((key) => {
+                    update[key] = json[key];
+                });
+                setData(update)
+                setUpdatedData(update)
+            })
+            .catch((error) => {
+                console.log(error);
             });
-            setData(update)
-            setUpdatedData(update)
-        }).catch((error) => {
-            console.log(error);
-        });
     }, [])
 
     return (
@@ -584,6 +599,25 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         </Grid>
                     </Grid>
                 </Card>
+                <Toolbar sx={{justifyContent: 'space-between', mt: 2}}>
+                    <Typography variant="h6">Azioni</Typography>
+                    {!profile.latest_esncard && (
+                        <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
+                            Rilascia ESNcard
+                        </Button>
+                    )}
+                    {profile.latest_esncard && !profile.latest_esncard.is_valid && (
+                        <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
+                            Rinnova ESNcard
+                        </Button>
+                    )}
+                </Toolbar>
+                {esncardModalOpen &&
+                    <ESNcardEmissionModal
+                        open={esncardModalOpen}
+                        profile={profile}
+                        onClose={handleCloseESNcardModal}
+                    />}
                 <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '20px'}}>
                     <CrudTable
                         cols={document_columns}
@@ -598,9 +632,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                         sortColumn={'expiration'}/>
                     <CrudTable
                         cols={esncard_columns}
-                        canCreate={user.permissions.includes('add_esncard')}
                         canEdit={user.permissions.includes('change_esncard')}
-                        //onCreate={createESNcard}
                         onSave={saveESNcard}
                         initialData={data.esncards}
                         title={'ESNcards'}
