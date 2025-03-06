@@ -14,7 +14,7 @@ from events.models import Event, Subscription
 logger = logging.getLogger(__name__)
 
 
-# Endpoint for ESNCard emission.
+# Endpoint for ESNcard emission.
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def esncard_emission(request):
@@ -25,6 +25,10 @@ def esncard_emission(request):
 
         with transaction.atomic():
             esncard = esncard_serializer.save()
+            # Check if this is a renewal (profile already has ESNcards)
+            has_previous_cards = ESNcard.objects.filter(profile=esncard.profile, enabled=True).exists()
+
+            # Get or create the membership event
             event = Event.objects.filter(name='Anno Associativo ' + esncard.membership_year)
             if not event.exists():
                 event = Event(name='Anno Associativo ' + esncard.membership_year,
@@ -34,22 +38,40 @@ def esncard_emission(request):
             else:
                 event = event.get()
 
+            # Get or create subscription
             subscription = event.subscription_set.filter(profile=esncard.profile)
             if not subscription.exists():
                 subscription = Subscription(profile=esncard.profile, event=event,
                                             event_data={'table': 'associati'},
                                             form_data={}, additional_data={}, created_at=datetime.now())
                 subscription.save()
-                amount = 10.0
             else:
                 subscription = subscription.get()
-                amount = 2.5
 
-            t = Transaction(subscription=subscription, account=esncard_serializer.validated_data['account'],
-                            executor=request.user, amount=amount,
-                            description="ESNCard emission")
+            # Get the appropriate fee amount from settings
+            settings = Settings.get()
+            if has_previous_cards:
+                amount = float(settings.esncard_renewal_fee.amount)
+                description = "ESNcard renewal"
+            else:
+                amount = float(settings.esncard_release_fee.amount)
+                description = "ESNcard emission"
+
+            # Create the transaction
+            t = Transaction(
+                subscription=subscription,
+                account=esncard_serializer.validated_data['account_id'],
+                executor=request.user,
+                amount=amount,
+                description=description
+            )
             t.save()
-            return Response(esncard_serializer.data, status=200)
+
+            # Return the newly created ESNcard with additional info
+            response_data = esncard_serializer.data
+            response_data['is_renewal'] = has_previous_cards
+
+            return Response(response_data, status=200)
 
     except PermissionDenied as e:
         return Response(str(e), status=403)
@@ -59,7 +81,8 @@ def esncard_emission(request):
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response(str(e), status=500)
+
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
@@ -84,6 +107,7 @@ def esncard_detail(request, pk):
         logger.error(str(e))
         return Response(str(e), status=500)
 
+
 #   Endpoint for adding a transaction
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -94,7 +118,7 @@ def transaction_add(request):
             return Response(transaction_serializer.errors, status=400)
 
         if transaction_serializer.validated_data['subscription'] is None:
-            if not request.user.has_perm('treasury.withdraw_deposit'): #TODO: add permission via Meta in model
+            if not request.user.has_perm('treasury.withdraw_deposit'):  # TODO: add permission via Meta in model
                 return Response(status=401)
 
         transaction_serializer.save()
