@@ -4,10 +4,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../api/api";
 import {styleESNcardModal as style} from "../utils/sharedStyles";
 import Grid from '@mui/material/Grid2';
+import Popup from "./Popup";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
     const [accounts, setAccounts] = useState([]);
     const [amount, setAmount] = useState(0);
+    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
 
     const [data, setData] = useState({  /* profile fields */
         esncard_number: '',
@@ -45,7 +47,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
     const resetErrors = () => {
         const resetObj = {};
         Object.keys(errors).forEach(key => {
-            errors[key] = [false, ''];
+            resetObj[key] = [false, ''];
         });
         setErrors(resetObj);
         return resetObj;
@@ -67,7 +69,6 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
         }
 
         try {
-            // TODO: Make the API call with the proper data
             const response = await fetchCustom("POST", '/esncard_emission/', {
                 profile_id: profile.id,
                 account_id: data.account_id,
@@ -76,14 +77,20 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Errore durante l\'emissione della ESNcard');
-            }
+                const text = await response.text();
+                if (text) {
+                    try {
+                        const errorData = JSON.parse(text);
+                        setShowSuccessPopup({message: "Errore durante l\'emissione della ESNcard (" + errorData.message + ")", state: "error"});
+                    } catch (parseError) {
+                        setShowSuccessPopup({message: "Errore server (" + response.status + "): " + text || 'Nessun dettaglio fornito', state: "error"});
+                    }
+                } else setShowSuccessPopup({message: "Errore server (" + response.status + ") con risposta vuota", state: "error"});
 
-            onClose();
+            } else onClose(true);
+
         } catch (error) {
-            console.error('Error emitting ESNcard:', error);
-            alert(`Errore: ${error.message}`);
+            setShowSuccessPopup({message: "Errore durante l\'emissione della ESNcard (" + error.message + ")", state: "error"});
         }
     }
 
@@ -104,7 +111,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
         >
             <Box sx={style}>
                 <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                    <Button onClick={onClose} sx={{minWidth: 0}}>
+                    <Button onClick={() => onClose(false)} sx={{minWidth: 0}}>
                         <CloseIcon/>
                     </Button>
                 </Box>
@@ -157,8 +164,8 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                 <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>
                     Conferma
                 </Button>
+                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
-
         </Modal>
     );
 }
