@@ -14,9 +14,9 @@ import {MRT_Localization_IT} from 'material-react-table/locales/it';
 export default function CrudTable({cols, initialData, title, onSave, onDelete, onCreate, canCreate, canDelete, canEdit, sortColumn}) {
     const columns = useMemo(() => cols, [cols]);
     const [data, setData] = useState([])
-    const canEditText = <span style={{color: 'green'}}>(Hai tutti i permessi per eseguire modifiche)</span>;
-    const cannotEditText = <span style={{color: 'red'}}>(Non hai tutti i permessi per eseguire modifiche)</span>;
-    const editText = canCreate && canEdit && canDelete? canEditText : cannotEditText;
+    const canEditText = <span style={{color: 'green'}}>(Hai i permessi per eseguire modifiche)</span>;
+    const cannotEditText = <span style={{color: 'red'}}>(Non hai i permessi per eseguire modifiche)</span>;
+    const editText = canEdit? canEditText : cannotEditText;
 
     useEffect(() => {
         setData(initialData);
