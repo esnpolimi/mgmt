@@ -82,11 +82,22 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
 
     const updateProfile = (newData) => {
         console.log("New data: ", newData);
-        setData((prevProfiles) =>
-            prevProfiles.map((profile) =>
-                profile.id === newData.id ? newData : profile
-            )
-        );
+        setData((prevProfiles) => {
+            return prevProfiles.map((profile) => {
+                if (profile.id === newData.id) {
+                    // For ESNers, maintain the structure with profile as nested object
+                    if (profileType === 'ESNer') {
+                        return {
+                            ...profile,
+                            ...newData,
+                            profile: {...profile.profile, ...newData}
+                        };
+                    }
+                    return newData;
+                }
+                return profile;
+            });
+        });
     };
 
     const handleProfileClose = () => {
