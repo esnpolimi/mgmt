@@ -64,14 +64,14 @@ Creates a profile with related document and matricola. `verified` field is initi
 
 `GET /profiles`
 
-Returns all profiles without linked documents, matricole or ESNCards.
+Returns all profiles without linked documents, matricole or ESNcards.
 
 ### Fetch specified profile *
 
 `GET /profiles/<str:pk>`
 
 If existing, returns detailed profile corresponding to the primary key (pk), including list of the profile's documents,
-matricole and ESNCards.
+matricole and ESNcards.
 
 ### Update specified profile *
 
@@ -174,13 +174,13 @@ Updates the fields of the specified matricola.
 
 Deletes the specified
 
-# ESNCard endpoints
+# ESNcard endpoints
 
-### Create ESNCard
+### Create ESNcard
 
 `POST /esncards`
 
-Creates a new ESNCard associated to the specified profile.
+Creates a new ESNcard associated to the specified profile.
 
 #### **Parameters**
 
@@ -190,11 +190,11 @@ Creates a new ESNCard associated to the specified profile.
 | number     | string    | yes       | document number                               |
 | expiration | timestamp | yes       | expiration date                               |
 
-### Update ESNCard
+### Update ESNcard
 
 `PATCH /esncards/<str:pk>`
 
-Updates the fields of the specified ESNCard.
+Updates the fields of the specified ESNcard.
 
 #### **Parameters**
 
