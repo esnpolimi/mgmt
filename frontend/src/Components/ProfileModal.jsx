@@ -12,9 +12,11 @@ import {useAuth} from "../Context/AuthContext";
 import Popup from './Popup'
 import {profileDisplayNames as names} from '../utils/displayAttributes';
 import ESNcardEmissionModal from "./ESNcardEmissionModal";
+import Loader from "./Loader";
 
 export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
+    const [isLoading, setIsLoading] = useState(true);
     const {user} = useAuth();
     // Qua puoi disattivare manualmente i permessi degli utenti
     // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
@@ -359,6 +361,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     };
 
     useEffect(() => {
+        setIsLoading(true);
         console.log('Fetching ' + profile.id)
         fetchCustom("GET", `/profile/${profile.id.toString()}/`)
             .then((response) => {
@@ -375,9 +378,11 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 });
                 setData(update)
                 setUpdatedData(update)
+                setIsLoading(false);
             })
             .catch((error) => {
                 console.log(error);
+                setIsLoading(false);
             });
     }, [])
 
@@ -387,271 +392,277 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 <Typography variant="h5" gutterBottom align="center">
                     Profilo {profileType}
                 </Typography>
-                <Card sx={{p: '20px'}}>
-                    <Grid container spacing={2}>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.name}
-                                name='name'
-                                value={updatedData.name}
-                                error={errors.name[0]}
-                                helperText={errors.name[1]}
-                                slotProps={{input: {readOnly: readOnly.name}}}
-                                onChange={handleChange}
-                                sx={{backgroundColor: readOnly.name ? 'grey.200' : 'white'}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.surname}
-                                name='surname'
-                                value={updatedData.surname}
-                                error={errors.surname[0]}
-                                helperText={errors.surname[1]}
-                                onChange={handleChange}
-                                slotProps={{input: {readOnly: readOnly.surname}}}
-                                sx={{backgroundColor: readOnly.surname ? 'grey.200' : 'white'}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.email}
-                                name='email'
-                                type='email'
-                                value={updatedData.email}
-                                error={errors.email[0]}
-                                helperText={errors.email[1]}
-                                slotProps={{input: {readOnly: readOnly.email}}}
-                                sx={{backgroundColor: readOnly.email ? 'grey.200' : 'white'}}
-                                onChange={handleChange} fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.phone}
-                                name='phone'
-                                value={updatedData.phone}
-                                error={errors.phone[0]}
-                                helperText={errors.phone[1]}
-                                onChange={handleChange}
-                                slotProps={{input: {readOnly: readOnly.phone}}}
-                                sx={{backgroundColor: readOnly.phone ? 'grey.200' : 'white'}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.whatsapp}
-                                name='whatsapp'
-                                value={updatedData.whatsapp}
-                                error={errors.whatsapp[0]}
-                                helperText={errors.whatsapp[1]}
-                                onChange={handleChange}
-                                slotProps={{input: {readOnly: readOnly.whatsapp}}}
-                                sx={{backgroundColor: readOnly.whatsapp ? 'grey.200' : 'white'}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.domicile}
-                                name='domicile'
-                                value={updatedData.domicile}
-                                error={errors.domicile[0]}
-                                helperText={errors.domicile[1]}
-                                onChange={handleChange}
-                                slotProps={{input: {readOnly: readOnly.domicile}}}
-                                sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.residency}
-                                name='residency'
-                                value={updatedData.residency}
-                                error={errors.residency[0]}
-                                helperText={errors.residency[1]}
-                                onChange={handleChange}
-                                sx={{backgroundColor: readOnly.residency ? 'grey.200' : 'white'}}
-                                slotProps={{input: {readOnly: readOnly.residency}}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.person_code}
-                                name='person_code'
-                                value={updatedData.person_code}
-                                error={errors.person_code[0]}
-                                helperText={errors.person_code[1]}
-                                onChange={handleChange}
-                                slotProps={{input: {readOnly: readOnly.person_code}}}
-                                sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                <DatePicker
-                                    label={names.birthdate}
-                                    value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
-                                    readOnly={readOnly.birthdate}
-                                    onChange={(date) => handleDateChange('birthdate', date)}
-                                    sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
-                                    renderInput={(params) => <TextField {...params}
-                                                                        fullWidth
-                                                                        required
-                                    />}
-                                />
-                            </LocalizationProvider>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <FormControl
-                                fullWidth
-                                required
-                            >
-                                <InputLabel id="country-label">{names.country}</InputLabel>
-                                <Select
-                                    variant="outlined"
-                                    labelId="country-label"
-                                    name="country"
-                                    label={names.country}
-                                    value={updatedData.country}
-                                    error={errors.country[0]}
-                                    onChange={handleChange}
-                                    slotProps={{input: {readOnly: readOnly.country}}}
-                                    sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}
-                                >
-                                    <MenuItem value="">
-                                        <em>None</em>
-                                    </MenuItem>
-                                    <MenuItem value="US">USA</MenuItem>
-                                    <MenuItem value="Canada">Canada</MenuItem>
-                                    {/* TODO Add more countries here */}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <FormControl
-                                fullWidth
-                                required
-                            >
-                                <InputLabel id="gender-label">{names.gender}</InputLabel>
-                                <Select
-                                    variant="outlined"
-                                    labelId="gender-label"
-                                    name="gender"
-                                    label={names.gender}
-                                    value={updatedData.gender}
-                                    onChange={handleChange}
-                                    slotProps={{input: {readOnly: readOnly.gender}}}
-                                    sx={{backgroundColor: readOnly.gender ? 'grey.200' : 'white'}}
-                                >
-                                    <MenuItem value="M">Maschio</MenuItem>
-                                    <MenuItem value="F">Femmina</MenuItem>
-                                    <MenuItem value="O">Altro</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <FormControl
-                                fullWidth
-                                required
-                            >
-                                <InputLabel id="course-label">{names.course}</InputLabel>
-                                <Select
-                                    variant="outlined"
-                                    labelId="course-label"
-                                    name="course"
-                                    label={names.course}
-                                    value={updatedData.course}
-                                    onChange={handleChange}
-                                    slotProps={{input: {readOnly: readOnly.course}}}
-                                    sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
-                                >
-                                    <MenuItem value="Engineering">Ingegneria</MenuItem>
-                                    <MenuItem value="Design">Design</MenuItem>
-                                    <MenuItem value="Architecture">Architettura</MenuItem>
-                                    {/* TODO Add more values here */}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <TextField
-                                label={names.matricola_number}
-                                name='matricola_number'
-                                value={updatedData.matricola_number || ''}
-                                error={errors.matricola_number[0]}
-                                helperText={errors.matricola_number[1]}
-                                onChange={handleChange}
-                                sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
-                                type="number"
-                                slotProps={{input: {readOnly: readOnly.matricola_number}}}
-                                fullWidth/>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                <DatePicker
-                                    label={names.matricola_expiration}
-                                    value={dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD')}
-                                    readOnly={readOnly.matricola_expiration}
-                                    onChange={(date) => handleDateChange('matricola_expiration', date)}
-                                    sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
-                                    renderInput={(params) => <TextField {...params}
-                                                                        fullWidth
-                                                                        required
-                                    />}
-                                />
-                            </LocalizationProvider>
-                        </Grid>
-                        <Grid xs={12} md={4} lg={3}>
-                            <EditButton
-                                onEdit={() => toggleEdit(true)}
-                                onCancel={() => {
-                                    toggleEdit(false);
-                                    setUpdatedData(data);
-                                }}
-                                saving={saving}
-                                onSave={() => handleSave()}
-                            />
-                        </Grid>
-                    </Grid>
-                </Card>
-                <Toolbar sx={{justifyContent: 'space-between', mt: 2}}>
-                    <Typography variant="h6">Azioni</Typography>
-                    {!profile.latest_esncard && (
-                        <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
-                            Rilascia ESNcard
-                        </Button>
-                    )}
-                    {profile.latest_esncard && !profile.latest_esncard.is_valid && (
-                        <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
-                            Rinnova ESNcard
-                        </Button>
-                    )}
-                </Toolbar>
-                {esncardModalOpen &&
-                    <ESNcardEmissionModal
-                        open={esncardModalOpen}
-                        profile={profile}
-                        onClose={handleCloseESNcardModal}
-                    />}
-                <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '20px'}}>
-                    <CrudTable
-                        cols={document_columns}
-                        canCreate={user.permissions.includes('add_document')}
-                        canEdit={user.permissions.includes('change_document')}
-                        canDelete={user.permissions.includes('delete_document')}
-                        onCreate={createDocument}
-                        onSave={saveDocument}
-                        onDelete={deleteDocument}
-                        initialData={data.documents}
-                        title={'Documenti'}
-                        sortColumn={'expiration'}/>
-                    <CrudTable
-                        cols={esncard_columns}
-                        canEdit={user.permissions.includes('change_esncard')}
-                        onSave={saveESNcard}
-                        initialData={data.esncards}
-                        title={'ESNcards'}
-                        sortColumn={'expiration'}/>
-                </Box>
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {isLoading ? (
+                    <Loader/>
+                ) : (<>
+
+                        <Card sx={{p: '20px'}}>
+                            <Grid container spacing={2}>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.name}
+                                        name='name'
+                                        value={updatedData.name}
+                                        error={errors.name[0]}
+                                        helperText={errors.name[1]}
+                                        slotProps={{input: {readOnly: readOnly.name}}}
+                                        onChange={handleChange}
+                                        sx={{backgroundColor: readOnly.name ? 'grey.200' : 'white'}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.surname}
+                                        name='surname'
+                                        value={updatedData.surname}
+                                        error={errors.surname[0]}
+                                        helperText={errors.surname[1]}
+                                        onChange={handleChange}
+                                        slotProps={{input: {readOnly: readOnly.surname}}}
+                                        sx={{backgroundColor: readOnly.surname ? 'grey.200' : 'white'}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.email}
+                                        name='email'
+                                        type='email'
+                                        value={updatedData.email}
+                                        error={errors.email[0]}
+                                        helperText={errors.email[1]}
+                                        slotProps={{input: {readOnly: readOnly.email}}}
+                                        sx={{backgroundColor: readOnly.email ? 'grey.200' : 'white'}}
+                                        onChange={handleChange} fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.phone}
+                                        name='phone'
+                                        value={updatedData.phone}
+                                        error={errors.phone[0]}
+                                        helperText={errors.phone[1]}
+                                        onChange={handleChange}
+                                        slotProps={{input: {readOnly: readOnly.phone}}}
+                                        sx={{backgroundColor: readOnly.phone ? 'grey.200' : 'white'}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.whatsapp}
+                                        name='whatsapp'
+                                        value={updatedData.whatsapp}
+                                        error={errors.whatsapp[0]}
+                                        helperText={errors.whatsapp[1]}
+                                        onChange={handleChange}
+                                        slotProps={{input: {readOnly: readOnly.whatsapp}}}
+                                        sx={{backgroundColor: readOnly.whatsapp ? 'grey.200' : 'white'}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.domicile}
+                                        name='domicile'
+                                        value={updatedData.domicile}
+                                        error={errors.domicile[0]}
+                                        helperText={errors.domicile[1]}
+                                        onChange={handleChange}
+                                        slotProps={{input: {readOnly: readOnly.domicile}}}
+                                        sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.residency}
+                                        name='residency'
+                                        value={updatedData.residency}
+                                        error={errors.residency[0]}
+                                        helperText={errors.residency[1]}
+                                        onChange={handleChange}
+                                        sx={{backgroundColor: readOnly.residency ? 'grey.200' : 'white'}}
+                                        slotProps={{input: {readOnly: readOnly.residency}}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.person_code}
+                                        name='person_code'
+                                        value={updatedData.person_code}
+                                        error={errors.person_code[0]}
+                                        helperText={errors.person_code[1]}
+                                        onChange={handleChange}
+                                        slotProps={{input: {readOnly: readOnly.person_code}}}
+                                        sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                        <DatePicker
+                                            label={names.birthdate}
+                                            value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
+                                            readOnly={readOnly.birthdate}
+                                            onChange={(date) => handleDateChange('birthdate', date)}
+                                            sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
+                                            renderInput={(params) => <TextField {...params}
+                                                                                fullWidth
+                                                                                required
+                                            />}
+                                        />
+                                    </LocalizationProvider>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <FormControl
+                                        fullWidth
+                                        required
+                                    >
+                                        <InputLabel id="country-label">{names.country}</InputLabel>
+                                        <Select
+                                            variant="outlined"
+                                            labelId="country-label"
+                                            name="country"
+                                            label={names.country}
+                                            value={updatedData.country}
+                                            error={errors.country[0]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.country}}}
+                                            sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}
+                                        >
+                                            <MenuItem value="">
+                                                <em>None</em>
+                                            </MenuItem>
+                                            <MenuItem value="US">USA</MenuItem>
+                                            <MenuItem value="Canada">Canada</MenuItem>
+                                            {/* TODO Add more countries here */}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <FormControl
+                                        fullWidth
+                                        required
+                                    >
+                                        <InputLabel id="gender-label">{names.gender}</InputLabel>
+                                        <Select
+                                            variant="outlined"
+                                            labelId="gender-label"
+                                            name="gender"
+                                            label={names.gender}
+                                            value={updatedData.gender}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.gender}}}
+                                            sx={{backgroundColor: readOnly.gender ? 'grey.200' : 'white'}}
+                                        >
+                                            <MenuItem value="M">Maschio</MenuItem>
+                                            <MenuItem value="F">Femmina</MenuItem>
+                                            <MenuItem value="O">Altro</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <FormControl
+                                        fullWidth
+                                        required
+                                    >
+                                        <InputLabel id="course-label">{names.course}</InputLabel>
+                                        <Select
+                                            variant="outlined"
+                                            labelId="course-label"
+                                            name="course"
+                                            label={names.course}
+                                            value={updatedData.course}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.course}}}
+                                            sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
+                                        >
+                                            <MenuItem value="Engineering">Ingegneria</MenuItem>
+                                            <MenuItem value="Design">Design</MenuItem>
+                                            <MenuItem value="Architecture">Architettura</MenuItem>
+                                            {/* TODO Add more values here */}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <TextField
+                                        label={names.matricola_number}
+                                        name='matricola_number'
+                                        value={updatedData.matricola_number || ''}
+                                        error={errors.matricola_number[0]}
+                                        helperText={errors.matricola_number[1]}
+                                        onChange={handleChange}
+                                        sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
+                                        type="number"
+                                        slotProps={{input: {readOnly: readOnly.matricola_number}}}
+                                        fullWidth/>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                        <DatePicker
+                                            label={names.matricola_expiration}
+                                            value={dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD')}
+                                            readOnly={readOnly.matricola_expiration}
+                                            onChange={(date) => handleDateChange('matricola_expiration', date)}
+                                            sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
+                                            renderInput={(params) => <TextField {...params}
+                                                                                fullWidth
+                                                                                required
+                                            />}
+                                        />
+                                    </LocalizationProvider>
+                                </Grid>
+                                <Grid xs={12} md={4} lg={3}>
+                                    <EditButton
+                                        onEdit={() => toggleEdit(true)}
+                                        onCancel={() => {
+                                            toggleEdit(false);
+                                            setUpdatedData(data);
+                                        }}
+                                        saving={saving}
+                                        onSave={() => handleSave()}
+                                    />
+                                </Grid>
+                            </Grid>
+                        </Card>
+                        <Toolbar sx={{justifyContent: 'space-between', mt: 2}}>
+                            <Typography variant="h6">Azioni</Typography>
+                            {!profile.latest_esncard && (
+                                <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
+                                    Rilascia ESNcard
+                                </Button>
+                            )}
+                            {profile.latest_esncard && !profile.latest_esncard.is_valid && (
+                                <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
+                                    Rinnova ESNcard
+                                </Button>
+                            )}
+                        </Toolbar>
+                        {esncardModalOpen &&
+                            <ESNcardEmissionModal
+                                open={esncardModalOpen}
+                                profile={profile}
+                                onClose={handleCloseESNcardModal}
+                            />}
+                        <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '20px'}}>
+                            <CrudTable
+                                cols={document_columns}
+                                canCreate={user.permissions.includes('add_document')}
+                                canEdit={user.permissions.includes('change_document')}
+                                canDelete={user.permissions.includes('delete_document')}
+                                onCreate={createDocument}
+                                onSave={saveDocument}
+                                onDelete={deleteDocument}
+                                initialData={data.documents}
+                                title={'Documenti'}
+                                sortColumn={'expiration'}/>
+                            <CrudTable
+                                cols={esncard_columns}
+                                canEdit={user.permissions.includes('change_esncard')}
+                                onSave={saveESNcard}
+                                initialData={data.esncards}
+                                title={'ESNcards'}
+                                sortColumn={'expiration'}/>
+                        </Box>
+                        {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                    </>
+                )}
             </Box>
         </Modal>
     );
