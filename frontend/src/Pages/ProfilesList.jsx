@@ -1,14 +1,14 @@
 import React, {useEffect, useState} from 'react';
-import {Box, IconButton} from '@mui/material';
+import {Box} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import EditIcon from '@mui/icons-material/Edit';
 import {fetchCustom} from '../api/api';
 import ProfileModal from '../Components/ProfileModal.jsx';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
+import Loader from "../Components/Loader";
 
 export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
     const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [isLoading, setLoading] = useState(true);
     const [modalOpen, toggleModal] = useState(false);
     const [selectedProfile, setSelectedProfile] = useState({});
 
@@ -106,7 +106,11 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
 
     return (
         <Box sx={{mx: '5%'}}>
-            <MaterialReactTable table={table}/>
+            {isLoading ? (
+                <Loader/>
+            ) : (
+                <MaterialReactTable table={table}/>
+            )}
             {modalOpen && <ProfileModal
                 open={modalOpen}
                 profile={selectedProfile}
