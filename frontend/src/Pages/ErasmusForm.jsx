@@ -1,5 +1,6 @@
 import React from 'react';
-import {Box, Button, FormControl, Grid, InputLabel, MenuItem, Select, TextField, Typography} from '@mui/material';
+import {Box, Button, FormControl, InputLabel, MenuItem, Select, TextField, Typography} from '@mui/material';
+import Grid from '@mui/material/Grid2';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -8,21 +9,26 @@ import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {fetchCustom} from "../api/api";
+import countryCodes from "../data/countryCodes";
 
 const ESNerForm = () => {
+    const [isSubmitted, setSubmitted] = React.useState(false)
+    const [sameWAasPhone, setSameWAasPhone] = React.useState(true);
+
     const [formData, setFormData] = React.useState({
-        'email': '',
-        'email_confirm': '',
         'name': '',
         'surname': '',
+        'email': '',
+        'email_confirm': '',
         'gender': '',
         'birthdate': dayjs(),
         'country': '',
-        'phone': '',
-        'whatsapp': '',
+        'phone_prefix': '+39',
+        'phone_number': '',
+        'whatsapp_prefix': '+39',
+        'whatsapp_number': '',
         'person_code': '',
         'domicile': '',
-        'residency': '',
         'course': '',
         'document-type': '',
         'document-number': '',
@@ -40,11 +46,12 @@ const ESNerForm = () => {
         'gender': [false, ''],
         'birthdate': [false, ''],
         'country': [false, ''],
-        'phone': [false, ''],
-        'whatsapp': [false, ''],
+        'phone_prefix': [false, ''],
+        'phone_number': [false, ''],
+        'whatsapp_prefix': [false, ''],
+        'whatsapp_number': [false, ''],
         'person_code': [false, ''],
         'domicile': [false, ''],
-        'residency': [false, ''],
         'course': [false, ''],
         'document-type': [false, ''],
         'document-number': [false, ''],
@@ -54,7 +61,34 @@ const ESNerForm = () => {
         'is_esner': [false, '']
     })
 
-    const [isSubmitted, setSubmitted] = React.useState(false)
+    const validateForm = () => {
+        let valid = true;
+        const newErrors = {...formErrors};
+
+        // Validate matricola (exactly 6 digits)
+        const matricolaRegex = /^\d{6}$/;
+        if (!matricolaRegex.test(formData['matricola-number'])) {
+            newErrors['matricola-number'] = [true, 'Matricola must be exactly 6 digits'];
+            valid = false;
+        } else newErrors['matricola-number'] = [false, ''];
+
+        // Validate person code (exactly 8 digits)
+        const personCodeRegex = /^\d{8}$/;
+        if (!personCodeRegex.test(formData['person_code'])) {
+            newErrors['person_code'] = [true, 'Person Code must be exactly 8 digits'];
+            valid = false;
+        } else newErrors['person_code'] = [false, ''];
+
+        // Validate emails equality
+        if (formData['email'] !== formData['email_confirm']) {
+            newErrors['email_confirm'] = [true, 'Emails do not match'];
+            valid = false;
+        } else newErrors['email_confirm'] = [false, ''];
+
+        setFormErrors(newErrors);
+        return valid;
+    };
+
 
     const scrollUp = () => {
         window.scrollTo({
@@ -84,18 +118,9 @@ const ESNerForm = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        if (formData['email'] !== formData['email_confirm']) {
-            setFormErrors({
-                ...formErrors,
-                'email_confirm': [true, 'Email not corresponding'],
-            });
+        if (!validateForm()) {
             scrollUp();
             return;
-        } else {
-            setFormErrors({
-                ...formErrors,
-                'email_confirm': [false, ''],
-            });
         }
 
         let body = {
@@ -130,7 +155,17 @@ const ESNerForm = () => {
         ).catch((error) => {
             console.log(error);
         })
+    };
 
+    const handleSameNumberChange = (e) => {
+        setSameWAasPhone(e.target.checked);
+        if (e.target.checked) {
+            setFormData({
+                ...formData,
+                whatsapp_prefix: formData.phone_prefix,
+                whatsapp_number: formData.phone_number
+            });
+        }
     };
 
     if (isSubmitted) {
@@ -160,11 +195,11 @@ const ESNerForm = () => {
             sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
             onSubmit={handleSubmit}
         >
-            <Typography variant="h4" align="center" gutterBottom mb={5}>
-                Registration - International Student
-            </Typography>
-            <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+            <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi Registration - International Student</Typography>
+
+            <Typography variant="h5" align="center" gutterBottom sx={{my: 4}}>Personal Information</Typography>
+            <Grid container spacing={3}>
+                <Grid size={{xs: 12, sm: 4}}>
                     <TextField
                         label="Name"
                         variant="outlined"
@@ -176,7 +211,7 @@ const ESNerForm = () => {
                         error={formErrors['name'][0]}
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 4}}>
                     <TextField
                         label="Surname"
                         variant="outlined"
@@ -187,7 +222,20 @@ const ESNerForm = () => {
                         required
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 4}}>
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                        <DatePicker
+                            label="Birthdate"
+                            value={formData.birthdate}
+                            onChange={(date) => handleDateChange('birthdate', date)}
+                            renderInput={(params) => <TextField {...params}
+                                                                fullWidth
+                                                                required
+                            />}
+                        />
+                    </LocalizationProvider>
+                </Grid>
+                <Grid size={{xs: 12, sm: 6}}>
                     <TextField
                         label="Email"
                         variant="outlined"
@@ -201,7 +249,7 @@ const ESNerForm = () => {
                         helperText={formErrors['email'][1]}
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 6}}>
                     <TextField
                         label="Confirm Email"
                         variant="outlined"
@@ -215,104 +263,32 @@ const ESNerForm = () => {
                         helperText={formErrors['email_confirm'][1]}
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 6}}>
                     <FormControl fullWidth required>
-                        <InputLabel id="gender-label">Gender</InputLabel>
+                        <InputLabel id="country-label">Home University Country</InputLabel>
                         <Select
-                            labelId="gender-label"
-                            name="gender"
-                            value={formData['gender']}
-                            onChange={handleChange}
-                            label="Gender"
-                        >
-                            <MenuItem value="M">Male</MenuItem>
-                            <MenuItem value="F">Female</MenuItem>
-                            <MenuItem value="O">Other</MenuItem>
-                        </Select>
-                    </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                        <DatePicker
-                            label="Birthdate"
-                            value={formData.birthdate}
-                            onChange={(date) => handleDateChange('birthdate', date)}
-                            renderInput={(params) => <TextField {...params}
-                                                                fullWidth
-                                                                required
-                            />}
-                        />
-                    </LocalizationProvider>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <FormControl
-                        fullWidth
-                        required
-                    >
-                        <InputLabel id="country-label">Country</InputLabel>
-                        <Select
+                            variant="outlined"
                             labelId="country-label"
                             name="country"
                             value={formData['country']}
                             onChange={handleChange}
-                            label="Country"
+                            label="Home University Country"
                             error={formErrors['country'][0]}
                         >
                             <MenuItem value="">
                                 <em>None</em>
                             </MenuItem>
-                            <MenuItem value="US">USA</MenuItem>
-                            <MenuItem value="Canada">Canada</MenuItem>
-                            {/* Add more countries here */}
+                            {countryCodes.map((country) => (
+                                <MenuItem key={country.code} value={country.code}>
+                                    {country.name}
+                                </MenuItem>
+                            ))}
                         </Select>
                     </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 6}}>
                     <TextField
-                        label="Phone Number"
-                        variant="outlined"
-                        name="phone"
-                        type="tel"
-                        value={formData['phone']}
-                        onChange={handleChange}
-                        fullWidth
-                        required
-                        error={formErrors['phone'][0]}
-                        helperText={formErrors['phone'][1]}
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <TextField
-                        label="Whatsapp Number"
-                        variant="outlined"
-                        name="whatsapp"
-                        type="tel"
-                        value={formData['whatsapp']}
-                        onChange={handleChange}
-                        fullWidth
-                        required
-                        error={formErrors['whatsapp'][0]}
-                        helperText={formErrors['whatsapp'][1]}
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <TextField
-                        label="Person Code"
-                        variant="outlined"
-                        name="person_code"
-                        type="number"
-                        inputProps={{min: 0}}
-                        value={formData['person_code']}
-                        onChange={handleChange}
-                        fullWidth
-                        required
-                        error={formErrors['person_code'][0]}
-                        helperText={formErrors['person_code'][1]}
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <TextField
-                        label="Domicile"
+                        label="Home Domicile"
                         variant="outlined"
                         name="domicile"
                         value={formData['domicile']}
@@ -321,43 +297,105 @@ const ESNerForm = () => {
                         required
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                    <TextField
-                        label="Residency"
-                        variant="outlined"
-                        name="residency"
-                        value={formData['residency']}
-                        onChange={handleChange}
-                        fullWidth
-                        required
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth required>
-                        <InputLabel id="course-label">Course</InputLabel>
+                <Grid size={{xs: 4, sm: 2}}>
+                    <FormControl fullWidth>
+                        <InputLabel id="phone-prefix-label">Prefix</InputLabel>
                         <Select
-                            labelId="course-label"
-                            name="course"
-                            value={formData['course']}
-                            onChange={handleChange}
-                            label="Course"
-                            error={formErrors['course'][0]}
+                            variant="outlined"
+                            labelId="phone-prefix-label"
+                            id="phone-prefix"
+                            name="phone_prefix"
+                            value={formData.phone_prefix}
+                            onChange={(e) => {
+                                handleChange(e);
+                                if (sameWAasPhone) {
+                                    setFormData(prev => ({...prev, whatsapp_prefix: e.target.value}));
+                                }
+                            }}
+                            label="Prefix"
+                            renderValue={(value) => value}
                         >
-                            <MenuItem value="Engineering">Engineering</MenuItem>
-                            <MenuItem value="Design">Design</MenuItem>
-                            <MenuItem value="Architecture">Architecture</MenuItem>
+                            {countryCodes.map((country) => (
+                                <MenuItem key={country.code} value={country.dial}>
+                                    {country.dial} ({country.name})
+                                </MenuItem>
+                            ))}
                         </Select>
                     </FormControl>
                 </Grid>
+                <Grid size={{xs: 8, sm: 4}}>
+                    <TextField
+                        label="Phone Number"
+                        variant="outlined"
+                        name="phone_number"
+                        type="number"
+                        value={formData.phone_number}
+                        onChange={handleChange}
+                        fullWidth
+                        required
+                        error={formErrors.phone_number[0]}
+                        helperText={formErrors.phone_number[1]}
+                    />
+                </Grid>
+                <Grid size={{xs: 12, sm: 6}}>
+                    <FormControlLabel
+                        control={
+                            <Checkbox
+                                checked={sameWAasPhone}
+                                onChange={handleSameNumberChange}
+                                name="sameAsPhone"
+                                color="primary"
+                            />
+                        }
+                        label="Same number for WhatsApp"
+                    />
+                </Grid>
+                {!sameWAasPhone && (<>
+                    <Grid size={{xs: 4, sm: 2}}>
+                        <FormControl fullWidth>
+                            <InputLabel id="whatsapp-prefix-label">Prefix</InputLabel>
+                            <Select
+                                variant="outlined"
+                                labelId="whatsapp-prefix-label"
+                                id="whatsapp-prefix"
+                                name="whatsapp_prefix"
+                                value={formData.whatsapp_prefix}
+                                onChange={handleChange}
+                                label="Prefix"
+                                renderValue={(value) => value}
+                            >
+                                {countryCodes.map((country) => (
+                                    <MenuItem key={country.code} value={country.dial}>
+                                        {country.dial} ({country.name})
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    <Grid size={{xs: 8, sm: 4}}>
+                        <TextField
+                            label="Whatsapp Number"
+                            variant="outlined"
+                            name="whatsapp_number"
+                            type="number"
+                            value={formData.whatsapp_number}
+                            onChange={handleChange}
+                            fullWidth
+                            required
+                            error={formErrors.whatsapp_number[0]}
+                            helperText={formErrors.whatsapp_number[1]}
+                        />
+                    </Grid>
+                </>)}
             </Grid>
-            <Typography variant="h5" align="center" gutterBottom my={4}>
-                Document information
-            </Typography>
-            <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+
+            <Typography variant="h5" align="center" gutterBottom my={4}>Document Information</Typography>
+            <Grid container spacing={3}>
+                <Grid size={{xs: 12, sm: 4}}>
                     <FormControl fullWidth required>
                         <InputLabel id="idType-label">Type</InputLabel>
                         <Select
+                            variant="outlined"
                             labelId="document-type-label"
                             name="document-type"
                             value={formData['document-type']}
@@ -366,12 +404,15 @@ const ESNerForm = () => {
                             required
                             error={formErrors['document-type'][0]}
                         >
-                            <MenuItem value="Identity Card">Identity Card</MenuItem>
                             <MenuItem value="Passport">Passport</MenuItem>
+                            <MenuItem value="National ID Card">National ID Card</MenuItem>
+                            <MenuItem value="Driving License">Driving License</MenuItem>
+                            <MenuItem value="Residence Permit">Residence Permit</MenuItem>
+                            <MenuItem value="Other">Other</MenuItem>
                         </Select>
                     </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 4}}>
                     <TextField
                         label="Number"
                         variant="outlined"
@@ -384,7 +425,7 @@ const ESNerForm = () => {
                         helperText={formErrors['document-number'][1]}
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Expiration Date"
@@ -395,17 +436,57 @@ const ESNerForm = () => {
                     </LocalizationProvider>
                 </Grid>
             </Grid>
-            <Typography variant="h5" align="center" gutterBottom my={4}>
-                Exchange information
-            </Typography>
-            <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+
+            <Typography variant="h5" align="center" gutterBottom my={4}>Exchange Information</Typography>
+            <Grid container spacing={3}>
+                <Grid size={{xs: 12, sm: 6}}>
+                    <FormControl fullWidth required>
+                        <InputLabel id="course-label">Field of Study</InputLabel>
+                        <Select
+                            variant="outlined"
+                            labelId="course-label"
+                            name="course"
+                            value={formData['course']}
+                            onChange={handleChange}
+                            label="Field of Study"
+                            error={formErrors['course'][0]}
+                        >
+                            <MenuItem value="Engineering">Engineering</MenuItem>
+                            <MenuItem value="Design">Design</MenuItem>
+                            <MenuItem value="Architecture">Architecture</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Grid>
+                <Grid size={{xs: 12, sm: 6}}>
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                        <DatePicker
+                            label="Exchange End Date"
+                            value={formData['matricola-expiration']}
+                            onChange={(date) => handleDateChange('matricola-expiration', date)}
+                            renderInput={(params) => <TextField {...params} fullWidth required/>}
+                        />
+                    </LocalizationProvider>
+                </Grid>
+                <Grid size={{xs: 12, sm: 6}}>
                     <TextField
-                        label="Matricola"
+                        label="Person Code (8 digits)"
+                        variant="outlined"
+                        name="person_code"
+                        type="number"
+                        value={formData['person_code']}
+                        onChange={handleChange}
+                        fullWidth
+                        required
+                        error={formErrors['person_code'][0]}
+                        helperText={formErrors['person_code'][1]}
+                    />
+                </Grid>
+                <Grid size={{xs: 12, sm: 6}}>
+                    <TextField
+                        label="Matricola (6 digits)"
                         variant="outlined"
                         name="matricola-number"
                         type="number"
-                        inputProps={{min: 0}}
                         value={formData['matricola-number']}
                         onChange={handleChange}
                         fullWidth
@@ -414,45 +495,40 @@ const ESNerForm = () => {
                         helperText={formErrors['matricola-number'][1]}
                     />
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                        <DatePicker
-                            label="Exchange end"
-                            value={formData['matricola-expiration']}
-                            onChange={(date) => handleDateChange('matricola-expiration', date)}
-                            renderInput={(params) => <TextField {...params} fullWidth required/>}
-                        />
-                    </LocalizationProvider>
+                <Grid size={{xs: 12}}>
+                    <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                        You can find your Person Code and Matricola in the Polimi App under your profile section, or from the Online Services.
+                        <br/> In case the university has not provided you a Matricola yet, you can fill the field with 6 '0's.
+                    </Typography>
                 </Grid>
             </Grid>
 
-            <Grid container spacing={2} mt={3}>
-                <Grid item xs={12}>
+            <Grid container spacing={3} mt={3}>
+                <Grid size={{xs: 12}}>
                     <FormControlLabel
                         control={<Checkbox name="acceptTerms" required/>}
                         label="I declare that I read and have accepted the ESN Politecnico Milano Charter"
                     />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{xs: 12}}>
                     <FormControlLabel
                         control={<Checkbox name="acceptPrivacyPolicy" required/>}
                         label="I declare that I fully share the aims of the Association (ref. Article 2 of the Charter)"
                     />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{xs: 12}}>
                     <FormControlLabel
                         control={<Checkbox name="acceptPrivacyPolicy" required/>}
                         label="I declare that I accept all the terms stated in the Charter, the Internal Rules and all subsequent changes and additions"
                     />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{xs: 12}}>
                     <FormControlLabel
                         control={<Checkbox name="acceptPrivacyPolicy" required/>}
                         label="I declare that I have read the attached disclaimer about Privacy and that I agree to the usage of my personal data according to the Regulation EU 2016/679 (GDPR) and to be aware of my guaranteed rights by the afore-mentioned law"
                     />
                 </Grid>
             </Grid>
-
 
             <Button type="submit" variant="contained" color="primary" fullWidth sx={{mt: 4}}>
                 Submit
