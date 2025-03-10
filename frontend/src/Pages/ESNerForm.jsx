@@ -17,20 +17,18 @@ const ErasmusForm = () => {
         'password_confirm': '',
         'name': '',
         'surname': '',
-        'gender': '',
         'birthdate': dayjs(),
         'country': '',
         'phone': '',
         'whatsapp': '',
         'person_code': '',
         'domicile': '',
-        'residency': '',
         'course': '',
         'document-type': '',
         'document-number': '',
         'document-expiration': dayjs(),
-        'matricola-number': '',
-        'matricola-expiration': dayjs(),
+        'matricola_number': '',
+        'matricola_expiration': dayjs(),
         'is_esner': true
     });
 
@@ -41,20 +39,18 @@ const ErasmusForm = () => {
         'password_confirm': [false, ''],
         'name': [false, ''],
         'surname': [false, ''],
-        'gender': [false, ''],
         'birthdate': [false, ''],
         'country': [false, ''],
         'phone': [false, ''],
         'whatsapp': [false, ''],
         'person_code': [false, ''],
         'domicile': [false, ''],
-        'residency': [false, ''],
         'course': [false, ''],
         'document-type': [false, ''],
         'document-number': [false, ''],
         'document-expiration': [false, ''],
-        'matricola-number': [false, ''],
-        'matricola-expiration': [false, ''],
+        'matricola_number': [false, ''],
+        'matricola_expiration': [false, ''],
         'is_esner': [false, '']
     })
 
@@ -120,7 +116,7 @@ const ErasmusForm = () => {
             ...formData,
             'birthdate': formatDateString(formData['birthdate']),
             'document-expiration': formatDateString(formData['document-expiration']),
-            'matricola-expiration': formatDateString(formData['matricola-expiration']),
+            'matricola_expiration': formatDateString(formData['matricola_expiration']),
         }
 
 
@@ -260,22 +256,6 @@ const ErasmusForm = () => {
                     />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth required>
-                        <InputLabel id="gender-label">Gender</InputLabel>
-                        <Select
-                            labelId="gender-label"
-                            name="gender"
-                            value={formData['gender']}
-                            onChange={handleChange}
-                            label="Gender"
-                        >
-                            <MenuItem value="M">Male</MenuItem>
-                            <MenuItem value="F">Female</MenuItem>
-                            <MenuItem value="O">Other</MenuItem>
-                        </Select>
-                    </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Birthdate"
@@ -358,15 +338,15 @@ const ErasmusForm = () => {
                     <TextField
                         label="Matricola"
                         variant="outlined"
-                        name="matricola-number"
+                        name="matricola_number"
                         type="number"
                         inputProps={{min: 0}}
-                        value={formData['matricola-number']}
+                        value={formData['matricola_number']}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['matricola-number'][0]}
-                        helperText={formErrors['matricola-number'][1]}
+                        error={formErrors['matricola_number'][0]}
+                        helperText={formErrors['matricola_number'][1]}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -375,17 +355,6 @@ const ErasmusForm = () => {
                         variant="outlined"
                         name="domicile"
                         value={formData['domicile']}
-                        onChange={handleChange}
-                        fullWidth
-                        required
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <TextField
-                        label="Residency"
-                        variant="outlined"
-                        name="residency"
-                        value={formData['residency']}
                         onChange={handleChange}
                         fullWidth
                         required

@@ -11,6 +11,7 @@ import EventsList from './Pages/EventsList.jsx';
 import Event from './Pages/Event.jsx';
 import {AuthProvider} from "./Context/AuthContext.jsx";
 import ProtectedRoute from "./Components/ProtectedRoute.jsx";
+import EmailVerification from './Pages/EmailVerification';
 
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
         <AuthProvider>
             <Router>
                 <Routes>
+                    <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
                     <Route path='/login' element={<Login/>}/>
                     <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
                     <Route path='/erasmus_profiles' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
@@ -27,7 +29,6 @@ function App() {
                     <Route path='/treasury' element={<ProtectedRoute><Treasury/></ProtectedRoute>}/>
                     <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
                     <Route path='/event' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
-
                 </Routes>
             </Router>
         </AuthProvider>

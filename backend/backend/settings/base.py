@@ -149,8 +149,6 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-
 # Allow your frontend origin
 CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS').split(",")
 
@@ -162,3 +160,11 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "Authorization",
     "Content-Type",
 ]
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'informatica@esnpolimi.it'
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'ESN Polimi <informatica@esnpolimi.it>'

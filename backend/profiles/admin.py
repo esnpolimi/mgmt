@@ -23,7 +23,7 @@ class DocumentAdmin(admin.ModelAdmin):
 class ProfileAdmin(admin.ModelAdmin):
     list_display = [
         'email', 'name', 'birthdate', 'country', 'course', 'created_at', 'is_esner',
-        'enabled', 'email_is_verified', 'gender', 'person_code', 'phone', 'residency',
+        'enabled', 'email_is_verified', 'person_code', 'phone',
         'surname', 'updated_at', 'whatsapp', 'matricola_number', 'matricola_expiration'
     ]
     search_fields = ('email', 'name', 'surname', 'person_code')
@@ -32,7 +32,7 @@ class ProfileAdmin(admin.ModelAdmin):
 
     fields = [
         'email', 'name', 'birthdate', 'country', 'course', 'is_esner',
-        'enabled', 'email_is_verified', 'gender', 'person_code', 'phone', 'residency',
+        'enabled', 'email_is_verified', 'person_code', 'phone',
         'surname', 'whatsapp', 'matricola_number', 'matricola_expiration', 'created_at', 'updated_at'
     ]  # Ensure all fields are included here
 

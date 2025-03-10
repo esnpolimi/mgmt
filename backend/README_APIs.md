@@ -46,14 +46,12 @@ Creates a profile with related document and matricola. `verified` field is initi
 | email                | string | yes       |                                |
 | name                 | string | yes       |                                |
 | surname              | string | yes       |
-| gender               | string | yes       | Must be either 'M', 'F' or 'O' |
 | country              | string | yes       | Must be a vaid country         |
 | course               | string | yes       |                                |
 | phone                | string | yes       |                                |
 | whatsapp             | string | yes       |                                |
 | person_code          | int    | yes       |                                |
 | domicile             | string | yes       |                                |
-| residency            | string | yes       |                                |
 | matricola_number     | int    | yes       |
 | matricola_expiration | date   | yes       |
 | document_type        | string | yes       |
@@ -85,14 +83,12 @@ If existing, updates the profile corresponding to the primary key (pk) using the
 |-------------|--------|-----------|------------------------------|
 | name        | string | no        |                              |
 | surname     | string | no        |
-| gender      | string | no        | Must be either 'M',F' or 'O' |
 | country     | string | no        | Must be a valid country      |
 | course      | string | no        |                              |
 | phone       | string | no        |                              |
 | whatsapp    | string | no        |                              |
 | person_code | int    | no        |                              |
 | domicile    | string | no        |                              |
-| residency   | string | no        |                              |
 
 ### Delete specified profile *
 
@@ -219,14 +215,12 @@ Creates a user and its associated profile, document and matricola. Profile's `ve
 | password             | string | yes       | unhashed password            |
 | name                 | string | no        |                              |
 | surname              | string | no        |
-| gender               | string | no        | Must be either 'M',F' or 'O' |
 | country              | string | no        | Must be a vaid country       |
 | course               | string | no        |                              |
 | phone                | string | no        |                              |
 | whatsapp             | string | no        |                              |
 | person_code          | int    | no        |                              |
 | domicile             | string | no        |                              |
-| residency            | string | no        |                              |
 | matricola_number     | int    | yes       |
 | matricola_expiration | date   | yes       |
 | document_type        | string | yes       |

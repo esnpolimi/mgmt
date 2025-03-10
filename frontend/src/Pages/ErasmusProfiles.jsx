@@ -53,14 +53,6 @@ export default function ErasmusProfiles() {
             size: 150,
         },
         {
-            accessorKey: 'gender',
-            header: names.gender,
-            size: 50,
-            Cell: ({cell}) => (
-                <Box sx={{textAlign: 'center'}}>{cell.getValue()}</Box>
-            ),
-        },
-        {
             accessorKey: 'birthdate',
             header: names.birthdate,
             size: 100,
@@ -83,11 +75,6 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'domicile',
             header: names.domicile,
-            size: 200,
-        },
-        {
-            accessorKey: 'residency',
-            header: names.residency,
             size: 200,
         },
         {
@@ -115,13 +102,11 @@ export default function ErasmusProfiles() {
         email: true,
         whatsapp: true,
         country: false,
-        gender: false,
         birthdate: false,
         course: false,
         phone: false,
         person_code: false,
         domicile: false,
-        residency: false,
         matricola_number: false,
         matricola_expiration: false,
         'latest_document.number': false,

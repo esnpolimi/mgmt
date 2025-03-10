@@ -30,14 +30,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         email: '',
         name: '',
         surname: '',
-        gender: '',
         birthdate: '',
         country: '',
         phone: '',
         whatsapp: '',
         person_code: '',
         domicile: '',
-        residency: '',
         course: '',
         matricola_number: '',
         matricola_expiration: '',
@@ -48,14 +46,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         email: '',
         name: '',
         surname: '',
-        gender: '',
         birthdate: '',
         country: '',
         phone: '',
         whatsapp: '',
         person_code: '',
         domicile: '',
-        residency: '',
         course: '',
         matricola_number: '',
         matricola_expiration: '',
@@ -64,14 +60,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         email: [false, ''],
         name: [false, ''],
         surname: [false, ''],
-        gender: [false, ''],
         birthdate: [false, ''],
         country: [false, ''],
         phone: [false, ''],
         whatsapp: [false, ''],
         person_code: [false, ''],
         domicile: [false, ''],
-        residency: [false, ''],
         course: [false, ''],
         matricola_number: [false, ''],
         matricola_expiration: [false, ''],
@@ -80,14 +74,12 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         email: true,
         name: true,
         surname: true,
-        gender: true,
         birthdate: true,
         country: true,
         phone: true,
         whatsapp: true,
         person_code: true,
         domicile: true,
-        residency: true,
         course: true,
         matricola_number: true,
         matricola_expiration: true,
@@ -472,18 +464,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                 </Grid>
                                 <Grid xs={12} md={4} lg={3}>
                                     <TextField
-                                        label={names.residency}
-                                        name='residency'
-                                        value={updatedData.residency}
-                                        error={errors.residency[0]}
-                                        helperText={errors.residency[1]}
-                                        onChange={handleChange}
-                                        sx={{backgroundColor: readOnly.residency ? 'grey.200' : 'white'}}
-                                        slotProps={{input: {readOnly: readOnly.residency}}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
                                         label={names.person_code}
                                         name='person_code'
                                         value={updatedData.person_code}
@@ -532,28 +512,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                             <MenuItem value="US">USA</MenuItem>
                                             <MenuItem value="Canada">Canada</MenuItem>
                                             {/* TODO Add more countries here */}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <FormControl
-                                        fullWidth
-                                        required
-                                    >
-                                        <InputLabel id="gender-label">{names.gender}</InputLabel>
-                                        <Select
-                                            variant="outlined"
-                                            labelId="gender-label"
-                                            name="gender"
-                                            label={names.gender}
-                                            value={updatedData.gender}
-                                            onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.gender}}}
-                                            sx={{backgroundColor: readOnly.gender ? 'grey.200' : 'white'}}
-                                        >
-                                            <MenuItem value="M">Maschio</MenuItem>
-                                            <MenuItem value="F">Femmina</MenuItem>
-                                            <MenuItem value="O">Altro</MenuItem>
                                         </Select>
                                     </FormControl>
                                 </Grid>
