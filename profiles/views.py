@@ -1,5 +1,4 @@
 import logging
-from django.core.mail import send_mail
 from django.db import transaction
 from django.contrib.auth.models import Group
 from rest_framework.decorators import api_view, permission_classes
@@ -10,9 +9,13 @@ from django.conf import settings
 from profiles.models import Profile, Document
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
 from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
-from profiles.tokens import email_verification_token
-from users.managers import UserManager
 from users.models import User
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from profiles.tokens import email_verification_token
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
+from django.core.mail import EmailMultiAlternatives
 
 logger = logging.getLogger(__name__)
 HOSTNAME = settings.HOSTNAME
@@ -34,61 +37,127 @@ def erasmus_profile_list(request):
         return Response(status=500)
 
 
-# Endpoint to create a profile, document and matricola together.
 @api_view(['POST'])
-def profile_creation(request):
+def initiate_profile_creation(request):
     try:
         data = request.data
 
-        is_esner = data.get('is_esner', False)  # Check if the user is an ESN member
-
-        # Create profile
+        # Validate data but don't save yet
         profile_serializer = ProfileCreateSerializer(data=data)
-        document_serializer = DocumentCreateSerializer(data={k[9:]: v for k, v in data.items() if k.startswith('document-')}, partial=True)
+        document_serializer = DocumentCreateSerializer(
+            data={k[9:]: v for k, v in data.items() if k.startswith('document-')},
+            partial=True
+        )
 
         if profile_serializer.is_valid() and document_serializer.is_valid():
-
-            # Data is valid: create objects
             with transaction.atomic():
-                profile = profile_serializer.save()
-                document_serializer.save(profile=profile)
+                # Store validated data, set flags and create profile
+                profile_data = profile_serializer.validated_data.copy()
+                profile_data['enabled'] = False
+                profile_data['email_is_verified'] = False
+                profile = Profile.objects.create(**profile_data)
 
-                # If ESN member, create an associated User
-                if is_esner:
+                # Create document (disabled until email verification) and create it
+                document_data = document_serializer.validated_data.copy()
+                document_data['enabled'] = False
+                Document.objects.create(profile=profile, **document_data)
+
+                # Create user if ESN member
+                is_esner = profile_data.get('is_esner', False)
+                if is_esner and 'password' in data:
                     user = User.objects.create_user(
-                        profile=profile,  # Link user to profile
-                        password=data.get('password', UserManager().make_random_password())  # Generate a password if none provided
+                        profile=profile,
+                        password=data.get('password'),
+                        is_active=False  # Will be activated upon verification
                     )
-                    # Assign to the "Aspirant" group
                     aspirant_group, created = Group.objects.get_or_create(name="Aspirant")
                     user.groups.add(aspirant_group)
 
-                # Send email for email verification
-                token = email_verification_token.make_token(profile)
-                verification_link = HOSTNAME + '/profile/' + str(profile.pk) + '/verification/' + token
+            # Generate verification token and send verification email
+            uid = urlsafe_base64_encode(force_bytes(profile.pk))
+            token = email_verification_token.make_token(profile)
+            verification_link = f"http://{HOSTNAME}:3000/#/verify-email/{uid}/{token}"  # TODO: set proper url
+            try:
+                subject = "Email verification for ESN Polimi"
+                from_email = settings.DEFAULT_FROM_EMAIL
+                to_email = [profile.email]
+                text_content = f"Click the following link to verify your email: {verification_link}"
+                html_content = f"""
+                <html>
+                <body>
+                    <h2>Welcome to ESN Polimi!</h2>
+                    <p>Please click the following link to verify your email:</p>
+                    <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verify Email Address</a></p>
+                    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+                    <p>{verification_link}</p>
+                    <p>This link will expire in 24 hours.</p>
+                </body>
+                </html>
+                """
 
-                send_mail(
-                    "Email verification",
-                    verification_link,
-                    "noreply@" + HOSTNAME,
-                    [profile.email],
-                    fail_silently=False
-                )
+                email = EmailMultiAlternatives(subject, text_content, from_email, to_email)
+                email.attach_alternative(html_content, "text/html")
+                email.send(fail_silently=False)
 
-            return Response({"message": "Profile created successfully."}, status=200)
+                print(f"Email sent to {profile.email}")
+            except Exception as e:
+                print(f"Email error: {str(e)}")
+                # Don't delete profile on email error, just return the error
+                return Response({"error": f"Error sending email: {str(e)}"}, status=500)
 
+            return Response({
+                "message": "Verification email sent. Please check your inbox to complete registration."
+            })
         else:
-            # Calling is_valid() is needed to access errors. In the 'if' statement they may not have been called
-            profile_serializer.is_valid()
-            document_serializer.is_valid()
-            # Data is invalid: return bad request (400) and errors
+            # Return validation errors
             errors = {k: v[0] for k, v in profile_serializer.errors.items()}
             errors.update({'document-' + k: v[0] for k, v in document_serializer.errors.items()})
             return Response(errors, status=400)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({"error": "An unexpected error occurred"}, status=500)
+
+
+@api_view(['GET'])
+def verify_email_and_enable_profile(request, uid, token):
+    try:
+        # Get profile from uid
+        try:
+            uid = force_str(urlsafe_base64_decode(uid))
+            profile = Profile.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, Profile.DoesNotExist):
+            return Response({"error": "Invalid verification link"}, status=400)
+
+        if not email_verification_token.check_token(profile, token):
+            return Response({"error": "Invalid or expired verification link"}, status=400)
+
+        if profile.email_is_verified:
+            return Response({"message": "Email already verified"}, status=200)
+
+        # Activate profile and related objects
+        with transaction.atomic():
+            profile.email_is_verified = True
+            profile.enabled = True
+            profile.save()
+
+            # Enable document
+            Document.objects.filter(profile=profile).update(enabled=True)
+
+            # Activate user if esner
+            if profile.is_esner:
+                try:
+                    user = User.objects.get(profile=profile)
+                    user.is_active = True
+                    user.save()
+                except User.DoesNotExist:
+                    return Response({"error": "The user associated to this profile does not exist"}, status=500)
+
+        return Response({"message": "Email verified and profile activated successfully!"})
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response({"error": "An unexpected error occurred"}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
