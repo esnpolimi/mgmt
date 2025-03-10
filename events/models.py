@@ -17,7 +17,7 @@ tables_schema = {
 
 profile_fields_schema = {
     "type" : "array",
-    "items" : {"enum" : ["email","name","surname","gender","birthdate","country","phone","whatsapp","course","domicile","residency","matricola","document","person_code","esncard"]}
+    "items" : {"enum" : ["email","name","surname","birthdate","country","phone","whatsapp","course","domicile","matricola","document","person_code","esncard"]}
 }
 
 fields_schema = {  
@@ -336,7 +336,7 @@ class Subscription(BaseEntity):
 #         },
 #         "profile_fields":{
 #             "type" : "array",
-#             "items" : {"enum" : ["email","name","surname","gender","birthdate","country","phone","whatsapp","course","domicile","residency","matricola","document","person_code","esncard"]}
+#             "items" : {"enum" : ["email","name","surname","birthdate","country","phone","whatsapp","course","domicile","matricola","document","person_code","esncard"]}
 #         },
 #         "form_fields":{
 #             "type" : "object",

@@ -1,6 +1,6 @@
-{"email":"damiano.tomazzolli@esnpolimi.it","name":"damiano","surname":"tomazzolli","country":"IT","gender":"M","birthdate":"02/04/2001","course":"Engineering","phone":"+393333333333","person_code":"0","domicile":"lavis","residency":"lavis", "document-type":"Passport","document-number":"123a","document-expiration":"01/01/2034","matricola-number":"123","matricola-exchange_end":"01/07/2024"}
+{"email":"damiano.tomazzolli@esnpolimi.it","name":"damiano","surname":"tomazzolli","country":"IT","birthdate":"02/04/2001","course":"Engineering","phone":"+393333333333","person_code":"0","domicile":"lavis", "document-type":"Passport","document-number":"123a","document-expiration":"01/01/2034","matricola_number":"123","matricola_expriration":"01/07/2024"}
 
-{"email":"matteo.pompilio@esnpolimi.it","name":"matteo","surname":"pompilio","country":"IT","gender":"M","birthdate":"04/02/2001","course":"Engineering","phone":"+393333333333","person_code":"312312","domicile":"puglia","residency":"puglia", "document-type":"Passport","document-number":"123a123","document-expiration":"01/01/2034","matricola-number":"12343211","matricola-exchange_end":"01/07/2024"}
+{"email":"matteo.pompilio@esnpolimi.it","name":"matteo","surname":"pompilio","country":"IT","birthdate":"04/02/2001","course":"Engineering","phone":"+393333333333","person_code":"312312","domicile":"puglia", "document-type":"Passport","document-number":"123a123","document-expiration":"01/01/2034","matricola_number":"12343211","matricola_expiration":"01/07/2024"}
 
 {"profile":"4","type":"passport","number":"197662","expiration_date":"01/01/2099"}
 
