@@ -7,7 +7,6 @@ export const profileDisplayNames = {
     phone: 'Numero Telefono',
     whatsapp: 'Numero WhatsApp',
     country: 'Paese',
-    gender: 'Genere',
     birthdate: 'Data di Nascita',
     latest_esncard: 'ESN Card',
     latest_document: 'Documento',
@@ -16,7 +15,6 @@ export const profileDisplayNames = {
     course: 'Corso di Studi',
     person_code: 'Codice Persona',
     domicile: 'Domicilio',
-    residency: 'Residenza'
 };
 
 export const eventDisplayNames = {

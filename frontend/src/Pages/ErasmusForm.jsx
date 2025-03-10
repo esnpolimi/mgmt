@@ -20,7 +20,6 @@ const ESNerForm = () => {
         'surname': '',
         'email': '',
         'email_confirm': '',
-        'gender': '',
         'birthdate': dayjs(),
         'country': '',
         'phone_prefix': '+39',
@@ -33,8 +32,8 @@ const ESNerForm = () => {
         'document-type': '',
         'document-number': '',
         'document-expiration': dayjs(),
-        'matricola-number': '',
-        'matricola-expiration': dayjs(),
+        'matricola_number': '',
+        'matricola_expiration': dayjs(),
         'is_esner': false
     });
 
@@ -43,7 +42,6 @@ const ESNerForm = () => {
         'email_confirm': [false, ''],
         'name': [false, ''],
         'surname': [false, ''],
-        'gender': [false, ''],
         'birthdate': [false, ''],
         'country': [false, ''],
         'phone_prefix': [false, ''],
@@ -56,8 +54,8 @@ const ESNerForm = () => {
         'document-type': [false, ''],
         'document-number': [false, ''],
         'document-expiration': [false, ''],
-        'matricola-number': [false, ''],
-        'matricola-expiration': [false, ''],
+        'matricola_number': [false, ''],
+        'matricola_expiration': [false, ''],
         'is_esner': [false, '']
     })
 
@@ -67,10 +65,10 @@ const ESNerForm = () => {
 
         // Validate matricola (exactly 6 digits)
         const matricolaRegex = /^\d{6}$/;
-        if (!matricolaRegex.test(formData['matricola-number'])) {
-            newErrors['matricola-number'] = [true, 'Matricola must be exactly 6 digits'];
+        if (!matricolaRegex.test(formData['matricola_number'])) {
+            newErrors['matricola_number'] = [true, 'Matricola must be exactly 6 digits'];
             valid = false;
-        } else newErrors['matricola-number'] = [false, ''];
+        } else newErrors['matricola_number'] = [false, ''];
 
         // Validate person code (exactly 8 digits)
         const personCodeRegex = /^\d{8}$/;
@@ -127,7 +125,7 @@ const ESNerForm = () => {
             ...formData,
             'birthdate': formatDateString(formData['birthdate']),
             'document-expiration': formatDateString(formData['document-expiration']),
-            'matricola-expiration': formatDateString(formData['matricola-expiration']),
+            'matricola_expiration': formatDateString(formData['matricola_expiration']),
         }
 
         fetchCustom("POST", '/profile/', body, {}, false).then(
@@ -461,8 +459,8 @@ const ESNerForm = () => {
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Exchange End Date"
-                            value={formData['matricola-expiration']}
-                            onChange={(date) => handleDateChange('matricola-expiration', date)}
+                            value={formData['matricola_expiration']}
+                            onChange={(date) => handleDateChange('matricola_expiration', date)}
                             renderInput={(params) => <TextField {...params} fullWidth required/>}
                         />
                     </LocalizationProvider>
@@ -485,14 +483,14 @@ const ESNerForm = () => {
                     <TextField
                         label="Matricola (6 digits)"
                         variant="outlined"
-                        name="matricola-number"
+                        name="matricola_number"
                         type="number"
-                        value={formData['matricola-number']}
+                        value={formData['matricola_number']}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['matricola-number'][0]}
-                        helperText={formErrors['matricola-number'][1]}
+                        error={formErrors['matricola_number'][0]}
+                        helperText={formErrors['matricola_number'][1]}
                     />
                 </Grid>
                 <Grid size={{xs: 12}}>

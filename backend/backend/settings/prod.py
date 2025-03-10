@@ -15,5 +15,5 @@ DATABASES = {
     }
 }
 
-HOSTNAME = 'mgmt.esnpolimi.it'
+HOSTNAME = 'mgmt.esnpolimi.it'  # TODO: Change this to the actual hostname
 SECURE_COOKIES = True

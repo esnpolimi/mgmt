@@ -1,6 +1,8 @@
+import uuid
 from cgitb import enable
 from datetime import date
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from phonenumber_field.modelfields import PhoneNumberField
@@ -26,28 +28,20 @@ class BaseEntity(models.Model):
 
 # Class that describes a Profile
 class Profile(BaseEntity):
-    # Inner class describing the Profile.Gender type (it's like an enum inner class)
-    class Gender(models.TextChoices):
-        M = "M", _("Male")
-        F = "F", _("Female")
-        O = "O", _("Other")
-
-    # Same goes for Profile.Course
+    # Inner class describing the Profile.Course type (it's like an enum inner class)
     class Course(models.TextChoices):
-        ingegneria = "Engineering", _("Engineering")
-        architettura = "Architecture", _("Architecture")
-        design = "Design", _("Design")
+        ENGINEERING = "Engineering", _("Engineering")
+        ARCHITECTURE = "Architecture", _("Architecture")
+        DESIGN = "Design", _("Design")
 
     id = models.AutoField(primary_key=True)  # primary key
     email = models.EmailField(max_length=256, unique=True)
 
-    # this field is set to true if the email is verified, i.e. the user has
-    # received the automatic email sent by us (TODO) and clicked on the link
+    # This field is set to true if the email is verified, i.e. the user has received the automatic email sent by us
     email_is_verified = models.BooleanField(default=False)
 
     name = models.CharField(max_length=128)
     surname = models.CharField(max_length=128)
-    gender = models.CharField(max_length=1, choices=Gender.choices)
     birthdate = models.DateField(null=True)
     country = CountryField(null=True)
     course = models.CharField(max_length=32, choices=Course.choices, null=True)
@@ -55,7 +49,6 @@ class Profile(BaseEntity):
     whatsapp = PhoneNumberField(blank=True)
     person_code = models.PositiveIntegerField(unique=True, null=True)
     domicile = models.CharField(max_length=256, null=True)
-    residency = models.CharField(max_length=256, null=True)
     is_esner = models.BooleanField(default=False)
     # Special fields that records all modifications made to the object.
     # Useful for rolling back to previous versions of the object. 
@@ -94,8 +87,11 @@ class Document(BaseEntity):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
 
     class Type(models.TextChoices):
-        passport = "Passport", _("Passport")
-        identity_card = "Identity Card", _("Identity Card")
+        PASSPORT = "Passport", _("Passport")
+        NATIONAL_ID = "National ID Card", _("National ID Card")
+        DRIVING_LICENSE = "Driving License", _("Driving License")
+        RESIDENCE_PERMIT = "Residence Permit", _("Residence Permit")
+        OTHER = "Other", _("Other")
 
     type = models.CharField(max_length=32, choices=Type.choices)
     number = models.CharField(unique=True, max_length=32)
