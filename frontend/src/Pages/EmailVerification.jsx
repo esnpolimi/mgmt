@@ -1,9 +1,8 @@
 import React, {useState, useEffect} from 'react';
 import {useParams} from 'react-router-dom';
-import {Container, Typography, Box, CircularProgress, Alert} from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import {Container, Typography, Box} from '@mui/material';
 import {fetchCustom} from "../api/api";
+import StatusBanner from '../components/StatusBanner';
 
 export default function EmailVerification() {
     const {uid, token} = useParams();
@@ -55,37 +54,13 @@ export default function EmailVerification() {
                     Email Verification
                 </Typography>
 
-                {status === 'loading' && (
-                    <>
-                        <CircularProgress sx={{my: 4}}/>
-                        <Typography>Verifying your email address...</Typography>
-                    </>
-                )}
-
-                {status === 'success' && (
-                    <>
-                        <CheckCircleOutlineIcon color="success" sx={{fontSize: 80, my: 2}}/>
-                        <Alert severity="success" sx={{width: '100%', mb: 2}}>
-                            {message || 'Email verified successfully!'}
-                        </Alert>
-                        <Typography>
-                            Your email address has been verified and your account is now active.
-                        </Typography>
-                    </>
-                )}
-
-                {status === 'error' && (
-                    <>
-                        <ErrorOutlineIcon color="error" sx={{fontSize: 80, my: 2}}/>
-                        <Alert severity="error" sx={{width: '100%', mb: 2}}>
-                            {message || 'Verification failed'}
-                        </Alert>
-                        <Typography>
-                            We couldn't verify your email address. The verification link may be expired or invalid.
-                            Please contact us.
-                        </Typography>
-                    </>
-                )}
+                <StatusBanner
+                    status={status}
+                    message={message}
+                    loadingText="Verifying your email address..."
+                    successText="Your email address has been verified and your account is now active."
+                    errorText="We couldn't verify your email address. The verification link may be expired or invalid. Please contact us."
+                />
             </Box>
         </Container>
     );
