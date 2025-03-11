@@ -4,6 +4,7 @@ import {Box, Chip, Typography} from "@mui/material";
 import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
 import Sidebar from "../Components/Sidebar";
 import {profileDisplayNames as names} from '../utils/displayAttributes';
+import countryCodes from "../data/countryCodes";
 
 export default function ESNersProfiles() {
 
@@ -48,14 +49,14 @@ export default function ESNersProfiles() {
             ),
         },
         {
-            accessorKey: 'whatsapp',
-            header: names.whatsapp,
-            size: 150,
-        },
-        {
             accessorKey: 'country',
             header: names.country,
             size: 150,
+            Cell: ({row}) => {
+                const countryCode = row.original.country;
+                const country = countryCodes.find(c => c.code === countryCode);
+                return country ? country.name : countryCode || '(vuoto)';
+            },
         },
         {
             accessorKey: 'birthdate',
@@ -63,14 +64,12 @@ export default function ESNersProfiles() {
             size: 100,
         },
         {
-            accessorKey: 'course',
-            header: names.course,
-            size: 100,
-        },
-        {
-            accessorKey: 'phone',
-            header: names.phone,
+            id: 'fullPhoneNumber',
+            header: names.phone_number,
             size: 150,
+            Cell: ({row}) => (
+                <span>({row.original.phone_prefix || 'vuoto'}) {row.original.phone_number || '(vuoto)'}</span>
+            ),
         },
         {
             accessorKey: 'person_code',
@@ -88,11 +87,6 @@ export default function ESNersProfiles() {
             size: 50,
         },
         {
-            accessorKey: 'matricola_expiration',
-            header: names.matricola_expiration,
-            size: 50,
-        },
-        {
             accessorKey: 'latest_document.number',
             header: names.latest_document,
             size: 50,
@@ -105,15 +99,12 @@ export default function ESNersProfiles() {
         surname: true,
         groups: true,
         email: true,
-        whatsapp: true,
         country: true,
         birthdate: false,
-        course: false,
-        phone: false,
+        fullPhoneNumber: true,
         person_code: false,
         domicile: false,
         matricola_number: false,
-        matricola_expiration: false,
         'latest_document.number': false,
     }
 
