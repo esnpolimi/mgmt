@@ -49,7 +49,10 @@ def initiate_profile_creation(request):
             partial=True
         )
 
-        if profile_serializer.is_valid() and document_serializer.is_valid():
+        profile_valid = profile_serializer.is_valid()
+        document_valid = document_serializer.is_valid()
+
+        if profile_valid and document_valid:
             with transaction.atomic():
                 # Store validated data, set flags and create profile
                 profile_data = profile_serializer.validated_data.copy()
@@ -67,9 +70,9 @@ def initiate_profile_creation(request):
                 if is_esner and 'password' in data:
                     user = User.objects.create_user(
                         profile=profile,
-                        password=data.get('password'),
-                        is_active=False  # Will be activated upon verification
+                        password=data.get('password')
                     )
+                    user.is_active = False  # Will be activated upon verification
                     aspirant_group, created = Group.objects.get_or_create(name="Aspirant")
                     user.groups.add(aspirant_group)
 
@@ -110,13 +113,16 @@ def initiate_profile_creation(request):
             })
         else:
             # Return validation errors
-            errors = {k: v[0] for k, v in profile_serializer.errors.items()}
-            errors.update({'document-' + k: v[0] for k, v in document_serializer.errors.items()})
+            errors = {}
+            if not profile_valid:
+                errors.update({k: v[0] for k, v in profile_serializer.errors.items()})
+            if not document_valid:
+                errors.update({'document-' + k: v[0] for k, v in document_serializer.errors.items()})
             return Response(errors, status=400)
 
     except Exception as e:
         logger.error(str(e))
-        return Response({"error": "An unexpected error occurred"}, status=500)
+        return Response({"error": "An unexpected error occurred: " + str(e)}, status=500)
 
 
 @api_view(['GET'])
