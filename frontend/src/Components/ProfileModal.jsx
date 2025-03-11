@@ -1,6 +1,6 @@
 import {Card, Box, TextField, FormControl, InputLabel, Select, MenuItem, Modal, Typography, Button, Toolbar} from "@mui/material";
 import Grid from '@mui/material/Grid2';
-import {useState, useEffect, useMemo} from 'react';
+import React, {useState, useEffect, useMemo} from 'react';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -13,18 +13,24 @@ import Popup from './Popup'
 import {profileDisplayNames as names} from '../utils/displayAttributes';
 import ESNcardEmissionModal from "./ESNcardEmissionModal";
 import Loader from "./Loader";
+import countryCodes from "../data/countryCodes";
+
+const profileFieldRules = {
+    ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
+    Erasmus: {hideFields: ['groups']}
+};
 
 export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const [isLoading, setIsLoading] = useState(true);
     const {user} = useAuth();
-    // Qua puoi disattivare manualmente i permessi degli utenti
-    // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [esncardModalOpen, setEsncardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
     //console.log("ProfileModal profile:", profile);
+    // Qua puoi disattivare manualmente i permessi degli utenti
+    // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
 
     const [data, setData] = useState({  /* profile fields */
         email: '',
@@ -32,8 +38,10 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         surname: '',
         birthdate: '',
         country: '',
-        phone: '',
-        whatsapp: '',
+        phone_prefix: '',
+        phone_number: '',
+        whatsapp_prefix: '',
+        whatsapp_number: '',
         person_code: '',
         domicile: '',
         course: '',
@@ -48,8 +56,10 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         surname: '',
         birthdate: '',
         country: '',
-        phone: '',
-        whatsapp: '',
+        phone_prefix: '',
+        phone_number: '',
+        whatsapp_prefix: '',
+        whatsapp_number: '',
         person_code: '',
         domicile: '',
         course: '',
@@ -62,8 +72,10 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         surname: [false, ''],
         birthdate: [false, ''],
         country: [false, ''],
-        phone: [false, ''],
-        whatsapp: [false, ''],
+        phone_prefix: [false, ''],
+        phone_number: [false, ''],
+        whatsapp_prefix: [false, ''],
+        whatsapp_number: [false, ''],
         person_code: [false, ''],
         domicile: [false, ''],
         course: [false, ''],
@@ -76,14 +88,21 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         surname: true,
         birthdate: true,
         country: true,
-        phone: true,
-        whatsapp: true,
+        phone_prefix: true,
+        phone_number: true,
+        whatsapp_prefix: true,
+        whatsapp_number: true,
         person_code: true,
         domicile: true,
         course: true,
         matricola_number: true,
         matricola_expiration: true,
     });
+
+    const rules = profileFieldRules[profileType] || {hideFields: []};
+    const shouldHideField = (fieldName) => {
+        return rules.hideFields.includes(fieldName);
+    };
 
     const refreshProfileData = async () => {
         try {
@@ -178,7 +197,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             header: 'Tipo',
             size: 80,
             editVariant: 'select',
-            editSelectOptions: ['Passport', 'Identity Card'],
+            editSelectOptions: ['Passport', 'National ID Card', 'Driving License', 'Residency Permit', 'Other'],
             muiEditTextFieldProps: {
                 select: true,
                 helperText: documentErrors?.type,
@@ -384,189 +403,255 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 <Typography variant="h5" gutterBottom align="center">
                     Profilo {profileType}
                 </Typography>
-                {isLoading ? (
-                    <Loader/>
-                ) : (<>
-
+                {isLoading ? <Loader/> : (<>
                         <Card sx={{p: '20px'}}>
                             <Grid container spacing={2}>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.name}
-                                        name='name'
-                                        value={updatedData.name}
-                                        error={errors.name[0]}
-                                        helperText={errors.name[1]}
-                                        slotProps={{input: {readOnly: readOnly.name}}}
-                                        onChange={handleChange}
-                                        sx={{backgroundColor: readOnly.name ? 'grey.200' : 'white'}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.surname}
-                                        name='surname'
-                                        value={updatedData.surname}
-                                        error={errors.surname[0]}
-                                        helperText={errors.surname[1]}
-                                        onChange={handleChange}
-                                        slotProps={{input: {readOnly: readOnly.surname}}}
-                                        sx={{backgroundColor: readOnly.surname ? 'grey.200' : 'white'}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.email}
-                                        name='email'
-                                        type='email'
-                                        value={updatedData.email}
-                                        error={errors.email[0]}
-                                        helperText={errors.email[1]}
-                                        slotProps={{input: {readOnly: readOnly.email}}}
-                                        sx={{backgroundColor: readOnly.email ? 'grey.200' : 'white'}}
-                                        onChange={handleChange} fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.phone}
-                                        name='phone'
-                                        value={updatedData.phone}
-                                        error={errors.phone[0]}
-                                        helperText={errors.phone[1]}
-                                        onChange={handleChange}
-                                        slotProps={{input: {readOnly: readOnly.phone}}}
-                                        sx={{backgroundColor: readOnly.phone ? 'grey.200' : 'white'}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.whatsapp}
-                                        name='whatsapp'
-                                        value={updatedData.whatsapp}
-                                        error={errors.whatsapp[0]}
-                                        helperText={errors.whatsapp[1]}
-                                        onChange={handleChange}
-                                        slotProps={{input: {readOnly: readOnly.whatsapp}}}
-                                        sx={{backgroundColor: readOnly.whatsapp ? 'grey.200' : 'white'}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.domicile}
-                                        name='domicile'
-                                        value={updatedData.domicile}
-                                        error={errors.domicile[0]}
-                                        helperText={errors.domicile[1]}
-                                        onChange={handleChange}
-                                        slotProps={{input: {readOnly: readOnly.domicile}}}
-                                        sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.person_code}
-                                        name='person_code'
-                                        value={updatedData.person_code}
-                                        error={errors.person_code[0]}
-                                        helperText={errors.person_code[1]}
-                                        onChange={handleChange}
-                                        slotProps={{input: {readOnly: readOnly.person_code}}}
-                                        sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                        <DatePicker
-                                            label={names.birthdate}
-                                            value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
-                                            readOnly={readOnly.birthdate}
-                                            onChange={(date) => handleDateChange('birthdate', date)}
-                                            sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
-                                            renderInput={(params) => <TextField {...params}
-                                                                                fullWidth
-                                                                                required
-                                            />}
-                                        />
-                                    </LocalizationProvider>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <FormControl
-                                        fullWidth
-                                        required
-                                    >
-                                        <InputLabel id="country-label">{names.country}</InputLabel>
-                                        <Select
-                                            variant="outlined"
-                                            labelId="country-label"
-                                            name="country"
-                                            label={names.country}
-                                            value={updatedData.country}
-                                            error={errors.country[0]}
+                                {!shouldHideField('name') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.name}
+                                            name='name'
+                                            value={updatedData.name}
+                                            error={errors.name[0]}
+                                            helperText={errors.name[1]}
+                                            slotProps={{input: {readOnly: readOnly.name}}}
                                             onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.country}}}
-                                            sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}
-                                        >
-                                            <MenuItem value="">
-                                                <em>None</em>
-                                            </MenuItem>
-                                            <MenuItem value="US">USA</MenuItem>
-                                            <MenuItem value="Canada">Canada</MenuItem>
-                                            {/* TODO Add more countries here */}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <FormControl
-                                        fullWidth
-                                        required
-                                    >
-                                        <InputLabel id="course-label">{names.course}</InputLabel>
-                                        <Select
-                                            variant="outlined"
-                                            labelId="course-label"
-                                            name="course"
-                                            label={names.course}
-                                            value={updatedData.course}
+                                            sx={{backgroundColor: readOnly.name ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('surname') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.surname}
+                                            name='surname'
+                                            value={updatedData.surname}
+                                            error={errors.surname[0]}
+                                            helperText={errors.surname[1]}
                                             onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.course}}}
-                                            sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
-                                        >
-                                            <MenuItem value="Engineering">Ingegneria</MenuItem>
-                                            <MenuItem value="Design">Design</MenuItem>
-                                            <MenuItem value="Architecture">Architettura</MenuItem>
-                                            {/* TODO Add more values here */}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <TextField
-                                        label={names.matricola_number}
-                                        name='matricola_number'
-                                        value={updatedData.matricola_number || ''}
-                                        error={errors.matricola_number[0]}
-                                        helperText={errors.matricola_number[1]}
-                                        onChange={handleChange}
-                                        sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
-                                        type="number"
-                                        slotProps={{input: {readOnly: readOnly.matricola_number}}}
-                                        fullWidth/>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
-                                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                        <DatePicker
-                                            label={names.matricola_expiration}
-                                            value={dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD')}
-                                            readOnly={readOnly.matricola_expiration}
-                                            onChange={(date) => handleDateChange('matricola_expiration', date)}
-                                            sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
-                                            renderInput={(params) => <TextField {...params}
-                                                                                fullWidth
-                                                                                required
-                                            />}
-                                        />
-                                    </LocalizationProvider>
-                                </Grid>
-                                <Grid xs={12} md={4} lg={3}>
+                                            slotProps={{input: {readOnly: readOnly.surname}}}
+                                            sx={{backgroundColor: readOnly.surname ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('email') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.email}
+                                            name='email'
+                                            type='email'
+                                            value={updatedData.email}
+                                            error={errors.email[0]}
+                                            helperText={errors.email[1]}
+                                            slotProps={{input: {readOnly: readOnly.email}}}
+                                            sx={{backgroundColor: readOnly.email ? 'grey.200' : 'white'}}
+                                            onChange={handleChange} fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('phone_prefix') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <FormControl fullWidth required>
+                                            <InputLabel id="phone-prefix-label">{names.phone_prefix}</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                labelId="phone-prefix-label"
+                                                id="phone-prefix"
+                                                name="phone_prefix"
+                                                value={updatedData.phone_prefix || ''}
+                                                onChange={handleChange}
+                                                slotProps={{input: {readOnly: readOnly.phone_number}}}
+                                                sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
+                                                label={names.phone_prefix}
+                                                renderValue={(value) => value}
+                                            >
+                                                {countryCodes.map((country) => (
+                                                    <MenuItem key={country.code} value={country.dial}>
+                                                        {country.dial} ({country.name})
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('phone_number') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.phone_number}
+                                            name='phone_number'
+                                            value={updatedData.phone_number || ''}
+                                            error={errors.phone_number[0]}
+                                            helperText={errors.phone_number[1]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.phone_number}}}
+                                            sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('whatsapp_prefix') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <FormControl fullWidth required>
+                                            <InputLabel id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                labelId="whatsapp-prefix-label"
+                                                id="whatsapp-prefix"
+                                                name="whatsapp_prefix"
+                                                value={updatedData.whatsapp_prefix || ''}
+                                                onChange={handleChange}
+                                                slotProps={{input: {readOnly: readOnly.whatsapp_prefix}}}
+                                                sx={{backgroundColor: readOnly.whatsapp_prefix ? 'grey.200' : 'white'}}
+                                                label={names.whatsapp_prefix}
+                                                renderValue={(value) => value}
+                                            >
+                                                {countryCodes.map((country) => (
+                                                    <MenuItem key={country.code} value={country.dial}>
+                                                        {country.dial} ({country.name})
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('whatsapp_number') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.whatsapp_number}
+                                            name='whatsapp_number'
+                                            value={updatedData.whatsapp_number || ''}
+                                            error={errors.whatsapp_number[0]}
+                                            helperText={errors.whatsapp_number[1]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.whatsapp_number}}}
+                                            sx={{backgroundColor: readOnly.whatsapp_number ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('domicile') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.domicile}
+                                            name='domicile'
+                                            value={updatedData.domicile}
+                                            error={errors.domicile[0]}
+                                            helperText={errors.domicile[1]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.domicile}}}
+                                            sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('person_code') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.person_code}
+                                            name='person_code'
+                                            value={updatedData.person_code}
+                                            error={errors.person_code[0]}
+                                            helperText={errors.person_code[1]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.person_code}}}
+                                            sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('birthdate') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                            <DatePicker
+                                                label={names.birthdate}
+                                                value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
+                                                readOnly={readOnly.birthdate}
+                                                onChange={(date) => handleDateChange('birthdate', date)}
+                                                sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
+                                                renderInput={(params) => <TextField {...params}
+                                                                                    fullWidth
+                                                                                    required
+                                                />}
+                                            />
+                                        </LocalizationProvider>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('country') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <FormControl fullWidth required>
+                                            <InputLabel id="country-label">{names.country}</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                labelId="country-label"
+                                                name="country"
+                                                label={names.country}
+                                                value={updatedData.country}
+                                                error={errors.country[0]}
+                                                onChange={handleChange}
+                                                slotProps={{input: {readOnly: readOnly.country}}}
+                                                sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}
+                                            >
+                                                <MenuItem value=""><em>None</em></MenuItem>
+                                                {countryCodes.map((country) => (
+                                                    <MenuItem key={country.code} value={country.code}>
+                                                        {country.name}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+
+                                        </FormControl>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('course') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <FormControl fullWidth required>
+                                            <InputLabel id="course-label">{names.course}</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                labelId="course-label"
+                                                name="course"
+                                                label={names.course}
+                                                value={updatedData.course}
+                                                onChange={handleChange}
+                                                slotProps={{input: {readOnly: readOnly.course}}}
+                                                sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
+                                            >
+                                                <MenuItem value="Engineering">Ingegneria</MenuItem>
+                                                <MenuItem value="Design">Design</MenuItem>
+                                                <MenuItem value="Architecture">Architettura</MenuItem>
+                                                {/* TODO Add more values here */}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('matricola_number') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.matricola_number}
+                                            name='matricola_number'
+                                            value={updatedData.matricola_number || ''}
+                                            error={errors.matricola_number[0]}
+                                            helperText={errors.matricola_number[1]}
+                                            onChange={handleChange}
+                                            sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
+                                            type="number"
+                                            slotProps={{input: {readOnly: readOnly.matricola_number}}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('matricola_expiration') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                            <DatePicker
+                                                label={names.matricola_expiration}
+                                                value={dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD')}
+                                                readOnly={readOnly.matricola_expiration}
+                                                onChange={(date) => handleDateChange('matricola_expiration', date)}
+                                                sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
+                                                renderInput={(params) => <TextField {...params}
+                                                                                    fullWidth
+                                                                                    required
+                                                />}
+                                            />
+                                        </LocalizationProvider>
+                                    </Grid>
+                                )}
+                                <Grid size={{xs: 12, md: 4, lg: 3}}>
                                     <EditButton
                                         onEdit={() => toggleEdit(true)}
                                         onCancel={() => {
@@ -623,5 +708,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 )}
             </Box>
         </Modal>
-    );
+    )
+        ;
 }

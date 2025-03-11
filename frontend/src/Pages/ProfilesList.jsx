@@ -36,49 +36,48 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     }, [apiEndpoint]);
 
     const table = useMaterialReactTable({
-            columns,
-            data,
-            enableStickyHeader: true,
-            enableStickyFooter: true,
-            enableColumnFilterModes: true,
-            enableColumnOrdering: true,
-            enableGrouping: true,
-            enableColumnPinning: true,
-            enableFacetedValues: true,
-            enableRowActions: false,
-            enableRowSelection: false,
-            enableRowPinning: true,
-            enableExpandAll: false,
-            initialState: {
-                showColumnFilters: false,
-                showGlobalFilter: true,
-                columnPinning: {
-                    left: ['mrt-row-expand', 'mrt-row-select'],
-                    right: ['mrt-row-actions'],
-                },
-                columnVisibility
+        columns,
+        data,
+        enableStickyHeader: true,
+        enableStickyFooter: true,
+        enableColumnFilterModes: true,
+        enableColumnOrdering: true,
+        enableGrouping: true,
+        enableColumnPinning: true,
+        enableFacetedValues: true,
+        enableRowActions: false,
+        enableRowSelection: false,
+        enableRowPinning: true,
+        enableExpandAll: false,
+        initialState: {
+            showColumnFilters: false,
+            showGlobalFilter: true,
+            columnPinning: {
+                left: ['mrt-row-expand', 'mrt-row-select'],
+                right: ['mrt-row-actions'],
             },
-            paginationDisplayMode: 'pages',
-            positionToolbarAlertBanner: 'bottom',
-            muiSearchTextFieldProps: {
-                size: 'small',
-                variant: 'outlined',
+            columnVisibility
+        },
+        paginationDisplayMode: 'pages',
+        positionToolbarAlertBanner: 'bottom',
+        muiSearchTextFieldProps: {
+            size: 'small',
+            variant: 'outlined',
+        },
+        muiPaginationProps: {
+            color: 'secondary',
+            rowsPerPageOptions: [10, 20, 30],
+            shape: 'rounded',
+            variant: 'outlined',
+        },
+        localization: MRT_Localization_IT,
+        muiTableBodyRowProps: ({row}) => ({
+            onClick: () => {
+                setSelectedProfile(row.original);
+                toggleModal(true);
             },
-            muiPaginationProps: {
-                color: 'secondary',
-                rowsPerPageOptions: [10, 20, 30],
-                shape: 'rounded',
-                variant: 'outlined',
-            },
-            localization: MRT_Localization_IT,
-            muiTableBodyRowProps: ({row}) => ({
-                onClick: () => {
-                    setSelectedProfile(row.original);
-                    toggleModal(true);
-                },
-            }),
-        })
-    ;
+        }),
+    });
 
     const updateProfile = (newData) => {
         console.log("New data: ", newData);
@@ -106,11 +105,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
 
     return (
         <Box sx={{mx: '5%'}}>
-            {isLoading ? (
-                <Loader/>
-            ) : (
-                <MaterialReactTable table={table}/>
-            )}
+            {isLoading ? <Loader/> : <MaterialReactTable table={table}/>}
             {modalOpen && <ProfileModal
                 open={modalOpen}
                 profile={selectedProfile}

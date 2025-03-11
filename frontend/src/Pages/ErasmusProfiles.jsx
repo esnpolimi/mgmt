@@ -4,6 +4,7 @@ import {Box, Chip, Typography} from "@mui/material";
 import SnowboardingIcon from '@mui/icons-material/Snowboarding';
 import Sidebar from "../Components/Sidebar";
 import {profileDisplayNames as names} from "../utils/displayAttributes";
+import countryCodes from "../data/countryCodes";
 
 export default function ErasmusProfiles() {
 
@@ -43,14 +44,14 @@ export default function ErasmusProfiles() {
             ),
         },
         {
-            accessorKey: 'whatsapp',
-            header: names.whatsapp,
-            size: 150,
-        },
-        {
             accessorKey: 'country',
             header: names.country,
             size: 150,
+            Cell: ({row}) => {
+                const countryCode = row.original.country;
+                const country = countryCodes.find(c => c.code === countryCode);
+                return country ? country.name : countryCode || '(vuoto)';
+            },
         },
         {
             accessorKey: 'birthdate',
@@ -63,14 +64,20 @@ export default function ErasmusProfiles() {
             size: 100,
         },
         {
-            accessorKey: 'phone',
-            header: names.phone,
+            id: 'fullPhoneNumber',
+            header: names.phone_number,
             size: 150,
+            Cell: ({row}) => (
+                <span>({row.original.phone_prefix || 'vuoto'}) {row.original.phone_number || '(vuoto)'}</span>
+            ),
         },
         {
-            accessorKey: 'person_code',
-            header: names.person_code,
+            id: 'fullWANumber',
+            header: names.whatsapp_number,
             size: 150,
+            Cell: ({row}) => (
+                <span>({row.original.whatsapp_prefix || 'vuoto'}) {row.original.whatsapp_number || '(vuoto)'}</span>
+            ),
         },
         {
             accessorKey: 'domicile',
@@ -100,11 +107,11 @@ export default function ErasmusProfiles() {
         name: true,
         surname: true,
         email: true,
-        whatsapp: true,
         country: false,
         birthdate: false,
         course: false,
-        phone: false,
+        fullPhoneNumber: true,
+        fullWANumber: true,
         person_code: false,
         domicile: false,
         matricola_number: false,
