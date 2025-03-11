@@ -1,7 +1,10 @@
 # This file is needed for administrating models from django admin
 
 from django.contrib import admin
+from django import forms
+
 from .models import Profile, Document
+
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
@@ -11,29 +14,67 @@ class DocumentAdmin(admin.ModelAdmin):
 
     def is_valid(self, obj):
         return obj.is_valid
+
     is_valid.boolean = True
     is_valid.short_description = 'Is Valid'
 
     def is_enabled(self, obj):
         return obj.enabled
+
     is_enabled.boolean = True
     is_enabled.short_description = 'Is Enabled'
 
+
+class ProfileAdminForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make fields optional in the form
+        optional_fields = [
+            'whatsapp_prefix', 'whatsapp_number',
+            'phone_prefix', 'phone_number',
+            'domicile', 'matricola_number',
+            'matricola_expiration', 'course'
+        ]
+
+        for field_name in optional_fields:
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+
+
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
+    form = ProfileAdminForm
     list_display = [
-        'email', 'name', 'birthdate', 'country', 'course', 'created_at', 'is_esner',
-        'enabled', 'email_is_verified', 'person_code', 'phone',
-        'surname', 'updated_at', 'whatsapp', 'matricola_number', 'matricola_expiration'
+        'email', 'is_esner', 'get_groups', 'enabled', 'email_is_verified',
+        'name', 'surname', 'birthdate',
+        'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
+        'country', 'domicile',
+        'course', 'person_code', 'matricola_number', 'matricola_expiration',
+        'created_at', 'updated_at'
     ]
     search_fields = ('email', 'name', 'surname', 'person_code')
-    list_filter = ('is_esner', 'enabled', 'country', 'created_at')
+    list_filter = ('is_esner', 'enabled', 'email_is_verified')
     ordering = ('-created_at',)
 
     fields = [
-        'email', 'name', 'birthdate', 'country', 'course', 'is_esner',
-        'enabled', 'email_is_verified', 'person_code', 'phone',
-        'surname', 'whatsapp', 'matricola_number', 'matricola_expiration', 'created_at', 'updated_at'
+        'email', 'is_esner', 'enabled', 'email_is_verified',
+        'name', 'surname', 'birthdate',
+        'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
+        'country', 'domicile',
+        'course', 'person_code', 'matricola_number', 'matricola_expiration',
+        'created_at', 'updated_at'
     ]  # Ensure all fields are included here
 
     readonly_fields = ('created_at', 'updated_at')  # Make only certain fields read-only
+
+    def get_groups(self, obj):
+        if obj.is_esner and hasattr(obj, 'user') and obj.user:
+            groups = obj.user.groups.all()
+            return ", ".join([group.name for group in groups])
+        return "-"
+
+    get_groups.short_description = "Groups"
