@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Box, Button, FormControl, InputLabel, MenuItem, Select, TextField, Typography} from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
@@ -10,10 +10,13 @@ import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {fetchCustom} from "../api/api";
 import countryCodes from "../data/countryCodes";
+import StatusBanner from '../components/StatusBanner';
 
-const ESNerForm = () => {
+export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
     const [sameWAasPhone, setSameWAasPhone] = React.useState(true);
+    const [formStatus, setFormStatus] = useState(null); // null, 'loading', 'success', or 'error'
+    const [statusMessage, setStatusMessage] = useState('');
 
     const [formData, setFormData] = React.useState({
         'name': '',
@@ -87,7 +90,6 @@ const ESNerForm = () => {
         return valid;
     };
 
-
     const scrollUp = () => {
         window.scrollTo({
             top: 0,
@@ -123,37 +125,39 @@ const ESNerForm = () => {
 
         let body = {
             ...formData,
+            'whatsapp_prefix': sameWAasPhone ? formData['phone_prefix'] : formData['whatsapp_prefix'],
+            'whatsapp_number': sameWAasPhone ? formData['phone_number'] : formData['whatsapp_number'],
             'birthdate': formatDateString(formData['birthdate']),
             'document-expiration': formatDateString(formData['document-expiration']),
             'matricola_expiration': formatDateString(formData['matricola_expiration']),
         }
 
-        fetchCustom("POST", '/profile/', body, {}, false).then(
-            (response) => {
+        const submit = async () => {
+            try {
+                const response = await fetchCustom("POST", '/profile/initiate-creation/', body, {}, false);
+                const data = await response.json();
                 if (response.ok) {
                     setSubmitted(true);
                 } else if (response.status === 400) {
-                    scrollUp();
-                    response.json().then((json) => {
-                        let errors = Object.fromEntries(Object.keys(formErrors).map(
-                            (e) => {
-                                if (e in json) {
-                                    return [e, [true, json[e]]];
-                                } else {
-                                    return [e, [false, '']];
-                                }
-                            }
-                        ));
-                        setFormErrors(errors);
-                    })
+                    setFormStatus('error');
+                    setStatusMessage('Failed to submit application: see errors below');
+                    const newErrors = {...formErrors};
+                    Object.entries(data).forEach(([field, message]) => {
+                        if (newErrors[field]) newErrors[field] = [true, message];
+                    });
+                    setFormErrors(newErrors);
                 } else {
-                    throw new Error('Error while fetching /profiles/');
+                    setFormStatus('error');
+                    setStatusMessage('Internal error (please contact us): ' + data.error);
                 }
+            } catch (error) {
+                setFormStatus('error');
+                setStatusMessage('Internal error (please contact us): ' + error.message);
             }
-        ).catch((error) => {
-            console.log(error);
-        })
-    };
+        };
+        submit().then();
+        scrollUp();
+    }
 
     const handleSameNumberChange = (e) => {
         setSameWAasPhone(e.target.checked);
@@ -193,7 +197,10 @@ const ESNerForm = () => {
             sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
             onSubmit={handleSubmit}
         >
+
             <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi Registration - International Student</Typography>
+
+            {formStatus && (<StatusBanner status={formStatus} message={statusMessage}/>)}
 
             <Typography variant="h5" align="center" gutterBottom sx={{my: 4}}>Personal Information</Typography>
             <Grid container spacing={3}>
@@ -304,12 +311,7 @@ const ESNerForm = () => {
                             id="phone-prefix"
                             name="phone_prefix"
                             value={formData.phone_prefix}
-                            onChange={(e) => {
-                                handleChange(e);
-                                if (sameWAasPhone) {
-                                    setFormData(prev => ({...prev, whatsapp_prefix: e.target.value}));
-                                }
-                            }}
+                            onChange={handleChange}
                             label="Prefix"
                             renderValue={(value) => value}
                         >
@@ -405,7 +407,7 @@ const ESNerForm = () => {
                             <MenuItem value="Passport">Passport</MenuItem>
                             <MenuItem value="National ID Card">National ID Card</MenuItem>
                             <MenuItem value="Driving License">Driving License</MenuItem>
-                            <MenuItem value="Residence Permit">Residence Permit</MenuItem>
+                            <MenuItem value="Residency Permit">Residency Permit</MenuItem>
                             <MenuItem value="Other">Other</MenuItem>
                         </Select>
                     </FormControl>
@@ -533,6 +535,4 @@ const ESNerForm = () => {
             </Button>
         </Box>
     );
-};
-
-export default ESNerForm;
+}
