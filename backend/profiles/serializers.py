@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from django_countries.serializer_fields import CountryField
 from rest_framework.fields import SerializerMethodField
-
 from profiles.models import Profile, Document
 from treasury.serializers import ESNcardSerializer
 

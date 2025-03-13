@@ -9,7 +9,7 @@ import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {fetchCustom} from "../api/api";
-import countryCodes from "../data/countryCodes";
+import countryCodes from "../data/countryCodes.json";
 import StatusBanner from '../components/StatusBanner';
 
 export default function ErasmusForm() {
