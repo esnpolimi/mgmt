@@ -1,11 +1,7 @@
-import uuid
-from cgitb import enable
 from datetime import date
 from django.db import models
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
-from phonenumber_field.modelfields import PhoneNumberField
 from simple_history.models import HistoricalRecords
 
 

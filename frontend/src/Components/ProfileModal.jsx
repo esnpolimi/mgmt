@@ -13,7 +13,7 @@ import Popup from './Popup'
 import {profileDisplayNames as names} from '../utils/displayAttributes';
 import ESNcardEmissionModal from "./ESNcardEmissionModal";
 import Loader from "./Loader";
-import countryCodes from "../data/countryCodes";
+import countryCodes from "../data/countryCodes.json";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},

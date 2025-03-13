@@ -4,7 +4,7 @@ import {Box, Chip, Typography} from "@mui/material";
 import SnowboardingIcon from '@mui/icons-material/Snowboarding';
 import Sidebar from "../Components/Sidebar";
 import {profileDisplayNames as names} from "../utils/displayAttributes";
-import countryCodes from "../data/countryCodes";
+import countryCodes from "../data/countryCodes.json";
 
 export default function ErasmusProfiles() {
 
