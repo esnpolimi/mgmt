@@ -39,7 +39,7 @@ class Profile(BaseEntity):
     name = models.CharField(max_length=128)
     surname = models.CharField(max_length=128)
     birthdate = models.DateField(null=True)
-    country = CountryField(null=True)
+    country = models.CharField(max_length=2, null=True)  # Store country code (e.g., 'IT')
     course = models.CharField(max_length=32, choices=Course.choices, null=True)
     phone_prefix = models.CharField(max_length=10, null=True)
     phone_number = models.PositiveIntegerField(null=True)
