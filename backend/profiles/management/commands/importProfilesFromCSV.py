@@ -7,6 +7,8 @@
 """
 import re
 import os
+
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 import csv
 from datetime import datetime
@@ -17,12 +19,16 @@ from treasury.models import ESNcard
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+
+from users.models import User
 from utils.country_prefix_utils import load_country_data, map_country_to_code, get_prefix_by_country_code
 
 
 class Command(BaseCommand):
     help = 'Import profiles from a CSV file'
     country_codes = []
+    AA = None
+    status = None
 
     def add_arguments(self, parser):
         parser.add_argument('file_path', type=str, help='Path to the CSV file')
@@ -116,6 +122,17 @@ class Command(BaseCommand):
                             if esncard:
                                 esncard.profile = profile
                                 esncard.save()
+                            if profile.is_esner:
+                                user = User.objects.create_user(
+                                    profile=profile,
+                                    password=None
+                                )
+                                user.is_active = False  # Will be activated upon verification
+                                if row['status'] == 'Aspirante':
+                                    group, created = Group.objects.get_or_create(name="Aspirant")
+                                elif row['status'] == 'Associato':
+                                    group, created = Group.objects.get_or_create(name="Associate")
+                                user.groups.add(group)
 
                     success_count += 1
                 except Exception as e:
@@ -142,7 +159,8 @@ class Command(BaseCommand):
 
     def _process_row(self, row, document_type_mapping):
         """Process a single CSV row and return profile, document, and ESNcard objects."""
-        if row['AA'] == '2024' or row['status'] != 'Erasmus':
+        if ((self.AA is not None and row['AA'] != self.AA) or
+                (self.status is not None and row['status'] != self.status)):
             return None, None, None
 
         if 'nome' in row:
@@ -158,22 +176,23 @@ class Command(BaseCommand):
 
         # Get country code
         country_name = row.get('nazione', '')
-        try:
-            country_code = map_country_to_code(country_name, self.country_codes)
-            if not country_code:
-                self.stdout.write(f"Failed to map country code for {country_name}")
-        except Exception as e:
-            country_code = None
-            self.stdout.write(f"Error mapping country code for {country_name}: {str(e)}")
+        country_code = map_country_to_code(country_name, self.country_codes)
+        if not country_code:
+            self.stdout.write(f"Failed to map country code for {country_name}")
+            return None, None, None
 
         # Parse phone numbers
         phone_prefix, phone_number = self.parse_phone_number(row.get('telefono', ''), country_name)
-        whatsapp_prefix, whatsapp_number = self.parse_phone_number(row.get('whatsapp', ''), country_name)
 
-        # Use phone number as WhatsApp if WhatsApp not provided
-        if not whatsapp_prefix and not whatsapp_number and (phone_prefix or phone_number):
-            whatsapp_prefix = phone_prefix
-            whatsapp_number = phone_number
+        # Parse WhatsApp numbers, matricola expiration only for Erasmus
+        if row['status'] == 'Erasmus':
+            whatsapp_prefix, whatsapp_number = self.parse_phone_number(row.get('whatsapp', ''), country_name)
+            # Use phone number as WhatsApp if WhatsApp not provided
+            if not whatsapp_prefix and not whatsapp_number and (phone_prefix or phone_number):
+                whatsapp_prefix = phone_prefix
+                whatsapp_number = phone_number
+        else:
+            whatsapp_prefix, whatsapp_number = None, None
 
         # Parse matricola and person code
         matricola_number = self._parse_matricola(row.get('matricola', ''))
@@ -185,9 +204,13 @@ class Command(BaseCommand):
         except ValueError:
             created_at = timezone.now()
 
-        # Determine period end date
-        periodo = row.get('periodo_permanenza', '')
-        end_date = '2025-01-31' if periodo == '1' else '2025-07-31'
+        # Determine period end date for matricola expiration (only for Erasmus)
+        if row['status'] == 'Erasmus':
+            periodo = row.get('periodo_permanenza', '')
+            end_date = '2025-01-31' if periodo == '1' else '2025-07-31'  # Assumed Erasmus of AA 2024
+            matricola_expiration = datetime.strptime(end_date, '%Y-%m-%d').date()
+        else:
+            matricola_expiration = None
 
         # Create Profile
         profile = Profile(
@@ -203,9 +226,10 @@ class Command(BaseCommand):
             person_code=person_code,
             domicile=row.get('indirizzo_residenza', ''),
             matricola_number=matricola_number,
-            matricola_expiration=datetime.strptime(end_date, '%Y-%m-%d').date(),
+            matricola_expiration=matricola_expiration,
             email_is_verified=True,
-            created_at=created_at
+            created_at=created_at,
+            is_esner=row.get('status', '') != 'Erasmus'
         )
 
         # Create Document if document data is available
