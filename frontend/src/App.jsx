@@ -28,7 +28,7 @@ function App() {
                     <Route path='/esner_form' element={<ESNerForm/>}/>
                     <Route path='/treasury' element={<ProtectedRoute><Treasury/></ProtectedRoute>}/>
                     <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
-                    <Route path='/event' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
+                    <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
                 </Routes>
             </Router>
         </AuthProvider>

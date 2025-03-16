@@ -99,6 +99,32 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         matricola_expiration: true,
     });
 
+    useEffect(() => {
+        setIsLoading(true);
+        console.log('Fetching ' + profile.id)
+        fetchCustom("GET", `/profile/${profile.id.toString()}/`)
+            .then((response) => {
+                if (response.ok) {
+                    return response.json()
+                } else {
+                    throw new Error('Error while fetching profile ' + profile.id.toString())
+                }
+            })
+            .then((json) => {
+                const update = {};
+                Object.keys(data).map((key) => {
+                    update[key] = json[key];
+                });
+                setData(update)
+                setUpdatedData(update)
+                setIsLoading(false);
+            })
+            .catch((error) => {
+                console.log(error);
+                setIsLoading(false);
+            });
+    }, [])
+
     const rules = profileFieldRules[profileType] || {hideFields: []};
     const shouldHideField = (fieldName) => {
         return rules.hideFields.includes(fieldName);
@@ -370,32 +396,6 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             setSaving(false);
         }
     };
-
-    useEffect(() => {
-        setIsLoading(true);
-        console.log('Fetching ' + profile.id)
-        fetchCustom("GET", `/profile/${profile.id.toString()}/`)
-            .then((response) => {
-                if (response.ok) {
-                    return response.json()
-                } else {
-                    throw new Error('Error while fetching profile ' + profile.id.toString())
-                }
-            })
-            .then((json) => {
-                const update = {};
-                Object.keys(data).map((key) => {
-                    update[key] = json[key];
-                });
-                setData(update)
-                setUpdatedData(update)
-                setIsLoading(false);
-            })
-            .catch((error) => {
-                console.log(error);
-                setIsLoading(false);
-            });
-    }, [])
 
     return (
         <Modal open={open} onClose={handleClose}>

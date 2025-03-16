@@ -3,16 +3,17 @@ import {Box, Typography, Chip, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../Components/Sidebar.jsx'
 import EventIcon from '@mui/icons-material/Event';
-import FormModal from '../Components/EventModal.jsx';
+import EventModal from '../Components/EventModal.jsx';
 import {fetchCustom} from "../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
 import {eventDisplayNames as names} from "../utils/displayAttributes";
+import Loader from "../Components/Loader";
 
 
 export default function EventsList() {
     const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [isLoading, setLoading] = useState(true);
     const [modalOpen, toggleModal] = useState(false);
     const navigate = useNavigate();
 
@@ -22,14 +23,13 @@ export default function EventsList() {
                 const response = await fetchCustom("GET", '/events/');
                 const json = await response.json();
                 setData(json.results);
-                console.log("Data: ", json.results);
+                console.log("Event List Data: ", json.results);
                 setLoading(false);
             } catch (error) {
                 console.error('Error fetching data:', error);
                 setLoading(false);
             }
         };
-
         fetchData().then();
     }, []);
 
@@ -114,7 +114,7 @@ export default function EventsList() {
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {
-                navigate('/event', {state: {event: row.original}});
+                navigate('/event/' + row.id, {state: {event: row.original}});
             },
         }),
         renderTopToolbarCustomActions: ({table}) => {
@@ -132,13 +132,20 @@ export default function EventsList() {
     return (
         <Box>
             <Sidebar/>
-            <FormModal open={modalOpen} handleClose={() => toggleModal(false)}/>
+            {modalOpen && <EventModal
+                open={modalOpen}
+                handleClose={handleCloseEventModal}
+                isEdit={false}
+            />}
             <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                    <EventIcon sx={{marginRight: '10px'}}/>
-                    <Typography variant="h4">Eventi</Typography>
-                </Box>
-                <MaterialReactTable table={table}/>
+                {isLoading ? <Loader/> : (<>
+                        <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                            <EventIcon sx={{marginRight: '10px'}}/>
+                            <Typography variant="h4">Lista Eventi</Typography>
+                        </Box>
+                        <MaterialReactTable table={table}/>
+                    </>
+                )}
             </Box>
         </Box>
     );
