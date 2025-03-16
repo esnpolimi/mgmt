@@ -31,7 +31,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                 setLoading(false);
             }
         };
-
         fetchData().then();
     }, [apiEndpoint]);
 

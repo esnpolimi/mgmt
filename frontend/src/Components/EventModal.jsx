@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
     Modal, Box, TextField, FormControlLabel, Switch, Button, Checkbox, FormControl,
     InputLabel, Select, MenuItem, IconButton, Paper, Typography
@@ -13,7 +13,7 @@ import {style, colorOptions} from '../utils/sharedStyles'
 import {profileDisplayNames as names} from '../utils/displayAttributes';
 
 
-export default function FormModal({open, handleClose}) {
+export default function EventModal({open, handleClose, event}) {
     const [formData, setFormData] = useState({
         name: '',
         date: dayjs(),
@@ -24,6 +24,12 @@ export default function FormModal({open, handleClose}) {
         additionalFields: [],
         formFields: []
     });
+
+    useEffect(() => {
+        if (event) {
+            setFormData(event)
+        }
+    }, []);
 
     const formatDateString = (date) => {
         return dayjs(date).format('YYYY-MM-DD');
