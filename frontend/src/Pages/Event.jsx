@@ -15,6 +15,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import EventModal from "../Components/EventModal";
 
 import {useParams} from 'react-router-dom';
+import MDEditor from "@uiw/react-md-editor";
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
@@ -115,9 +116,9 @@ export default function Event() {
                                             <DescriptionIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Descrizione</Typography>
                                         </Box>
-                                        <Typography variant="body1" color="text.secondary" sx={{mt: 1}}>
-                                            {data.description || 'Nessuna descrizione disponibile'}
-                                        </Typography>
+                                        <div data-color-mode="light">
+                                            <MDEditor.Markdown source={data.description || 'Nessuna descrizione disponibile'}/>
+                                        </div>
                                     </Grid>
 
                                     <Grid size={{xs: 12}}>
