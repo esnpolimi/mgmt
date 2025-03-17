@@ -114,7 +114,7 @@ export default function EventsList() {
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {
-                navigate('/event/' + row.id, {state: {event: row.original}});
+                navigate('/event/' + row.original.id, {state: {event: row.original}});
             },
         }),
         renderTopToolbarCustomActions: ({table}) => {
@@ -134,7 +134,7 @@ export default function EventsList() {
             <Sidebar/>
             {modalOpen && <EventModal
                 open={modalOpen}
-                handleClose={handleCloseEventModal}
+                handleClose={() => toggleModal(false)}
                 isEdit={false}
             />}
             <Box sx={{mx: '5%'}}>
