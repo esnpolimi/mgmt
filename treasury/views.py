@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from rest_framework.decorators import api_view, permission_classes
@@ -9,7 +8,6 @@ from rest_framework.response import Response
 from treasury.models import Transaction, Account, ESNcard, Settings
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer
-from events.models import Event, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -28,26 +26,6 @@ def esncard_emission(request):
             # Check if this is a renewal (profile already has ESNcards)
             has_previous_cards = ESNcard.objects.filter(profile=esncard.profile, enabled=True).exists()
 
-            # Get or create the membership event
-            event = Event.objects.filter(name='Anno Associativo ' + esncard.membership_year)
-            if not event.exists():
-                event = Event(name='Anno Associativo ' + esncard.membership_year,
-                              tables={'associati': {'capacity': 100000, 'visible_by_office': True, 'editable_by_office': False}},
-                              profile_fields=[], form_fields={}, additional_fields={})
-                event.save()
-            else:
-                event = event.get()
-
-            # Get or create subscription
-            subscription = event.subscription_set.filter(profile=esncard.profile)
-            if not subscription.exists():
-                subscription = Subscription(profile=esncard.profile, event=event,
-                                            event_data={'table': 'associati'},
-                                            form_data={}, additional_data={}, created_at=datetime.now())
-                subscription.save()
-            else:
-                subscription = subscription.get()
-
             # Get the appropriate fee amount from settings
             settings = Settings.get()
             if has_previous_cards:
@@ -57,9 +35,8 @@ def esncard_emission(request):
                 amount = float(settings.esncard_release_fee.amount)
                 description = "ESNcard emission"
 
-            # Create the transaction
+            # Create the transaction TODO: check that subscription is not needed
             t = Transaction(
-                subscription=subscription,
                 account=esncard_serializer.validated_data['account_id'],
                 executor=request.user,
                 amount=amount,
