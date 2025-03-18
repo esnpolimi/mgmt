@@ -1,13 +1,17 @@
 import logging
+
+from django.core.exceptions import ValidationError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from profiles.models import Profile
-from events.models import Event, Subscription
-from events.serializers import EventListViewSerializer, SubscriptionSerializer, EventEditSerializer, EventDetailViewSerializer, EventCreationSerializer
-from events.forms import FormSubscriptionForm, ManualSubscriptionForm, ProfileLookUpForm
 
+from events.models import Event, Subscription
+from events.serializers import (
+    EventListSerializer, EventCreationSerializer,
+    SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
+    EventWithSubscriptionsSerializer
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +22,10 @@ def events_list(request):
     try:
         events = Event.objects.all().order_by('-created_at')
         paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(events,request=request)
-        serializer = EventListViewSerializer(page, many=True)
+        page = paginator.paginate_queryset(events, request=request)
+        serializer = EventListSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
-    
+
     except Exception as e:
         logger.error(str(e))
         return Response(status=500)
@@ -35,149 +39,185 @@ def event_creation(request):
 
         if event_serializer.is_valid():
             event_serializer.save()
-            return Response(event_serializer.data,status=200)
+            return Response(event_serializer.data, status=200)
         else:
-            return Response(event_serializer.errors,status=400)
-        
+            return Response(event_serializer.errors, status=400)
+
     except Exception as e:
         logger.error(str(e))
         return Response(status=500)
 
 
-@api_view(['GET','PATCH','DELETE'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def event_detail(request,pk):
+def event_detail(request, pk):
     try:
         event = Event.objects.get(pk=pk)
 
         if request.method == 'GET':
-            event_serializer = EventDetailViewSerializer(event)
-            return Response(event_serializer.data,status=200)
-            
-        elif request.method == 'PATCH':
-            serializer = EventEditSerializer(request.data,instance=event,partial=True)
+            serializer = EventWithSubscriptionsSerializer(event)
+            return Response(serializer.data, status=200)
 
-            # If event already has subscriptions, it is not possible to edit the event 
+        elif request.method == 'PATCH':
+            # If event already has subscriptions, it is not possible to edit the event
             subs = Subscription.objects.filter(event=event)
             if len(subs) > 0:
-                return Response('Cannot edit an event that already has subscriptions',status=400)
-            
+                return Response('Cannot edit an event that already has subscriptions', status=400)
+
+            serializer = EventCreationSerializer(instance=event, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data,status=200)
+                return Response(serializer.data, status=200)
             else:
-                return Response(serializer.errors,status=400)
-            
+                return Response(serializer.errors, status=400)
+
         elif request.method == 'DELETE':
             # TODO: implement permission verification
             event.delete()
             return Response(status=200)
 
-
     except Event.DoesNotExist:
-        return Response('Event does not exist',status=400)
-    
+        return Response('Event does not exist', status=400)
+
     except Exception as e:
         logger.error(str(e))
         return Response(status=500)
-    
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def profile_lookup(request):
+def subscription_create(request):
     try:
-        form = ProfileLookUpForm(request.data)
-        if not form.is_valid():
-            return Response(form.errors,status=400)
-        
-        event = form.cleaned_data['event']
-        profile = Profile.objects.filter(email=form.cleaned_data['email'])
-        if not profile.exists():
-            return Response({'found':False, 'required_fields':event.profile_fields},status=200)
+        serializer = SubscriptionCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            # Run clean method to validate capacity
+            subscription = Subscription(**serializer.validated_data)
+            subscription.clean()
+
+            # Save if validation passes
+            serializer.save()
+            return Response(serializer.data, status=200)
         else:
-            required = []
-            for field in event.profile_fields:
-                if getattr(profile,field) is None:
-                    required.append(field)
-            return Response({'found':True, 'required_fields':required}, status=200)
-        
-    except Exception as e:
-        logger.error(str(e))
-        return Response(status=500)
- 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def form_subscription_creation(request):
-    try:
-        form = FormSubscriptionForm(request.data)
-        if not form.is_valid():
-            return Response(form.errors,status=400)
-    
-        profile = Profile.objects.get(email=form.cleaned_data['email'])
-        event = form.cleaned_data['event']
-        sub = form.save(commit=False)
+            return Response(serializer.errors, status=400)
 
-        if not event.enable_form:
-            return Response('Form is closed',status=401)
-
-        if Subscription.objects.filter(profile=profile,event=event).exists():
-            return Response('Subscription already exists',status=400)
-        
-        if not 'form_responses' in event.tables:
-            event.tables.append('form_responses')
-            event.save()
-
-        event_data = {'table':'form_responses','color':'#00ffffff','type':'form'}
-        sub.event_data = event_data
-        sub.save()
-        return Response(status=200)
-    
-    except Profile.DoesNotExist:
-        return Response('Profile with this email does not exist',status=400)
+    except ValidationError as e:
+        return Response(str(e), status=400)
 
     except Exception as e:
         logger.error(str(e))
         return Response(status=500)
-    
-    
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def manual_subscription_creation(request):
-    try:
-        form = ManualSubscriptionForm(request.data)
-        if form.is_valid():
-            form.save()
-            return Response(status=200)
-        else:
-            return Response(form.errors,status=400)
-    
-    except Exception as e:
-        logger.error(str(e))
-        return Response(status=500)
 
 
-@api_view(['PATCH','DELETE'])
+@api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def subscription_detail(request, pk):
     try:
         sub = Subscription.objects.get(pk=pk)
 
         if request.method == "PATCH":
-            serializer = SubscriptionSerializer(request.data,instance=sub,partial=True)
+            serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
             if serializer.is_valid():
+                # Run clean method to validate capacity
+                subscription = Subscription.objects.get(pk=pk)
+                for attr, value in serializer.validated_data.items():
+                    setattr(subscription, attr, value)
+                subscription.clean()
+
+                # Save if validation passes
                 serializer.save()
-                return Response(serializer.data,status=200)
+                return Response(serializer.data, status=200)
             else:
-                return Response(status=400)
-            
+                return Response(serializer.errors, status=400)
+
         elif request.method == "DELETE":
-            #TODO: implement permission verification    
+            # TODO: implement permission verification
             sub.delete()
             return Response(status=200)
 
     except Subscription.DoesNotExist:
-        return Response("Subscription does not exist",status=400)
-    
+        return Response("Subscription does not exist", status=400)
+
+    except ValidationError as e:
+        return Response(str(e), status=400)
+
     except Exception as e:
         logger.error(str(e))
         return Response(status=500)
 
+
+# Future implementations
+''' 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def profile_lookup(request):
+    try:
+        form = ProfileLookUpForm(request.data)
+        if not form.is_valid():
+            return Response(form.errors, status=400)
+
+        event = form.cleaned_data['event']
+        profile = Profile.objects.filter(email=form.cleaned_data['email'])
+        if not profile.exists():
+            return Response({'found': False, 'required_fields': event.profile_fields}, status=200)
+        else:
+            required = []
+            for field in event.profile_fields:
+                if getattr(profile, field) is None:
+                    required.append(field)
+            return Response({'found': True, 'required_fields': required}, status=200)
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response(status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def form_subscription_creation(request):
+    try:
+        # Extract data from request
+        profile_email = request.data.get('email')
+        event_id = request.data.get('event')
+        table_id = request.data.get('table')
+        notes = request.data.get('notes', '')
+
+        # Validate required fields
+        if not all([profile_email, event_id, table_id]):
+            return Response({'error': 'Missing required fields'}, status=400)
+
+        # Get related objects
+        try:
+            profile = Profile.objects.get(email=profile_email)
+            event = Event.objects.get(id=event_id)
+            table = EventTable.objects.get(id=table_id, event=event)
+        except Profile.DoesNotExist:
+            return Response({'error': 'Profile not found'}, status=400)
+        except Event.DoesNotExist:
+            return Response({'error': 'Event not found'}, status=400)
+        except EventTable.DoesNotExist:
+            return Response({'error': 'Table not found'}, status=400)
+
+        # Check if subscription already exists
+        if Subscription.objects.filter(profile=profile, event=event).exists():
+            return Response({'error': 'Subscription already exists'}, status=400)
+
+        # Create and validate subscription
+        subscription = Subscription(
+            profile=profile,
+            event=event,
+            table=table,
+            notes=notes,
+            created_by_form=True
+        )
+        subscription.clean()
+        subscription.save()
+
+        return Response(SubscriptionSerializer(subscription).data, status=201)
+
+    except ValidationError as e:
+        return Response(str(e), status=400)
+    except Exception as e:
+        logger.error(str(e))
+        return Response({'error': str(e)}, status=500)
+
+'''
