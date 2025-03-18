@@ -1,417 +1,192 @@
-import re
-from jsonschema import validate
+from typing import Any
 
-from django.db import models
 from django.core.exceptions import ValidationError
+from django.db import models
 from simple_history.models import HistoricalRecords
 from profiles.models import Profile, BaseEntity
 
-
-tables_schema = {
-    "type" : "object",
-    "patternProperties" : {
-        ".*":{"type":"number"} #capacity
-    },
-    "additionalProperties":False
-}
-
-profile_fields_schema = {
-    "type" : "array",
-    "items" : {"enum" : ["email","name","surname","birthdate","country","phone","whatsapp","course","domicile","matricola","document","person_code","esncard"]}
-}
-
-fields_schema = {  
-            "type" : "object",
-            "patternProperties" :{
-                "^t_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "length":{
-                            "type":"integer",
-                            "minimum":1
-                        },
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,   
-                },
-                "^i_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,
-                },
-                "^f_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,
-                },
-                "^(c_|m_).*$" : {
-                    "type":"object",
-                    "properties":{
-                        "choices":{
-                             "type":"object",
-                             "patternProperties":{
-                                 ".*": {"type":"string"} # color
-                             },
-                             "additionalProperties":False
-                         },
-                         "office_view":{"type":"boolean"},
-                         "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,
-                },
-            },
- #           "additionalProperties":False
-        }
-
-
-event_data_schema = {
-    "type":"object",
-    "properties":{
-        "table":{"type":"string"},
-        "type":{"enum":["form","office"]},
-        "color":{"type":"string"},
-    } 
-}
-
-
-def validate_hex_color(hex_str):
-    if not (re.search(r'^#[A-Fa-f0-9]{8}$', hex_str) or hex_str == ''):
-        raise ValidationError("Invalid hex color code")
 
 class Event(BaseEntity):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=128, unique=True)
     date = models.DateField(null=True)
-    description = models.TextField(max_length=2048,null=True)
-    enable_form = models.BooleanField(default=False)
-    
-    tables = models.JSONField()
-    profile_fields = models.JSONField(default=list,blank=True,null=True)
-    form_fields = models.JSONField(default=dict,blank=True,null=True)
-    additional_fields = models.JSONField(default=dict,blank=True,null=True)
+    description = models.TextField(max_length=2048, null=True)
+    cost = models.DecimalField(decimal_places=2, max_digits=20, null=True)
 
-    def clean(self):
-        super(Event, self).clean()
+    # These fields can be uncommented when implementing the full feature set
+    # enable_form = models.BooleanField(default=False)
+    # profile_fields = models.JSONField(default=list, blank=True, null=True)
+    # form_fields = models.JSONField(default=dict, blank=True, null=True)
+    # additional_fields = models.JSONField(default=dict, blank=True, null=True)
 
-        #Validate profile fields
-        validate(instance=self.tables, schema=tables_schema)
-        if not self.profile_fields is None:
-            validate(instance=self.profile_fields, schema=profile_fields_schema)
-            if len(self.profile_fields) != len(set(self.profile_fields)):
-                raise ValidationError("Profile fields names must be unique")
+    def __str__(self):
+        return f"{self.name} ({self.date})"
 
-        #Validate form fields
-        if not self.form_fields is None:
-            validate(instance=self.form_fields, schema=fields_schema)
-            for field_name in self.form_fields.keys():
-                if field_name[0] == 'c' or field_name[0] == 'm':
-                    for choice_name in self.form_fields[field_name]["choices"].keys():
-                        validate_hex_color(self.form_fields[field_name]["choices"][choice_name])
 
-        #Validate additional fields
-        if not self.additional_fields is None:
-            validate(instance=self.additional_fields, schema=fields_schema)
-            for field_name in self.additional_fields.keys():
-                if field_name[0] == 'c' or field_name[0] == 'm':
-                    for choice_name in self.additional_fields[field_name]["choices"].keys():
-                        validate_hex_color(self.additional_fields[field_name]["choices"][choice_name])
-        
-        #Validate tables capacity 
-        for key in self.tables.keys():
-            if self.tables[key]<= 0:
-                raise ValidationError('Table capacity must be greater than zero')
-        
-                
+class EventOrganizer(BaseEntity):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='organizers')
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='organized_events')
 
-  
+    # Optional fields to track roles or permissions
+    is_lead = models.BooleanField(default=False)
+    role = models.CharField(max_length=64, blank=True, null=True)
+
+    class Meta:
+        unique_together = ('event', 'profile')
+        ordering = ['is_lead', 'id']
+
+    def __str__(self):
+        return f"{self.profile} - {self.event}"
+
+
+class EventTable(BaseEntity):
+    """
+    Dynamic tables for events, with customizable names and capacities
+    """
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='tables')
+    name = models.CharField(max_length=64)
+    capacity = models.PositiveIntegerField(default=0)  # 0 means unlimited
+
+    # Fields to identify special tables that need integration with payment systems, probably not needed?
+    # is_main_list = models.BooleanField(default=False)
+    # is_waiting_list = models.BooleanField(default=False)
+
+    # Display order in the UI
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('event', 'name')
+        ordering = ['display_order', 'id']
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.RelatedObjectDoesNotExist = None
+
+    def __str__(self):
+        return f"{self.name} ({self.event.name})"
+
+
+class SubscriptionStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    PAID = 'paid', 'Paid'
+    REIMBURSED = 'reimbursed', 'Reimbursed'
+    CANCELLED = 'cancelled', 'Cancelled'
+    # TODO: Add more statuses as needed
+
+
 class Subscription(BaseEntity):
-
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
-    enable_refund = models.BooleanField(default=False)
-    history = HistoricalRecords()
+    table = models.ForeignKey(EventTable, on_delete=models.CASCADE, related_name='subscriptions')
 
-    event_data = models.JSONField()
-    form_data = models.JSONField(null=True, blank=True)
-    additional_data = models.JSONField(null=True,blank=True)
+    # Payment status
+    status = models.CharField(
+        max_length=30,
+        choices=SubscriptionStatus.choices,
+        default=SubscriptionStatus.PENDING
+    )
+
+    # For payment tracking and integration with treasury
+    enable_refund = models.BooleanField(default=False)
+    # Simple note field for MVP
+    notes = models.TextField(blank=True, null=True)
+    # For visual organization (hex color)
+    # color = models.CharField(max_length=9, blank=True, null=True)
+    # For tracking subscription source
+    created_by_form = models.BooleanField(default=False)
+
+    history = HistoricalRecords()
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['profile', 'event'], name='unique_profile_event_combination'
+                fields=['profile', 'event'],
+                name='unique_profile_event_combination'
             )
         ]
 
- 
     def clean(self):
         super(Subscription, self).clean()
 
-        if self.event_data is not None:
-            validate(instance=self.event_data, schema=event_data_schema)
-            validate_hex_color(self.event_data["color"])
-            # Validate table name
-            if not self.event_data["table"] in self.event.tables:
-                raise ValidationError("Table does not exist")
-        # Validate color
-    
+        # Ensure table capacity isn't exceeded (if capacity is not 0/unlimited)
+        if self.table.capacity > 0:
+            current_count = Subscription.objects.filter(table=self.table).exclude(pk=self.pk).count()
+            if current_count >= self.table.capacity:
+                raise ValidationError(f"{self.table.name} capacity exceeded")
 
+    def __str__(self):
+        return f"{self.profile} - {self.event} ({self.table.name})"
+
+
+# For future implementation
+'''
+class EventField(BaseEntity):
+    """
+    This model can be implemented in the future to handle dynamic fields
+    for events without complex JSON structures.
+    """
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='fields')
+    name = models.CharField(max_length=100)
+
+    # Field types
+    TYPE_TEXT = 'text'
+    TYPE_NUMBER = 'number'
+    TYPE_CHOICE = 'choice'
+    TYPE_CHECKBOX = 'checkbox'
+
+    FIELD_TYPES = [
+        (TYPE_TEXT, 'Text'),
+        (TYPE_NUMBER, 'Number'),
+        (TYPE_CHOICE, 'Choice'),
+        (TYPE_CHECKBOX, 'Checkbox'),
+    ]
+
+    field_type = models.CharField(max_length=10, choices=FIELD_TYPES)
+    is_profile_field = models.BooleanField(default=False)  # True if from profile data
+    is_form_field = models.BooleanField(default=False)  # True if from form
+    is_additional_field = models.BooleanField(default=False)  # True if additional
+
+    # Permissions
+    office_view = models.BooleanField(default=True)
+    office_edit = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_field_type_display()}) - {self.event}"
+
+
+class FieldChoice(BaseEntity):
+    """
+    This model can store choices for choice and checkbox fields.
+    """
+    field = models.ForeignKey(EventField, on_delete=models.CASCADE, related_name='choices')
+    value = models.CharField(max_length=100)
+    color = models.CharField(max_length=9, null=True, blank=True)  # Format: #RRGGBBAA
+
+    def __str__(self):
+        return f"{self.value} - {self.field}"
+
+
+class FieldValue(BaseEntity):
+    """
+    This model can store actual values for fields in subscriptions.
+    """
+    subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE, related_name='field_values')
+    field = models.ForeignKey(EventField, on_delete=models.CASCADE)
+    text_value = models.TextField(null=True, blank=True)
+    number_value = models.FloatField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.field.name} - {self.subscription}"
+
+
+class FieldValueChoice(BaseEntity):
+    """
+    This model can store selected choices for a field value.
+    """
+    field_value = models.ForeignKey(FieldValue, on_delete=models.CASCADE, related_name='selected_choices')
+    choice = models.ForeignKey(FieldChoice, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.choice.value} - {self.field_value}"
         
-        # form_data_form = DynamicForm(self.form_data,fields=self.event.form_fields)
-        # additional_data_form = DynamicForm(self.additional_data,fields=self.event.additional_fields)
-
-        # if not form_data_form.is_valid():
-        #     raise ValidationError(form_data_form.errors)
-        
-        # if not additional_data_form.is_valid():
-        #     raise ValidationError(additional_data_form.errors)
-        
-
-
-#form_fields_schema = {
-#     "type" : "object",
-#     "patternProperties" :{
-#         ".*" : {
-#             "type":"object",
-#             "properties":{
-#                 "type":{"enum":["text","number","choice","checkbox"]},
-#                 "choices":{
-#                     "type":"object",
-#                     "patternProperties":{
-#                         ".*": {"type":"string"} # color
-#                     },
-#                     "additionalProperties":"false"
-#                 },
-#                 "visible_by_office":{"type":"boolean"},
-#                 "editable_by_office":{"type":"boolean"},
-#             },
-#             "additionalProperties":"false",   
-#         }
-#     },
-#     "additionalProperties":"false"
-# }
-
-# additional_fields_schema = {
-#     "type" : "object",
-#     "patternProperties" :{
-#         ".*" : {
-#             "type":"object",
-#             "properties":{
-#                 "type":{"enum":["text","number","choice","checkbox"]},
-#                 "choices":{
-#                     "type":"object",
-#                     "patternProperties":{
-#                         ".*": {"type":"string"} # color
-#                     },
-#                     "additionalProperties":"false"
-#                 },
-#                 "visible_by_office":{"type":"boolean"},
-#                 "editable_by_office":{"type":"boolean"},
-#             } ,
-#             "additionalProperties":"false",  
-#         }
-#     },
-#     "additionalProperties":"false"
-# }
-
-    # def clean(self):
-    #     super(Subscription, self).clean()
-
-    #     # Validate json schema
-    #     validate(instance=self.event_data, schema=event_data_schema)
-    #     validate(instance=self.form_data, schema=form_data_schema)
-    #     validate(instance=self.additional_data, schema=additional_data_schema)
-
-    #     # Validate color
-    #     validate_hex_color(self.json_data["color"])
-
-    #     # Validate table name
-    #     if not self.event_data["table"] in self.event.tables:
-    #         raise ValidationError("Table does not exist")
-        
-    #     # Validate additional data types
-    #     for field_name in self.event.additional_fields.keys():
-    #         if not field_name in self.additional_data:
-    #             raise ValidationError("Missing field value: " + field_name)
-            
-    #         type = self.event.additional_fields[field_name]["type"]
-    #         val = self.additional_data[field_name]
-    #         match type:
-    #             case "string":
-    #                 if not isinstance(val, str):
-    #                     raise ValidationError("Invalid value for field " + field_name)
-    #             case "number":
-    #                 try:
-    #                     float(val)
-    #                 except:
-    #                     raise ValidationError("Invalid value for field " + field_name)
-    #             case "choice":
-    #                 if not val in self.event.additional_fields[field_name]["choices"]:
-    #                     raise ValidationError("Invalid value for field " + field_name)
-    #             case "checkbox":
-    #                 try:
-    #                     if not set(val).issubset(set(self.event.additional_fields[field_name]["choices"])):
-    #                         ValidationError("Invalid value for field " + field_name)
-    #                 except:
-    #                     ValidationError("Invalid value for field " + field_name)
-        
-    #     # Validate form data types
-    #     for field_name in self.event.form_fields.keys():
-    #         if not field_name in self.form_data:
-    #             raise ValidationError("Missing form field value: " + field_name)
-            
-    #         type = self.event.form_fields[field_name]["type"]
-    #         val = self.form_data[field_name]
-    #         match type:
-    #             case "string":
-    #                 if not isinstance(val, str):
-    #                     raise ValidationError("Invalid value for field " + field_name)
-    #             case "number":
-    #                 try:
-    #                     float(val)
-    #                 except:
-    #                     raise ValidationError("Invalid value for field " + field_name)
-    #             case "choice":
-    #                 if not val in self.event.form_fields[field_name]["choices"]:
-    #                     raise ValidationError("Invalid value for field " + field_name)
-    #             case "checkbox":
-    #                 try:
-    #                     if not set(val).issubset(set(self.event.form_fields[field_name]["choices"])):
-    #                         ValidationError("Invalid value for field " + field_name)
-    #                 except:
-    #                     ValidationError("Invalid value for field " + field_name)
-
-        
-
-#form_data_schema = {
-#     "type":"object",
-#     "patternProperties":{
-#         ".*":{
-#             "anyOf":[
-#                 {"type":"string"},
-#                 {"type":"number"},
-#                 {"type":"array", "items":{"type":"string"}},
-#             ]
-#         },
-#     "additionalProperties":"false",
-#     }
-# }
-
-# additional_data_schema = {
-#     "type":"object",
-#     "patternProperties":{
-#         ".*":{
-#             "anyOf":[
-#                 {"type":"string"},
-#                 {"type":"number"},
-#                 {"type":"array","items":{"type":"string"}},
-#             ]
-#         }
-#     },
-#     "additionalProperties":"false"
-# }
-
-# event_data_schema = {
-#     "type" : "object",
-#     "properties": {
-#         "tables":{
-#             "type" : "object",
-#             "patternProperties" : {
-#                 ".*":{
-#                     "type":"object",
-#                     "properties":{
-#                         "capacity":{"type":"number"},
-#                         "visible_by_office":{"type":"boolean"},
-#                         "editable_by_office":{"type":"boolean"}
-#                     }
-#                 }
-#             },
-#             "additionalProperties":"false"
-#         },
-#         "profile_fields":{
-#             "type" : "array",
-#             "items" : {"enum" : ["email","name","surname","birthdate","country","phone","whatsapp","course","domicile","matricola","document","person_code","esncard"]}
-#         },
-#         "form_fields":{
-#             "type" : "object",
-#             "patternProperties" :{
-#                 ".*" : {
-#                     "type":"object",
-#                     "properties":{
-#                         "type":{"enum":["text","number","choice","checkbox"]},
-#                         "choices":{
-#                             "type":"object",
-#                             "patternProperties":{
-#                                 ".*": {"type":"string"}#color
-#                             },
-#                             "additionalProperties":"false"
-#                         }
-#                     }   
-#                 }
-#             },
-#             "additionalProperties":"false"
-#         },
-#         "additional_fields":{
-#             "type" : "object",
-#             "patternProperties" :{
-#                 ".*" : {
-#                     "type":"object",
-#                     "properties":{
-#                         "type":{"enum":["text","number","choice","checkbox"]},
-#                         "choices":{
-#                             "type":"object",
-#                             "patternProperties":{
-#                                 ".*": {"type":"string"}#color
-#                             },
-#                             "additionalProperties":"false"
-#                         }
-#                     }   
-#                 }
-#             },
-#             "additionalProperties":"false"
-#         },
-#     }
-# }
-
-# subscription_data_schema = {
-#     "type":"object",
-#     "properties":{
-#         "table":{"type":"string"},
-#         "type":{"enum":["form","office"]},
-#         "color":{"type":"string"},
-#         "additional_data":{
-#             "type":"object",
-#             "patternProperties":{
-#                 ".*":{
-#                     "anyOf":[
-#                         {"type":"string"},
-#                         {"type":"number"},
-#                         {"type":"array",
-#                          "items":{"type":"string"}},
-#                     ]
-#                 }
-#             },
-#             "additionalProperties":"false"
-#         },
-#         "form_data":{
-#             "type":"object",
-#             "patternProperties":{
-#                 ".*":{
-#                     "anyOf":[
-#                         {"type":"string"},
-#                         {"type":"number"},
-#                         {"type":"array",
-#                          "items":{"type":"string"}},
-#                     ]
-#                 },
-#                 "additionalProperties":"false",
-#             }
-#         }
-#     }
-# }
+'''

@@ -1,160 +1,133 @@
-from jsonschema import validate
-from events.models import Event, Subscription
-from profiles.models import Profile
 from rest_framework import serializers
+from events.models import Event, EventTable, Subscription, EventOrganizer
+from profiles.models import Profile
 
-# Serializer to create events
+
+# Serializers for EventTable
+class EventTableSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventTable
+        fields = ['id', 'name', 'capacity', 'display_order']
+
+
+# Serializers for Event
+class EventListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Event
+        fields = ['id', 'name', 'date', 'description', 'cost']
+
+
+class EventOrganizerSerializer(serializers.ModelSerializer):
+    profile_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventOrganizer
+        fields = ['id', 'profile', 'profile_name', 'is_lead', 'role']
+
+    @staticmethod
+    def get_profile_name(obj):
+        return f"{obj.profile.first_name} {obj.profile.last_name}"
+
+
 class EventCreationSerializer(serializers.ModelSerializer):
+    tables = EventTableSerializer(many=True, required=False)
+    organizers = serializers.PrimaryKeyRelatedField(
+        queryset=Profile.objects.all(),
+        many=True,
+        required=False,
+        write_only=True
+    )
+    lead_organizer = serializers.PrimaryKeyRelatedField(
+        queryset=Profile.objects.all(),
+        required=False,
+        write_only=True
+    )
+
     class Meta:
         model = Event
-        exclude = ['id','created_at','updated_at','enabled']
+        fields = ['name', 'date', 'description', 'cost', 'tables', 'organizers', 'lead_organizer']
 
-    
-# Serializer to view subscriptions
+    def create(self, validated_data):
+        tables_data = validated_data.pop('tables', [])
+        organizers = validated_data.pop('organizers', [])
+        lead_organizer = validated_data.pop('lead_organizer', None)
+
+        event = Event.objects.create(**validated_data)
+
+        # Create tables
+        for table_data in tables_data:
+            EventTable.objects.create(event=event, **table_data)
+
+        # Create organizers
+        for profile in organizers:
+            EventOrganizer.objects.create(
+                event=event,
+                profile=profile,
+                is_lead=False
+            )
+
+        # Add lead organizer if specified
+        if lead_organizer:
+            EventOrganizer.objects.create(
+                event=event,
+                profile=lead_organizer,
+                is_lead=True
+            )
+
+        return event
+
+
+class EventDetailSerializer(serializers.ModelSerializer):
+    tables = EventTableSerializer(many=True, read_only=True)
+    organizers = EventOrganizerSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Event
+        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers', 'created_at', 'updated_at']
+
+
+# Serializers for Subscription
 class SubscriptionSerializer(serializers.ModelSerializer):
+    profile_name = serializers.SerializerMethodField()
+    table_name = serializers.CharField(source='table.name', read_only=True)
+
     class Meta:
         model = Subscription
-        fields = '__all__'
+        fields = ['id', 'profile', 'profile_name', 'event', 'table', 'table_name',
+                  'status', 'enable_refund', 'notes', 'created_by_form']
 
-# Serializer to view event details
-class EventDetailViewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Event
-        fields = '__all__'
+    @staticmethod
+    def get_profile_name(obj):
+        return f"{obj.profile.first_name} {obj.profile.last_name}"
 
-    subscriptions = SubscriptionSerializer(source='subscription_set',many=True)
 
-# Serializer to view event
-class EventListViewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Event
-        fields = '__all__'
-
-# Serializer to edit event
-class EventEditSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Event
-        exclude = ['id','created_at','updated_at','enabled']
-
-# Serializer for validation of subscription additional/form data, given the event's additional/form fields.
-# Can be adjusted for editing mode and office visibility
-
-class SubscriptionJSONDataValidator(serializers.Serializer):
-    def __init__(self,*args,fields,office=False,editing=False,**kwargs):
-        self.fields_schema = {  
-            "type" : "object",
-            "patternProperties" :{
-                "^t_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "length":{
-                            "type":"integer",
-                            "minimum":1
-                        },
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,   
-                },
-                "^i_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,
-                },
-                "^f_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,
-                },
-                "^(c_|m_).*$" : {
-                    "type":"object",
-                    "properties":{
-                        "choices":{
-                             "type":"object",
-                             "patternProperties":{
-                                 ".*": {"type":"string"} # color
-                             },
-                             "additionalProperties":False
-                         },
-                         "office_view":{"type":"boolean"},
-                         "office_edit":{"type":"boolean"},
-                    },
-                    "additionalProperties":False,
-                },
-            },
-            "additionalProperties":False
-        }
-        validate(fields,schema=self.fields_schema)
-
-        for field_name in fields.keys():
-            if not office or ( editing and fields[field_name]['office_edit'] ) or ((not editing) and fields[field_name]['office_view'] ):
-                if field_name[0] == 't':
-                    self.fields[field_name[2:]] = serializers.CharField(max_length=fields[field_name]['length'])
-                elif field_name[0] == 'i':
-                    self.fields[field_name[2:]] = serializers.IntegerField()
-                elif field_name[0] == 'f':
-                    self.fields[field_name[2:]] = serializers.FloatField()
-                elif field_name[0] == 'c':
-                    self.fields[field_name[2:]] = serializers.ChoiceField(choices=tuple([(c,c) for c in fields[field_name]['choices'].keys()]))
-                elif field_name[0] == 'm':
-                    self.fields[field_name[2:]] = serializers.MultipleChoiceField(choices=tuple([(c,c) for c in fields[field_name]['choices'].keys()]))
-
-        super().__init__(*args,**kwargs)
-
-# Serializer to create subscription through form
-class FormSubscriptionCreateSerializer(serializers.ModelSerializer):
+class SubscriptionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = ['event','event_data','form_data']
-
-    profile = serializers.SlugRelatedField(queryset=Profile.objects.all(),slug_field='email')
-    
-    def validate(self, attrs):
-        super().validate(attrs)
-        form_data_validator = SubscriptionJSONDataValidator(data=self.fields['form_data'], fields=self.fields['event'].form_fields)
-        form_data_validator.validate()
-
-# Serializer to create subscription manually
-class ManualSubscriptionCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subscription
-        fields = ['profile','event','event_data','additional_data']
+        fields = ['profile', 'event', 'table', 'notes']
 
     def validate(self, attrs):
-        super().validate(attrs)
-        additional_data_validator = SubscriptionJSONDataValidator(data=self.fields['additional_data'], fields=self.fields['event'].additional_fields)
-        additional_data_validator.validate()
+        # Check if profile is already registered for this event
+        profile = attrs.get('profile')
+        event = attrs.get('event')
 
-# Serializer to fully edit subscription 
-class SubscriptionFullEditSerializer(serializers.ModelSerializer):
+        if Subscription.objects.filter(profile=profile, event=event).exists():
+            raise serializers.ValidationError("This profile is already registered for this event")
+
+        return attrs
+
+
+class SubscriptionUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = ['event_data','additional_data','form_data']
+        fields = ['table', 'status', 'enable_refund', 'notes']
 
-    def validate(self,attrs):
-        super().validate(attrs)
-        form_data_validator = SubscriptionJSONDataValidator(data=self.fields['form_data'], fields=self.fields['event'].form_fields)
-        additional_data_validator = SubscriptionJSONDataValidator(data=self.fields['additional_data'], fields=self.fields['event'].additional_fields)
-        form_data_validator.validate()
-        additional_data_validator.validate()
 
-# Serializer for editing a subscription, disabling fields not editable by office
-class SubscriptionOfficeEditSerializer(serializers.ModelSerializer):
+class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
+    tables = EventTableSerializer(many=True, read_only=True)
+    organizers = EventOrganizerSerializer(many=True, read_only=True)
+    subscriptions = SubscriptionSerializer(many=True, read_only=True, source='subscription_set')
+
     class Meta:
-        model = Subscription
-        fields = ['event_data','additional_data','form_data']
-
-        def validate(self,attrs):
-            form_data_validator = SubscriptionJSONDataValidator(data=self.fields['form_data'], fields=self.fields['event'].form_fields, office=True,editing=True)
-            additional_data_validator = SubscriptionJSONDataValidator(data=self.fields['additional_data'], fields=self.fields['event'].additional_fields, office=True,editing=True)
-            form_data_validator.validate()
-            additional_data_validator.validate()
-
-
-    
+        model = Event
+        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers', 'subscriptions']
