@@ -13,9 +13,7 @@ import {fetchCustom} from "../api/api";
 import dayjs from "dayjs";
 import EditIcon from "@mui/icons-material/Edit";
 import EventModal from "../Components/EventModal";
-
-import {useParams} from 'react-router-dom';
-import MDEditor from "@uiw/react-md-editor";
+import CustomEditor from '../Components/CustomEditor';
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
@@ -117,7 +115,10 @@ export default function Event() {
                                             <Typography variant="h6" component="div">Descrizione</Typography>
                                         </Box>
                                         <div data-color-mode="light">
-                                            <MDEditor.Markdown source={data.description || 'Nessuna descrizione disponibile'}/>
+                                            <CustomEditor
+                                                value={data.description || 'Nessuna descrizione disponibile'}
+                                                readOnly={true}
+                                            />
                                         </div>
                                     </Grid>
 

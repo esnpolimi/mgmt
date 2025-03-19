@@ -14,7 +14,8 @@ class EventTableSerializer(serializers.ModelSerializer):
 class EventListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost']
+        fields = ['id', 'name', 'date', 'description', 'cost',
+                  'subscription_start_date', 'subscription_end_date']
 
 
 class EventOrganizerSerializer(serializers.ModelSerializer):
@@ -45,7 +46,8 @@ class EventCreationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['name', 'date', 'description', 'cost', 'tables', 'organizers', 'lead_organizer']
+        fields = ['name', 'date', 'description', 'cost', 'tables', 'organizers', 'lead_organizer',
+                  'subscription_start_date', 'subscription_end_date']
 
     def create(self, validated_data):
         tables_data = validated_data.pop('tables', [])
@@ -83,7 +85,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers',
+                  'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at']
 
 
 # Serializers for Subscription
@@ -130,4 +133,5 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers', 'subscriptions']
+        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers', 'subscriptions',
+                  'subscription_start_date', 'subscription_end_date']
