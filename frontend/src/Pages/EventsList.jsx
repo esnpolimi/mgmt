@@ -9,6 +9,7 @@ import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
 import {eventDisplayNames as names} from "../utils/displayAttributes";
 import Loader from "../Components/Loader";
+import dayjs from "dayjs";
 
 
 export default function EventsList() {
@@ -55,18 +56,37 @@ export default function EventsList() {
             size: 150,
         },
         {
-            accessorKey: 'enable_form',
-            header: names.enable_form,
-            size: 50,
-            Cell: ({cell}) => (
-                <Box sx={{}}>
-                    {cell.getValue() ? (
-                        <Chip label="Sì" color="success"/>
-                    ) : (
-                        <Chip label="No" color="error"/>
-                    )}
-                </Box>
-            ),
+            accessorKey: 'cost',
+            header: names.cost,
+            size: 150,
+        },
+        {
+            accessorKey: 'subscription_start_date',
+            header: names.subscription_date_status,
+            size: 150,
+            Cell: ({row}) => {
+                const now = dayjs();
+                const startDateTime = row.original.subscription_start_date ? dayjs(row.original.subscription_start_date) : null;
+                const endDateTime = row.original.subscription_end_date ? dayjs(row.original.subscription_end_date) : null;
+
+                let status = "Non disponibile";
+                let color = "error";
+
+                if (startDateTime && endDateTime) {
+                    if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
+                        status = "Iscrizioni aperte";
+                        color = "success";
+                    } else if (now.isBefore(startDateTime)) {
+                        status = "Iscrizioni non ancora aperte";
+                        color = "warning";
+                    } else if (now.isAfter(endDateTime)) {
+                        status = "Iscrizioni chiuse";
+                        color = "error";
+                    }
+                }
+
+                return <Chip label={status} color={color}/>;
+            },
         },
     ], []);
 
