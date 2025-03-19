@@ -12,6 +12,13 @@ class Event(BaseEntity):
     date = models.DateField(null=True)
     description = models.TextField(max_length=2048, null=True)
     cost = models.DecimalField(decimal_places=2, max_digits=20, null=True)
+    subscription_start_date = models.DateTimeField(null=True)
+    subscription_end_date = models.DateTimeField(null=True)
+
+    # is_a_bando = models.BooleanField(default=False)
+    # is_liberatoria = models.BooleanField(default=False)
+    # is_automatic_reimbursement = models.BooleanField(default=False)
+    # is_allow_external = models.BooleanField(default=False)
 
     # These fields can be uncommented when implementing the full feature set
     # enable_form = models.BooleanField(default=False)
