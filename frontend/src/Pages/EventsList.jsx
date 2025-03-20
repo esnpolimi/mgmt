@@ -10,13 +10,15 @@ import {useNavigate} from "react-router-dom";
 import {eventDisplayNames as names} from "../utils/displayAttributes";
 import Loader from "../Components/Loader";
 import dayjs from "dayjs";
+import Popup from "../Components/Popup";
 
 
 export default function EventsList() {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
-    const [modalOpen, toggleModal] = useState(false);
+    const [eventModalOpen, setEventModalOpen] = useState(false);
     const navigate = useNavigate();
+    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -48,11 +50,6 @@ export default function EventsList() {
         {
             accessorKey: 'date',
             header: names.date,
-            size: 150,
-        },
-        {
-            accessorKey: 'description',
-            header: names.description,
             size: 150,
         },
         {
@@ -115,8 +112,7 @@ export default function EventsList() {
                 id: true,
                 name: true,
                 date: true,
-                description: true,
-                enable_form: true,
+                cost: true
             },
         },
         paginationDisplayMode: 'pages',
@@ -140,21 +136,42 @@ export default function EventsList() {
         renderTopToolbarCustomActions: ({table}) => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                    <Button variant='contained' onClick={() => toggleModal(true)} sx={{width: '150px'}}>
+                    <Button variant='contained' onClick={() => setEventModalOpen(true)} sx={{width: '150px'}}>
                         Crea
                     </Button>
                 </Box>
             );
         },
-
     });
+
+    const refreshEventsData = async () => {
+        try {
+            const response = await fetchCustom("GET", '/events/');
+            if (response.ok) {
+                const json = await response.json();
+                setData(json.results);
+                setLoading(false);
+            }
+        } catch (error) {
+            console.error("Error refreshing events data:", error);
+            setLoading(false);
+        }
+    };
+
+    const handleCloseEventModal = async (success) => {
+        if (success) {
+            setShowSuccessPopup({message: "Evento creato con successo!", state: "success"});
+            await refreshEventsData();
+        }
+        setEventModalOpen(false);
+    };
 
     return (
         <Box>
             <Sidebar/>
-            {modalOpen && <EventModal
-                open={modalOpen}
-                handleClose={() => toggleModal(false)}
+            {eventModalOpen && <EventModal
+                open={eventModalOpen}
+                onClose={handleCloseEventModal}
                 isEdit={false}
             />}
             <Box sx={{mx: '5%'}}>
@@ -167,6 +184,7 @@ export default function EventsList() {
                     </>
                 )}
             </Box>
+            {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
         </Box>
     );
 }

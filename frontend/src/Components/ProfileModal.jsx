@@ -1,7 +1,7 @@
-import {Card, Box, TextField, FormControl, InputLabel, Select, MenuItem, Modal, Typography, Button, Toolbar} from "@mui/material";
+import {Box, Button, Card, FormControl, InputLabel, MenuItem, Modal, Select, TextField, Toolbar, Typography} from "@mui/material";
 import Grid from '@mui/material/Grid2';
-import React, {useState, useEffect, useMemo} from 'react';
-import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
+import React, {useEffect, useMemo, useState} from 'react';
+import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import EditButton from "./EditButton";
@@ -25,7 +25,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     const [isLoading, setIsLoading] = useState(true);
     const {user} = useAuth();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-    const [esncardModalOpen, setEsncardModalOpen] = useState(false);
+    const [ESNcardModalOpen, setESNcardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
     //console.log("ProfileModal profile:", profile);
@@ -138,16 +138,14 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 setData(json);
                 setUpdatedData(json);
                 if (updateProfile) updateProfile(json);
-                return json;
             }
         } catch (error) {
             console.error("Error refreshing profile data:", error);
         }
-        return null;
     };
 
     const handleOpenESNcardModal = () => {
-        setEsncardModalOpen(true);
+        setESNcardModalOpen(true);
     };
 
     const handleCloseESNcardModal = async (success) => {
@@ -155,7 +153,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
             setShowSuccessPopup({message: "ESNcard emessa con successo!", state: "success"});
             await refreshProfileData();
         }
-        setEsncardModalOpen(false);
+        setESNcardModalOpen(false);
     };
 
     /* columns for esncard table */
@@ -369,8 +367,8 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
 
             const response = await fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body);
             if (response.ok) {
-                const updatedProfile = await refreshProfileData();
-                if (updatedProfile) {
+                await refreshProfileData();
+                if (data) {
                     resetErrors();
                     setShowSuccessPopup({message: "Profilo aggiornato con successo!", state: "success"});
                     toggleEdit(false);
@@ -659,7 +657,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                             setUpdatedData(data);
                                         }}
                                         saving={saving}
-                                        onSave={() => handleSave()}
+                                        onSave={handleSave}
                                     />
                                 </Grid>
                             </Grid>
@@ -677,9 +675,9 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                 </Button>
                             )}
                         </Toolbar>
-                        {esncardModalOpen &&
+                        {ESNcardModalOpen &&
                             <ESNcardEmissionModal
-                                open={esncardModalOpen}
+                                open={ESNcardModalOpen}
                                 profile={profile}
                                 onClose={handleCloseESNcardModal}
                             />}

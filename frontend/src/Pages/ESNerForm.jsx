@@ -15,8 +15,7 @@ import StatusBanner from "../Components/StatusBanner";
 
 export default function ESNerForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
-    const [formStatus, setFormStatus] = useState(null); // null, 'loading', 'success', or 'error'
-    const [statusMessage, setStatusMessage] = useState('');
+    const [statusMessage, setStatusMessage] = useState(null);
     const names = profileDisplayNames;
 
     const [formData, setFormData] = React.useState({
@@ -57,7 +56,7 @@ export default function ESNerForm() {
         'document-expiration': [false, ''],
         'matricola_number': [false, ''],
         'is_esner': [false, '']
-    })
+    });
 
     const validateForm = () => {
         let valid = true;
@@ -140,20 +139,17 @@ export default function ESNerForm() {
                 if (response.ok) {
                     setSubmitted(true);
                 } else if (response.status === 400) {
-                    setFormStatus('error');
-                    setStatusMessage('Failed to submit application: see errors below');
+                    setStatusMessage({message: 'Failed to submit application: see errors below', state: 'error'});
                     const newErrors = {...formErrors};
                     Object.entries(data).forEach(([field, message]) => {
                         if (newErrors[field]) newErrors[field] = [true, message];
                     });
                     setFormErrors(newErrors);
                 } else {
-                    setFormStatus('error');
-                    setStatusMessage('Internal error (please contact us): ' + data.error);
+                    setStatusMessage({message: 'Internal error (please contact us): ' + data.error, state: 'error'});
                 }
             } catch (error) {
-                setFormStatus('error');
-                setStatusMessage('Internal error (please contact us): ' + error.message);
+                setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});
             }
         };
         submit().then();
@@ -189,7 +185,7 @@ export default function ESNerForm() {
         >
             <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi - Registrazione ESNer</Typography>
 
-            {formStatus && (<StatusBanner status={formStatus} message={statusMessage}/>)}
+            {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
             <Typography variant="h5" align="center" gutterBottom sx={{my: 4}}>Informazioni Personali</Typography>
 
