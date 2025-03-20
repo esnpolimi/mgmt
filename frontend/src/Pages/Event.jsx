@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {useLocation, useNavigate} from 'react-router-dom';
+import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import Sidebar from "../Components/Sidebar";
 import {Box, Button, Card, CardContent, Chip, Divider, IconButton, Typography} from "@mui/material";
 import Grid from "@mui/material/Grid2";
@@ -8,6 +8,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EuroIcon from '@mui/icons-material/Euro';
+import Adjust from '@mui/icons-material/Adjust';
 import Loader from "../Components/Loader";
 import {fetchCustom} from "../api/api";
 import dayjs from "dayjs";
@@ -57,6 +58,37 @@ export default function Event() {
         toggleModal(false);
     };
 
+    const handleSubscriptionStatus = () => {
+        const now = dayjs();
+        const startDateTime = data.subscription_start_date ? dayjs(data.subscription_start_date) : null;
+        const endDateTime = data.subscription_end_date ? dayjs(data.subscription_end_date) : null;
+
+        let status = "Non disponibile";
+        let color = "error";
+
+        if (startDateTime && endDateTime) {
+            if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
+                status = "Iscrizioni aperte";
+                color = "success";
+            } else if (now.isBefore(startDateTime)) {
+                status = "Iscrizioni non ancora aperte";
+                color = "warning";
+            } else if (now.isAfter(endDateTime)) {
+                status = "Iscrizioni chiuse";
+                color = "error";
+            }
+        }
+
+        return (
+            <Chip
+                label={status}
+                color={color}
+                variant="outlined"
+                size="medium"
+            />
+        );
+    };
+
     return (
         <Box>
             <Sidebar/>
@@ -82,7 +114,7 @@ export default function Event() {
                                             <CalendarTodayIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Data</Typography>
                                         </Box>
-                                        <Typography variant="body1" color="text.secondary" sx={{mt: 1}}>
+                                        <Typography variant="body1" color="text.secondary" sx={{mt: 2}}>
                                             {data.date ? dayjs(data.date).format('DD/MM/YYYY') : 'Data non specificata'}
                                         </Typography>
                                     </Grid>
@@ -92,29 +124,28 @@ export default function Event() {
                                             <EuroIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Costo</Typography>
                                         </Box>
-                                        <Typography variant="body1" color="text.secondary" sx={{mt: 1}}>
-                                            {data.cost ? `€ ${data.cost}` : 'Gratuito'}
+                                        <Typography variant="body1" color="text.secondary" sx={{mt: 2}}>
+                                            {data.cost !== 0 ? `€ ${data.cost}` : 'Gratuito'}
                                         </Typography>
                                     </Grid>
 
                                     <Grid size={{xs: 12, md: 4}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
-                                            <Chip
-                                                label={data.enable_form ? "Iscrizione attiva" : "Iscrizione disattivata"}
-                                                color={data.enable_form ? "success" : "error"}
-                                                variant="outlined"
-                                                size="medium"
-                                            />
+                                            <Adjust sx={{color: 'primary.main', mr: 1}}/>
+                                            <Typography variant="h6" component="div">Stato Iscrizioni</Typography>
+                                        </Box>
+                                        <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
+                                            {(() => handleSubscriptionStatus())()}
                                         </Box>
                                     </Grid>
 
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>
-                                        <Box sx={{display: 'flex', alignItems: 'center', mt: 1}}>
+                                        <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
                                             <DescriptionIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Descrizione</Typography>
                                         </Box>
-                                        <div data-color-mode="light">
+                                        <div data-color-mode="light" style={{marginTop: 10}}>
                                             <CustomEditor
                                                 value={data.description || 'Nessuna descrizione disponibile'}
                                                 readOnly={true}
@@ -124,11 +155,11 @@ export default function Event() {
 
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>
-                                        <Box sx={{display: 'flex', alignItems: 'center', mt: 1}}>
+                                        <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
                                             <EditIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Azioni</Typography>
                                         </Box>
-                                        <Button variant="contained" color="primary" onClick={handleOpenEventModal}>
+                                        <Button sx={{mt: 2}} variant="contained" color="primary" onClick={handleOpenEventModal}>
                                             Modifica Evento
                                         </Button>
                                     </Grid>

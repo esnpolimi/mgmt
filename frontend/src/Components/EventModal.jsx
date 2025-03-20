@@ -13,9 +13,12 @@ import {style, colorOptions} from '../utils/sharedStyles'
 import {eventDisplayNames as eventNames} from '../utils/displayAttributes';
 import CustomEditor from './CustomEditor';
 import Loader from "./Loader";
+import StatusBanner from "./StatusBanner";
 
-export default function EventModal({open, handleClose, event, isEdit}) {
+export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
+    const title = isEdit ? 'Modifica Evento - ' + event.name : 'Crea Evento';
+    const [statusMessage, setStatusMessage] = useState(null);
 
     const [data, setData] = useState({
         id: '',
@@ -24,11 +27,22 @@ export default function EventModal({open, handleClose, event, isEdit}) {
         description: '<h3>Descrizione</h3>' +
             '    <p>Ecco un <a href="https://www.italia.it" target="_blank">link all\'Italia</a>.</p>' +
             '    <blockquote>Citazione elegante.</blockquote>' +
-            '    <p style="text-align: center;">Divertiti!</p>',
+            '    <p style="text-align: center;">Adios.</p>',
         cost: '',
         subscription_start_date: dayjs().hour(12).minute(0),
         subscription_end_date: dayjs().hour(24).minute(0),
-        tables: []
+        tables: [{name: 'Main List', capacity: ''}]
+    });
+
+    const [errors, setErrors] = React.useState({
+        name: [false, ''],
+        date: [false, ''],
+        description: [false, ''],
+        cost: [false, ''],
+        subscription_start_date: [false, ''],
+        subscription_end_date: [false, ''],
+        tables: [false, ''],
+        tableItems: [] // Add tracking for individual table field errors
     });
 
     useEffect(() => {
@@ -40,6 +54,10 @@ export default function EventModal({open, handleClose, event, isEdit}) {
     }, []);
 
     const formatDateString = (date) => {
+        return dayjs(date).format('YYYY-MM-DD');
+    };
+
+    const formatDateTimeString = (date) => {
         return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
     };
 
@@ -80,8 +98,14 @@ export default function EventModal({open, handleClose, event, isEdit}) {
             name: data.name,
             date: formatDateString(data.date),
             description: data.description,
-            enable_form: data.enableForm,
-            tables: Object.fromEntries(data.tables.map((t) => [t.name, t.capacity])),
+            subscription_start_date: formatDateTimeString(data.subscription_start_date),
+            subscription_end_date: formatDateTimeString(data.subscription_end_date),
+            cost: Number(data.cost).toFixed(2),
+            tables: data.tables.map(t => ({
+                name: t.name,
+                capacity: Math.floor(Number(t.capacity))
+            }))
+            /*enable_form: data.enableForm,
             profile_fields: data.profileFields,
             additional_fields: Object.fromEntries(data.additionalFields.map((f) => {
                 switch (f.type) {
@@ -118,8 +142,15 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                             }))
                         }]
                 }
-            }))
+            }))*/
         })
+    }
+
+    const scrollUp = () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
     }
 
     const handleInputChange = (event) => {
@@ -151,6 +182,73 @@ export default function EventModal({open, handleClose, event, isEdit}) {
             tables: data.tables.filter((_, i) => i !== index),
         });
     };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        // Validate tables - check if any table has empty name or capacity
+        const tableErrors = data.tables.map(table => ({
+            name: !table.name.trim(),
+            capacity: table.capacity === ''
+        }));
+        const hasTableErrors = tableErrors.some(error => error.name || error.capacity);
+        setErrors({...errors, tableItems: tableErrors, tables: [hasTableErrors]});
+        if (hasTableErrors) {
+            setStatusMessage({message: 'Errore campi Liste', state: 'error'});
+            scrollUp();
+            return;
+        }
+
+        try {
+            const response = await fetchCustom("POST", '/event/', convert(data))
+            if (!response.ok) {
+                const text = await response.text();
+                if (text) {
+                    try {
+                        const errorData = JSON.parse(text);
+
+                        if (errorData.tables && errorData.tables.non_field_errors) {
+                            setStatusMessage({
+                                message: 'Errore formato Liste: ' + errorData.tables.non_field_errors.join(', '),
+                                state: 'error'
+                            });
+                        } else {
+                            // Handle top-level error message
+                            const errorMessage = typeof errorData.message === 'string' ?
+                                errorData.message : 'Controllare i campi con errore';
+
+                            setStatusMessage({
+                                message: 'Errore creazione evento: ' + errorMessage,
+                                state: 'error'
+                            });
+                        }
+
+                        const newErrors = {...errors};
+                        Object.entries(errorData).forEach(([field, message]) => {
+                            if (newErrors[field]) {
+                                newErrors[field] = [true, Array.isArray(message) ? message.join(', ') : message];
+                            }
+                        });
+                        setErrors(newErrors);
+                    } catch (parseError) {
+                        setStatusMessage({
+                            message: "Errore server (" + response.status + "): " + text || 'Nessun dettaglio fornito',
+                            state: "error"
+                        });
+                    }
+                } else setStatusMessage({message: "Errore server (" + response.status + ") con risposta vuota", state: "error"});
+                scrollUp();
+            } else onClose(true);
+        } catch (error) {
+            console.log("Error creating event: ", error);
+            setStatusMessage({message: "Errore durante l\'emissione della ESNcard (" + error.message + ")", state: "error"});
+            scrollUp();
+        }
+    }
+
+    const handleClose = () => {
+        onClose(false);
+    }
 
     /*
     const profileFieldOptions = ['name', 'surname', 'email', 'phone', 'whatsapp', 'birthdate', 'latest_esncard', 'latest_document', 'matricola_number', 'matricola_expiration', 'person_code', 'domicile'];
@@ -223,9 +321,10 @@ export default function EventModal({open, handleClose, event, isEdit}) {
 
     return (
         <Modal open={open} onClose={handleClose}>
-            <Box sx={style}>
+            <Box sx={style} component="form" onSubmit={handleSubmit} noValidate={false}>
                 {isLoading ? <Loader/> : (<>
-                    <Typography variant="h5" gutterBottom align="center">Nuovo Evento</Typography>
+                    <Typography variant="h5" gutterBottom align="center">{title}</Typography>
+                    {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
                     <Grid container spacing={2}>
                         <Grid size={{xs: 12, md: 6}}>
                             <TextField
@@ -234,6 +333,8 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                                 name="name"
                                 value={data.name}
                                 onChange={handleInputChange}
+                                required
+                                error={errors.name[0]}
                             />
                         </Grid>
                         <Grid size={{xs: 12, md: 6}}>
@@ -244,6 +345,8 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                                     onChange={handleEventDateChange}
                                     minDate={dayjs()}
                                     renderInput={(params) => <TextField {...params} fullWidth required/>}
+                                    required
+                                    error={errors.date[0]}
                                 />
                             </LocalizationProvider>
                         </Grid>
@@ -255,6 +358,8 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                                     onChange={handleSubscriptionStartChange}
                                     minDate={dayjs()}
                                     slotProps={{textField: {fullWidth: true, required: true}}}
+                                    required
+                                    error={errors.subscription_start_date[0]}
                                 />
                             </LocalizationProvider>
                         </Grid>
@@ -266,6 +371,8 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                                     onChange={handleSubscriptionEndChange}
                                     minDate={data.subscription_start_date || dayjs()}
                                     slotProps={{textField: {fullWidth: true, required: true}}}
+                                    required
+                                    error={errors.subscription_start_date[0]}
                                 />
                             </LocalizationProvider>
                         </Grid>
@@ -279,6 +386,8 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                                 value={data.cost}
                                 onChange={handleInputChange}
                                 placeholder="Inserisci 0 se gratuito"
+                                required
+                                error={errors.cost[0]}
                             />
                         </Grid>
                     </Grid>
@@ -286,11 +395,11 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                         <Typography variant="h6" component="div">{eventNames.description}</Typography>
                         <CustomEditor
                             value={data.description}
-                            onChange={(value) => {console.log(value);setData({...data, description: value});}}
+                            onChange={(value) => {
+                                setData({...data, description: value});
+                            }}
                         />
                     </Grid>
-
-                    {/* Insert *1 */}
 
                     <Box my={2}>
                         <Grid container spacing={2} alignItems="center">
@@ -301,19 +410,27 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                             <Grid container spacing={2} alignItems="center" mb={2} key={index}>
                                 <Grid>
                                     <TextField
-                                        label="Nome"
+                                        label={eventNames.list_name}
                                         name="name"
                                         value={table.name}
                                         onChange={(e) => handleTableChange(index, e)}
+                                        required
+                                        error={errors.tableItems[index]?.name}
+                                        helperText={errors.tableItems[index]?.name ? "Il nome è obbligatorio" : ""}
                                     />
                                 </Grid>
                                 <Grid>
                                     <TextField
-                                        label="Capacità"
+                                        label={eventNames.list_capacity}
                                         name="capacity"
                                         type="number"
                                         value={table.capacity}
+                                        slotProps={{htmlInput: {min: "0", step: "1"}}}
                                         onChange={(e) => handleTableChange(index, e)}
+                                        placeholder="Inserisci 0 se illimitata"
+                                        required
+                                        error={errors.tableItems[index]?.capacity}
+                                        helperText={errors.tableItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
                                     />
                                 </Grid>
                                 <Grid size={{xs: 2}}><IconButton onClick={() => handleDeleteTable(index)}><DeleteIcon/></IconButton></Grid>
@@ -321,17 +438,13 @@ export default function EventModal({open, handleClose, event, isEdit}) {
                         ))}
                     </Box>
 
+                    {/* Insert *1 */}
                     {/* Insert *2 */}
                     {/* Insert *3 */}
 
                     <Box mt={2}>
                         <Button variant="contained" color="grey" onClick={handleClose}>Chiudi</Button>
-                        <Button variant="contained" color="primary"
-                                onClick={() => {
-                                    fetchCustom("POST", '/event/', convert(data)).then()
-                                }}>
-                            Crea
-                        </Button>
+                        <Button variant="contained" color="primary" type="submit">Crea</Button>
                     </Box>
                 </>)}
             </Box>
@@ -509,3 +622,4 @@ export default function EventModal({open, handleClose, event, isEdit}) {
         </Box>
     ))
 }*/
+

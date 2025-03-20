@@ -8,10 +8,10 @@ export default function QuillEditor({value, onChange, readOnly = false}) {
 
     useEffect(() => {
         if (editorRef.current && !quillInstance.current) {
-            quillInstance.current = new Quill(editorRef.current, {
-                theme: 'snow',
-                readOnly: readOnly,
-                modules: {
+            // Define toolbar only when not in readOnly mode
+            const modules = readOnly
+                ? { toolbar: false }
+                : {
                     toolbar: [
                         ['bold', 'italic', 'underline', 'strike'],
                         ['blockquote', 'code-block'],
@@ -25,10 +25,15 @@ export default function QuillEditor({value, onChange, readOnly = false}) {
                         [{'color': []}, {'background': []}],
                         [{'font': []}],
                         [{'align': []}],
-                        ['link', 'image'],
+                        ['link'],
                         ['clean']
                     ]
-                }
+                };
+
+            quillInstance.current = new Quill(editorRef.current, {
+                theme: 'snow',
+                readOnly: readOnly,
+                modules: modules
             });
 
             quillInstance.current.on('text-change', () => {
