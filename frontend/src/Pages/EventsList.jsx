@@ -145,6 +145,7 @@ export default function EventsList() {
     });
 
     const refreshEventsData = async () => {
+        setLoading(true);
         try {
             const response = await fetchCustom("GET", '/events/');
             if (response.ok) {

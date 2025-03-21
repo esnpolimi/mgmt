@@ -42,13 +42,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
         subscription_start_date: [false, ''],
         subscription_end_date: [false, ''],
         tables: [false, ''],
-        tableItems: [] // Add tracking for individual table field errors
+        tableItems: []
     });
 
     useEffect(() => {
         if (isEdit) {
+            console.log("Seting form data: ", event);
             setData(event);
-            console.log("Set form data: ", event);
         }
         setLoading(false);
     }, []);
@@ -68,9 +68,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
     };
 
     const handleSubscriptionStartChange = (date) => {
-        // Only allow dates from today onward
-        if (date && dayjs(date).isBefore(dayjs(), 'day')) return;
-
         // If end date exists and is now before start date, update it
         if (data.subscription_end_date && dayjs(date).isAfter(dayjs(data.subscription_end_date))) {
             setData({
@@ -200,25 +197,21 @@ export default function EventModal({open, event, isEdit, onClose}) {
         }
 
         try {
-            const response = await fetchCustom("POST", '/event/', convert(data))
+            const response = isEdit ? await fetchCustom("PATCH", `/event/${data.id}/`, convert(data))
+                : await fetchCustom("POST", '/event/', convert(data));
             if (!response.ok) {
                 const text = await response.text();
                 if (text) {
                     try {
                         const errorData = JSON.parse(text);
-
                         if (errorData.tables && errorData.tables.non_field_errors) {
                             setStatusMessage({
                                 message: 'Errore formato Liste: ' + errorData.tables.non_field_errors.join(', '),
                                 state: 'error'
                             });
                         } else {
-                            // Handle top-level error message
-                            const errorMessage = typeof errorData.message === 'string' ?
-                                errorData.message : 'Controllare i campi con errore';
-
                             setStatusMessage({
-                                message: 'Errore creazione evento: ' + errorMessage,
+                                message: 'Errore ' + (isEdit ? 'modifica' : 'creazione') + ' evento: ' + errorData.message,
                                 state: 'error'
                             });
                         }
@@ -240,8 +233,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 scrollUp();
             } else onClose(true);
         } catch (error) {
-            console.log("Error creating event: ", error);
-            setStatusMessage({message: "Errore durante l\'emissione della ESNcard (" + error.message + ")", state: "error"});
+            console.log("Error creating/updating event: ", error);
+            setStatusMessage({message: "Errore generale (" + error.message + ")", state: "error"});
             scrollUp();
         }
     }
@@ -343,7 +336,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     label={eventNames.date}
                                     value={data.date}
                                     onChange={handleEventDateChange}
-                                    minDate={dayjs()}
+                                    minDate={isEdit ? null : dayjs()}
                                     renderInput={(params) => <TextField {...params} fullWidth required/>}
                                     required
                                     error={errors.date[0]}
@@ -356,7 +349,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     label={eventNames.subscription_start_date}
                                     value={data.subscription_start_date || null}
                                     onChange={handleSubscriptionStartChange}
-                                    minDate={dayjs()}
+                                    minDate={isEdit ? null : dayjs()}
                                     slotProps={{textField: {fullWidth: true, required: true}}}
                                     required
                                     error={errors.subscription_start_date[0]}
@@ -444,7 +437,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
                     <Box mt={2}>
                         <Button variant="contained" color="grey" onClick={handleClose}>Chiudi</Button>
-                        <Button variant="contained" color="primary" type="submit">Crea</Button>
+                        <Button variant="contained" color="primary" type="submit">{isEdit ? 'Salva Modifiche' : 'Crea'}</Button>
                     </Box>
                 </>)}
             </Box>

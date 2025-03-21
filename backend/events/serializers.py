@@ -78,6 +78,40 @@ class EventCreationSerializer(serializers.ModelSerializer):
 
         return event
 
+    def update(self, instance, validated_data):
+        tables_data = validated_data.pop('tables', [])
+        organizers = validated_data.pop('organizers', [])
+        lead_organizer = validated_data.pop('lead_organizer', None)
+
+        # Update event fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update tables
+        instance.tables.all().delete()
+        for table_data in tables_data:
+            EventTable.objects.create(event=instance, **table_data)
+
+        # Update organizers
+        instance.organizers.all().delete()
+        for profile in organizers:
+            EventOrganizer.objects.create(
+                event=instance,
+                profile=profile,
+                is_lead=False
+            )
+
+        # Update lead organizer
+        if lead_organizer:
+            EventOrganizer.objects.create(
+                event=instance,
+                profile=lead_organizer,
+                is_lead=True
+            )
+
+        return instance
+
 
 class EventDetailSerializer(serializers.ModelSerializer):
     tables = EventTableSerializer(many=True, read_only=True)

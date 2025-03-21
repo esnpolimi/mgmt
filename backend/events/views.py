@@ -59,7 +59,7 @@ def event_detail(request, pk):
             return Response(serializer.data, status=200)
 
         elif request.method == 'PATCH':
-            # If event already has subscriptions, it is not possible to edit the event
+            # If event already has subscriptions, it is not possible to edit the event (TODO: check this statement)
             subs = Subscription.objects.filter(event=event)
             if len(subs) > 0:
                 return Response('Cannot edit an event that already has subscriptions', status=400)
@@ -81,7 +81,7 @@ def event_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({"message": "An unexpected error occurred: " + str(e)}, status=500)
 
 
 @api_view(['POST'])
