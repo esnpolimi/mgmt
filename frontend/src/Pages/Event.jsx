@@ -8,26 +8,30 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EuroIcon from '@mui/icons-material/Euro';
-import Adjust from '@mui/icons-material/Adjust';
+import AdjustIcon from '@mui/icons-material/Adjust';
 import Loader from "../Components/Loader";
 import {fetchCustom} from "../api/api";
 import dayjs from "dayjs";
 import EditIcon from "@mui/icons-material/Edit";
 import EventModal from "../Components/EventModal";
 import CustomEditor from '../Components/CustomEditor';
+import Popup from "../Components/Popup";
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
     const location = useLocation();
     const navigate = useNavigate();
-    const [modalOpen, toggleModal] = useState(false);
+    const [eventModalOpen, setEventModalOpen] = useState(false);
     const [isLoading, setLoading] = useState(true);
+    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+
     // Try to get event from location state, if not available we'll fetch it using ID
     const eventFromState = location.state?.event;
 
-    const [data, setData] = useState([]);
+    const [data, setData] = useState(null);
 
     useEffect(() => {
+        setLoading(true);
         const fetchData = async () => {
             try {
                 // Use ID from URL params if available, otherwise from state
@@ -46,42 +50,57 @@ export default function Event() {
     }, [id, eventFromState]);
 
 
+    const refreshEventData = async () => {
+        setLoading(true);
+        try {
+            const response = await fetchCustom("GET", `/event/${data.id}/`);
+            if (response.ok) {
+                const json = await response.json();
+                setData(json);
+                setLoading(false);
+            }
+        } catch (error) {
+            console.error("Error refreshing events data:", error);
+            setLoading(false);
+        }
+    };
+
     const handleBack = () => {
         navigate('/events');
     };
 
     const handleOpenEventModal = () => {
-        toggleModal(true);
+        setEventModalOpen(true);
     };
 
-    const handleCloseEventModal = () => {
-        toggleModal(false);
+    const handleCloseEventModal = async (success) => {
+        if (success) {
+            setShowSuccessPopup({message: "Evento modificato con successo!", state: "success"});
+            await refreshEventData();
+        }
+        setEventModalOpen(false);
     };
 
     const handleSubscriptionStatus = () => {
+        if (!data) return <Chip label="Loading..." variant="outlined" size="medium"/>;
+
         const now = dayjs();
         const startDateTime = data.subscription_start_date ? dayjs(data.subscription_start_date) : null;
         const endDateTime = data.subscription_end_date ? dayjs(data.subscription_end_date) : null;
 
-        let status = "Non disponibile";
         let color = "error";
 
         if (startDateTime && endDateTime) {
-            if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
-                status = "Iscrizioni aperte";
-                color = "success";
-            } else if (now.isBefore(startDateTime)) {
-                status = "Iscrizioni non ancora aperte";
-                color = "warning";
-            } else if (now.isAfter(endDateTime)) {
-                status = "Iscrizioni chiuse";
-                color = "error";
-            }
+            if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) color = "success";
+            else if (now.isBefore(startDateTime)) color = "warning";
         }
+
+        let startText = data.subscription_start_date ? dayjs(data.subscription_start_date).format('DD/MM/YYYY HH:mm') : 'Inizio non specificato';
+        let endText = data.subscription_end_date ? dayjs(data.subscription_end_date).format('DD/MM/YYYY HH:mm') : 'Fine non specificata';
 
         return (
             <Chip
-                label={status}
+                label={startText + ' - ' + endText}
                 color={color}
                 variant="outlined"
                 size="medium"
@@ -92,10 +111,15 @@ export default function Event() {
     return (
         <Box>
             <Sidebar/>
-            {modalOpen && <EventModal
-                open={modalOpen}
-                handleClose={handleCloseEventModal}
-                event={data}
+            {eventModalOpen && <EventModal
+                open={eventModalOpen}
+                onClose={handleCloseEventModal}
+                event={{
+                    ...data,
+                    date: data.date ? dayjs(data.date) : null,
+                    subscription_start_date: data.subscription_start_date ? dayjs(data.subscription_start_date) : null,
+                    subscription_end_date: data.subscription_end_date ? dayjs(data.subscription_end_date) : null
+                }}
                 isEdit={true}
             />}
             <Box sx={{mx: '5%'}}>
@@ -131,7 +155,7 @@ export default function Event() {
 
                                     <Grid size={{xs: 12, md: 4}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
-                                            <Adjust sx={{color: 'primary.main', mr: 1}}/>
+                                            <AdjustIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Stato Iscrizioni</Typography>
                                         </Box>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
@@ -168,6 +192,7 @@ export default function Event() {
                         </Card>
                     </>
                 )}
+                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
         </Box>
     );
