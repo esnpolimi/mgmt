@@ -1,17 +1,17 @@
 from rest_framework import serializers
-from events.models import Event, EventTable, Subscription, EventOrganizer
+from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 
 
-# Serializers for EventTable
-class EventTableSerializer(serializers.ModelSerializer):
+# Serializers for EventList
+class EventListSerializer(serializers.ModelSerializer):
     class Meta:
-        model = EventTable
+        model = EventList
         fields = ['id', 'name', 'capacity', 'display_order']
 
 
 # Serializers for Event
-class EventListSerializer(serializers.ModelSerializer):
+class EventsListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = ['id', 'name', 'date', 'description', 'cost',
@@ -31,7 +31,7 @@ class EventOrganizerSerializer(serializers.ModelSerializer):
 
 
 class EventCreationSerializer(serializers.ModelSerializer):
-    tables = EventTableSerializer(many=True, required=False)
+    lists = EventListSerializer(many=True, required=False)
     organizers = serializers.PrimaryKeyRelatedField(
         queryset=Profile.objects.all(),
         many=True,
@@ -46,19 +46,19 @@ class EventCreationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['name', 'date', 'description', 'cost', 'tables', 'organizers', 'lead_organizer',
+        fields = ['name', 'date', 'description', 'cost', 'lists', 'organizers', 'lead_organizer',
                   'subscription_start_date', 'subscription_end_date']
 
     def create(self, validated_data):
-        tables_data = validated_data.pop('tables', [])
+        lists_data = validated_data.pop('lists', [])
         organizers = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
 
         event = Event.objects.create(**validated_data)
 
-        # Create tables
-        for table_data in tables_data:
-            EventTable.objects.create(event=event, **table_data)
+        # Create lists
+        for list_data in lists_data:
+            EventList.objects.create(event=event, **list_data)
 
         # Create organizers
         for profile in organizers:
@@ -79,7 +79,7 @@ class EventCreationSerializer(serializers.ModelSerializer):
         return event
 
     def update(self, instance, validated_data):
-        tables_data = validated_data.pop('tables', [])
+        lists_data = validated_data.pop('lists', [])
         organizers = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
 
@@ -88,10 +88,10 @@ class EventCreationSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
 
-        # Update tables
-        instance.tables.all().delete()
-        for table_data in tables_data:
-            EventTable.objects.create(event=instance, **table_data)
+        # Update lists
+        instance.lists.all().delete()
+        for list_data in lists_data:
+            EventList.objects.create(event=instance, **list_data)
 
         # Update organizers
         instance.organizers.all().delete()
@@ -114,23 +114,23 @@ class EventCreationSerializer(serializers.ModelSerializer):
 
 
 class EventDetailSerializer(serializers.ModelSerializer):
-    tables = EventTableSerializer(many=True, read_only=True)
+    lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers',
+        fields = ['id', 'name', 'date', 'description', 'cost', 'lists', 'organizers',
                   'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at']
 
 
 # Serializers for Subscription
 class SubscriptionSerializer(serializers.ModelSerializer):
     profile_name = serializers.SerializerMethodField()
-    table_name = serializers.CharField(source='table.name', read_only=True)
+    list_name = serializers.CharField(source='list.name', read_only=True)
 
     class Meta:
         model = Subscription
-        fields = ['id', 'profile', 'profile_name', 'event', 'table', 'table_name',
+        fields = ['id', 'profile', 'profile_name', 'event', 'list', 'list_name',
                   'status', 'enable_refund', 'notes', 'created_by_form']
 
     @staticmethod
@@ -141,7 +141,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'table', 'notes']
+        fields = ['profile', 'event', 'list', 'notes']
 
     def validate(self, attrs):
         # Check if profile is already registered for this event
@@ -157,15 +157,15 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
 class SubscriptionUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
-        fields = ['table', 'status', 'enable_refund', 'notes']
+        fields = ['list', 'status', 'enable_refund', 'notes']
 
 
 class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
-    tables = EventTableSerializer(many=True, read_only=True)
+    lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
     subscriptions = SubscriptionSerializer(many=True, read_only=True, source='subscription_set')
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'tables', 'organizers', 'subscriptions',
+        fields = ['id', 'name', 'date', 'description', 'cost', 'lists', 'organizers', 'subscriptions',
                   'subscription_start_date', 'subscription_end_date']

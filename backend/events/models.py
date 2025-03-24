@@ -46,15 +46,15 @@ class EventOrganizer(BaseEntity):
         return f"{self.profile} - {self.event}"
 
 
-class EventTable(BaseEntity):
+class EventList(BaseEntity):
     """
-    Dynamic tables for events, with customizable names and capacities
+    Dynamic lists for events, with customizable names and capacities
     """
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='tables')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='lists')
     name = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField(default=0)  # 0 means unlimited
 
-    # Fields to identify special tables that need integration with payment systems, probably not needed?
+    # Fields to identify special lists that need integration with payment systems, probably not needed?
     # is_main_list = models.BooleanField(default=False)
     # is_waiting_list = models.BooleanField(default=False)
 
@@ -84,7 +84,7 @@ class SubscriptionStatus(models.TextChoices):
 class Subscription(BaseEntity):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
-    table = models.ForeignKey(EventTable, on_delete=models.CASCADE, related_name='subscriptions')
+    list = models.ForeignKey(EventList, on_delete=models.CASCADE, related_name='subscriptions')
 
     # Payment status
     status = models.CharField(
@@ -115,14 +115,14 @@ class Subscription(BaseEntity):
     def clean(self):
         super(Subscription, self).clean()
 
-        # Ensure table capacity isn't exceeded (if capacity is not 0/unlimited)
-        if self.table.capacity > 0:
-            current_count = Subscription.objects.filter(table=self.table).exclude(pk=self.pk).count()
-            if current_count >= self.table.capacity:
-                raise ValidationError(f"{self.table.name} capacity exceeded")
+        # Ensure list capacity isn't exceeded (if capacity is not 0/unlimited)
+        if self.list.capacity > 0:
+            current_count = Subscription.objects.filter(list=self.list).exclude(pk=self.pk).count()
+            if current_count >= self.list.capacity:
+                raise ValidationError(f"{self.list.name} capacity exceeded")
 
     def __str__(self):
-        return f"{self.profile} - {self.event} ({self.table.name})"
+        return f"{self.profile} - {self.event} ({self.list.name})"
 
 
 # For future implementation

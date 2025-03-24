@@ -31,7 +31,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         cost: '',
         subscription_start_date: dayjs().hour(12).minute(0),
         subscription_end_date: dayjs().hour(24).minute(0),
-        tables: [{name: 'Main List', capacity: ''}]
+        lists: [{name: 'Main List', capacity: ''}]
     });
 
     const [errors, setErrors] = React.useState({
@@ -41,8 +41,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         cost: [false, ''],
         subscription_start_date: [false, ''],
         subscription_end_date: [false, ''],
-        tables: [false, ''],
-        tableItems: []
+        lists: [false, ''],
+        listItems: []
     });
 
     useEffect(() => {
@@ -98,7 +98,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             subscription_start_date: formatDateTimeString(data.subscription_start_date),
             subscription_end_date: formatDateTimeString(data.subscription_end_date),
             cost: Number(data.cost).toFixed(2),
-            tables: data.tables.map(t => ({
+            lists: data.lists.map(t => ({
                 name: t.name,
                 capacity: Math.floor(Number(t.capacity))
             }))
@@ -108,23 +108,23 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 switch (f.type) {
                     case 'text':
                         return ['t_' + f.name, {
-                            office_edit: f.editableByOffice,
+                            office_edit: f.edilistByOffice,
                             office_view: f.visibleByOffice,
                             length: f.length // Add length here
                         }]
                     case 'integer':
                         return ['i_' + f.name, {
-                            office_edit: f.editableByOffice,
+                            office_edit: f.edilistByOffice,
                             office_view: f.visibleByOffice
                         }]
                     case 'float':
                         return ['f_' + f.name, {
-                            office_edit: f.editableByOffice,
+                            office_edit: f.edilistByOffice,
                             office_view: f.visibleByOffice
                         }]
                     case 'single choice':
                         return ['c_' + f.name, {
-                            office_edit: f.editableByOffice,
+                            office_edit: f.edilistByOffice,
                             office_view: f.visibleByOffice,
                             choices: Object.fromEntries(f.choices.map((c) => {
                                 return [c.value, c.color]
@@ -132,7 +132,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         }]
                     case 'multiple choice':
                         return ['m_' + f.name, {
-                            office_edit: f.editableByOffice,
+                            office_edit: f.edilistByOffice,
                             office_view: f.visibleByOffice,
                             choices: Object.fromEntries(f.choices.map((c) => {
                                 return [c.value, c.color]
@@ -158,39 +158,39 @@ export default function EventModal({open, event, isEdit, onClose}) {
         });
     };
 
-    const handleAddTable = () => {
+    const handleAddList = () => {
         setData({
             ...data,
-            tables: [...data.tables, {name: '', capacity: ''}],
+            lists: [...data.lists, {name: '', capacity: ''}],
         });
     };
 
-    const handleTableChange = (index, event) => {
+    const handleListChange = (index, event) => {
         const {name, value} = event.target;
-        const updatedTables = data.tables.map((table, i) =>
-            i === index ? {...table, [name]: value} : table
+        const updatedLists = data.lists.map((list, i) =>
+            i === index ? {...list, [name]: value} : list
         );
-        setData({...data, tables: updatedTables});
+        setData({...data, lists: updatedLists});
     };
 
-    const handleDeleteTable = (index) => {
+    const handleDeleteList = (index) => {
         setData({
             ...data,
-            tables: data.tables.filter((_, i) => i !== index),
+            lists: data.lists.filter((_, i) => i !== index),
         });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validate tables - check if any table has empty name or capacity
-        const tableErrors = data.tables.map(table => ({
-            name: !table.name.trim(),
-            capacity: table.capacity === ''
+        // Validate lists - check if any list has empty name or capacity
+        const listErrors = data.lists.map(list => ({
+            name: !list.name.trim(),
+            capacity: list.capacity === ''
         }));
-        const hasTableErrors = tableErrors.some(error => error.name || error.capacity);
-        setErrors({...errors, tableItems: tableErrors, tables: [hasTableErrors]});
-        if (hasTableErrors) {
+        const hasListErrors = listErrors.some(error => error.name || error.capacity);
+        setErrors({...errors, listItems: listErrors, lists: [hasListErrors]});
+        if (hasListErrors) {
             setStatusMessage({message: 'Errore campi Liste', state: 'error'});
             scrollUp();
             return;
@@ -204,9 +204,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 if (text) {
                     try {
                         const errorData = JSON.parse(text);
-                        if (errorData.tables && errorData.tables.non_field_errors) {
+                        if (errorData.lists && errorData.lists.non_field_errors) {
                             setStatusMessage({
-                                message: 'Errore formato Liste: ' + errorData.tables.non_field_errors.join(', '),
+                                message: 'Errore formato Liste: ' + errorData.lists.non_field_errors.join(', '),
                                 state: 'error'
                             });
                         } else {
@@ -257,7 +257,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const handleAddField = (fieldType) => {
         setData({
             ...data,
-            [fieldType]: [...data[fieldType], {name: '', editableByOffice: false, visibleByOffice: false, type: '', choices: [], length: ''}],
+            [fieldType]: [...data[fieldType], {name: '', edilistByOffice: false, visibleByOffice: false, type: '', choices: [], length: ''}],
         });
     };
 
@@ -397,19 +397,19 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Box my={2}>
                         <Grid container spacing={2} alignItems="center">
                             <Grid><Typography variant="h6" gutterBottom>Liste</Typography></Grid>
-                            <Grid><IconButton onClick={handleAddTable}><AddIcon/></IconButton></Grid>
+                            <Grid><IconButton onClick={handleAddList}><AddIcon/></IconButton></Grid>
                         </Grid>
-                        {data.tables.map((table, index) => (
+                        {data.lists.map((list, index) => (
                             <Grid container spacing={2} alignItems="center" mb={2} key={index}>
                                 <Grid>
                                     <TextField
                                         label={eventNames.list_name}
                                         name="name"
-                                        value={table.name}
-                                        onChange={(e) => handleTableChange(index, e)}
+                                        value={list.name}
+                                        onChange={(e) => handleListChange(index, e)}
                                         required
-                                        error={errors.tableItems[index]?.name}
-                                        helperText={errors.tableItems[index]?.name ? "Il nome è obbligatorio" : ""}
+                                        error={errors.listItems[index]?.name}
+                                        helperText={errors.listItems[index]?.name ? "Il nome è obbligatorio" : ""}
                                     />
                                 </Grid>
                                 <Grid>
@@ -417,16 +417,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                         label={eventNames.list_capacity}
                                         name="capacity"
                                         type="number"
-                                        value={table.capacity}
+                                        value={list.capacity}
                                         slotProps={{htmlInput: {min: "0", step: "1"}}}
-                                        onChange={(e) => handleTableChange(index, e)}
+                                        onChange={(e) => handleListChange(index, e)}
                                         placeholder="Inserisci 0 se illimitata"
                                         required
-                                        error={errors.tableItems[index]?.capacity}
-                                        helperText={errors.tableItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
+                                        error={errors.listItems[index]?.capacity}
+                                        helperText={errors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
                                     />
                                 </Grid>
-                                <Grid size={{xs: 2}}><IconButton onClick={() => handleDeleteTable(index)}><DeleteIcon/></IconButton></Grid>
+                                <Grid size={{xs: 2}}><IconButton onClick={() => handleDeleteList(index)}><DeleteIcon/></IconButton></Grid>
                             </Grid>
                         ))}
                     </Box>
@@ -511,9 +511,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             <FormControlLabel
                                 control={
                                     <Checkbox
-                                        checked={field.editableByOffice}
+                                        checked={field.edilistByOffice}
                                         onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                        name="editableByOffice"
+                                        name="edilistByOffice"
                                     />
                                 }
                                 label="Editabile"
