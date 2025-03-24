@@ -8,7 +8,7 @@ from rest_framework.response import Response
 
 from events.models import Event, Subscription
 from events.serializers import (
-    EventListSerializer, EventCreationSerializer,
+    EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
     EventWithSubscriptionsSerializer
 )
@@ -23,7 +23,7 @@ def events_list(request):
         events = Event.objects.all().order_by('-created_at')
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(events, request=request)
-        serializer = EventListSerializer(page, many=True)
+        serializer = EventsListSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
     except Exception as e:
@@ -178,24 +178,24 @@ def form_subscription_creation(request):
         # Extract data from request
         profile_email = request.data.get('email')
         event_id = request.data.get('event')
-        table_id = request.data.get('table')
+        list_id = request.data.get('list')
         notes = request.data.get('notes', '')
 
         # Validate required fields
-        if not all([profile_email, event_id, table_id]):
+        if not all([profile_email, event_id, list_id]):
             return Response({'error': 'Missing required fields'}, status=400)
 
         # Get related objects
         try:
             profile = Profile.objects.get(email=profile_email)
             event = Event.objects.get(id=event_id)
-            table = EventTable.objects.get(id=table_id, event=event)
+            list = EventList.objects.get(id=list_id, event=event)
         except Profile.DoesNotExist:
             return Response({'error': 'Profile not found'}, status=400)
         except Event.DoesNotExist:
             return Response({'error': 'Event not found'}, status=400)
-        except EventTable.DoesNotExist:
-            return Response({'error': 'Table not found'}, status=400)
+        except EventList.DoesNotExist:
+            return Response({'error': 'List not found'}, status=400)
 
         # Check if subscription already exists
         if Subscription.objects.filter(profile=profile, event=event).exists():
@@ -205,7 +205,7 @@ def form_subscription_creation(request):
         subscription = Subscription(
             profile=profile,
             event=event,
-            table=table,
+            list=list,
             notes=notes,
             created_by_form=True
         )
