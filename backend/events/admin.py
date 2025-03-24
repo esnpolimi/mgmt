@@ -1,9 +1,9 @@
 from django.contrib import admin
-from events.models import Event, EventTable, EventOrganizer, Subscription
+from events.models import Event, EventList, EventOrganizer, Subscription
 
 
-class EventTableInline(admin.TabularInline):
-    model = EventTable
+class EventListInline(admin.TabularInline):
+    model = EventList
     extra = 1
 
 
@@ -18,7 +18,7 @@ class EventAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
     list_filter = ('date', 'created_at')
     date_hierarchy = 'created_at'
-    inlines = [EventTableInline, EventOrganizerInline]
+    inlines = [EventListInline, EventOrganizerInline]
 
     def subscription_count(self, obj):
         return obj.subscription_set.count()
@@ -30,8 +30,8 @@ class EventAdmin(admin.ModelAdmin):
     organizer_count.short_description = 'Organizers'
 
 
-@admin.register(EventTable)
-class EventTableAdmin(admin.ModelAdmin):
+@admin.register(EventList)
+class EventListAdmin(admin.ModelAdmin):
     list_display = ('name', 'event', 'capacity', 'display_order', 'subscription_count')
     list_filter = ('event', 'capacity')
     search_fields = ('name', 'event__name')
@@ -51,16 +51,16 @@ class EventOrganizerAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'event', 'table', 'status', 'created_at')
-    list_filter = ('event', 'table', 'status', 'created_at', 'enable_refund')
-    search_fields = ('profile__name', 'profile__surname', 'profile__email', 'event__name', 'table__name')
+    list_display = ('profile', 'event', 'list', 'status', 'created_at')
+    list_filter = ('event', 'list', 'status', 'created_at', 'enable_refund')
+    search_fields = ('profile__name', 'profile__surname', 'profile__email', 'event__name', 'list__name')
     date_hierarchy = 'created_at'
     readonly_fields = ('created_at', 'updated_at')
 
-    def get_table(self, obj):
+    def get_list(self, obj):
         try:
-            return obj.table
-        except Subscription.table.RelatedObjectDoesNotExist:
+            return obj.list
+        except Subscription.list.RelatedObjectDoesNotExist:
             return "-"
 
-    get_table.short_description = 'Table'
+    get_list.short_description = 'List'
