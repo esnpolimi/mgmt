@@ -27,7 +27,7 @@ class EventOrganizerSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_profile_name(obj):
-        return f"{obj.profile.first_name} {obj.profile.last_name}"
+        return f"{obj.profile.name} {obj.profile.surname}"
 
 
 class EventCreationSerializer(serializers.ModelSerializer):
@@ -79,31 +79,55 @@ class EventCreationSerializer(serializers.ModelSerializer):
         return event
 
     def update(self, instance, validated_data):
-        lists_data = validated_data.pop('lists', [])
-        organizers = validated_data.pop('organizers', [])
-        lead_organizer = validated_data.pop('lead_organizer', None)
+        data_to_update = validated_data.copy()
+        # Remove any relationship fields if they exist in validated_data
+        # These fields should be handled separately
+        for field in ['lists', 'organizers', 'lead_organizer']:
+            if field in data_to_update:
+                data_to_update.pop(field)
 
-        # Update event fields
-        for attr, value in validated_data.items():
+        for attr, value in data_to_update.items():
             setattr(instance, attr, value)
+
         instance.save()
 
-        # Update lists
-        instance.lists.all().delete()
-        for list_data in lists_data:
-            EventList.objects.create(event=instance, **list_data)
+        lists_data = self.initial_data.get('lists', None)
+        organizers = self.initial_data.get('organizers', None)
+        lead_organizer = self.initial_data.get('lead_organizer', None)
 
-        # Update organizers
-        instance.organizers.all().delete()
-        for profile in organizers:
-            EventOrganizer.objects.create(
-                event=instance,
-                profile=profile,
-                is_lead=False
-            )
+        if lists_data is not None:
+            existing_lists = {list_obj.id: list_obj for list_obj in instance.lists.all()}
+            # Process each list in the request
+            for list_data in lists_data:
+                list_id = list_data.get('id')
+                if list_id and list_id in existing_lists:
+                    list_obj = existing_lists[list_id]
+                    for attr, value in list_data.items():
+                        setattr(list_obj, attr, value)
+                    list_obj.save()
+                    del existing_lists[list_id]
+                else:
+                    # Create new list - remove empty id field
+                    create_data = {k: v for k, v in list_data.items() if k != 'id' or v}
+                    EventList.objects.create(event=instance, **create_data)
 
-        # Update lead organizer
-        if lead_organizer:
+            # Optional: if you want to delete lists not included in the update
+            for remaining_list in existing_lists.values():
+                remaining_list.delete()
+
+        # Similar pattern for organizers
+        if organizers is not None:
+            instance.organizers.filter(is_lead=False).delete()
+            for profile in organizers:
+                EventOrganizer.objects.create(
+                    event=instance,
+                    profile=profile,
+                    is_lead=False
+                )
+
+        # Only update lead organizer if provided
+        if lead_organizer is not None:
+            instance.organizers.filter(is_lead=True).delete()
             EventOrganizer.objects.create(
                 event=instance,
                 profile=lead_organizer,
@@ -135,13 +159,16 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_profile_name(obj):
-        return f"{obj.profile.first_name} {obj.profile.last_name}"
+        return f"{obj.profile.name} {obj.profile.surname}"
 
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
+    account = serializers.CharField(write_only=True, allow_null=True)
+    status = serializers.CharField(default='pending')
+
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'list', 'notes']
+        fields = ['profile', 'event', 'list', 'notes', 'status', 'account']
 
     def validate(self, attrs):
         # Check if profile is already registered for this event
@@ -151,13 +178,23 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
         if Subscription.objects.filter(profile=profile, event=event).exists():
             raise serializers.ValidationError("This profile is already registered for this event")
 
+        # Remove account id from validated_data as it's not a field in Subscription model
+        self.account = attrs.pop('account', None)
+
         return attrs
 
 
 class SubscriptionUpdateSerializer(serializers.ModelSerializer):
+    account_id = serializers.IntegerField(write_only=True, required=False)
+
     class Meta:
         model = Subscription
-        fields = ['list', 'status', 'enable_refund', 'notes']
+        fields = ['list', 'status', 'enable_refund', 'notes', 'account_id']
+
+    def validate(self, attrs):
+        # Remove account_id from validated_data as it's not a field in Subscription model
+        self.account_id = attrs.pop('account_id', None) if 'account_id' in attrs else None
+        return attrs
 
 
 class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
