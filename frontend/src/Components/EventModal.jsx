@@ -1,24 +1,26 @@
 import React, {useEffect, useState} from 'react';
 import {
     Modal, Box, TextField, FormControlLabel, Switch, Button, Checkbox, FormControl,
-    InputLabel, Select, MenuItem, IconButton, Paper, Typography
+    InputLabel, Select, MenuItem, IconButton, Paper, Typography, Tooltip
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
+import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon} from '@mui/icons-material';
 import {fetchCustom} from "../api/api";
 import {style, colorOptions} from '../utils/sharedStyles'
 import {eventDisplayNames as eventNames} from '../utils/displayAttributes';
 import CustomEditor from './CustomEditor';
 import Loader from "./Loader";
 import StatusBanner from "./StatusBanner";
+import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
     const title = isEdit ? 'Modifica Evento - ' + event.name : 'Crea Evento';
     const [statusMessage, setStatusMessage] = useState(null);
+    const [hasSubscriptions, setHasSubscriptions] = useState(false);
 
     const [data, setData] = useState({
         id: '',
@@ -31,7 +33,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         cost: '',
         subscription_start_date: dayjs().hour(12).minute(0),
         subscription_end_date: dayjs().hour(24).minute(0),
-        lists: [{name: 'Main List', capacity: ''}]
+        lists: [{id: '', name: 'Main List', capacity: ''}]
     });
 
     const [errors, setErrors] = React.useState({
@@ -49,6 +51,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         if (isEdit) {
             console.log("Seting form data: ", event);
             setData(event);
+            console.log("#Subsciptions: ", event.subscriptions.length);
+            setHasSubscriptions(event.subscriptions.length > 0)
         }
         setLoading(false);
     }, []);
@@ -58,7 +62,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     };
 
     const formatDateTimeString = (date) => {
-        return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
+        return dayjs(date).toISOString();
     };
 
     const handleEventDateChange = (date) => {
@@ -81,11 +85,18 @@ export default function EventModal({open, event, isEdit, onClose}) {
     };
 
     const handleSubscriptionEndChange = (date) => {
-        // Only allow dates and times after start date and time
-        if (date && data.subscription_start_date) {
+        // Only allow dates and times after start date and time and current time
+        if (date) {
             const startDateTime = dayjs(data.subscription_start_date);
             const endDateTime = dayjs(date);
-            if (endDateTime.isBefore(startDateTime)) date = startDateTime;
+            const now = dayjs();
+
+            // End date should not be before start date or current time
+            if (endDateTime.isBefore(startDateTime)) {
+                date = startDateTime;
+            } else if (endDateTime.isBefore(now)) {
+                date = now;
+            }
         }
         setData({...data, subscription_end_date: date});
     };
@@ -99,6 +110,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             subscription_end_date: formatDateTimeString(data.subscription_end_date),
             cost: Number(data.cost).toFixed(2),
             lists: data.lists.map(t => ({
+                id: t.id,
                 name: t.name,
                 capacity: Math.floor(Number(t.capacity))
             }))
@@ -161,7 +173,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const handleAddList = () => {
         setData({
             ...data,
-            lists: [...data.lists, {name: '', capacity: ''}],
+            lists: [...data.lists, {id: '', name: '', capacity: ''}],
         });
     };
 
@@ -197,44 +209,18 @@ export default function EventModal({open, event, isEdit, onClose}) {
         }
 
         try {
-            const response = isEdit ? await fetchCustom("PATCH", `/event/${data.id}/`, convert(data))
+            const response = isEdit
+                ? await fetchCustom("PATCH", `/event/${data.id}/`, convert(data))
                 : await fetchCustom("POST", '/event/', convert(data));
             if (!response.ok) {
-                const text = await response.text();
-                if (text) {
-                    try {
-                        const errorData = JSON.parse(text);
-                        if (errorData.lists && errorData.lists.non_field_errors) {
-                            setStatusMessage({
-                                message: 'Errore formato Liste: ' + errorData.lists.non_field_errors.join(', '),
-                                state: 'error'
-                            });
-                        } else {
-                            setStatusMessage({
-                                message: 'Errore ' + (isEdit ? 'modifica' : 'creazione') + ' evento: ' + errorData.message,
-                                state: 'error'
-                            });
-                        }
-
-                        const newErrors = {...errors};
-                        Object.entries(errorData).forEach(([field, message]) => {
-                            if (newErrors[field]) {
-                                newErrors[field] = [true, Array.isArray(message) ? message.join(', ') : message];
-                            }
-                        });
-                        setErrors(newErrors);
-                    } catch (parseError) {
-                        setStatusMessage({
-                            message: "Errore server (" + response.status + "): " + text || 'Nessun dettaglio fornito',
-                            state: "error"
-                        });
-                    }
-                } else setStatusMessage({message: "Errore server (" + response.status + ") con risposta vuota", state: "error"});
+                const errorMessage = await extractErrorMessage(response);
+                setStatusMessage({message: `Errore ${isEdit ? 'modifica' : 'creazione'} evento: ${errorMessage}`, state: 'error'});
                 scrollUp();
             } else onClose(true);
         } catch (error) {
-            console.log("Error creating/updating event: ", error);
-            setStatusMessage({message: "Errore generale (" + error.message + ")", state: "error"});
+            console.error("Error creating/updating event:", error);
+            const errorMessage = await extractErrorMessage(error);
+            setStatusMessage({message: `Errore generale: ${errorMessage}`, state: "error"});
             scrollUp();
         }
     }
@@ -318,6 +304,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 {isLoading ? <Loader/> : (<>
                     <Typography variant="h5" gutterBottom align="center">{title}</Typography>
                     {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
+
+                    {isEdit && hasSubscriptions && (
+                        <Box sx={{ mb: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1 }}>
+                            <Typography variant="body2" color="warning.main">
+                                <InfoIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 1 }} />
+                                Alcuni campi non sono modificabili perché ci sono già iscrizioni. Rimuovi tutte le iscrizioni per abilitare la modifica.
+                            </Typography>
+                        </Box>
+                    )}
+
                     <Grid container spacing={2}>
                         <Grid size={{xs: 12, md: 6}}>
                             <TextField
@@ -344,17 +340,27 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </LocalizationProvider>
                         </Grid>
                         <Grid size={{xs: 12, md: 3}}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                <DateTimePicker
-                                    label={eventNames.subscription_start_date}
-                                    value={data.subscription_start_date || null}
-                                    onChange={handleSubscriptionStartChange}
-                                    minDate={isEdit ? null : dayjs()}
-                                    slotProps={{textField: {fullWidth: true, required: true}}}
-                                    required
-                                    error={errors.subscription_start_date[0]}
-                                />
-                            </LocalizationProvider>
+                            <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                                <div> {/* Wrapper div needed for Tooltip to work with disabled elements */}
+                                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                        <DateTimePicker
+                                            label={eventNames.subscription_start_date}
+                                            value={data.subscription_start_date || null}
+                                            onChange={handleSubscriptionStartChange}
+                                            minDate={isEdit ? null : dayjs()}
+                                            slotProps={{
+                                                textField: {
+                                                    fullWidth: true,
+                                                    required: true,
+                                                }
+                                            }}
+                                            disabled={isEdit && hasSubscriptions}
+                                            required
+                                            error={errors.subscription_start_date[0]}
+                                        />
+                                    </LocalizationProvider>
+                                </div>
+                            </Tooltip>
                         </Grid>
                         <Grid size={{xs: 12, md: 3}}>
                             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
@@ -362,7 +368,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     label={eventNames.subscription_end_date}
                                     value={data.subscription_end_date || null}
                                     onChange={handleSubscriptionEndChange}
-                                    minDate={data.subscription_start_date || dayjs()}
+                                    minDate={dayjs().isAfter(data.subscription_start_date) ? dayjs() : data.subscription_start_date || dayjs()}
                                     slotProps={{textField: {fullWidth: true, required: true}}}
                                     required
                                     error={errors.subscription_start_date[0]}
@@ -370,18 +376,23 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </LocalizationProvider>
                         </Grid>
                         <Grid size={{xs: 12, md: 3}}>
-                            <TextField
-                                fullWidth
-                                label={eventNames.cost}
-                                name="cost"
-                                type="number"
-                                slotProps={{htmlInput: {min: "0", step: "0.01"}}}
-                                value={data.cost}
-                                onChange={handleInputChange}
-                                placeholder="Inserisci 0 se gratuito"
-                                required
-                                error={errors.cost[0]}
-                            />
+                            <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                                <div> {/* Wrapper div needed for Tooltip to work with disabled elements */}
+                                    <TextField
+                                        fullWidth
+                                        label={eventNames.cost}
+                                        name="cost"
+                                        type="number"
+                                        slotProps={{htmlInput: {min: "0", step: "0.01"}}}
+                                        value={data.cost}
+                                        onChange={handleInputChange}
+                                        placeholder="Inserisci 0 se gratuito"
+                                        required
+                                        error={errors.cost[0]}
+                                        disabled={isEdit && hasSubscriptions}
+                                    />
+                                </div>
+                            </Tooltip>
                         </Grid>
                     </Grid>
                     <Grid size={{xs: 12}} data-color-mode="light">

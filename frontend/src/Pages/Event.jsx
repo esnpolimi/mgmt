@@ -22,6 +22,7 @@ import CustomEditor from '../Components/CustomEditor';
 import Popup from "../Components/Popup";
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
+import SubscriptionModal from "../Components/SubscriptionModal";
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
@@ -55,7 +56,7 @@ export default function Event() {
         };
         fetchData().then();
     }, [id, eventFromState]);
-    
+
     const refreshEventData = async () => {
         setLoading(true);
         try {
@@ -128,6 +129,18 @@ export default function Event() {
         );
     };
 
+    const handleEditSubscription = (subscriptionId) => {
+        // Implementation for editing a subscription
+        console.log("Edit subscription:", subscriptionId);
+        // TODO: Open subscription edit modal
+    };
+
+    const handleDeleteSubscription = (subscriptionId) => {
+        // Implementation for deleting a subscription
+        console.log("Delete subscription:", subscriptionId);
+        // TODO: Show confirmation dialog before deletion
+    };
+
     // Columns and data for lists
     const listConfigs = React.useMemo(() => {
         if (!data?.lists) return [];
@@ -194,14 +207,14 @@ export default function Event() {
     const lists = React.useMemo(() => {
         return listConfigs.map(config => ({
             ...config,
-            listOptions: {
+            tableOptions: {
                 columns: config.columns,
                 data: config.subscriptions,
                 enableStickyHeader: true,
                 enablePagination: true,
                 initialState: {
                     pagination: {
-                        pageSize: 5,
+                        pageSize: 10,
                         pageIndex: 0,
                     },
                 },
@@ -209,8 +222,7 @@ export default function Event() {
                 localization: MRT_Localization_IT,
                 renderDetailPanel: ({row}) => (
                     <Box sx={{p: 2}}>
-                        <Typography variant="h6" gutterBottom>Azioni</Typography>
-                        <Box sx={{display: 'flex', gap: 2}}>
+                        <Box sx={{display: 'flex', gap: 1}}>
                             <Button
                                 variant="contained"
                                 color="secondary"
@@ -235,7 +247,7 @@ export default function Event() {
                         <Typography variant="body1">Nessuna iscrizione presente</Typography>
                     </Box>
                 ),
-                muiListPaginationProps: {
+                muiTablePaginationProps: {
                     labelRowsPerPage: 'Righe per pagina:'
                 }
             }
@@ -244,21 +256,18 @@ export default function Event() {
 
     const ListAccordions = React.memo(() => {
         if (!lists || lists.length === 0) {
-            return <Typography>Nessuna Lista disponibile</Typography>;
+            return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere persone)</Typography>;
         }
 
         return lists.map(listConfig => {
-            const {listId, listName, capacity, subscriptions, listOptions} = listConfig;
+            const {listId, listName, capacity, subscriptions, tableOptions} = listConfig;
             const occupancyPercentage = Math.round((subscriptions.length / capacity) * 100) || 0;
-            const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 70 ? 'warning' : 'success';
-
-            // Fix type issues by properly typing paginationDisplayMode
-            const fixedListOptions = {
-                ...listOptions,
+            const occupancyColor = occupancyPercentage >= 60 ? 'error' : occupancyPercentage >= 70 ? 'warning' : 'success';
+            const fixedTableOptions = {
+                ...tableOptions,
                 paginationDisplayMode: 'pages', // Use literal value instead of string type
             };
-
-            const list = useMaterialReactTable(fixedListOptions);
+            const list = useMaterialReactTable(fixedTableOptions);
 
             return (
                 <Accordion key={listId} sx={{mt: 2}}>
@@ -271,7 +280,6 @@ export default function Event() {
                             <Box sx={{width: '200px', ml: 2}}>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
                                     <Typography variant="body2">{subscriptions.length}/{capacity}</Typography>
-                                    <Typography variant="body2">{occupancyPercentage}%</Typography>
                                 </Box>
                                 <LinearProgress
                                     variant="determinate"
@@ -284,7 +292,7 @@ export default function Event() {
                     </AccordionSummary>
                     <AccordionDetails>
                         <Box sx={{mb: 2}}>
-                            <Button
+                            {subscriptions.length < capacity && <Button
                                 variant="contained"
                                 color="primary"
                                 startIcon={<PersonAddIcon/>}
@@ -292,7 +300,7 @@ export default function Event() {
                                 disabled={subscriptions.length >= capacity}
                             >
                                 Iscrivi Erasmus
-                            </Button>
+                            </Button>}
                         </Box>
                         <MaterialReactTable table={list}/>
                     </AccordionDetails>
@@ -300,18 +308,6 @@ export default function Event() {
             );
         });
     });
-
-    const handleEditSubscription = (subscriptionId) => {
-        // Implementation for editing a subscription
-        console.log("Edit subscription:", subscriptionId);
-        // TODO: Open subscription edit modal
-    };
-
-    const handleDeleteSubscription = (subscriptionId) => {
-        // Implementation for deleting a subscription
-        console.log("Delete subscription:", subscriptionId);
-        // TODO: Show confirmation dialog before deletion
-    };
 
     return (
         <Box>
@@ -327,6 +323,12 @@ export default function Event() {
                 }}
                 isEdit={true}
             />}
+            {subscribeModalOpen && <SubscriptionModal
+                open={subscribeModalOpen}
+                onClose={handleCloseSubscribeModal}
+                event={data}
+                listId={selectedList}
+            />}
             {/* TODO: Add SubscriptionModal component when subscribeModalOpen is true */}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
@@ -335,7 +337,6 @@ export default function Event() {
                             <EventIcon sx={{marginRight: '10px'}}/>
                             <Typography variant="h4">Evento - {data.name}</Typography>
                         </Box>
-
                         <Card elevation={3} sx={{mt: 5, mb: 4, borderRadius: 2, overflow: 'hidden'}}>
                             <CardContent>
                                 <Grid container spacing={3}>
@@ -348,7 +349,6 @@ export default function Event() {
                                             {data.date ? dayjs(data.date).format('DD/MM/YYYY') : 'Data non specificata'}
                                         </Typography>
                                     </Grid>
-
                                     <Grid size={{xs: 12, md: 4}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
                                             <EuroIcon sx={{color: 'primary.main', mr: 1}}/>
@@ -358,7 +358,6 @@ export default function Event() {
                                             {data.cost !== 0 ? `€ ${data.cost}` : 'Gratuito'}
                                         </Typography>
                                     </Grid>
-
                                     <Grid size={{xs: 12, md: 4}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
                                             <AdjustIcon sx={{color: 'primary.main', mr: 1}}/>
@@ -368,7 +367,6 @@ export default function Event() {
                                             {(() => handleSubscriptionStatus())()}
                                         </Box>
                                     </Grid>
-
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
@@ -382,7 +380,6 @@ export default function Event() {
                                             />
                                         </div>
                                     </Grid>
-
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
@@ -392,17 +389,7 @@ export default function Event() {
                                         <Button sx={{mt: 2}} variant="contained" color="primary" onClick={handleOpenEventModal}>
                                             Modifica Evento
                                         </Button>
-                                        <Button
-                                            sx={{mt: 2, ml: 2}}
-                                            variant="contained"
-                                            color="secondary"
-                                            startIcon={<PersonAddIcon/>}
-                                            onClick={() => handleOpenSubscribeModal()}
-                                        >
-                                            Iscrivi Erasmus
-                                        </Button>
                                     </Grid>
-
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{mt: 2}}>
@@ -410,7 +397,6 @@ export default function Event() {
                                             <ListAccordions/>
                                         </Box>
                                     </Grid>
-
                                 </Grid>
                             </CardContent>
                         </Card>

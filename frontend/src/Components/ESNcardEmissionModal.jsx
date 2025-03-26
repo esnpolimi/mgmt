@@ -28,17 +28,15 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
         const fetchAccounts = async () => {
             try {
                 const response = await fetchCustom("GET", '/accounts/');
-                if (!response.ok) throw new Error('Error fetching accounts');
-
                 const json = await response.json();
                 console.log('ESNcardEmissionModal accounts json:', json);
                 setAccounts(json.results);
-
                 const feeKey = profile.latest_esncard ? 'esncard_renewal_fee' : 'esncard_release_fee';
                 const feeAmount = json.esncard_fees[feeKey];
                 setAmount(parseFloat(feeAmount.replace('€', '')));
             } catch (error) {
                 console.error('Error in fetching data:', error);
+                setShowSuccessPopup({message: "Errore durante il recupero dei dati", state: "error"});
             }
         };
         fetchAccounts().then();
