@@ -16,6 +16,7 @@ from profiles.tokens import email_verification_token
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.core.mail import EmailMultiAlternatives
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 HOSTNAME = settings.HOSTNAME
@@ -273,3 +274,41 @@ def document_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         return Response(str(e), status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def search_profiles(request):
+    try:
+        query = request.GET.get('q', '')
+        print("AA Query: ", query)
+        valid_only = request.GET.get('valid_only', 'false').lower() == 'true'
+        esner_only = request.GET.get('esner_only', 'false').lower() == 'true'
+
+        if len(query) < 2:
+            return Response({"results": []})
+
+        # Search by name, surname, or esncard
+        profiles = Profile.objects.filter(
+            Q(name__icontains=query) |
+            Q(surname__icontains=query) |
+            Q(esncard__number__icontains=query)
+        ).distinct()
+
+        if valid_only:
+            profiles = profiles.filter(enabled=True, email_is_verified=True)
+
+        if esner_only:
+            profiles = profiles.filter(is_esner=True)
+
+        # Order by most relevant (exact matches first, then contains)
+        profiles = profiles.order_by('-created_at')
+
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(profiles, request=request)
+        serializer = ProfileListViewSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response({"error": str(e)}, status=500)

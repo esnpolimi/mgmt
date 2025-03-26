@@ -8,5 +8,6 @@ urlpatterns = [
     path('profile/<str:pk>/', views.profile_detail),  # returns detailed profile, including esncards, documents and matricole
     path('profile/<str:pk>/verification/<str:token>/', views.profile_verification),  # used to verify emails
     path('document/', views.document_creation),  # creates a new document
-    path('document/<str:pk>/', views.document_detail)
+    path('document/<str:pk>/', views.document_detail),
+    path('profiles/search/', views.search_profiles)  # search for profiles by name, surname, or email
 ]
