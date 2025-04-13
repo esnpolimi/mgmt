@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from events.models import Event, Subscription
+from events.models import Event, Subscription, EventList
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
@@ -77,11 +77,11 @@ def event_detail(request, pk):
                 print(f"Start date: {start_date}, existing: {event.subscription_start_date}")
                 print(f"Start date: {formatted_start}, existing: {existing_date}")
                 if formatted_start != existing_date:
-                    return Response("Cannot modify start date when event has subscriptions", status=400)
+                    return Response("Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni", status=400)
 
                 # Not possible to change cost
-                if data_to_validate.get('cost') != event.cost:
-                    return Response("Cannot modify cost when event has subscriptions", status=400)
+                if data_to_validate.get('cost') != str(event.cost):
+                    return Response("Non è possibile modificare il costo se l'evento ha delle iscrizioni", status=400)
 
                 # Not possible to reduce capacity below current subscription count
                 for list_data in data_to_validate['lists']:
@@ -94,19 +94,15 @@ def event_detail(request, pk):
 
                     subscription_count = Subscription.objects.filter(event=event, list_id=list_id).count()
                     if subscription_count > new_capacity > 0:
-                        return Response(f"Cannot reduce list capacity below current subscription count ({subscription_count})", status=400)
+                        return Response(f"Non è possibile impostare una capacità lista minore del numero di iscrizoni presenti ({subscription_count})", status=400)
 
             # Not possible to set end date before now or before start date
             now = timezone.now()  # This is timezone-aware
             current_start = start_date if start_date else event.subscription_start_date
-            print(f"Now: {now}")
-            print(f"Current start: {current_start}")
-            print(f"Start date: {current_start}")
-            print(f"End date: {end_date}")
             if end_date < now:
-                return Response("Subscription end date cannot be in the past", status=400)
+                return Response("Non è possibile impostare una data fine iscrizioni nel passato", status=400)
             if current_start and end_date <= current_start:
-                return Response("Subscription end date must be after start date", status=400)
+                return Response("Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni", status=400)
 
             # Continue with serializer validation and saving
             serializer = EventCreationSerializer(instance=event, data=data_to_validate, partial=True)
@@ -134,6 +130,12 @@ def event_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def subscription_create(request):
     try:
+        # Check if the profile is already subscribed to any list in the same event
+        profile = request.data.get('profile')
+        event = request.data.get('event')
+        if Subscription.objects.filter(profile=profile, event=event).exists():
+            return Response("Il profilo è già iscritto all'evento", status=400)
+
         serializer = SubscriptionCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
@@ -251,6 +253,42 @@ def subscription_detail(request, pk):
         logger.error(str(e))
         return Response(str(e), status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def move_subscriptions(request):
+    try:
+        # Extract data from the request
+        subscription_ids = request.data.get('subscriptionIds', [])
+        target_list_id = request.data.get('targetListId')
+
+        if not subscription_ids or not target_list_id:
+            return Response("Missing subscription IDs or target list ID", status=400)
+
+        # Fetch the target list and validate its existence
+        try:
+            target_list = EventList.objects.get(id=target_list_id)
+        except EventList.DoesNotExist:
+            return Response("Lista di destinazione inesistente", status=400)
+
+        # Check if moving the subscriptions would exceed the target list's capacity
+        current_count = Subscription.objects.filter(list=target_list).count()
+        if current_count + len(subscription_ids) > target_list.capacity:
+            return Response("Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione ", status=400)
+
+        # Fetch the subscriptions to be moved
+        subscriptions = Subscription.objects.filter(id__in=subscription_ids)
+
+        # Update the list for each subscription
+        with transaction.atomic():
+            for subscription in subscriptions:
+                subscription.list = target_list
+                subscription.save()
+
+        return Response("Subscriptions moved successfully", status=200)
+
+    except Exception as e:
+        logger.error(f"Error moving subscriptions: {str(e)}")
+        return Response({"message": f"Errore: {str(e)}"}, status=500)
 
 # Future implementations
 ''' 
