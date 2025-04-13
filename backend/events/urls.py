@@ -7,5 +7,6 @@ urlpatterns = [
     path('event/<str:pk>/', views.event_detail),
     #path('form_subscription/', views.form_subscription_creation),
     path('subscription/',views.subscription_create),
-    path('subcription/<str:pk>/', views.subscription_detail),
+    path('subscription/<str:pk>/', views.subscription_detail),
+    path('move-subscriptions/', views.move_subscriptions),
 ]

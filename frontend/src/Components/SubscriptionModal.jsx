@@ -1,10 +1,11 @@
 import React, {useEffect, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, Autocomplete, Switch, FormControlLabel, Paper} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, Autocomplete, Switch, FormControlLabel, Paper, IconButton} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../api/api";
 import {styleESNcardModal as style} from "../utils/sharedStyles";
 import Grid from '@mui/material/Grid2';
 import Popup from "./Popup";
+import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function SubscriptionModal({open, onClose, event, listId}) {
     const [accounts, setAccounts] = useState([]);
@@ -13,7 +14,7 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
     const [profiles, setProfiles] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
-
+    const listName = event.lists.find(list => list.id === listId)?.name || 'Lista non trovata';
 
     const [data, setData] = useState({
         notes: '',
@@ -41,12 +42,16 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
             if (!isPaid) return;
             try {
                 const response = await fetchCustom("GET", '/accounts/');
-                const json = await response.json();
-                console.log('Accounts json:', json);
-                setAccounts(json.results);
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                } else {
+                    const json = await response.json();
+                    console.log('Accounts json:', json);
+                    setAccounts(json.results);
+                }
             } catch (error) {
-                console.error('Error in fetching data:', error);
-                setShowSuccessPopup({message: "Errore durante il recupero dei dati", state: "error"});
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             }
         };
         fetchAccounts().then();
@@ -55,24 +60,22 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
     // Fetch profiles based on search query
     useEffect(() => {
         const searchProfiles = async () => {
-            if (searchQuery.length < 2) {
+            if (searchQuery.length < 3) {
                 setProfiles([]);
                 return;
             }
-
             setLoading(true);
             try {
                 const response = await fetchCustom("GET", `/profiles/search/?q=${searchQuery}&valid_only=true&esner_only=false`);
-                if (response.ok) {
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                } else {
                     const json = await response.json();
                     setProfiles(json.results || []);
-                } else {
-                    console.error('Error searching profiles:', response.status);
-                    setShowSuccessPopup({message: "Errore durante il recupero dei profili", state: "error"});
                 }
             } catch (error) {
-                console.error('Error searching profiles:', error);
-                setShowSuccessPopup({message: "Errore durante il recupero dei profili", state: "error"});
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setLoading(false);
             }
@@ -118,21 +121,12 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
                 notes: data.notes,
                 status: data.status
             });
-
             if (!response.ok) {
-                const text = await response.text();
-                if (text) {
-                    try {
-                        setShowSuccessPopup({message: "Errore durante l'iscrizione (" + text + ")", state: "error"});
-                    } catch (parseError) {
-                        setShowSuccessPopup({message: "Errore server (" + response.status + "): " + text || 'Nessun dettaglio fornito', state: "error"});
-                    }
-                } else setShowSuccessPopup({message: "Errore server (" + response.status + ") con risposta vuota", state: "error"});
-
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
-
         } catch (error) {
-            setShowSuccessPopup({message: "Errore durante l'iscrizione (" + error.message + ")", state: "error"});
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -153,7 +147,7 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
     };
 
     const getOptionLabel = (option) => {
-        return `${option.name} ${option.surname} ${option.latest_esncard?.number || 'Nessuna ESNcard'} ${option.is_esner ? 'ESNer' : 'Erasmus'}`;
+        return `${option.name} ${option.surname}`;
     };
 
     const renderOption = (props, option) => {
@@ -200,32 +194,34 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
     return (
         <Modal
             open={open}
-            onClose={onClose}
+            onClose={() => {
+                onClose(false);
+            }}
             aria-labelledby="modal-modal-title"
             aria-describedby="modal-modal-description"
         >
             <Box sx={style}>
                 <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                    <Button onClick={() => onClose(false)} sx={{minWidth: 0}}>
+                    <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}>
                         <CloseIcon/>
-                    </Button>
+                    </IconButton>
                 </Box>
                 <Typography variant="h4" component="h2" gutterBottom>
-                    Iscrizione all'evento
+                    Iscrizione Evento
                 </Typography>
                 <Divider sx={{mb: 2}}/>
                 <Typography variant="subtitle1" gutterBottom>
-                    <b>Evento:</b> {event.name}
+                    <b>Nome Evento:</b> {event.name}
                 </Typography>
                 <Typography variant="subtitle1" gutterBottom>
-                    <b>Lista:</b> {listId}
+                    <b>Lista:</b> {listName}
                 </Typography>
                 <Typography variant="subtitle1" gutterBottom>
                     <b>Importo:</b> {event.cost}€
                 </Typography>
 
                 <Grid container spacing={2} direction="column">
-                    <Grid xs={12}>
+                    <Grid size={{xs: 12}} sx={{mt: 2}}>
                         <Autocomplete
                             id="profile-search"
                             options={profiles}
@@ -253,7 +249,7 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
                             loadingText="Caricamento..."
                         />
                     </Grid>
-                    <Grid xs={12}>
+                    <Grid size={{xs: 12}}>
                         <Paper
                             elevation={1}
                             sx={{
@@ -281,7 +277,7 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
                     </Grid>
 
                     {isPaid && (
-                        <Grid xs={12}>
+                        <Grid size={{xs: 12}}>
                             <FormControl fullWidth required error={errors.account_id && errors.account_id[0]}>
                                 <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
                                 <Select
@@ -304,7 +300,7 @@ export default function SubscriptionModal({open, onClose, event, listId}) {
                         </Grid>
                     )}
 
-                    <Grid xs={12}>
+                    <Grid size={{xs: 12}}>
                         <TextField
                             label="Note"
                             name="notes"

@@ -11,6 +11,7 @@ import {eventDisplayNames as names} from "../utils/displayAttributes";
 import Loader from "../Components/Loader";
 import dayjs from "dayjs";
 import Popup from "../Components/Popup";
+import {extractErrorMessage} from "../utils/errorHandling";
 
 
 export default function EventsList() {
@@ -24,12 +25,18 @@ export default function EventsList() {
         const fetchData = async () => {
             try {
                 const response = await fetchCustom("GET", '/events/');
-                const json = await response.json();
-                setData(json.results);
-                console.log("Event List Data: ", json.results);
-                setLoading(false);
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                } else {
+                    const json = await response.json();
+                    setData(json.results);
+                    console.log("Event List Data: ", json.results);
+                    setLoading(false);
+                }
             } catch (error) {
-                console.error('Error fetching data:', error);
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            } finally {
                 setLoading(false);
             }
         };
@@ -133,7 +140,7 @@ export default function EventsList() {
                 navigate('/event/' + row.original.id, {state: {event: row.original}});
             },
         }),
-        renderTopToolbarCustomActions: ({table}) => {
+        renderTopToolbarCustomActions: () => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
                     <Button variant='contained' onClick={() => setEventModalOpen(true)} sx={{width: '150px'}}>
@@ -148,13 +155,16 @@ export default function EventsList() {
         setLoading(true);
         try {
             const response = await fetchCustom("GET", '/events/');
-            if (response.ok) {
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
                 const json = await response.json();
                 setData(json.results);
-                setLoading(false);
             }
         } catch (error) {
-            console.error("Error refreshing events data:", error);
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
             setLoading(false);
         }
     };
