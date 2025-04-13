@@ -23,6 +23,9 @@ import Popup from "../Components/Popup";
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import SubscriptionModal from "../Components/SubscriptionModal";
+import {styleESNcardModal as style} from "../utils/sharedStyles";
+import MoveToListModal from "../Components/MoveToListModal";
+import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
@@ -30,6 +33,8 @@ export default function Event() {
     const navigate = useNavigate();
     const [eventModalOpen, setEventModalOpen] = useState(false);
     const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
+    const [moveToListModalOpen, setMoveToListModalOpen] = useState(false);
+    const [selectedRows, setSelectedRows] = useState([]);
     const [isLoading, setLoading] = useState(true);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [data, setData] = useState(null);
@@ -45,12 +50,17 @@ export default function Event() {
                 // Use ID from URL params if available, otherwise from state
                 const eventId = id || eventFromState?.id;
                 const response = await fetchCustom("GET", `/event/${eventId}/`);
-                const json = await response.json();
-                setData(json);
-                console.log("Event Data: ", json);
-                setLoading(false);
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                } else {
+                    const json = await response.json();
+                    setData(json);
+                    console.log("Event Data: ", json);
+                }
             } catch (error) {
-                console.error('Error fetching data:', error);
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            } finally {
                 setLoading(false);
             }
         };
@@ -61,13 +71,17 @@ export default function Event() {
         setLoading(true);
         try {
             const response = await fetchCustom("GET", `/event/${data.id}/`);
-            if (response.ok) {
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
                 const json = await response.json();
                 setData(json);
                 setLoading(false);
             }
         } catch (error) {
-            console.error("Error refreshing events data:", error);
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
             setLoading(false);
         }
     };
@@ -135,19 +149,11 @@ export default function Event() {
         // TODO: Open subscription edit modal
     };
 
-    const handleDeleteSubscription = (subscriptionId) => {
-        // Implementation for deleting a subscription
-        console.log("Delete subscription:", subscriptionId);
-        // TODO: Show confirmation dialog before deletion
-    };
-
     // Columns and data for lists
     const listConfigs = React.useMemo(() => {
         if (!data?.lists) return [];
-
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list === list.id) || [];
-
             const listSubscriptionsColumns = [
                 {
                     accessorKey: 'id',
@@ -168,17 +174,17 @@ export default function Event() {
                         let color;
                         let label;
                         switch (status) {
-                            case 'confirmed':
+                            case 'paid':
                                 color = 'success';
-                                label = 'Confermato';
+                                label = 'PAGATO';
                                 break;
                             case 'pending':
                                 color = 'warning';
-                                label = 'In attesa';
+                                label = 'IN ATTESA';
                                 break;
-                            case 'canceled':
+                            case 'cancelled':
                                 color = 'error';
-                                label = 'Cancellato';
+                                label = 'CANCELLATO';
                                 break;
                             default:
                                 color = 'default';
@@ -193,7 +199,6 @@ export default function Event() {
                     size: 200,
                 }
             ];
-
             return {
                 listId: list.id,
                 listName: list.name,
@@ -212,36 +217,16 @@ export default function Event() {
                 data: config.subscriptions,
                 enableStickyHeader: true,
                 enablePagination: true,
+                enableRowSelection: true,
+                display: false,
                 initialState: {
                     pagination: {
                         pageSize: 10,
                         pageIndex: 0,
                     },
                 },
-                paginationDisplayMode: 'pages', // Use literal type instead of string
+                paginationDisplayMode: 'pages',
                 localization: MRT_Localization_IT,
-                renderDetailPanel: ({row}) => (
-                    <Box sx={{p: 2}}>
-                        <Box sx={{display: 'flex', gap: 1}}>
-                            <Button
-                                variant="contained"
-                                color="secondary"
-                                startIcon={<EditIcon/>}
-                                onClick={() => handleEditSubscription(row.original.id)}
-                            >
-                                Modifica iscrizione
-                            </Button>
-                            <Button
-                                variant="outlined"
-                                color="error"
-                                startIcon={<DeleteIcon/>}
-                                onClick={() => handleDeleteSubscription(row.original.id)}
-                            >
-                                Cancella iscrizione
-                            </Button>
-                        </Box>
-                    </Box>
-                ),
                 renderEmptyRowsFallback: () => (
                     <Box sx={{textAlign: 'center', p: 2}}>
                         <Typography variant="body1">Nessuna iscrizione presente</Typography>
@@ -249,20 +234,52 @@ export default function Event() {
                 ),
                 muiTablePaginationProps: {
                     labelRowsPerPage: 'Righe per pagina:'
-                }
+                },
+                renderTopToolbarCustomActions: ({table}) => {
+                    const selectedRows = table.getSelectedRowModel().rows;
+                    const selectedCount = selectedRows.length;
+                    return (
+                        <Box sx={{display: 'flex', gap: 1}}>
+                            {selectedCount >= 1 && (<>
+                                    <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        onClick={() => handleMoveToList(selectedRows, config.listId)}>
+                                        Sposta in Altra Lista
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        color="secondary"
+                                        onClick={() => handleExportSelected(selectedRows)}>
+                                        Esporta
+                                    </Button>
+                                </>
+                            )}
+                            {selectedCount === 1 && (<>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={() => handleEditSubscription(selectedRows[0].original.id)}>
+                                        Modifica Iscrizione
+                                    </Button>
+                                </>
+                            )}
+                        </Box>
+                    );
+                },
             }
         }));
     }, [listConfigs]);
 
     const ListAccordions = React.memo(() => {
         if (!lists || lists.length === 0) {
-            return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere persone)</Typography>;
+            return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
         }
 
         return lists.map(listConfig => {
             const {listId, listName, capacity, subscriptions, tableOptions} = listConfig;
             const occupancyPercentage = Math.round((subscriptions.length / capacity) * 100) || 0;
-            const occupancyColor = occupancyPercentage >= 60 ? 'error' : occupancyPercentage >= 70 ? 'warning' : 'success';
+            const occupancyColor = occupancyPercentage >= 60 ? 'warning' : occupancyPercentage >= 70 ? 'error' : 'success';
             const fixedTableOptions = {
                 ...tableOptions,
                 paginationDisplayMode: 'pages', // Use literal value instead of string type
@@ -271,12 +288,20 @@ export default function Event() {
 
             return (
                 <Accordion key={listId} sx={{mt: 2}}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon/>}>
+                    <AccordionSummary>
                         <Box sx={{display: 'flex', alignItems: 'center', width: '100%'}}>
                             <BallotIcon sx={{color: 'primary.main', mr: 1}}/>
-                            <Typography variant="h6" component="div" sx={{flexGrow: 1}}>
-                                {listName} ({subscriptions.length}/{capacity})
-                            </Typography>
+                            <Typography variant="h6" component="div" sx={{flexGrow: 1}}>{listName}</Typography>
+                            <Box sx={{display: 'flex'}}>
+                                {subscriptions.length < capacity && <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<PersonAddIcon/>}
+                                    onClick={() => handleOpenSubscribeModal(listId)}
+                                    disabled={subscriptions.length >= capacity}>
+                                    Iscrivi
+                                </Button>}
+                            </Box>
                             <Box sx={{width: '200px', ml: 2}}>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
                                     <Typography variant="body2">{subscriptions.length}/{capacity}</Typography>
@@ -291,23 +316,33 @@ export default function Event() {
                         </Box>
                     </AccordionSummary>
                     <AccordionDetails>
-                        <Box sx={{mb: 2}}>
-                            {subscriptions.length < capacity && <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<PersonAddIcon/>}
-                                onClick={() => handleOpenSubscribeModal(listId)}
-                                disabled={subscriptions.length >= capacity}
-                            >
-                                Iscrivi Erasmus
-                            </Button>}
-                        </Box>
                         <MaterialReactTable table={list}/>
                     </AccordionDetails>
                 </Accordion>
             );
         });
     });
+
+    // Handlers for actions
+    const handleMoveToList = (selectedRows, listId) => {
+        console.log("Moving selected rows to another list:", selectedRows);
+        setSelectedRows(selectedRows);
+        setSelectedList(listId);
+        setMoveToListModalOpen(true);
+    };
+
+    const handleCloseMoveToListModal = (success) => {
+        if (success) {
+            setShowSuccessPopup({message: "Spostamento effettuato con successo!", state: "success"});
+            refreshEventData().then();
+        }
+        setMoveToListModalOpen(false);
+    }
+
+    const handleExportSelected = (selectedRows) => {
+        console.log("Exporting selected rows:", selectedRows);
+        // Implement export logic here
+    };
 
     return (
         <Box>
@@ -329,7 +364,13 @@ export default function Event() {
                 event={data}
                 listId={selectedList}
             />}
-            {/* TODO: Add SubscriptionModal component when subscribeModalOpen is true */}
+            {moveToListModalOpen && <MoveToListModal
+                open={moveToListModalOpen}
+                onClose={handleCloseMoveToListModal}
+                selectedRows={selectedRows}
+                event={data}
+                listId={selectedList}
+            />}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
@@ -361,7 +402,7 @@ export default function Event() {
                                     <Grid size={{xs: 12, md: 4}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
                                             <AdjustIcon sx={{color: 'primary.main', mr: 1}}/>
-                                            <Typography variant="h6" component="div">Stato Iscrizioni</Typography>
+                                            <Typography variant="h6" component="div">Periodo Iscrizioni</Typography>
                                         </Box>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
                                             {(() => handleSubscriptionStatus())()}
