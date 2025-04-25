@@ -1,7 +1,7 @@
 import React, {useState, useCallback} from 'react';
 import {Box, IconButton, Typography} from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
-import LogoutButton from './LogoutButton';
+import LogoutButton from '../LogoutButton';
 import ProfileModal from './ProfileModal';
 
 export default function ProfileSidebarBox({user}) {

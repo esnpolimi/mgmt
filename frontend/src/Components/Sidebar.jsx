@@ -12,7 +12,7 @@ import {
     ExpandLess,
     ExpandMore,
 } from "@mui/icons-material";
-import ProfileSidebarBox from './ProfileSidebarBox';
+import ProfileSidebarBox from './profiles/ProfileSidebarBox';
 import {useAuth} from "../Context/AuthContext";
 
 

@@ -1,10 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import {Box} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import {fetchCustom} from '../api/api';
-import ProfileModal from '../Components/ProfileModal.jsx';
+import {fetchCustom} from '../../api/api';
+import ProfileModal from '../../Components/profiles/ProfileModal.jsx';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
-import Loader from "../Components/Loader";
+import Loader from "../../Components/Loader";
 
 export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
     const [data, setData] = useState([]);

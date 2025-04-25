@@ -90,6 +90,6 @@ class Transaction(BaseEntity):
 
     def delete(self, *args, **kwargs):
         with transaction.atomic():
-            self.account.balance -= self.Amount
+            self.account.balance -= self.amount
             self.account.save()
             super(Transaction, self).delete(*args, **kwargs)

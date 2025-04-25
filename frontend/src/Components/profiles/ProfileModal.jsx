@@ -4,16 +4,16 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import EditButton from "./EditButton";
-import CrudTable from "./CrudTable";
-import {fetchCustom} from "../api/api";
-import {style} from '../utils/sharedStyles'
-import {useAuth} from "../Context/AuthContext";
-import Popup from './Popup'
-import {profileDisplayNames as names} from '../utils/displayAttributes';
+import EditButton from "../EditButton";
+import CrudTable from "../CrudTable";
+import {fetchCustom} from "../../api/api";
+import {style} from '../../utils/sharedStyles'
+import {useAuth} from "../../Context/AuthContext";
+import Popup from '../Popup'
+import {profileDisplayNames as names} from '../../utils/displayAttributes';
 import ESNcardEmissionModal from "./ESNcardEmissionModal";
-import Loader from "./Loader";
-import countryCodes from "../data/countryCodes.json";
+import Loader from "../Loader";
+import countryCodes from "../../data/countryCodes.json";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
