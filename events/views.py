@@ -12,7 +12,7 @@ from events.models import Event, Subscription, EventList
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
-    EventWithSubscriptionsSerializer
+    EventWithSubscriptionsSerializer, SubscriptionSerializer
 )
 from treasury.models import Transaction
 
@@ -158,6 +158,7 @@ def subscription_create(request):
                 # Create transaction
                 t = Transaction(
                     account_id=serializer.account,
+                    subscription=subscription,
                     executor=request.user,
                     amount=float(subscription.event.cost),
                     description=f"Payment for {subscription.event.name}"
@@ -180,12 +181,16 @@ def subscription_create(request):
         return Response(str(e), status=500)
 
 
-@api_view(['PATCH', 'DELETE'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def subscription_detail(request, pk):
     try:
         sub = Subscription.objects.get(pk=pk)
         old_status = sub.status
+
+        if request.method == 'GET':
+            serializer = SubscriptionSerializer(sub)
+            return Response(serializer.data, status=200)
 
         if request.method == "PATCH":
             serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
@@ -205,30 +210,40 @@ def subscription_detail(request, pk):
                 if old_status != 'paid' and subscription.status == 'paid':
                     # Check if we have an account ID
                     if not hasattr(serializer, 'account_id') or not serializer.account_id:
-                        raise ValidationError("Account ID is required for paid subscriptions")
+                        raise ValidationError("Richiesta una cassa per iscrizioni a pagamento")
 
                     # Create transaction
                     t = Transaction(
                         account_id=serializer.account_id,
+                        subscription=subscription,
                         executor=request.user,
                         amount=float(subscription.event.cost),
                         description=f"Payment for {subscription.event.name}"
                     )
                     t.save()
 
-                # Handle refunds if enabled and status changed from paid to something else
-                elif old_status == 'paid' and subscription.status != 'paid' and subscription.enable_refund:
-                    if not hasattr(serializer, 'account_id') or not serializer.account_id:
-                        raise ValidationError("Account ID is required for refunds")
 
-                    # Create refund transaction
-                    t = Transaction(
-                        account_id=serializer.account_id,
-                        executor=request.user,
-                        amount=-float(subscription.event.cost),  # Negative amount for refund
-                        description=f"Refund for {subscription.event.name}"
-                    )
-                    t.save()
+                elif old_status == 'paid' and subscription.status != 'paid':
+                    if not hasattr(serializer, 'account_id') or not serializer.account_id:
+                        raise ValidationError("Richiesta una cassa per l'eliminazione della transazione")
+                    '''
+                    # Handle refunds if enabled and status changed from paid to something else
+                    if subscription.enable_refund:
+                        # Create refund transaction
+                        t = Transaction(
+                            account_id=serializer.account_id,
+                            subscription=subscription,
+                            executor=request.user,
+                            amount=-float(subscription.event.cost),  # Negative amount for refund
+                            description=f"Refund for {subscription.event.name}"
+                        )
+                        t.save()
+                    '''
+                    # Delete the transaction
+                    transaction_del = Transaction.objects.filter(subscription=subscription).order_by('-id').first()
+                    if transaction_del:
+                        transaction_del.delete()
+
 
                 return Response(serializer.data, status=200)
 
@@ -236,6 +251,9 @@ def subscription_detail(request, pk):
             # TODO: implement permission verification
             sub.delete()
             return Response(status=200)
+
+        else :
+            return Response("Method not allowed", status=405)
 
     except Subscription.DoesNotExist:
         return Response("Subscription does not exist", status=400)
@@ -252,6 +270,7 @@ def subscription_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         return Response(str(e), status=500)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -289,6 +308,7 @@ def move_subscriptions(request):
     except Exception as e:
         logger.error(f"Error moving subscriptions: {str(e)}")
         return Response({"message": f"Errore: {str(e)}"}, status=500)
+
 
 # Future implementations
 ''' 

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
+from treasury.models import Transaction, Account
 
 
 # Serializers for EventList
@@ -149,17 +150,32 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
 # Serializers for Subscription
 class SubscriptionSerializer(serializers.ModelSerializer):
+    profile_id = serializers.PrimaryKeyRelatedField(source='profile', read_only=True)
     profile_name = serializers.SerializerMethodField()
+    list_id = serializers.PrimaryKeyRelatedField(source='list', read_only=True)
     list_name = serializers.CharField(source='list.name', read_only=True)
+    account_id = serializers.SerializerMethodField()
+    account_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
-        fields = ['id', 'profile', 'profile_name', 'event', 'list', 'list_name',
-                  'status', 'enable_refund', 'notes', 'created_by_form']
+        fields = ['id', 'profile_id', 'profile_name', 'event', 'list_id', 'list_name',
+                  'status', 'enable_refund', 'notes', 'created_by_form',
+                  'account_id', 'account_name']
 
     @staticmethod
     def get_profile_name(obj):
         return f"{obj.profile.name} {obj.profile.surname}"
+
+    @staticmethod
+    def get_account_id(obj):
+        transaction = Transaction.objects.filter(subscription=obj.id).order_by('-id').first()
+        return transaction.account.id if transaction else None
+
+    @staticmethod
+    def get_account_name(obj):
+        transaction = Transaction.objects.filter(subscription=obj.id).order_by('-id').first()
+        return transaction.account.name if transaction else None
 
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
