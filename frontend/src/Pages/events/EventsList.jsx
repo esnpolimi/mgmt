@@ -1,17 +1,17 @@
 import React, {useEffect, useState, useMemo} from 'react';
 import {Box, Typography, Chip, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import Sidebar from '../Components/Sidebar.jsx'
+import Sidebar from '../../Components/Sidebar.jsx'
 import EventIcon from '@mui/icons-material/Event';
-import EventModal from '../Components/EventModal.jsx';
-import {fetchCustom} from "../api/api";
+import EventModal from '../../Components/events/EventModal.jsx';
+import {fetchCustom} from "../../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
-import {eventDisplayNames as names} from "../utils/displayAttributes";
-import Loader from "../Components/Loader";
+import {eventDisplayNames as names} from "../../utils/displayAttributes";
+import Loader from "../../Components/Loader";
 import dayjs from "dayjs";
-import Popup from "../Components/Popup";
-import {extractErrorMessage} from "../utils/errorHandling";
+import Popup from "../../Components/Popup";
+import {extractErrorMessage} from "../../utils/errorHandling";
 
 
 export default function EventsList() {

@@ -1,10 +1,10 @@
 import React, {useEffect, useState} from "react";
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import {fetchCustom} from "../api/api";
-import {styleESNcardModal as style} from "../utils/sharedStyles";
+import {fetchCustom} from "../../api/api";
+import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import Grid from '@mui/material/Grid2';
-import Popup from "./Popup";
+import Popup from "../Popup";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
     const [accounts, setAccounts] = useState([]);

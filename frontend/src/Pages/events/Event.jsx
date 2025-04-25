@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
-import Sidebar from "../Components/Sidebar";
+import Sidebar from "../../Components/Sidebar";
 import {Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography} from "@mui/material";
 import Grid from "@mui/material/Grid2";
 import EventIcon from "@mui/icons-material/Event";
@@ -13,26 +13,26 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BallotIcon from '@mui/icons-material/Ballot';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import Loader from "../Components/Loader";
-import {fetchCustom} from "../api/api";
+import Loader from "../../Components/Loader";
+import {fetchCustom} from "../../api/api";
 import dayjs from "dayjs";
 import EditIcon from "@mui/icons-material/Edit";
-import EventModal from "../Components/EventModal";
-import CustomEditor from '../Components/CustomEditor';
-import Popup from "../Components/Popup";
+import EventModal from "../../Components/events/EventModal";
+import CustomEditor from '../../Components/CustomEditor';
+import Popup from "../../Components/Popup";
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
-import SubscriptionModal from "../Components/SubscriptionModal";
-import {styleESNcardModal as style} from "../utils/sharedStyles";
-import MoveToListModal from "../Components/MoveToListModal";
-import {extractErrorMessage} from "../utils/errorHandling";
+import SubscriptionModal from "../../Components/events/SubscriptionModal";
+import {styleESNcardModal as style} from "../../utils/sharedStyles";
+import MoveToListModal from "../../Components/events/MoveToListModal";
+import {extractErrorMessage} from "../../utils/errorHandling";
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
     const location = useLocation();
     const navigate = useNavigate();
     const [eventModalOpen, setEventModalOpen] = useState(false);
-    const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
+    const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
     const [moveToListModalOpen, setMoveToListModalOpen] = useState(false);
     const [selectedRows, setSelectedRows] = useState([]);
     const [isLoading, setLoading] = useState(true);
@@ -42,6 +42,8 @@ export default function Event() {
     const eventFromState = location.state?.event;
     // States for subscription management
     const [selectedList, setSelectedList] = useState(null);
+    const [subscription, setSubscription] = useState(null);
+    const [subscriptionIsEdit, setSubscriptionIsEdit] = useState(null);
 
     useEffect(() => {
         setLoading(true);
@@ -102,17 +104,18 @@ export default function Event() {
         setEventModalOpen(false);
     };
 
-    const handleOpenSubscribeModal = (listId) => {
+    const handleOpenSubscriptionModal = (listId) => {
         setSelectedList(listId);
-        setSubscribeModalOpen(true);
+        setSubscriptionIsEdit(false);
+        setSubscriptionModalOpen(true);
     };
 
-    const handleCloseSubscribeModal = async (success) => {
+    const handleCloseSubscriptionModal = async (success) => {
         if (success) {
-            setShowSuccessPopup({message: "Iscrizione completata con successo!", state: "success"});
+            setShowSuccessPopup({message: `${subscriptionIsEdit ? 'Modifica Iscrizione' : 'Iscrizione'} completata con successo!`, state: "success"});
             await refreshEventData();
         }
-        setSubscribeModalOpen(false);
+        setSubscriptionModalOpen(false);
         setSelectedList(null);
     };
 
@@ -145,15 +148,18 @@ export default function Event() {
 
     const handleEditSubscription = (subscriptionId) => {
         // Implementation for editing a subscription
-        console.log("Edit subscription:", subscriptionId);
-        // TODO: Open subscription edit modal
+        console.log("Editing subscription:", subscriptionId);
+        setSelectedList(null);
+        setSubscription(data.subscriptions.find(sub => sub.id === subscriptionId) || null);
+        setSubscriptionIsEdit(true);
+        setSubscriptionModalOpen(true);
     };
 
     // Columns and data for lists
     const listConfigs = React.useMemo(() => {
         if (!data?.lists) return [];
         return data.lists.map(list => {
-            const listSubscriptions = data.subscriptions?.filter(sub => sub.list === list.id) || [];
+            const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
             const listSubscriptionsColumns = [
                 {
                     accessorKey: 'id',
@@ -280,10 +286,7 @@ export default function Event() {
             const {listId, listName, capacity, subscriptions, tableOptions} = listConfig;
             const occupancyPercentage = Math.round((subscriptions.length / capacity) * 100) || 0;
             const occupancyColor = occupancyPercentage >= 60 ? 'warning' : occupancyPercentage >= 70 ? 'error' : 'success';
-            const fixedTableOptions = {
-                ...tableOptions,
-                paginationDisplayMode: 'pages', // Use literal value instead of string type
-            };
+            const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
             const list = useMaterialReactTable(fixedTableOptions);
 
             return (
@@ -292,15 +295,21 @@ export default function Event() {
                         <Box sx={{display: 'flex', alignItems: 'center', width: '100%'}}>
                             <BallotIcon sx={{color: 'primary.main', mr: 1}}/>
                             <Typography variant="h6" component="div" sx={{flexGrow: 1}}>{listName}</Typography>
-                            <Box sx={{display: 'flex'}}>
-                                {subscriptions.length < capacity && <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<PersonAddIcon/>}
-                                    onClick={() => handleOpenSubscribeModal(listId)}
-                                    disabled={subscriptions.length >= capacity}>
-                                    Iscrivi
-                                </Button>}
+                            <Box
+                                sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    cursor: subscriptions.length < capacity ? 'pointer' : 'not-allowed',
+                                    opacity: subscriptions.length < capacity ? 1 : 0.5,
+                                    px: 2,
+                                    py: 1,
+                                    borderRadius: 1,
+                                    bgcolor: 'primary.main',
+                                    color: 'white',
+                                    ml: 2,
+                                }}
+                                onClick={subscriptions.length < capacity ? () => handleOpenSubscriptionModal(listId) : undefined}>
+                                <PersonAddIcon sx={{mr: 1}}/> ISCRIVI
                             </Box>
                             <Box sx={{width: '200px', ml: 2}}>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
@@ -358,11 +367,13 @@ export default function Event() {
                 }}
                 isEdit={true}
             />}
-            {subscribeModalOpen && <SubscriptionModal
-                open={subscribeModalOpen}
-                onClose={handleCloseSubscribeModal}
+            {subscriptionModalOpen && <SubscriptionModal
+                open={subscriptionModalOpen}
+                onClose={handleCloseSubscriptionModal}
                 event={data}
                 listId={selectedList}
+                subscription={subscription}
+                isEdit={subscriptionIsEdit}
             />}
             {moveToListModalOpen && <MoveToListModal
                 open={moveToListModalOpen}

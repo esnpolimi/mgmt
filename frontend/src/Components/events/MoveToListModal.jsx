@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from 'react';
 import {Modal, Box, Button, Typography, FormControl, InputLabel, Select, MenuItem, IconButton} from '@mui/material';
-import {styleESNcardModal as style} from "../utils/sharedStyles";
-import {fetchCustom} from "../api/api";
-import {extractErrorMessage} from "../utils/errorHandling";
-import Popup from "./Popup";
+import {styleESNcardModal as style} from "../../utils/sharedStyles";
+import {fetchCustom} from "../../api/api";
+import {extractErrorMessage} from "../../utils/errorHandling";
+import Popup from "../Popup";
 import CloseIcon from "@mui/icons-material/Close";
 
 export default function MoveToListModal({open, onClose, selectedRows, event, listId}) {

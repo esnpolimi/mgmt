@@ -8,9 +8,9 @@ import {Checkbox, FormControlLabel} from '@mui/material';
 import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import {fetchCustom} from "../api/api";
-import countryCodes from "../data/countryCodes.json";
-import StatusBanner from '../components/StatusBanner';
+import {fetchCustom} from "../../api/api";
+import countryCodes from "../../data/countryCodes.json";
+import StatusBanner from '../../Components/StatusBanner';
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)

@@ -8,13 +8,13 @@ import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pick
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon} from '@mui/icons-material';
-import {fetchCustom} from "../api/api";
-import {style, colorOptions} from '../utils/sharedStyles'
-import {eventDisplayNames as eventNames} from '../utils/displayAttributes';
-import CustomEditor from './CustomEditor';
-import Loader from "./Loader";
-import StatusBanner from "./StatusBanner";
-import {extractErrorMessage} from "../utils/errorHandling";
+import {fetchCustom} from "../../api/api";
+import {style, colorOptions} from '../../utils/sharedStyles'
+import {eventDisplayNames as eventNames} from '../../utils/displayAttributes';
+import CustomEditor from '../CustomEditor';
+import Loader from "../Loader";
+import StatusBanner from "../StatusBanner";
+import {extractErrorMessage} from "../../utils/errorHandling";
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
@@ -49,7 +49,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
     useEffect(() => {
         if (isEdit) {
-            console.log("Seting form data: ", event);
+            console.log("Setting form data: ", event);
             setData(event);
             console.log("#Subsciptions: ", event.subscriptions.length);
             setHasSubscriptions(event.subscriptions.length > 0)
