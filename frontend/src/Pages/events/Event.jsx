@@ -110,9 +110,9 @@ export default function Event() {
         setSubscriptionModalOpen(true);
     };
 
-    const handleCloseSubscriptionModal = async (success) => {
+    const handleCloseSubscriptionModal = async (success, message) => {
         if (success) {
-            setShowSuccessPopup({message: `${subscriptionIsEdit ? 'Modifica Iscrizione' : 'Iscrizione'} completata con successo!`, state: "success"});
+            setShowSuccessPopup({message: message, state: "success"});
             await refreshEventData();
         }
         setSubscriptionModalOpen(false);
@@ -120,30 +120,38 @@ export default function Event() {
     };
 
     const handleSubscriptionStatus = () => {
-        if (!data) return <Chip label="Loading..." variant="outlined" size="medium"/>;
+        if (!data) return {chip: <Chip label="Loading..." variant="outlined" size="medium"/>, isActive: false};
 
         const now = dayjs();
         const startDateTime = data.subscription_start_date ? dayjs(data.subscription_start_date) : null;
         const endDateTime = data.subscription_end_date ? dayjs(data.subscription_end_date) : null;
 
         let color = "error";
+        let isActive = false;
 
         if (startDateTime && endDateTime) {
-            if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) color = "success";
-            else if (now.isBefore(startDateTime)) color = "warning";
+            if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
+                color = "success";
+                isActive = true;
+            } else if (now.isBefore(startDateTime)) {
+                color = "warning";
+            }
         }
 
         let startText = data.subscription_start_date ? dayjs(data.subscription_start_date).format('DD/MM/YYYY HH:mm') : 'Inizio non specificato';
         let endText = data.subscription_end_date ? dayjs(data.subscription_end_date).format('DD/MM/YYYY HH:mm') : 'Fine non specificata';
 
-        return (
-            <Chip
-                label={startText + ' - ' + endText}
-                color={color}
-                variant="outlined"
-                size="medium"
-            />
-        );
+        return {
+            chip: (
+                <Chip
+                    label={startText + ' - ' + endText}
+                    color={color}
+                    variant="outlined"
+                    size="medium"
+                />
+            ),
+            isActive
+        };
     };
 
     const handleEditSubscription = (subscriptionId) => {
@@ -282,6 +290,8 @@ export default function Event() {
             return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
         }
 
+        const {isActive} = handleSubscriptionStatus();
+
         return lists.map(listConfig => {
             const {listId, listName, capacity, subscriptions, tableOptions} = listConfig;
             const occupancyPercentage = Math.round((subscriptions.length / capacity) * 100) || 0;
@@ -299,8 +309,8 @@ export default function Event() {
                                 sx={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    cursor: subscriptions.length < capacity ? 'pointer' : 'not-allowed',
-                                    opacity: subscriptions.length < capacity ? 1 : 0.5,
+                                    cursor: subscriptions.length < capacity && isActive ? 'pointer' : 'not-allowed',
+                                    opacity: subscriptions.length < capacity && isActive ? 1 : 0.5,
                                     px: 2,
                                     py: 1,
                                     borderRadius: 1,
@@ -308,7 +318,7 @@ export default function Event() {
                                     color: 'white',
                                     ml: 2,
                                 }}
-                                onClick={subscriptions.length < capacity ? () => handleOpenSubscriptionModal(listId) : undefined}>
+                                onClick={subscriptions.length < capacity && isActive ? () => handleOpenSubscriptionModal(listId) : undefined}>
                                 <PersonAddIcon sx={{mr: 1}}/> ISCRIVI
                             </Box>
                             <Box sx={{width: '200px', ml: 2}}>
@@ -416,7 +426,7 @@ export default function Event() {
                                             <Typography variant="h6" component="div">Periodo Iscrizioni</Typography>
                                         </Box>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
-                                            {(() => handleSubscriptionStatus())()}
+                                            {handleSubscriptionStatus().chip}
                                         </Box>
                                     </Grid>
                                     <Grid size={{xs: 12}}>
