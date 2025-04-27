@@ -30,10 +30,10 @@ def esncard_emission(request):
             settings = Settings.get()
             if has_previous_cards:
                 amount = float(settings.esncard_renewal_fee.amount)
-                description = "ESNcard renewal"
+                description = "Rinnovo ESNcard"
             else:
                 amount = float(settings.esncard_release_fee.amount)
-                description = "ESNcard emission"
+                description = "Emissione ESNcard"
 
             # Create the transaction TODO: check that subscription is not needed
             t = Transaction(
@@ -75,10 +75,10 @@ def esncard_detail(request, pk):
                 else:
                     return Response(esncard_serializer.errors, status=400)
             else:
-                return Response({'error': 'You do not have permissions to edit this ESNcard.'}, status=403)
+                return Response({'error': 'Non hai i permessi per modificare questa ESNcard.'}, status=403)
 
     except ESNcard.DoesNotExist:
-        return Response('ESNcard does not exist', status=400)
+        return Response('La ESNcard non esiste', status=400)
 
     except Exception as e:
         logger.error(str(e))
@@ -96,14 +96,14 @@ def transaction_add(request):
 
         if transaction_serializer.validated_data['subscription'] is None:
             if not request.user.has_perm('treasury.withdraw_deposit'):  # TODO: add permission via Meta in model
-                return Response(status=401)
+                return Response({'error': 'Non autorizzato.'}, status=401)
 
         transaction_serializer.save()
         return Response(status=200)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 #   Endpoint to retrieve list of transactions
@@ -119,7 +119,7 @@ def transactions_list(request):
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrive transaction details based on id
@@ -132,11 +132,11 @@ def transaction_detail(request, pk):
         return Response(serializer.data, status=200)
 
     except Transaction.DoesNotExist:
-        return Response(status=404)
+        return Response({'error': 'Transazione non trovata.'}, status=404)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrieve all accounts 
@@ -161,7 +161,7 @@ def accounts_list(request):
         return Response(response_data)
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to create new account
@@ -170,7 +170,7 @@ def accounts_list(request):
 def account_creation(request):
     try:
         if not request.user.has_perm('treasury.add_account'):
-            return Response(status=401)
+            return Response({'error': 'Non autorizzato.'}, status=401)
 
         account_serializer = AccountCreateSerializer(request.data)
         if not account_serializer.is_valid():
@@ -180,7 +180,7 @@ def account_creation(request):
         return Response(status=200)
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrieve account info / edit account
@@ -197,7 +197,7 @@ def account_detail(request, pk):
         if request.method == 'PATCH':
 
             if not request.user.has_perm('treasury.change_acconut'):
-                return Response(status=401)
+                return Response({'error': 'Non autorizzato.'}, status=401)
 
             data = request.data
             data['changed_by'] = request.user
@@ -210,8 +210,9 @@ def account_detail(request, pk):
             return Response(serializer.data, status=200)
 
     except Account.DoesNotExist:
-        return Response(status=404)
+        return Response({'error': 'Account non trovato.'}, status=404)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+

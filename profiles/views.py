@@ -107,10 +107,10 @@ def initiate_profile_creation(request):
             except Exception as e:
                 print(f"Email error: {str(e)}")
                 # Don't delete profile on email error, just return the error
-                return Response({"error": f"Error sending email: {str(e)}"}, status=500)
+                return Response({"error": f"Errore nell'invio dell'email: {str(e)}"}, status=500)
 
             return Response({
-                "message": "Verification email sent. Please check your inbox to complete registration."
+                "message": "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
             })
         else:
             # Return validation errors
@@ -123,7 +123,7 @@ def initiate_profile_creation(request):
 
     except Exception as e:
         logger.error(str(e))
-        return Response({"error": "An unexpected error occurred: " + str(e)}, status=500)
+        return Response({"error": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
 
 
 @api_view(['GET'])
@@ -134,13 +134,13 @@ def verify_email_and_enable_profile(request, uid, token):
             uid = force_str(urlsafe_base64_decode(uid))
             profile = Profile.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, Profile.DoesNotExist):
-            return Response({"error": "Invalid verification link"}, status=400)
+            return Response({"error": "Link di verifica non valido."}, status=400)
 
         if not email_verification_token.check_token(profile, token):
-            return Response({"error": "Invalid or expired verification link"}, status=400)
+            return Response({"error": "Link di verifica non valido o scaduto."}, status=400)
 
         if profile.email_is_verified:
-            return Response({"message": "Email already verified"}, status=200)
+            return Response({"message": "Email già verificata."}, status=200)
 
         # Activate profile and related objects
         with transaction.atomic():
@@ -158,13 +158,13 @@ def verify_email_and_enable_profile(request, uid, token):
                     user.is_active = True
                     user.save()
                 except User.DoesNotExist:
-                    return Response({"error": "The user associated to this profile does not exist"}, status=500)
+                    return Response({"error": "L'utente associato a questo profilo non esiste."}, status=500)
 
-        return Response({"message": "Email verified and profile activated successfully!"})
+        return Response({"message": "Email verificata e profilo attivato con successo!"})
 
     except Exception as e:
         logger.error(str(e))
-        return Response({"error": "An unexpected error occurred"}, status=500)
+        return Response({"error": "Si è verificato un errore imprevisto."}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
@@ -183,7 +183,7 @@ def profile_detail(request, pk):
             elif request.user.has_perm('profiles.change_person_code'):  # TODO: permission to define via Meta in the model
                 serializer = ProfileBasicEditSerializer(profile, data=request.data, partial=True)
             else:
-                return Response({'error': 'You do not have permissions to delete this profile.'}, status=403)
+                return Response({'error': 'Non hai i permessi per modificare questo profilo.'}, status=403)
 
             if serializer.is_valid():
                 serializer.save()
@@ -195,14 +195,14 @@ def profile_detail(request, pk):
                 profile.enabled = False
                 profile.save()
                 return Response(status=200)
-            return Response(status=401)
+            return Response({'error': 'Non hai i permessi per eliminare questo profilo.'}, status=401)
 
     except Profile.DoesNotExist:
-        return Response('Profile does not exist', status=404)
+        return Response('Il profilo non esiste.', status=404)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Si è verificato un errore imprevisto.'}, status=500)
 
 
 # Endpoint to verify email
@@ -213,16 +213,16 @@ def profile_verification(request, pk, token):
         if email_verification_token.check_token(profile, token):
             profile.email_is_verified = True
             profile.save()
-            return Response('Email verified', status=200)
+            return Response('Email verificata.', status=200)
         else:
-            return Response('Invalid token', status=400)
+            return Response('Token non valido.', status=400)
 
     except Profile.DoesNotExist:
-        return Response('Profile does not exist', status=400)
+        return Response('Il profilo non esiste.', status=400)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response('Si è verificato un errore imprevisto.', status=500)
 
 
 # Endpoint to create document
@@ -241,7 +241,7 @@ def document_creation(request):
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response('Si è verificato un errore imprevisto.', status=500)
 
 
 @api_view(['PATCH', 'DELETE'])
@@ -258,7 +258,7 @@ def document_detail(request, pk):
                 else:
                     return Response(document_serializer.errors, status=400)
             else:
-                return Response({'error': 'You do not have permissions to edit this document.'}, status=403)
+                return Response({'error': 'Non hai i permessi per modificare questo documento.'}, status=403)
 
         elif request.method == 'DELETE':
             if request.user.has_perm('profiles.delete_document'):
@@ -266,10 +266,10 @@ def document_detail(request, pk):
                 document.save()
                 return Response(status=200)
             else:
-                return Response({'error': 'You do not have permissions to delete this document.'}, status=403)
+                return Response({'error': 'Non hai i permessi per eliminare questo documento.'}, status=403)
 
     except Document.DoesNotExist:
-        return Response('Document does not exist', status=400)
+        return Response('Il documento non esiste.', status=400)
 
     except Exception as e:
         logger.error(str(e))
@@ -311,4 +311,5 @@ def search_profiles(request):
 
     except Exception as e:
         logger.error(str(e))
-        return Response({"error": str(e)}, status=500)
+        return Response({"error": "Si è verificato un errore: " + str(e)}, status=500)
+
