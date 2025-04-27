@@ -179,12 +179,12 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
-    account = serializers.CharField(write_only=True, allow_null=True)
+    account_id = serializers.IntegerField(write_only=True, required=False)
     status = serializers.CharField(default='pending')
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'list', 'notes', 'status', 'account']
+        fields = ['profile', 'event', 'list', 'notes', 'status', 'account_id']
 
     def validate(self, attrs):
         # Check if profile is already registered for this event
@@ -195,7 +195,7 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This profile is already registered for this event")
 
         # Remove account id from validated_data as it's not a field in Subscription model
-        self.account = attrs.pop('account', None)
+        self.account = attrs.pop('account_id', None)
 
         return attrs
 

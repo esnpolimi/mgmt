@@ -53,14 +53,14 @@ def log_in(request):
             )
             return response
         else:
-            return Response({'detail': 'Invalid credentials'}, status=403)
+            return Response({'detail': 'Credenziali invalide'}, status=403)
 
     return Response(serializer.errors, status=400)
 
 
 @api_view(['POST'])
 def log_out(request):
-    response = Response({'detail': 'Successfully logged out'}, status=200)
+    response = Response({'detail': 'Log out avvenuto con successo'}, status=200)
 
     # Delete the refresh token cookie
     response.delete_cookie('refresh_token')
@@ -71,8 +71,7 @@ def log_out(request):
 def refresh_token_view(request):
     refresh_token = request.COOKIES.get('refresh_token')
     if not refresh_token:
-        print("Refresh token not found")
-        return Response({'detail': 'Refresh token not found'}, status=400)
+        return Response({'detail': 'Token di refresh non trovato'}, status=400)
 
     profile, _ = Profile.objects.get_or_create(email=request.data.get('email'))
     user, _ = User.objects.get_or_create(profile=profile)
@@ -87,7 +86,7 @@ def refresh_token_view(request):
         except TokenError as e:
             return Response({'detail': str(e)}, status=401)
     else:
-        return Response({'detail': 'Invalid user profile'}, status=403)
+        return Response({'detail': 'Profilo utente invalido'}, status=403)
 
 
 @api_view(['GET', 'POST'])
