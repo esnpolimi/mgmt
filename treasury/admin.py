@@ -6,7 +6,7 @@ from django.utils.html import format_html
 
 @admin.register(Settings)
 class SettingsAdmin(admin.ModelAdmin):
-    list_display = ('esncard_release_fee', 'esncard_renewal_fee')
+    list_display = ('esncard_release_fee', 'esncard_lost_fee')
 
 
 @admin.register(ESNcard)
