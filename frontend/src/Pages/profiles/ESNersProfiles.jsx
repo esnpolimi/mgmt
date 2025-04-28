@@ -1,10 +1,10 @@
 import React, {useMemo} from 'react';
-import ProfilesList from './profiles/ProfilesList.jsx';
+import ProfilesList from './ProfilesList.jsx';
 import {Box, Chip, Typography} from "@mui/material";
 import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
-import Sidebar from "../Components/Sidebar";
-import {profileDisplayNames as names} from '../utils/displayAttributes';
-import countryCodes from "../data/countryCodes.json";
+import Sidebar from "../../Components/Sidebar";
+import {profileDisplayNames as names} from '../../utils/displayAttributes';
+import countryCodes from "../../data/countryCodes.json";
 
 export default function ESNersProfiles() {
 
@@ -35,13 +35,13 @@ export default function ESNersProfiles() {
             size: 150,
         },
         {
-            accessorKey: 'latest_esncard.number',
+            accessorKey: 'latest_esncard',
             header: names.latest_esncard,
             size: 50,
             Cell: ({cell}) => (
                 <Box sx={{}}>
-                    {cell.getValue() !== undefined ? (
-                        <Chip label={cell.getValue()} color="success"/>
+                    {cell.getValue() !== null ? (
+                        <Chip label={cell.getValue().number} color={cell.getValue().is_valid ? "success" : "warning"}/>
                     ) : (
                         <Chip label="Nessuna ESNcard" color="error"/>
                     )}

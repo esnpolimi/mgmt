@@ -1,15 +1,19 @@
 import React, {useEffect, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, IconButton} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import Grid from '@mui/material/Grid2';
 import Popup from "../Popup";
+import ConfirmDialog from "../ConfirmDialog";
+import {extractErrorMessage} from "../../utils/errorHandling";
+import {useAuth} from "../../Context/AuthContext";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
-    const [accounts, setAccounts] = useState([]);
+    const {accounts} = useAuth();
     const [amount, setAmount] = useState(0);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
 
     const [data, setData] = useState({  /* profile fields */
         esncard_number: '',
@@ -25,21 +29,9 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
     ];
 
     useEffect(() => {
-        const fetchAccounts = async () => {
-            try {
-                const response = await fetchCustom("GET", '/accounts/');
-                const json = await response.json();
-                console.log('ESNcardEmissionModal accounts json:', json);
-                setAccounts(json.results);
-                const feeKey = profile.latest_esncard ? 'esncard_renewal_fee' : 'esncard_release_fee';
-                const feeAmount = json.esncard_fees[feeKey];
-                setAmount(parseFloat(feeAmount.replace('€', '')));
-            } catch (error) {
-                console.error('Error in fetching data:', error);
-                setShowSuccessPopup({message: "Errore durante il recupero dei dati", state: "error"});
-            }
-        };
-        fetchAccounts().then();
+        let feeAmount = accounts.esncard_fees.esncard_release_fee;
+        if (profile.latest_esncard && profile.latest_esncard?.is_valid) feeAmount = accounts.esncard_fees.esncard_lost_fee;
+        setAmount(parseFloat(feeAmount.replace('€', '')));
     }, []);
 
     const resetErrors = () => {
@@ -66,6 +58,12 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             return;
         }
 
+        let msg = 'Confermi un pagamento di ' + amount + '€ per l\'emissione della ESNcard?';
+        setConfirmDialog({open: true, action: () => doSubmit(), message: msg});
+    }
+
+    const doSubmit = async () => {
+        setConfirmDialog({open: false, action: null, message: ''});
         try {
             const response = await fetchCustom("POST", '/esncard_emission/', {
                 profile_id: profile.id,
@@ -73,22 +71,12 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                 esncard_number: data.esncard_number,
                 amount: amount
             });
-
             if (!response.ok) {
-                const text = await response.text();
-                if (text) {
-                    try {
-                        const errorData = JSON.parse(text);
-                        setShowSuccessPopup({message: "Errore durante l\'emissione della ESNcard (" + errorData.message + ")", state: "error"});
-                    } catch (parseError) {
-                        setShowSuccessPopup({message: "Errore server (" + response.status + "): " + text || 'Nessun dettaglio fornito', state: "error"});
-                    }
-                } else setShowSuccessPopup({message: "Errore server (" + response.status + ") con risposta vuota", state: "error"});
-
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore durante l\'emissione della ESNcard: ${errorMessage}`, state: 'error'});
             } else onClose(true);
-
         } catch (error) {
-            setShowSuccessPopup({message: "Errore durante l\'emissione della ESNcard (" + error.message + ")", state: "error"});
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -103,29 +91,21 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
         <Modal
             open={open}
             onClose={() => {
+                onClose(false);
             }}
             aria-labelledby="modal-modal-title"
-            aria-describedby="modal-modal-description"
-        >
+            aria-describedby="modal-modal-description">
             <Box sx={style}>
                 <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                    <Button onClick={() => onClose(false)} sx={{minWidth: 0}}>
-                        <CloseIcon/>
-                    </Button>
+                    <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                 </Box>
-                <Typography variant="h4" component="h2" gutterBottom>
-                    {!profile.latest_esncard ? 'Emissione' : 'Rinnovo'} ESNcard
-                </Typography>
+                <Typography variant="h4" component="h2" gutterBottom>Emissione ESNcard</Typography>
                 <Divider sx={{mb: 2}}/>
-                <Typography variant="subtitle1" gutterBottom>
-                    <b>A:</b> {profile.name} {profile.surname}
-                </Typography>
-                <Typography variant="subtitle1" gutterBottom>
-                    <b>Importo:</b> {amount}€
-                </Typography>
+                <Typography variant="subtitle1" gutterBottom><b>A:</b> {profile.name} {profile.surname}</Typography>
+                <Typography variant="subtitle1" gutterBottom><b>Importo:</b> {amount}€</Typography>
 
                 <Grid container spacing={2} direction="column">
-                    <Grid xs={12}>
+                    <Grid size={{xs: 12}} sx={{mt: 2}}>
                         <TextField
                             required
                             label='Numero ESNcard'
@@ -136,7 +116,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                             onChange={handleChange}
                             fullWidth/>
                     </Grid>
-                    <Grid xs={12}>
+                    <Grid size={{xs: 12}} sx={{mt: 0}}>
                         <FormControl fullWidth required error={errors.account_id[0]}>
                             <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
                             <Select
@@ -148,10 +128,8 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                                 value={data.account_id}
                                 error={errors.account_id[0]}
                                 onChange={handleChange}>
-                                {accounts.map((account) => (
-                                    <MenuItem key={account.id} value={account.id}>
-                                        {account.name}
-                                    </MenuItem>
+                                {accounts.results.map((account) => (
+                                    <MenuItem key={account.id} value={account.id}>{account.name}</MenuItem>
                                 ))}
                             </Select>
                             {errors.account_id[0] && <FormHelperText>{errors.account_id[1]}</FormHelperText>}
@@ -159,10 +137,14 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                     </Grid>
                 </Grid>
 
-                <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>
-                    Conferma
-                </Button>
+                <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>Conferma</Button>
                 {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                <ConfirmDialog
+                    open={confirmDialog.open}
+                    message={confirmDialog.message}
+                    onConfirm={confirmDialog.action}
+                    onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
+                />
             </Box>
         </Modal>
     );

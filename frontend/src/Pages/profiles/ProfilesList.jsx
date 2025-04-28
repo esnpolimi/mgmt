@@ -107,7 +107,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
             {isLoading ? <Loader/> : <MaterialReactTable table={table}/>}
             {modalOpen && <ProfileModal
                 open={modalOpen}
-                profile={selectedProfile}
+                inProfile={selectedProfile}
                 profileType={profileType}
                 handleClose={handleProfileClose}
                 updateProfile={updateProfile}

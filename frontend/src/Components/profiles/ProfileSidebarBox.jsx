@@ -31,7 +31,7 @@ export default function ProfileSidebarBox({user}) {
                 <LogoutButton/>
             </Box>
             <ProfileModal
-                profile={user.profile}
+                inProfile={user.profile}
                 profileType={"ESNer - " + user.groups[0]}
                 open={modalOpen}
                 handleClose={handleProfileClose}
