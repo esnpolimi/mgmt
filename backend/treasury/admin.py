@@ -6,7 +6,7 @@ from django.utils.html import format_html
 
 @admin.register(Settings)
 class SettingsAdmin(admin.ModelAdmin):
-    list_display = ('esncard_release_fee', 'esncard_renewal_fee')
+    list_display = ('esncard_release_fee', 'esncard_lost_fee')
 
 
 @admin.register(ESNcard)
@@ -67,23 +67,3 @@ class TransactionAdmin(admin.ModelAdmin):
         return "-"
 
     subscription_link.short_description = 'Subscription'
-
-
-@admin.register(Event)
-class EventAdmin(admin.ModelAdmin):
-    list_display = ('name', 'subscription_count', 'created_at')
-    search_fields = ('name',)
-    date_hierarchy = 'created_at'
-
-    def subscription_count(self, obj):
-        return obj.subscription_set.count()
-
-    subscription_count.short_description = 'Subscriptions'
-
-
-@admin.register(Subscription)
-class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'event', 'created_at')
-    list_filter = ('event', 'created_at')
-    search_fields = ('profile__name', 'profile__surname', 'profile__email', 'event__name')
-    date_hierarchy = 'created_at'

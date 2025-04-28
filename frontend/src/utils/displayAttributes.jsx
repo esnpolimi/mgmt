@@ -21,8 +21,13 @@ export const profileDisplayNames = {
 
 export const eventDisplayNames = {
     id: 'Id',
-    name: 'Nome',
+    name: 'Nome Evento',
     date: 'Data Evento',
     description: 'Descrizione',
-    enable_form: 'Abilita Form'
+    cost: 'Costo (€)',
+    subscription_start_date: 'Data Apertura Iscrizioni',
+    subscription_end_date: 'Data Chiusura Iscrizioni',
+    subscription_date_status: 'Stato Iscrizioni',
+    list_name: 'Nome Lista',
+    list_capacity: 'Capacità Lista'
 };

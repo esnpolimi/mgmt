@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const Popup = ({message, state, duration = 2000}) => {
+
     useEffect(() => {
         const popup = document.createElement('div');
         const copyButton = document.createElement('button');
@@ -75,7 +76,6 @@ const Popup = ({message, state, duration = 2000}) => {
 
         handleMouseLeave();
     }, [message, state, duration]);
-
     return null;
 };
 

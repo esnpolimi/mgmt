@@ -1,15 +1,15 @@
 import logging
-from datetime import datetime
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from profiles.models import Profile
 from treasury.models import Transaction, Account, ESNcard, Settings
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer
-from events.models import Event, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -19,58 +19,40 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def esncard_emission(request):
     try:
+        profile = Profile.objects.filter(id=request.data['profile_id']).first()
+        latest_card = profile.latest_esncard if profile else None
+        print("Latest card for" + str(profile) + ": " + str(latest_card))
         esncard_serializer = ESNcardEmissionSerializer(data=request.data)
         if not esncard_serializer.is_valid():
             return Response(esncard_serializer.errors, status=400)
 
         with transaction.atomic():
             esncard = esncard_serializer.save()
-            # Check if this is a renewal (profile already has ESNcards)
-            has_previous_cards = ESNcard.objects.filter(profile=esncard.profile, enabled=True).exists()
-
-            # Get or create the membership event
-            event = Event.objects.filter(name='Anno Associativo ' + esncard.membership_year)
-            if not event.exists():
-                event = Event(name='Anno Associativo ' + esncard.membership_year,
-                              tables={'associati': {'capacity': 100000, 'visible_by_office': True, 'editable_by_office': False}},
-                              profile_fields=[], form_fields={}, additional_fields={})
-                event.save()
-            else:
-                event = event.get()
-
-            # Get or create subscription
-            subscription = event.subscription_set.filter(profile=esncard.profile)
-            if not subscription.exists():
-                subscription = Subscription(profile=esncard.profile, event=event,
-                                            event_data={'table': 'associati'},
-                                            form_data={}, additional_data={}, created_at=datetime.now())
-                subscription.save()
-            else:
-                subscription = subscription.get()
 
             # Get the appropriate fee amount from settings
             settings = Settings.get()
-            if has_previous_cards:
-                amount = float(settings.esncard_renewal_fee.amount)
-                description = "ESNcard renewal"
+            if latest_card:
+                if latest_card.is_valid:
+                    amount = float(settings.esncard_lost_fee.amount)
+                    description = "Emissione ESNcard smarrita"
+                else:
+                    amount = float(settings.esncard_release_fee.amount)
+                    description = "Rinnovo ESNcard"
             else:
                 amount = float(settings.esncard_release_fee.amount)
-                description = "ESNcard emission"
+                description = "Emissione ESNcard"
 
             # Create the transaction
             t = Transaction(
-                subscription=subscription,
                 account=esncard_serializer.validated_data['account_id'],
                 executor=request.user,
                 amount=amount,
-                description=description
+                description=f"{description}: {esncard.profile.name} {esncard.profile.surname}"
             )
             t.save()
 
             # Return the newly created ESNcard with additional info
             response_data = esncard_serializer.data
-            response_data['is_renewal'] = has_previous_cards
-
             return Response(response_data, status=200)
 
     except PermissionDenied as e:
@@ -98,10 +80,12 @@ def esncard_detail(request, pk):
                 else:
                     return Response(esncard_serializer.errors, status=400)
             else:
-                return Response({'error': 'You do not have permissions to edit this ESNcard.'}, status=403)
+                return Response({'error': 'Non hai i permessi per modificare questa ESNcard.'}, status=403)
+        else:
+            return Response("Metodo non consentito", status=405)
 
     except ESNcard.DoesNotExist:
-        return Response('ESNcard does not exist', status=400)
+        return Response('La ESNcard non esiste', status=400)
 
     except Exception as e:
         logger.error(str(e))
@@ -119,14 +103,14 @@ def transaction_add(request):
 
         if transaction_serializer.validated_data['subscription'] is None:
             if not request.user.has_perm('treasury.withdraw_deposit'):  # TODO: add permission via Meta in model
-                return Response(status=401)
+                return Response({'error': 'Non autorizzato.'}, status=401)
 
         transaction_serializer.save()
         return Response(status=200)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 #   Endpoint to retrieve list of transactions
@@ -142,7 +126,7 @@ def transactions_list(request):
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrive transaction details based on id
@@ -155,11 +139,11 @@ def transaction_detail(request, pk):
         return Response(serializer.data, status=200)
 
     except Transaction.DoesNotExist:
-        return Response(status=404)
+        return Response({'error': 'Transazione non trovata.'}, status=404)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrieve all accounts 
@@ -167,7 +151,7 @@ def transaction_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def accounts_list(request):
     try:
-        accounts = Account.objects.all()
+        accounts = Account.objects.all().order_by('id')
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(accounts, request=request)
         serializer = AccountListViewSerializer(page, many=True)
@@ -179,12 +163,12 @@ def accounts_list(request):
         settings = Settings.get()
         response_data['esncard_fees'] = {
             'esncard_release_fee': str(settings.esncard_release_fee),
-            'esncard_renewal_fee': str(settings.esncard_renewal_fee)
+            'esncard_lost_fee': str(settings.esncard_lost_fee)
         }
         return Response(response_data)
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to create new account
@@ -193,7 +177,7 @@ def accounts_list(request):
 def account_creation(request):
     try:
         if not request.user.has_perm('treasury.add_account'):
-            return Response(status=401)
+            return Response({'error': 'Non autorizzato.'}, status=401)
 
         account_serializer = AccountCreateSerializer(request.data)
         if not account_serializer.is_valid():
@@ -203,7 +187,7 @@ def account_creation(request):
         return Response(status=200)
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrieve account info / edit account
@@ -220,7 +204,7 @@ def account_detail(request, pk):
         if request.method == 'PATCH':
 
             if not request.user.has_perm('treasury.change_acconut'):
-                return Response(status=401)
+                return Response({'error': 'Non autorizzato.'}, status=401)
 
             data = request.data
             data['changed_by'] = request.user
@@ -233,8 +217,8 @@ def account_detail(request, pk):
             return Response(serializer.data, status=200)
 
     except Account.DoesNotExist:
-        return Response(status=404)
+        return Response({'error': 'Account non trovato.'}, status=404)
 
     except Exception as e:
         logger.error(str(e))
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)

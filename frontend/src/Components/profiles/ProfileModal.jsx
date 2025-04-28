@@ -1,31 +1,33 @@
-import {Card, Box, TextField, FormControl, InputLabel, Select, MenuItem, Modal, Typography, Button, Toolbar} from "@mui/material";
+import {Box, Button, Card, FormControl, InputLabel, MenuItem, Modal, Select, TextField, Toolbar, Typography} from "@mui/material";
 import Grid from '@mui/material/Grid2';
-import React, {useState, useEffect, useMemo} from 'react';
-import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
+import React, {useEffect, useMemo, useState} from 'react';
+import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import EditButton from "./EditButton";
-import CrudTable from "./CrudTable";
-import {fetchCustom} from "../api/api";
-import {style} from '../utils/sharedStyles'
-import {useAuth} from "../Context/AuthContext";
-import Popup from './Popup'
-import {profileDisplayNames as names} from '../utils/displayAttributes';
+import EditButton from "../EditButton";
+import CrudTable from "../CrudTable";
+import {fetchCustom} from "../../api/api";
+import {style} from '../../utils/sharedStyles'
+import {useAuth} from "../../Context/AuthContext";
+import Popup from '../Popup'
+import {profileDisplayNames as names} from '../../utils/displayAttributes';
 import ESNcardEmissionModal from "./ESNcardEmissionModal";
-import Loader from "./Loader";
-import countryCodes from "../data/countryCodes.json";
+import Loader from "../Loader";
+import countryCodes from "../../data/countryCodes.json";
+import {extractErrorMessage} from "../../utils/errorHandling";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
     Erasmus: {hideFields: ['groups']}
 };
 
-export default function ProfileModal({open, handleClose, profile, profileType, updateProfile}) {
+export default function ProfileModal({open, handleClose, inProfile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
-    const [isLoading, setIsLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
     const {user} = useAuth();
+    const [profile, setProfile] = useState(inProfile);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-    const [esncardModalOpen, setEsncardModalOpen] = useState(false);
+    const [ESNcardModalOpen, setESNcardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
     //console.log("ProfileModal profile:", profile);
@@ -99,6 +101,32 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
         matricola_expiration: true,
     });
 
+    useEffect(() => {
+        setLoading(true);
+        const fetchData = async () => {
+            try {
+                const response = await fetchCustom("GET", `/profile/${profile.id.toString()}/`);
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                } else {
+                    const json = await response.json();
+                    const update = {};
+                    Object.keys(data).map((key) => {
+                        update[key] = json[key];
+                    });
+                    setData(update)
+                    setUpdatedData(update)
+                }
+            } catch (error) {
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData().then();
+    }, []);
+
     const rules = profileFieldRules[profileType] || {hideFields: []};
     const shouldHideField = (fieldName) => {
         return rules.hideFields.includes(fieldName);
@@ -107,29 +135,32 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     const refreshProfileData = async () => {
         try {
             const response = await fetchCustom("GET", `/profile/${profile.id.toString()}/`);
-            if (response.ok) {
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
                 const json = await response.json();
                 setData(json);
                 setUpdatedData(json);
                 if (updateProfile) updateProfile(json);
-                return json;
+                setProfile(json);
             }
         } catch (error) {
-            console.error("Error refreshing profile data:", error);
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
-        return null;
     };
 
     const handleOpenESNcardModal = () => {
-        setEsncardModalOpen(true);
+        setESNcardModalOpen(true);
     };
 
     const handleCloseESNcardModal = async (success) => {
         if (success) {
             setShowSuccessPopup({message: "ESNcard emessa con successo!", state: "success"});
             await refreshProfileData();
+            // set profile latest esncard to the latest one
         }
-        setEsncardModalOpen(false);
+        setESNcardModalOpen(false);
     };
 
     /* columns for esncard table */
@@ -173,20 +204,20 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     ], []);
 
     const saveESNcard = async (row, values) => {
-        console.log(row);
-        const response = await fetchCustom("PATCH", `/esncard/${row.id}/`, values);
-
-        if (response.ok) {
-            setESNcardErrors({});
-            setShowSuccessPopup({message: "ESNcard aggiornata con successo!", state: "success"});
-            await refreshProfileData();
-            return true;
-        } else if (response.status === 400) {
-            response.json().then((errors) => setESNcardErrors(errors))
-            setShowSuccessPopup({message: "Errore aggiornamento ESNcard: " + response.errors, state: "error"});
-            return false;
-        } else {
-            return false;
+        try {
+            const response = await fetchCustom("PATCH", `/esncard/${row.id}/`, values);
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                return false;
+            } else {
+                setESNcardErrors({});
+                setShowSuccessPopup({message: "ESNcard aggiornata con successo!", state: "success"});
+                await refreshProfileData();
+                return true;
+            }
+        } catch (error) {
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -240,51 +271,63 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
     ], []);
 
     const deleteDocument = async (row) => {
-        const response = await fetchCustom("DELETE", `/document/${row.id}/`);
-        if (response.ok) {
-            setDocumentErrors({});
-            setShowSuccessPopup({message: "Documento eliminato con successo!", state: "success"});
-            await refreshProfileData();
-            return true;
-        } else {
-            response.json().then((errors) => setDocumentErrors(errors))
-            setShowSuccessPopup({message: "Errore nell'eliminazione del Documento", state: "error"});
-            return false;
+        try {
+            const response = await fetchCustom("DELETE", `/document/${row.id}/`);
+            if (!response.ok) {
+                response.json().then((errors) => setDocumentErrors(errors))
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
+                setDocumentErrors({});
+                setShowSuccessPopup({message: "Documento eliminato con successo!", state: "success"});
+                await refreshProfileData();
+                return true;
+            }
+        } catch (error) {
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
     /* document creation */
     const createDocument = async (values) => {
-        let val = {...values, profile: profile.id};
-        const response = await fetchCustom("POST", '/document/', val);
-
-        if (response.ok) {
-            setDocumentErrors({});
-            setShowSuccessPopup({message: "Documento aggiunto con successo!", state: "success"});
-            await refreshProfileData();
-            return true;
-        } else if (response.status === 400) {
-            response.json().then((errors) => setDocumentErrors(errors))
-            return false;
+            let val = {...values, profile: profile.id};
+            try {
+                const response = await fetchCustom("POST", '/document/', val);
+                if (!response.ok) {
+                    response.json().then((errors) => setDocumentErrors(errors))
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                    return false;
+                } else {
+                    setDocumentErrors({});
+                    setShowSuccessPopup({message: "Documento aggiunto con successo!", state: "success"});
+                    await refreshProfileData();
+                    return true;
+                }
+            } catch (error) {
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+                return false;
+            }
         }
-        return false;
-    };
+    ;
 
     /* save edited document */
     const saveDocument = async (row, values) => {
-        console.log(row);
-        const response = await fetchCustom("PATCH", `/document/${row.id}/`, values);
-
-        if (response.ok) {
-            setDocumentErrors({});
-            setShowSuccessPopup({message: "Documento aggiornato con successo!", state: "success"});
-            await refreshProfileData();
-            return true;
-        } else if (response.status === 400) {
-            response.json().then((errors) => setDocumentErrors(errors))
-            setShowSuccessPopup({message: "Errore aggiornamento Documento: " + response.errors, state: "error"});
-            return false;
-        } else {
+        try {
+            const response = await fetchCustom("PATCH", `/document/${row.id}/`, values);
+            if (!response.ok) {
+                response.json().then((errors) => setDocumentErrors(errors))
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                return false;
+            } else {
+                setDocumentErrors({});
+                setShowSuccessPopup({message: "Documento aggiornato con successo!", state: "success"});
+                await refreshProfileData();
+                return true;
+            }
+        } catch (error) {
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             return false;
         }
     }
@@ -340,16 +383,8 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 birthdate: formatDateString(updatedData.birthdate),
                 matricola_expiration: formatDateString(updatedData.matricola_expiration)
             }
-
             const response = await fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body);
-            if (response.ok) {
-                const updatedProfile = await refreshProfileData();
-                if (updatedProfile) {
-                    resetErrors();
-                    setShowSuccessPopup({message: "Profilo aggiornato con successo!", state: "success"});
-                    toggleEdit(false);
-                }
-            } else if (response.status === 400) {
+            if (!response.ok) {
                 const json = await response.json();
                 const updatedErrors = Object.fromEntries(Object.keys(errors).map(
                     (e) => {
@@ -359,43 +394,21 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 ));
                 setErrors(updatedErrors);
             } else {
-                throw new Error('Error while patching profile ' + profile.id.toString());
+                await refreshProfileData();
+                if (data) {
+                    resetErrors();
+                    setShowSuccessPopup({message: "Profilo aggiornato con successo!", state: "success"});
+                    toggleEdit(false);
+                }
             }
         } catch (error) {
-            console.error(error);
             setUpdatedData(data);
-            setShowSuccessPopup({message: "Errore nell'aggiornamento del profilo", state: "error"});
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             toggleEdit(false);
         } finally {
             setSaving(false);
         }
     };
-
-    useEffect(() => {
-        setIsLoading(true);
-        console.log('Fetching ' + profile.id)
-        fetchCustom("GET", `/profile/${profile.id.toString()}/`)
-            .then((response) => {
-                if (response.ok) {
-                    return response.json()
-                } else {
-                    throw new Error('Error while fetching profile ' + profile.id.toString())
-                }
-            })
-            .then((json) => {
-                const update = {};
-                Object.keys(data).map((key) => {
-                    update[key] = json[key];
-                });
-                setData(update)
-                setUpdatedData(update)
-                setIsLoading(false);
-            })
-            .catch((error) => {
-                console.log(error);
-                setIsLoading(false);
-            });
-    }, [])
 
     return (
         <Modal open={open} onClose={handleClose}>
@@ -403,7 +416,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                 <Typography variant="h5" gutterBottom align="center">
                     Profilo {profileType}
                 </Typography>
-                {isLoading ? <Loader/> : (<>
+                {loading ? <Loader/> : (<>
                         <Card sx={{p: '20px'}}>
                             <Grid container spacing={2}>
                                 {!shouldHideField('name') && (
@@ -545,7 +558,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                         <TextField
                                             label={names.person_code}
                                             name='person_code'
-                                            value={updatedData.person_code}
+                                            value={updatedData.person_code || ''}
                                             error={errors.person_code[0]}
                                             helperText={errors.person_code[1]}
                                             onChange={handleChange}
@@ -606,7 +619,7 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                                 labelId="course-label"
                                                 name="course"
                                                 label={names.course}
-                                                value={updatedData.course}
+                                                value={updatedData.course || ''}
                                                 onChange={handleChange}
                                                 slotProps={{input: {readOnly: readOnly.course}}}
                                                 sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
@@ -659,27 +672,26 @@ export default function ProfileModal({open, handleClose, profile, profileType, u
                                             setUpdatedData(data);
                                         }}
                                         saving={saving}
-                                        onSave={() => handleSave()}
+                                        onSave={handleSave}
                                     />
                                 </Grid>
                             </Grid>
                         </Card>
                         <Toolbar sx={{justifyContent: 'space-between', mt: 2}}>
                             <Typography variant="h6">Azioni</Typography>
-                            {!profile.latest_esncard && (
+                            {!profile.latest_esncard ? (
                                 <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
                                     Rilascia ESNcard
                                 </Button>
-                            )}
-                            {profile.latest_esncard && !profile.latest_esncard.is_valid && (
+                            ) : (
                                 <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
-                                    Rinnova ESNcard
+                                    {profile.latest_esncard.is_valid ? 'ESNcard smarrita' : 'Rinnova ESNcard'}
                                 </Button>
                             )}
                         </Toolbar>
-                        {esncardModalOpen &&
+                        {ESNcardModalOpen &&
                             <ESNcardEmissionModal
-                                open={esncardModalOpen}
+                                open={ESNcardModalOpen}
                                 profile={profile}
                                 onClose={handleCloseESNcardModal}
                             />}

@@ -10,13 +10,13 @@ import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {fetchCustom} from "../api/api";
 import countryCodes from "../data/countryCodes.json";
-import StatusBanner from '../components/StatusBanner';
+import StatusBanner from '../Components/StatusBanner';
+import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
     const [sameWAasPhone, setSameWAasPhone] = React.useState(true);
-    const [formStatus, setFormStatus] = useState(null); // null, 'loading', 'success', or 'error'
-    const [statusMessage, setStatusMessage] = useState('');
+    const [statusMessage, setStatusMessage] = useState(null);
 
     const [formData, setFormData] = React.useState({
         'name': '',
@@ -60,7 +60,7 @@ export default function ErasmusForm() {
         'matricola_number': [false, ''],
         'matricola_expiration': [false, ''],
         'is_esner': [false, '']
-    })
+    });
 
     const validateForm = () => {
         let valid = true;
@@ -136,23 +136,18 @@ export default function ErasmusForm() {
             try {
                 const response = await fetchCustom("POST", '/profile/initiate-creation/', body, {}, false);
                 const data = await response.json();
-                if (response.ok) {
-                    setSubmitted(true);
-                } else if (response.status === 400) {
-                    setFormStatus('error');
-                    setStatusMessage('Failed to submit application: see errors below');
+                if (!response.ok) {
+                    setStatusMessage({message: 'Failed to submit application: see errors below', state: 'error'});
                     const newErrors = {...formErrors};
                     Object.entries(data).forEach(([field, message]) => {
                         if (newErrors[field]) newErrors[field] = [true, message];
                     });
                     setFormErrors(newErrors);
                 } else {
-                    setFormStatus('error');
-                    setStatusMessage('Internal error (please contact us): ' + data.error);
+                    setSubmitted(true);
                 }
             } catch (error) {
-                setFormStatus('error');
-                setStatusMessage('Internal error (please contact us): ' + error.message);
+                setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});
             }
         };
         submit().then();
@@ -200,7 +195,7 @@ export default function ErasmusForm() {
 
             <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi Registration - International Student</Typography>
 
-            {formStatus && (<StatusBanner status={formStatus} message={statusMessage}/>)}
+            {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
             <Typography variant="h5" align="center" gutterBottom sx={{my: 4}}>Personal Information</Typography>
             <Grid container spacing={3}>
