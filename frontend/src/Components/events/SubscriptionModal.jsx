@@ -7,15 +7,12 @@ import Grid from '@mui/material/Grid2';
 import Popup from "../Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
+import ConfirmDialog from "../ConfirmDialog";
+import {useAuth} from "../../Context/AuthContext";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
     const [isLoading, setLoading] = useState(true);
-    const [accounts, setAccounts] = useState([]);
-    //const [amount, setAmount] = useState(event.cost);
+    const {accounts} = useAuth();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [profiles, setProfiles] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -62,27 +59,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         }
         setLoading(false);
     }, [isEdit])
-
-    // Only fetch accounts when needed (when payment status is 'paid')
-    useEffect(() => {
-        const fetchAccounts = async () => {
-            if (!(data?.status === 'paid')) return;
-            try {
-                const response = await fetchCustom("GET", '/accounts/');
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
-                    setShowSuccessPopup({message: `Errore casse: ${errorMessage}`, state: 'error'});
-                } else {
-                    const json = await response.json();
-                    //console.log('Accounts json:', json.results);
-                    setAccounts(json.results);
-                }
-            } catch (error) {
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-            }
-        };
-        fetchAccounts().then();
-    }, [data?.status]);
 
     // Fetch profiles based on search query
     useEffect(() => {
@@ -183,7 +159,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             setConfirmDialog({
                 open: true,
                 action: () => doDelete(),
-                message: 'Questa iscrizione risulta pagata. Confermi di voler eliminare un pagamento di €' + event.cost + ' per questa iscrizione?'
+                message: 'Confermi di voler eliminare un pagamento di €' + event.cost + ' per questa iscrizione?'
             });
             return;
         }
@@ -362,7 +338,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                         value={data.account_id || ''}
                                         error={errors.account_id && errors.account_id[0]}
                                         onChange={handleChange}>
-                                        {accounts.map((account) => (
+                                        {accounts.results.map((account) => (
                                             <MenuItem key={account.id} value={account.id}>
                                                 {account.name}
                                             </MenuItem>
@@ -413,29 +389,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                     )}
                     {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
                 </>)}
-                <Dialog
+                <ConfirmDialog
                     open={confirmDialog.open}
+                    message={confirmDialog.message}
+                    onConfirm={confirmDialog.action}
                     onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
-                >
-                    <DialogTitle>Conferma Azione</DialogTitle>
-                    <DialogContent>
-                        <Typography>{confirmDialog.message}</Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setConfirmDialog({open: false, action: null, message: ''})} color="secondary">
-                            Annulla
-                        </Button>
-                        <Button
-                            onClick={() => {
-                                if (confirmDialog.action) confirmDialog.action();
-                            }}
-                            color="primary"
-                            autoFocus
-                        >
-                            Conferma
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                />
             </Box>
         </Modal>
     );

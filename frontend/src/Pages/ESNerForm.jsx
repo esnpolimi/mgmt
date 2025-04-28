@@ -136,9 +136,7 @@ export default function ESNerForm() {
             try {
                 const response = await fetchCustom("POST", '/profile/initiate-creation/', body, {}, false);
                 const data = await response.json();
-                if (response.ok) {
-                    setSubmitted(true);
-                } else if (response.status === 400) {
+                if (!response.ok) {
                     setStatusMessage({message: 'Failed to submit application: see errors below', state: 'error'});
                     const newErrors = {...formErrors};
                     Object.entries(data).forEach(([field, message]) => {
@@ -146,7 +144,7 @@ export default function ESNerForm() {
                     });
                     setFormErrors(newErrors);
                 } else {
-                    setStatusMessage({message: 'Internal error (please contact us): ' + data.error, state: 'error'});
+                    setSubmitted(true);
                 }
             } catch (error) {
                 setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});

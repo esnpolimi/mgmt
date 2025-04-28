@@ -8,9 +8,10 @@ import {Checkbox, FormControlLabel} from '@mui/material';
 import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import {fetchCustom} from "../../api/api";
-import countryCodes from "../../data/countryCodes.json";
-import StatusBanner from '../../Components/StatusBanner';
+import {fetchCustom} from "../api/api";
+import countryCodes from "../data/countryCodes.json";
+import StatusBanner from '../Components/StatusBanner';
+import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -135,9 +136,7 @@ export default function ErasmusForm() {
             try {
                 const response = await fetchCustom("POST", '/profile/initiate-creation/', body, {}, false);
                 const data = await response.json();
-                if (response.ok) {
-                    setSubmitted(true);
-                } else if (response.status === 400) {
+                if (!response.ok) {
                     setStatusMessage({message: 'Failed to submit application: see errors below', state: 'error'});
                     const newErrors = {...formErrors};
                     Object.entries(data).forEach(([field, message]) => {
@@ -145,7 +144,7 @@ export default function ErasmusForm() {
                     });
                     setFormErrors(newErrors);
                 } else {
-                    setStatusMessage({message: 'Internal error (please contact us): ' + data.error, state: 'error'});
+                    setSubmitted(true);
                 }
             } catch (error) {
                 setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});

@@ -8,6 +8,8 @@ const ACCESS_TOKEN_LIFETIME_MINUTES = import.meta.env.VITE_ACCESS_TOKEN_LIFETIME
 export const AuthProvider = ({children}) => {
         const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken")); // localStorage needed for when refreshing page
         const refreshTimer = useRef(null);
+
+        const [accounts, setAccounts] = useState([]);
         const [user, setUser] = useState(() => {
             try {
                 const storedUser = localStorage.getItem("user");
@@ -18,6 +20,7 @@ export const AuthProvider = ({children}) => {
                 return null;
             }
         });
+
         const login = async (username, password) => {
             try {
                 const response = await fetchCustom("POST", "/login/",
@@ -32,6 +35,13 @@ export const AuthProvider = ({children}) => {
                     setAccessToken(data.access);
                     localStorage.setItem("accessToken", data.access);
                     localStorage.setItem("user", JSON.stringify(decodedToken.user));
+                    // Fetch accounts after login
+                    const accountsResp = await fetchCustom("GET", "/accounts/");
+                    if (accountsResp.ok) {
+                        const accountsJson = await accountsResp.json();
+                        console.log("Accounts fetched successfully:", accountsJson);
+                        setAccounts(accountsJson);
+                    }
                     return true;
                 } else {
                     console.error("Invalid credentials");
@@ -112,7 +122,7 @@ export const AuthProvider = ({children}) => {
                             refreshTimer.current = null;
                         }
                         refreshTimer.current = setTimeout(() => {
-                            console.log("Refreshing access token...");
+                            //console.log("Refreshing access token...");
                             refreshAccessToken().then();
                         }, refreshTime);
 
@@ -136,7 +146,7 @@ export const AuthProvider = ({children}) => {
         }, [refreshTimer, accessToken, refreshAccessToken]);
 
         return (
-            <AuthContext.Provider value={{user, accessToken, refreshAccessToken, logout, login}}>
+            <AuthContext.Provider value={{user, accessToken, refreshAccessToken, logout, login, accounts}}>
                 {children}
             </AuthContext.Provider>
         );
