@@ -3,36 +3,33 @@ import {useParams} from 'react-router-dom';
 import {Container, Typography, Box} from '@mui/material';
 import {fetchCustom} from "../api/api";
 import StatusBanner from '../components/StatusBanner';
+import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function EmailVerification() {
     const {uid, token} = useParams();
-    const [status, setStatus] = useState('loading');
-    const [message, setMessage] = useState('');
+    const [statusMessage, setStatusMessage] = useState({
+        message: '',
+        state: 'loading'
+    });
 
     useEffect(() => {
         const verifyEmail = async () => {
             try {
                 const response = await fetchCustom('GET', `/api/profile/verify-email/${uid}/${token}/`, null, {}, false);
                 const data = await response.json();
-                if (response.ok) {
-                    setStatus('success');
-                    setMessage(data.message);
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setStatusMessage({message: errorMessage, state: 'error'});
                 } else {
-                    setStatus('error');
-                    setMessage(data.message);
+                    setStatusMessage({message: data.message, state: 'success'});
                 }
             } catch (error) {
-                setStatus('error');
-                setMessage('An unexpected error occurred: ' + error.message);
+                setStatusMessage({message: `General error: ${error}`, state: 'error'});
             }
         };
 
-        if (uid && token) {
-            verifyEmail().then();
-        } else {
-            setStatus('error');
-            setMessage('Invalid verification link');
-        }
+        if (uid && token) verifyEmail().then();
+        else setStatusMessage({message: 'Invalid verification link', state: 'error'});
     }, [uid, token]);
 
     return (
@@ -55,8 +52,8 @@ export default function EmailVerification() {
                 </Typography>
 
                 <StatusBanner
-                    status={status}
-                    message={message}
+                    message={statusMessage.message}
+                    state={statusMessage.state}
                     loadingText="Verifying your email address..."
                     successText="Your email address has been verified and your account is now active."
                     errorText="We couldn't verify your email address. The verification link may be expired or invalid. Please contact us."

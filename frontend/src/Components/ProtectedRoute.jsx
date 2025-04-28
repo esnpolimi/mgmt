@@ -11,8 +11,7 @@ const ProtectedRoute = ({children}) => {
             console.log("PR: Redirecting to login...");
             navigate("/login");
         }
-        else {
-            console.log("PR: Token is valid");}
+        // else console.log("PR: Token is valid");
     }, [accessToken, navigate]);
 
     return accessToken ? children : null;

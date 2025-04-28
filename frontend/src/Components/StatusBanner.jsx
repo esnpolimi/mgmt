@@ -1,7 +1,7 @@
 import React from 'react';
 import {Typography, Box, Alert} from '@mui/material';
 
-const StatusBanner = ({status, message, successText, errorText}) => {
+const StatusBanner = ({message, state, successText, errorText}) => {
     return (
         <Box
             sx={{
@@ -17,7 +17,7 @@ const StatusBanner = ({status, message, successText, errorText}) => {
                 bgcolor: 'background.paper'
             }}
         >
-            {status === 'success' && (
+            {state === 'success' && (
                 <>
                     <Alert severity="success" sx={{width: '100%', mb: 1}}>
                         {message || 'Success!'}
@@ -26,7 +26,7 @@ const StatusBanner = ({status, message, successText, errorText}) => {
                 </>
             )}
 
-            {status === 'error' && (
+            {state === 'error' && (
                 <>
                     <Alert severity="error" sx={{width: '100%', mb: 1}}>
                         {message || 'An error occurred'}

@@ -12,7 +12,7 @@ from simple_history.models import HistoricalRecords
 
 class Settings(models.Model):
     esncard_release_fee = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=10.0)
-    esncard_renewal_fee = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=2.5)
+    esncard_lost_fee = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=4.0)
 
     class Meta:
         verbose_name = 'Settings'
@@ -90,6 +90,6 @@ class Transaction(BaseEntity):
 
     def delete(self, *args, **kwargs):
         with transaction.atomic():
-            self.account.balance -= self.Amount
+            self.account.balance -= self.amount
             self.account.save()
             super(Transaction, self).delete(*args, **kwargs)

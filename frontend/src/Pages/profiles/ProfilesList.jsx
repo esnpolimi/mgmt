@@ -1,10 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import {Box} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import {fetchCustom} from '../api/api';
-import ProfileModal from '../Components/ProfileModal.jsx';
+import {fetchCustom} from '../../api/api';
+import ProfileModal from '../../Components/profiles/ProfileModal.jsx';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
-import Loader from "../Components/Loader";
+import Loader from "../../Components/Loader";
 
 export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
     const [data, setData] = useState([]);
@@ -31,7 +31,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                 setLoading(false);
             }
         };
-
         fetchData().then();
     }, [apiEndpoint]);
 
@@ -108,7 +107,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
             {isLoading ? <Loader/> : <MaterialReactTable table={table}/>}
             {modalOpen && <ProfileModal
                 open={modalOpen}
-                profile={selectedProfile}
+                inProfile={selectedProfile}
                 profileType={profileType}
                 handleClose={handleProfileClose}
                 updateProfile={updateProfile}
