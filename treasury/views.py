@@ -5,6 +5,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from profiles.models import Profile
 from treasury.models import Transaction, Account, ESNcard, Settings
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer
@@ -17,37 +19,40 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def esncard_emission(request):
     try:
+        profile = Profile.objects.filter(id=request.data['profile_id']).first()
+        latest_card = profile.latest_esncard if profile else None
+        print("Latest card for" + str(profile) + ": " + str(latest_card))
         esncard_serializer = ESNcardEmissionSerializer(data=request.data)
         if not esncard_serializer.is_valid():
             return Response(esncard_serializer.errors, status=400)
 
         with transaction.atomic():
             esncard = esncard_serializer.save()
-            # Check if this is a renewal (profile already has ESNcards)
-            has_previous_cards = ESNcard.objects.filter(profile=esncard.profile, enabled=True).exists()
 
             # Get the appropriate fee amount from settings
             settings = Settings.get()
-            if has_previous_cards:
-                amount = float(settings.esncard_renewal_fee.amount)
-                description = "Rinnovo ESNcard"
+            if latest_card:
+                if latest_card.is_valid:
+                    amount = float(settings.esncard_lost_fee.amount)
+                    description = "Emissione ESNcard smarrita"
+                else:
+                    amount = float(settings.esncard_release_fee.amount)
+                    description = "Rinnovo ESNcard"
             else:
                 amount = float(settings.esncard_release_fee.amount)
                 description = "Emissione ESNcard"
 
-            # Create the transaction TODO: check that subscription is not needed
+            # Create the transaction
             t = Transaction(
                 account=esncard_serializer.validated_data['account_id'],
                 executor=request.user,
                 amount=amount,
-                description=description
+                description=f"{description}: {esncard.profile.name} {esncard.profile.surname}"
             )
             t.save()
 
             # Return the newly created ESNcard with additional info
             response_data = esncard_serializer.data
-            response_data['is_renewal'] = has_previous_cards
-
             return Response(response_data, status=200)
 
     except PermissionDenied as e:
@@ -76,6 +81,8 @@ def esncard_detail(request, pk):
                     return Response(esncard_serializer.errors, status=400)
             else:
                 return Response({'error': 'Non hai i permessi per modificare questa ESNcard.'}, status=403)
+        else:
+            return Response("Metodo non consentito", status=405)
 
     except ESNcard.DoesNotExist:
         return Response('La ESNcard non esiste', status=400)
@@ -144,7 +151,7 @@ def transaction_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def accounts_list(request):
     try:
-        accounts = Account.objects.all()
+        accounts = Account.objects.all().order_by('id')
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(accounts, request=request)
         serializer = AccountListViewSerializer(page, many=True)
@@ -156,7 +163,7 @@ def accounts_list(request):
         settings = Settings.get()
         response_data['esncard_fees'] = {
             'esncard_release_fee': str(settings.esncard_release_fee),
-            'esncard_renewal_fee': str(settings.esncard_renewal_fee)
+            'esncard_lost_fee': str(settings.esncard_lost_fee)
         }
         return Response(response_data)
     except Exception as e:
@@ -215,4 +222,3 @@ def account_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         return Response({'error': 'Errore interno del server.'}, status=500)
-
