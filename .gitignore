@@ -4,3 +4,7 @@ __pycache__/
 /venv
 .idea
 *.xlsx
+/backend/backend/
+*.env*
+*.env.*
+/frontend/src/Context/
