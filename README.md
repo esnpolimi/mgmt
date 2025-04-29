@@ -1,3 +1,6 @@
+# ESN Politecnico Milano New Management System
+This is a webapp designed to manage the activities and events of the Erasmus Student Network of Politecnico di Milano organization. The system is built using Django for the backend and React for the frontend, providing a modern and efficient user experience.
+
 # Guida Workflow Git
 
 ## Branch principali
