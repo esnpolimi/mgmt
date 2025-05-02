@@ -196,6 +196,8 @@ def profile_detail(request, pk):
                 profile.save()
                 return Response(status=200)
             return Response({'error': 'Non hai i permessi per eliminare questo profilo.'}, status=401)
+        else:
+            return Response({'error': 'Metodo non supportato.'}, status=405)
 
     except Profile.DoesNotExist:
         return Response('Il profilo non esiste.', status=404)
@@ -203,26 +205,6 @@ def profile_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         return Response({'error': 'Si è verificato un errore imprevisto.'}, status=500)
-
-
-# Endpoint to verify email
-@api_view(['GET'])
-def profile_verification(request, pk, token):
-    try:
-        profile = Profile.objects.get(pk=pk)
-        if email_verification_token.check_token(profile, token):
-            profile.email_is_verified = True
-            profile.save()
-            return Response('Email verificata.', status=200)
-        else:
-            return Response('Token non valido.', status=400)
-
-    except Profile.DoesNotExist:
-        return Response('Il profilo non esiste.', status=400)
-
-    except Exception as e:
-        logger.error(str(e))
-        return Response('Si è verificato un errore imprevisto.', status=500)
 
 
 # Endpoint to create document
@@ -312,4 +294,3 @@ def search_profiles(request):
     except Exception as e:
         logger.error(str(e))
         return Response({"error": "Si è verificato un errore: " + str(e)}, status=500)
-
