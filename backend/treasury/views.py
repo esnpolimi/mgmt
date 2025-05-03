@@ -202,7 +202,6 @@ def account_detail(request, pk):
             return Response(serializer.data, status=200)
 
         if request.method == 'PATCH':
-
             if not request.user.has_perm('treasury.change_acconut'):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
@@ -215,6 +214,8 @@ def account_detail(request, pk):
 
             serializer.save()
             return Response(serializer.data, status=200)
+        else:
+            return Response("Metodo non consentito", status=405)
 
     except Account.DoesNotExist:
         return Response({'error': 'Account non trovato.'}, status=404)

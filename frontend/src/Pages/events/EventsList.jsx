@@ -22,25 +22,7 @@ export default function EventsList() {
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const response = await fetchCustom("GET", '/events/');
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                } else {
-                    const json = await response.json();
-                    setData(json.results);
-                    console.log("Event List Data: ", json.results);
-                    setLoading(false);
-                }
-            } catch (error) {
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData().then();
+        refreshEventsData().then();
     }, []);
 
     const columns = useMemo(() => [
@@ -161,6 +143,7 @@ export default function EventsList() {
             } else {
                 const json = await response.json();
                 setData(json.results);
+                console.log("Event List Data: ", json.results);
             }
         } catch (error) {
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});

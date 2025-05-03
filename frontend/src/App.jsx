@@ -6,31 +6,35 @@ import ESNerForm from './Pages/ESNerForm.jsx';
 import ErasmusProfiles from './Pages/profiles/ErasmusProfiles.jsx';
 import ESNersProfiles from './Pages/profiles/ESNersProfiles.jsx';
 import Home from './Pages/Home.jsx'
-import Treasury from './Pages/Treasury.jsx';
+import TreasuryDashboard from './Pages/treasury/TreasuryDashboard.jsx';
+import AccountsList from './Pages/treasury/AccountsList.jsx';
 import EventsList from './Pages/events/EventsList.jsx';
 import Event from './Pages/events/Event.jsx';
 import {AuthProvider} from "./Context/AuthContext.jsx";
 import ProtectedRoute from "./Components/ProtectedRoute.jsx";
-import EmailVerification from './Pages/EmailVerification';
-
+import EmailVerification from './Pages/EmailVerification.jsx';
+import {SidebarProvider} from './Context/SidebarContext.jsx';
 
 function App() {
     return (
         <AuthProvider>
-            <Router>
-                <Routes>
-                    <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
-                    <Route path='/login' element={<Login/>}/>
-                    <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
-                    <Route path='/erasmus_profiles' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
-                    <Route path='/esners_profiles' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
-                    <Route path='/erasmus_form' element={<ErasmusForm/>}/>
-                    <Route path='/esner_form' element={<ESNerForm/>}/>
-                    <Route path='/treasury' element={<ProtectedRoute><Treasury/></ProtectedRoute>}/>
-                    <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
-                    <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
-                </Routes>
-            </Router>
+            <SidebarProvider>
+                <Router>
+                    <Routes>
+                        <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
+                        <Route path='/login' element={<Login/>}/>
+                        <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
+                        <Route path='/profiles/erasmus' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
+                        <Route path='/profiles/esners' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
+                        <Route path='/erasmus_form' element={<ErasmusForm/>}/>
+                        <Route path='/esner_form' element={<ESNerForm/>}/>
+                        <Route path='/treasury/dashboard' element={<ProtectedRoute><TreasuryDashboard/></ProtectedRoute>}/>
+                        <Route path='/treasury/accounts_list' element={<ProtectedRoute><AccountsList/></ProtectedRoute>}/>
+                        <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
+                        <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
+                    </Routes>
+                </Router>
+            </SidebarProvider>
         </AuthProvider>
     )
 }

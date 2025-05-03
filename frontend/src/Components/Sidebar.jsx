@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React from 'react';
 import {Link} from 'react-router-dom';
 import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, IconButton, Collapse} from '@mui/material';
 import {
@@ -14,37 +14,26 @@ import {
 } from "@mui/icons-material";
 import ProfileSidebarBox from './profiles/ProfileSidebarBox';
 import {useAuth} from "../Context/AuthContext";
+import {useSidebar} from "../Context/SidebarContext";
 
 
 export default function Sidebar() {
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-    const [expandedSection, setExpandedSection] = useState(null);
+    const {isDrawerOpen, toggleDrawer, expandedSection, handleExpand} = useSidebar();
     const {user} = useAuth();
-
-    const toggleDrawer = (open) => () => {
-        setIsDrawerOpen(open);
-    };
 
     const menuItems = [
         {text: "Home", icon: <HomeIcon/>, path: "/"},
-        {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury"},
+        {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury/dashboard"},
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
         {
             text: "Profili",
             icon: <PersonIcon/>,
             children: [
-                {text: 'Erasmus', icon: <SnowboardingIcon/>, path: '/erasmus_profiles'},
-                {text: 'ESNers', icon: <BabyChangingStationIcon/>, path: '/esners_profiles'},
+                {text: 'Erasmus', icon: <SnowboardingIcon/>, path: '/profiles/erasmus'},
+                {text: 'ESNers', icon: <BabyChangingStationIcon/>, path: '/profiles/esners'},
             ],
         },
     ];
-
-    const handleExpand = (section) => {
-        setExpandedSection((prevSection) =>
-            prevSection === section ? null : section
-        );
-    };
-
 
     const drawer = (
         <Box
@@ -55,6 +44,7 @@ export default function Sidebar() {
                 height: '100%'
             }}
             role="presentation"
+            onClick={toggleDrawer(false)}
             onKeyDown={toggleDrawer(false)}
         >
             <Box sx={{flexGrow: 1}}>
@@ -70,16 +60,17 @@ export default function Sidebar() {
                             </ListItem>
                         ) : (
                             <React.Fragment key={item.text}>
-                                <ListItem button="true" onClick={() => handleExpand(item.text)}>
+                                <ListItem button onClick={(e) => {
+                                    e.stopPropagation(); // Prevent drawer from closing
+                                    handleExpand(item.text);
+                                }}>
                                     <ListItemIcon>{item.icon}</ListItemIcon>
                                     <ListItemText
                                         primary={item.text}
                                         slotProps={{primary: {style: {color: "black"},}}}
                                     />
-                                    {/* Expand/Collapse Icon */}
                                     {expandedSection === item.text ? <ExpandLess/> : <ExpandMore/>}
                                 </ListItem>
-                                {/* Subsections (e.g., Erasmus, Aspirants, ESNers) */}
                                 <Collapse
                                     in={expandedSection === item.text}
                                     timeout="auto"
@@ -91,9 +82,9 @@ export default function Sidebar() {
                                                 component={Link}
                                                 to={child.path}
                                                 key={child.text}
-                                                sx={{pl: 4}} // Ensure padding for hierarchy
+                                                sx={{pl: 4}}
                                             >
-                                                <ListItemIcon>{child.icon}</ListItemIcon> {/* Add Icon */}
+                                                <ListItemIcon>{child.icon}</ListItemIcon>
                                                 <ListItemText
                                                     primary={child.text}
                                                     slotProps={{primary: {style: {color: "black"},}}}
@@ -107,9 +98,11 @@ export default function Sidebar() {
                     </React.Fragment>
                 ))}
             </Box>
-            <Box sx={{mt: 'auto', mb: 2}}>
-                <ProfileSidebarBox user={user}/>
-            </Box>
+            {user && (
+                <Box sx={{mt: 'auto', mb: 2}}>
+                    <ProfileSidebarBox user={user}/>
+                </Box>
+            )}
         </Box>
     );
 
@@ -130,3 +123,4 @@ export default function Sidebar() {
         </Box>
     );
 }
+

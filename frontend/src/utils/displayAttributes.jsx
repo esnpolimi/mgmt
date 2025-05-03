@@ -31,3 +31,9 @@ export const eventDisplayNames = {
     list_name: 'Nome Lista',
     list_capacity: 'Capacità Lista'
 };
+
+export const accountDisplayNames = {
+    id: 'Id',
+    name: 'Nome',
+    status: 'Stato',
+};

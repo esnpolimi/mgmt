@@ -7,4 +7,4 @@ __pycache__/
 /backend/backend/
 *.env*
 *.env.*
-/frontend/src/Context/
+/frontend/src/Context/AuthContext.jsx
