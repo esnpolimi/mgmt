@@ -2,27 +2,26 @@ import React, {useEffect, useState, useMemo} from 'react';
 import {Box, Typography, Chip, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
-import EventIcon from '@mui/icons-material/Event';
-import EventModal from '../../Components/events/EventModal.jsx';
+import StoreIcon from '@mui/icons-material/Store';
+import AccountModal from '../../Components/treasury/AccountModal.jsx';
 import {fetchCustom} from "../../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
-import {eventDisplayNames as names} from "../../utils/displayAttributes";
+import {accountDisplayNames as names} from "../../utils/displayAttributes";
 import Loader from "../../Components/Loader";
-import dayjs from "dayjs";
 import Popup from "../../Components/Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 
 
-export default function EventsList() {
+export default function AccountsList() {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
-    const [eventModalOpen, setEventModalOpen] = useState(false);
+    const [accountModalOpen, setAccountModalOpen] = useState(false);
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
 
     useEffect(() => {
-        refreshEventsData().then();
+        refreshAccountsData().then();
     }, []);
 
     const columns = useMemo(() => [
@@ -37,42 +36,9 @@ export default function EventsList() {
             size: 150,
         },
         {
-            accessorKey: 'date',
-            header: names.date,
+            accessorKey: 'status',
+            header: names.status,
             size: 150,
-        },
-        {
-            accessorKey: 'cost',
-            header: names.cost,
-            size: 150,
-        },
-        {
-            accessorKey: 'subscription_start_date',
-            header: names.subscription_date_status,
-            size: 150,
-            Cell: ({row}) => {
-                const now = dayjs();
-                const startDateTime = row.original.subscription_start_date ? dayjs(row.original.subscription_start_date) : null;
-                const endDateTime = row.original.subscription_end_date ? dayjs(row.original.subscription_end_date) : null;
-
-                let status = "Non disponibile";
-                let color = "error";
-
-                if (startDateTime && endDateTime) {
-                    if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
-                        status = "Iscrizioni aperte";
-                        color = "success";
-                    } else if (now.isBefore(startDateTime)) {
-                        status = "Iscrizioni non ancora aperte";
-                        color = "warning";
-                    } else if (now.isAfter(endDateTime)) {
-                        status = "Iscrizioni chiuse";
-                        color = "error";
-                    }
-                }
-
-                return <Chip label={status} color={color}/>;
-            },
         },
     ], []);
 
@@ -119,31 +85,31 @@ export default function EventsList() {
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {
-                navigate('/event/' + row.original.id, {state: {event: row.original}});
+                navigate('/treasury/account/' + row.original.id, {state: {account: row.original}});
             },
         }),
         renderTopToolbarCustomActions: () => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                    <Button variant='contained' onClick={() => setEventModalOpen(true)} sx={{width: '150px'}}>
-                        Crea
+                    <Button variant='contained' onClick={() => setAccountModalOpen(true)} sx={{width: '150px'}}>
+                        Crea Nuova Cassa
                     </Button>
                 </Box>
             );
         },
     });
 
-    const refreshEventsData = async () => {
+    const refreshAccountsData = async () => {
         setLoading(true);
         try {
-            const response = await fetchCustom("GET", '/events/');
+            const response = await fetchCustom("GET", '/accounts/');
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
                 const json = await response.json();
                 setData(json.results);
-                console.log("Event List Data: ", json.results);
+                console.log("Account List Data: ", json.results);
             }
         } catch (error) {
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
@@ -152,27 +118,27 @@ export default function EventsList() {
         }
     };
 
-    const handleCloseEventModal = async (success) => {
+    const handleCloseAccountModal = async (success) => {
         if (success) {
-            setShowSuccessPopup({message: "Evento creato con successo!", state: "success"});
-            await refreshEventsData();
+            setShowSuccessPopup({message: "Cassa creata con successo!", state: "success"});
+            await refreshAccountsData();
         }
-        setEventModalOpen(false);
+        setAccountModalOpen(false);
     };
 
     return (
         <Box>
             <Sidebar/>
-            {eventModalOpen && <EventModal
-                open={eventModalOpen}
-                onClose={handleCloseEventModal}
+            {accountModalOpen && <AccountModal
+                open={accountModalOpen}
+                onClose={handleCloseAccountModal}
                 isEdit={false}
             />}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                            <EventIcon sx={{marginRight: '10px'}}/>
-                            <Typography variant="h4">Lista Eventi</Typography>
+                            <StoreIcon sx={{marginRight: '10px'}}/>
+                            <Typography variant="h4">Lista Casse</Typography>
                         </Box>
                         <MaterialReactTable table={table}/>
                     </>
