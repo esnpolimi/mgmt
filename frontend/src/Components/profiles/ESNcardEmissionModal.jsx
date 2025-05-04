@@ -1,9 +1,8 @@
 import React, {useEffect, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, IconButton} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import Grid from '@mui/material/Grid2';
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import {extractErrorMessage} from "../../utils/errorHandling";
