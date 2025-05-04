@@ -1,16 +1,13 @@
 import React, {useEffect, useState} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import Sidebar from "../../Components/Sidebar";
-import {Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography} from "@mui/material";
-import Grid from "@mui/material/Grid2";
+import {Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography, Grid} from "@mui/material";
 import EventIcon from "@mui/icons-material/Event";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EuroIcon from '@mui/icons-material/Euro';
 import AdjustIcon from '@mui/icons-material/Adjust';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import DeleteIcon from '@mui/icons-material/Delete';
 import BallotIcon from '@mui/icons-material/Ballot';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Loader from "../../Components/Loader";
@@ -23,7 +20,6 @@ import Popup from "../../Components/Popup";
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
-import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import {extractErrorMessage} from "../../utils/errorHandling";
 

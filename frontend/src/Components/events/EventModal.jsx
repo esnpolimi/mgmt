@@ -1,9 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {
-    Modal, Box, TextField, FormControlLabel, Switch, Button, Checkbox, FormControl,
-    InputLabel, Select, MenuItem, IconButton, Paper, Typography, Tooltip
-} from '@mui/material';
-import Grid from '@mui/material/Grid2';
+import {Modal, Box, TextField, Button, IconButton, Typography, Tooltip, Grid} from '@mui/material';
 import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -306,9 +302,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
                     {isEdit && hasSubscriptions && (
-                        <Box sx={{ mb: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1 }}>
+                        <Box sx={{mb: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1}}>
                             <Typography variant="body2" color="warning.main">
-                                <InfoIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 1 }} />
+                                <InfoIcon fontSize="small" sx={{verticalAlign: 'middle', mr: 1}}/>
                                 Alcuni campi non sono modificabili perché ci sono già iscrizioni. Rimuovi tutte le iscrizioni per abilitare la modifica.
                             </Typography>
                         </Box>

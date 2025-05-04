@@ -1,6 +1,5 @@
 import React, {useState} from 'react';
-import {Box, Button, FormControl, InputLabel, MenuItem, Select, TextField, Typography} from '@mui/material';
-import Grid from '@mui/material/Grid2';
+import {Box, Button, FormControl, InputLabel, MenuItem, Select, TextField, Typography, Grid} from '@mui/material';
 import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -11,7 +10,6 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {fetchCustom} from "../api/api";
 import countryCodes from "../data/countryCodes.json";
 import StatusBanner from '../Components/StatusBanner';
-import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
