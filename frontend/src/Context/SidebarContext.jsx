@@ -1,6 +1,6 @@
 import React, {createContext, useContext, useState, useEffect} from 'react';
 
-const SidebarContext = createContext();
+const SidebarContext = createContext(undefined);
 
 export function SidebarProvider({children}) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);

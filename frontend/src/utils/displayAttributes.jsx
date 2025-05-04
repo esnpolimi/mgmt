@@ -36,4 +36,16 @@ export const accountDisplayNames = {
     id: 'Id',
     name: 'Nome',
     status: 'Stato',
+    balance: 'Saldo (€)',
+    changed_by: 'Ultimo Modificato Da',
 };
+
+export const transactionDisplayNames = {
+    id: 'Id',
+    date: 'Data',
+    subscription: 'Iscrizione',
+    description: 'Descrizione',
+    amount: 'Importo',
+    executor: 'Eseguito da',
+    account: 'Cassa',
+}

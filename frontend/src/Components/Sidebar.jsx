@@ -1,6 +1,6 @@
 import React from 'react';
 import {Link} from 'react-router-dom';
-import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, IconButton, Collapse} from '@mui/material';
+import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, ListItemButton, IconButton, Collapse} from '@mui/material';
 import {
     Menu as MenuIcon,
     Home as HomeIcon,
@@ -23,7 +23,7 @@ export default function Sidebar() {
 
     const menuItems = [
         {text: "Home", icon: <HomeIcon/>, path: "/"},
-        {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury/dashboard"},
+        {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury"},
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
         {
             text: "Profili",
@@ -60,7 +60,7 @@ export default function Sidebar() {
                             </ListItem>
                         ) : (
                             <React.Fragment key={item.text}>
-                                <ListItem button onClick={(e) => {
+                                <ListItemButton onClick={(e) => {
                                     e.stopPropagation(); // Prevent drawer from closing
                                     handleExpand(item.text);
                                 }}>
@@ -70,7 +70,7 @@ export default function Sidebar() {
                                         slotProps={{primary: {style: {color: "black"},}}}
                                     />
                                     {expandedSection === item.text ? <ExpandLess/> : <ExpandMore/>}
-                                </ListItem>
+                                </ListItemButton>
                                 <Collapse
                                     in={expandedSection === item.text}
                                     timeout="auto"

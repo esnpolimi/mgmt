@@ -171,6 +171,31 @@ def accounts_list(request):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
+# Endpoint to retrieve all accounts
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def accounts_list_full(request):
+    try:
+        accounts = Account.objects.all().order_by('id')
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(accounts, request=request)
+        serializer = AccountDetailedViewSerializer(page, many=True)
+
+        # Get the paginated response
+        response_data = paginator.get_paginated_response(serializer.data).data
+
+        # Get the settings and add fee information
+        settings = Settings.get()
+        response_data['esncard_fees'] = {
+            'esncard_release_fee': str(settings.esncard_release_fee),
+            'esncard_lost_fee': str(settings.esncard_lost_fee)
+        }
+        return Response(response_data)
+    except Exception as e:
+        logger.error(str(e))
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
 # Endpoint to create new account
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
