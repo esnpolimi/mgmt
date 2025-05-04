@@ -1,9 +1,8 @@
 import React, {useEffect, useMemo, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, Autocomplete, Switch, FormControlLabel, Paper, IconButton} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, Autocomplete, Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import Grid from '@mui/material/Grid2';
 import Popup from "../Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
