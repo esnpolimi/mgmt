@@ -28,7 +28,7 @@ function App() {
                         <Route path='/profiles/esners' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
                         <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                         <Route path='/esner_form' element={<ESNerForm/>}/>
-                        <Route path='/treasury/dashboard' element={<ProtectedRoute><TreasuryDashboard/></ProtectedRoute>}/>
+                        <Route path='/treasury' element={<ProtectedRoute><TreasuryDashboard/></ProtectedRoute>}/>
                         <Route path='/treasury/accounts_list' element={<ProtectedRoute><AccountsList/></ProtectedRoute>}/>
                         <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
                         <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>

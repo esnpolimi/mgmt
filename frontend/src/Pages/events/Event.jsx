@@ -85,7 +85,7 @@ export default function Event() {
     };
 
     const handleBack = () => {
-        navigate('/events');
+        navigate(-1);
     };
 
     const handleOpenEventModal = () => {
@@ -391,7 +391,7 @@ export default function Event() {
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                            <IconButton onClick={handleBack} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
+                            <IconButton onClick={() => {navigate(-1);}} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
                             <EventIcon sx={{marginRight: '10px'}}/>
                             <Typography variant="h4">Evento - {data.name}</Typography>
                         </Box>
