@@ -7,8 +7,8 @@ urlpatterns = [
     path('transaction/', views.transaction_add),
     path('transaction/<str:pk>/', views.transaction_detail),
     path('transactions/', views.transactions_list),
+    path('esncard_fees/', views.esncard_fees),
     path('accounts/', views.accounts_list),
-    path('accounts_full/', views.accounts_list_full),
     path('account/', views.account_creation),
     path('account/<str:pk>/', views.account_detail),
 ]
