@@ -146,35 +146,27 @@ def transaction_detail(request, pk):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
-# Endpoint to retrieve all accounts 
+# Endpoint to retrieve ensncard fees
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def accounts_list(request):
+def esncard_fees(request):
     try:
-        accounts = Account.objects.all().order_by('id')
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(accounts, request=request)
-        serializer = AccountListViewSerializer(page, many=True)
-
-        # Get the paginated response
-        response_data = paginator.get_paginated_response(serializer.data).data
-
         # Get the settings and add fee information
         settings = Settings.get()
-        response_data['esncard_fees'] = {
+        response = Response({
             'esncard_release_fee': str(settings.esncard_release_fee),
             'esncard_lost_fee': str(settings.esncard_lost_fee)
-        }
-        return Response(response_data)
+        }, status=200)
+        return response
     except Exception as e:
         logger.error(str(e))
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
-# Endpoint to retrieve all accounts
+# Endpoint to retrieve all accounts 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def accounts_list_full(request):
+def accounts_list(request):
     try:
         accounts = Account.objects.all().order_by('id')
         paginator = PageNumberPagination()
@@ -184,12 +176,6 @@ def accounts_list_full(request):
         # Get the paginated response
         response_data = paginator.get_paginated_response(serializer.data).data
 
-        # Get the settings and add fee information
-        settings = Settings.get()
-        response_data['esncard_fees'] = {
-            'esncard_release_fee': str(settings.esncard_release_fee),
-            'esncard_lost_fee': str(settings.esncard_lost_fee)
-        }
         return Response(response_data)
     except Exception as e:
         logger.error(str(e))
@@ -204,7 +190,7 @@ def account_creation(request):
         if not request.user.has_perm('treasury.add_account'):
             return Response({'error': 'Non autorizzato.'}, status=401)
 
-        account_serializer = AccountCreateSerializer(request.data)
+        account_serializer = AccountCreateSerializer(data=request.data)
         if not account_serializer.is_valid():
             return Response(account_serializer.errors, status=400)
 

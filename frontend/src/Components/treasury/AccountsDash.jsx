@@ -14,7 +14,7 @@ export default function AccountsDash({limit = 5}) {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetchCustom("GET", '/accounts_full/');
+                const response = await fetchCustom("GET", '/accounts/');
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.results);

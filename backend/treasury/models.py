@@ -74,9 +74,9 @@ class Transaction(BaseEntity):
 
     def clean(self):
         if self.account.status == "closed":
-            raise PermissionDenied("Account is closed")
+            raise PermissionDenied("La cassa è chiusa")
         if self.amount + self.account.balance < Money(0.0, 'EUR'):
-            raise ValueError("Insufficient balance")
+            raise ValueError("Il saldo non può essere negativo")
         # if not self.user.has_perm(''):
         #     raise PermissionDenied("Permission denied")
         super(Transaction, self).clean()

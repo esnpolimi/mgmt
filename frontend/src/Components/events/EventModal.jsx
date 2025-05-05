@@ -11,6 +11,8 @@ import CustomEditor from '../CustomEditor';
 import Loader from "../Loader";
 import StatusBanner from "../StatusBanner";
 import {extractErrorMessage} from "../../utils/errorHandling";
+import CloseIcon from '@mui/icons-material/Close';
+
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
@@ -298,7 +300,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
         <Modal open={open} onClose={handleClose}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate={false}>
                 {isLoading ? <Loader/> : (<>
-                    <Typography variant="h5" gutterBottom align="center">{title}</Typography>
+                    <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
+                        <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
+                    </Box>
+                    <Typography variant="h5" gutterBottom sx={{mb: 2}} align="center">{title}</Typography>
                     {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
                     {isEdit && hasSubscriptions && (
@@ -443,7 +448,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {/* Insert *3 */}
 
                     <Box mt={2}>
-                        <Button variant="contained" color="grey" onClick={handleClose}>Chiudi</Button>
                         <Button variant="contained" color="primary" type="submit">{isEdit ? 'Salva Modifiche' : 'Crea'}</Button>
                     </Box>
                 </>)}
