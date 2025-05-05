@@ -28,6 +28,25 @@ export default function AccountsList() {
         fetchAllTransactions().then(); // Fetch all transactions on mount
     }, []);
 
+    const refreshAccountsData = async () => {
+        setLoading(true);
+        try {
+            const response = await fetchCustom("GET", '/accounts/');
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
+                const json = await response.json();
+                setData(json.results);
+                console.log("Account List Data: ", json.results);
+            }
+        } catch (error) {
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const fetchAllTransactions = async () => {
         try {
             const response = await fetchCustom("GET", `/transactions/`);
@@ -124,9 +143,7 @@ export default function AccountsList() {
             sx: {cursor: 'pointer'},
         }),
         renderDetailPanel: ({row}) => {
-            const accountTransactions = transactions.filter(
-                (transaction) => transaction.account === row.original.id
-            );
+            /*const accountTransactions = transactions.filter((transaction) => transaction.account === row.original.id);
 
             const transactionTable = useMaterialReactTable({
                 columns: transactionColumns,
@@ -146,9 +163,7 @@ export default function AccountsList() {
                 }
             });
 
-            return (
-                <MaterialReactTable table={transactionTable}/>
-            );
+            return (<MaterialReactTable table={transactionTable}/>);*/
         },
         renderTopToolbarCustomActions: () => {
             return (
@@ -160,25 +175,6 @@ export default function AccountsList() {
             );
         },
     });
-
-    const refreshAccountsData = async () => {
-        setLoading(true);
-        try {
-            const response = await fetchCustom("GET", '/accounts_full/');
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
-                const json = await response.json();
-                setData(json.results);
-                console.log("Account List Data: ", json.results);
-            }
-        } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleCloseAccountModal = async (success) => {
         if (success) {

@@ -3,6 +3,8 @@ import logging
 from rest_framework_simplejwt.exceptions import TokenError
 
 from profiles.models import Profile
+from treasury.models import Account
+from treasury.serializers import AccountListViewSerializer
 from users.models import User
 from rest_framework.pagination import PageNumberPagination
 from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer, UserReactSerializer
@@ -35,8 +37,9 @@ def log_in(request):
             refresh = RefreshToken.for_user(user)
 
             # Add custom payload fields to the token
-            user_data = UserReactSerializer(user).data  # Serialize the user object
-            refresh['user'] = user_data
+            accounts = Account.objects.all().order_by('id')
+            refresh['user'] = UserReactSerializer(user).data  # Serialize the user object
+            refresh['accounts'] = AccountListViewSerializer(accounts, many=True).data
 
             access_token = str(refresh.access_token)
             print(f"User {user} logged in")
@@ -79,8 +82,9 @@ def refresh_token_view(request):
     if user is not None:
         try:
             refresh = RefreshToken(str(refresh_token))
-            user_data = UserReactSerializer(user).data
-            refresh['user'] = user_data
+            accounts = Account.objects.all().order_by('id')
+            refresh['user'] = UserReactSerializer(user).data
+            refresh['accounts'] = AccountListViewSerializer(accounts, many=True).data
             access_token = str(refresh.access_token)
             return Response({'access': access_token}, status=200)
         except TokenError as e:
@@ -97,7 +101,7 @@ def user_list(request):
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
 
-    if request.method == 'POST':
+    elif request.method == 'POST':
         data = request.data
         serializer = UserSerializer(data=data)
 
@@ -105,6 +109,9 @@ def user_list(request):
             serializer.save()
             return Response(status=201)
         return Response(serializer.errors, status=400)
+
+    else:
+        return Response(status=405)
 
 
 # Endpoint to retrieve a list of ESNers profiles. Pagination is implemented
@@ -135,7 +142,7 @@ def user_detail(request, pk):
         serializer = UserSerializer(user)
         return Response(serializer.data)
 
-    if request.method == 'PATCH':
+    elif request.method == 'PATCH':
         data = request.data
         serializer = UserSerializer(user, data=data, partial=True)
 
@@ -144,8 +151,11 @@ def user_detail(request, pk):
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
-    if request.method == 'DELETE':
+    elif request.method == 'DELETE':
         if request.user.has_perm('users.delete_user'):
             user.delete()
             return Response(status=204)
         return Response(status=401)
+
+    else:
+        return Response(status=405)

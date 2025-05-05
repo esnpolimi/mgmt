@@ -12,7 +12,7 @@ import {useAuth} from "../../Context/AuthContext";
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
     const [isLoading, setLoading] = useState(true);
     const {accounts} = useAuth();
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [successPopup, setSuccessPopup] = useState(null);
     const [profiles, setProfiles] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchLoading, setSearchLoading] = useState(false);
@@ -71,13 +71,13 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 const response = await fetchCustom("GET", `/profiles/search/?q=${searchQuery}&valid_only=true&esner_only=false`);
                 if (!response.ok) {
                     const errorMessage = await extractErrorMessage(response);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                    setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 } else {
                     const json = await response.json();
                     setProfiles(json.results || []);
                 }
             } catch (error) {
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+                setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setSearchLoading(false);
             }
@@ -145,10 +145,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             });
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
         } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -172,12 +172,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             const response = await fetchCustom("DELETE", `/subscription/${data.id}/`);
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
             } else {
                 onClose(true, "Eliminazione avvenuta con successo");
             }
         } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -337,7 +337,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                         value={data.account_id || ''}
                                         error={errors.account_id && errors.account_id[0]}
                                         onChange={handleChange}>
-                                        {accounts.results.map((account) => (
+                                        {accounts.map((account) => (
                                             <MenuItem key={account.id} value={account.id}>
                                                 {account.name}
                                             </MenuItem>
@@ -386,7 +386,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             Elimina Iscrizione
                         </Button>
                     )}
-                    {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                    {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
                 </>)}
                 <ConfirmDialog
                     open={confirmDialog.open}
