@@ -71,7 +71,15 @@ export default function AccountsList() {
         {accessorKey: 'id', header: names.id, size: 50},
         {accessorKey: 'name', header: names.name, size: 150},
         {accessorKey: 'changed_by', header: names.changed_by, size: 150},
-        {accessorKey: 'balance', header: names.balance, size: 150},
+        {accessorKey: 'balance', header: names.balance, size: 100,
+            Cell: ({cell}) => (
+                <Box>
+                    {cell.getValue() !== null ? (
+                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                            <Chip label="N/A" color="warning"/>)}
+                </Box>
+            ),
+        },
         {
             accessorKey: 'status', header: names.status, size: 150,
             Cell: ({cell}) => (

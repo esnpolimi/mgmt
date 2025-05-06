@@ -81,7 +81,28 @@ def initiate_profile_creation(request):
             uid = urlsafe_base64_encode(force_bytes(profile.pk))
             token = email_verification_token.make_token(profile)
             verification_link = f"http://{HOSTNAME}:3000/#/verify-email/{uid}/{token}"  # TODO: set proper url
-            try:
+
+            # Language selection
+            if is_esner:
+                subject = "Verifica email per ESN Polimi"
+                from_email = settings.DEFAULT_FROM_EMAIL
+                to_email = [profile.email]
+                text_content = f"Clicca sul seguente link per verificare la tua email: {verification_link}"
+                html_content = f"""
+                <html>
+                <body>
+                    <h2>Benvenuto/a in ESN Polimi!</h2>
+                    <p>Per favore, clicca sul seguente link per verificare la tua email:</p>
+                    <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verifica indirizzo email</a></p>
+                    <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
+                    <p>{verification_link}</p>
+                    <p>Questo link scadrà tra 24 ore.</p>
+                </body>
+                </html>
+                """
+                success_message = "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
+                error_message = "Errore nell'invio dell'email: "
+            else:
                 subject = "Email verification for ESN Polimi"
                 from_email = settings.DEFAULT_FROM_EMAIL
                 to_email = [profile.email]
@@ -98,7 +119,10 @@ def initiate_profile_creation(request):
                 </body>
                 </html>
                 """
+                success_message = "Verification email sent. Check your inbox to complete registration."
+                error_message = "Error sending email: "
 
+            try:
                 email = EmailMultiAlternatives(subject, text_content, from_email, to_email)
                 email.attach_alternative(html_content, "text/html")
                 email.send(fail_silently=False)
@@ -107,10 +131,10 @@ def initiate_profile_creation(request):
             except Exception as e:
                 print(f"Email error: {str(e)}")
                 # Don't delete profile on email error, just return the error
-                return Response({"error": f"Errore nell'invio dell'email: {str(e)}"}, status=500)
+                return Response({"error": f"{error_message}{str(e)}"}, status=500)
 
             return Response({
-                "message": "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
+                "message": success_message
             })
         else:
             # Return validation errors
@@ -137,10 +161,16 @@ def verify_email_and_enable_profile(request, uid, token):
             return Response({"error": "Link di verifica non valido."}, status=400)
 
         if not email_verification_token.check_token(profile, token):
-            return Response({"error": "Link di verifica non valido o scaduto."}, status=400)
+            if profile.is_esner:
+                return Response({"error": "Link di verifica non valido o scaduto."}, status=400)
+            else:
+                return Response({"error": "Invalid or expired verification link."}, status=400)
 
         if profile.email_is_verified:
-            return Response({"message": "Email già verificata."}, status=200)
+            if profile.is_esner:
+                return Response({"message": "Email già verificata."}, status=200)
+            else:
+                return Response({"message": "Email already verified."}, status=200)
 
         # Activate profile and related objects
         with transaction.atomic():
@@ -160,11 +190,17 @@ def verify_email_and_enable_profile(request, uid, token):
                 except User.DoesNotExist:
                     return Response({"error": "L'utente associato a questo profilo non esiste."}, status=500)
 
-        return Response({"message": "Email verificata e profilo attivato con successo!"})
+        if profile.is_esner:
+            return Response({"message": "Email verificata e profilo attivato con successo!"})
+        else:
+            return Response({"message": "Email verified and profile successfully activated!"})
 
     except Exception as e:
         logger.error(str(e))
-        return Response({"error": "Si è verificato un errore imprevisto."}, status=500)
+        if 'profile' in locals() and hasattr(profile, 'is_esner') and profile.is_esner:
+            return Response({"error": "Si è verificato un errore imprevisto."}, status=500)
+        else:
+            return Response({"error": "An unexpected error occurred."}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
@@ -249,7 +285,8 @@ def document_detail(request, pk):
                 return Response(status=200)
             else:
                 return Response({'error': 'Non hai i permessi per eliminare questo documento.'}, status=403)
-
+        else:
+            return Response({'error': 'Metodo non supportato.'}, status=405)
     except Document.DoesNotExist:
         return Response('Il documento non esiste.', status=400)
 

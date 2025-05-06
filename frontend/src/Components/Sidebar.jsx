@@ -21,9 +21,19 @@ export default function Sidebar() {
     const {isDrawerOpen, toggleDrawer, expandedSection, handleExpand} = useSidebar();
     const {user} = useAuth();
 
+    // Helper function to check permissions
+    const hasPermission = (permission) => {
+        return user?.permissions?.includes(permission) || false;
+    };
+
     const menuItems = [
         {text: "Home", icon: <HomeIcon/>, path: "/"},
-        {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury"},
+        {
+            text: "Tesoreria",
+            icon: <AccountBalanceIcon/>,
+            path: "/treasury",
+            requiredPermission: "change_account"
+        },
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
         {
             text: "Profili",
@@ -33,7 +43,7 @@ export default function Sidebar() {
                 {text: 'ESNers', icon: <BabyChangingStationIcon/>, path: '/profiles/esners'},
             ],
         },
-    ];
+    ].filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
 
     const drawer = (
         <Box

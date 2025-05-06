@@ -9,6 +9,7 @@ import {useAuth} from "../Context/AuthContext";
 import logo from '../assets/esnpolimi-logo.png';
 import Popup from "../Components/Popup";
 import {accountDisplayNames as names} from "../utils/displayAttributes";
+import {extractErrorMessage} from "../utils/errorHandling";
 
 const style = {
     display: "flex",
@@ -27,14 +28,10 @@ export default function Home() {
     const [actionType, setActionType] = useState(""); // "open" or "close"
     const [casseOpen, setCasseOpen] = useState(false);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const accountsDetails = user?.permissions.includes("change_account");
 
     useEffect(() => {
-        if (user?.permissions.includes("change_account")) {
-            console.log("User has permission to change accounts.");
-            fetchAccounts().then();
-        } else {
-            console.log("User does not have permission to change accounts.");
-        }
+        fetchAccounts().then();
     }, [user]);
 
     const fetchAccounts = async () => {
@@ -44,10 +41,11 @@ export default function Home() {
                 const json = await response.json();
                 setAccounts(json.results);
             } else {
-                console.error("Failed to fetch accounts.");
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
-            console.error("Error fetching accounts:", error);
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -81,49 +79,53 @@ export default function Home() {
     return (
         <Box>
             <Sidebar/>
-            {user?.permissions.includes("change_account") && (
-                <Box sx={{width: "100%", maxWidth: "90%", mx: "auto", mt: 0}}>
-                    <Paper elevation={3} sx={{p: 2, mb: 0, borderRadius: 8}}>
-                        <Box sx={{display: "flex", alignItems: "center", cursor: "pointer"}} onClick={() => setCasseOpen(o => !o)}>
-                            <Typography variant="h5" sx={{flexGrow: 1, fontWeight: 600}}>Casse</Typography>
-                            <IconButton>
-                                {casseOpen ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                            </IconButton>
-                        </Box>
-                        <Collapse in={casseOpen} timeout="auto" unmountOnExit>
-                            <Box
-                                sx={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 2,
-                                    mt: 2,
-                                    justifyContent: "center",
-                                }}>
-                                {accounts.map((account) => (
-                                    <Card
-                                        key={account.id}
-                                        sx={{
-                                            flex: "1 1 320px",
-                                            minWidth: 320,
-                                            maxWidth: 400,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            boxShadow: 4,
-                                            borderRadius: 2,
-                                            m: 1,
-                                        }}>
-                                        <CardContent sx={{flex: 1}}>
-                                            <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
-                                                {account.name}
-                                            </Typography>
+            <Box sx={{width: "100%", maxWidth: "90%", mx: "auto", mt: 0}}>
+                <Paper elevation={3} sx={{p: 2, mb: 0, borderRadius: 5}}>
+                    <Box sx={{display: "flex", alignItems: "center", cursor: "pointer"}} onClick={() => setCasseOpen(o => !o)}>
+                        <Typography variant="h5" sx={{flexGrow: 1, fontWeight: 600}}>Casse</Typography>
+                        <IconButton>
+                            {casseOpen ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                        </IconButton>
+                    </Box>
+                    <Collapse in={casseOpen} timeout="auto" unmountOnExit>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 2,
+                                mt: 2,
+                                justifyContent: "center",
+                            }}>
+                            {accounts.map((account) => (
+                                <Card
+                                    key={account.id}
+                                    sx={{
+                                        flex: "1 1 320px",
+                                        minWidth: 320,
+                                        maxWidth: 400,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        boxShadow: 4,
+                                        borderRadius: 2,
+                                        m: 1,
+                                    }}>
+                                    <CardContent sx={{flex: 1}}>
+                                        <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
+                                            {account.name}
+                                        </Typography>
+
+                                        {accountsDetails && (<>
                                             <Typography variant="body1" sx={{color: "#3e5060"}}>
                                                 {names.balance}: <b>€{account.balance}</b>
                                             </Typography>
                                             <Typography variant="body2" sx={{color: "#607d8b"}}>
                                                 {names.changed_by}: {account.changed_by || "N/A"}
                                             </Typography>
-                                        </CardContent>
-                                        <CardActions sx={{pr: 2}}>
+                                        </>)}
+                                    </CardContent>
+
+                                    {accountsDetails ? (
+                                        <CardActions sx={{pr: 2, flexDirection: 'column', alignItems: 'flex-end'}}>
                                             {account.status === "closed" && (
                                                 <Button
                                                     variant="contained"
@@ -143,13 +145,22 @@ export default function Home() {
                                                 </Button>
                                             )}
                                         </CardActions>
-                                    </Card>
-                                ))}
-                            </Box>
-                        </Collapse>
-                    </Paper>
-                </Box>
-            )}
+                                    ) : (
+                                        <Typography
+                                            variant="h7"
+                                            style={{
+                                                color: account.status === "closed" ? 'red' : 'green',
+                                                fontWeight: 'bold',
+                                                padding: '20px'
+                                            }}>
+                                            {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
+                                        </Typography>)}
+                                </Card>
+                            ))}
+                        </Box>
+                    </Collapse>
+                </Paper>
+            </Box>
             <Box sx={style}>
                 <Typography variant="h3" gutterBottom>
                     Sistema di Gestione

@@ -30,11 +30,19 @@ export default function AccountsDash({limit = 5}) {
 
     const columns = useMemo(() => [
         {accessorKey: 'name', header: names.name, size: 100},
-        {accessorKey: 'balance', header: names.balance, size: 100},
+        {accessorKey: 'balance', header: names.balance, size: 100,
+            Cell: ({cell}) => (
+                <Box>
+                    {cell.getValue() !== null ? (
+                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                            <Chip label="N/A" color="warning"/>)}
+                </Box>
+            ),
+        },
         {
             accessorKey: 'status', header: names.status, size: 100,
             Cell: ({cell}) => (
-                <Box sx={{}}>
+                <Box>
                     {cell.getValue() !== null ? (
                         <Chip
                             label={cell.getValue() === 'open' ? "Aperta" : "Chiusa"}

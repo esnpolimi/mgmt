@@ -1,21 +1,19 @@
 import {useAuth} from "../Context/AuthContext";
 import {useNavigate} from "react-router-dom";
-import {useEffect, useState} from "react";
+import {useEffect} from "react";
 
-const ProtectedRoute = ({children}) => {
-    const {accessToken} = useAuth();
+const ProtectedRoute = ({children, requiredPermission}) => {
+    const {accessToken, user} = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (!accessToken) {
-            console.log("PR: Redirecting to login...");
+        if (!accessToken || (requiredPermission && !user?.permissions.includes(requiredPermission))) {
+            console.log("PR: Redirecting to login or insufficient permissions...");
             navigate("/login");
         }
-        // else console.log("PR: Token is valid");
-    }, [accessToken, navigate]);
+    }, [accessToken, user, requiredPermission, navigate]);
 
-    return accessToken ? children : null;
+    return accessToken && (!requiredPermission || user?.permissions.includes(requiredPermission)) ? children : null;
 };
 
 export default ProtectedRoute;
-
