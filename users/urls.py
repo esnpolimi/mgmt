@@ -12,4 +12,6 @@ urlpatterns = [
     path('users/<str:pk>/', views.user_detail),
     path('login/', views.log_in),
     path('logout/', views.log_out),
+    path('api/forgot-password/', views.forgot_password),
+    path('api/reset-password/<uid>/<token>/', views.reset_password),
 ]

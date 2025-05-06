@@ -1,5 +1,9 @@
 import logging
 
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import EmailMultiAlternatives
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from rest_framework_simplejwt.exceptions import TokenError
 
 from profiles.models import Profile
@@ -18,6 +22,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+HOSTNAME = settings.HOSTNAME
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -159,3 +164,97 @@ def user_detail(request, pk):
 
     else:
         return Response(status=405)
+
+
+@api_view(['POST'])
+def forgot_password(request):
+    try:
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "L'indirizzo email è obbligatorio."}, status=400)
+
+        # Verifica se esiste un utente con questa email
+        try:
+            user = User.objects.get(profile__email=email)
+        except User.DoesNotExist:
+            # Per ragioni di sicurezza, non riveliamo che l'utente non esiste
+            return Response({
+                "message": "Se l'indirizzo email è associato a un account, riceverai un'email con le istruzioni per reimpostare la password."
+            })
+
+        # Genera token e link per il reset della password
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        reset_link = f"http://{HOSTNAME}:3000/#/reset-password/{uid}/{token}"  # Ajuste la URL según tu frontend
+
+        # Invia email di reset password
+        try:
+            subject = "Reimposta la tua password - ESN Polimi"
+            from_email = settings.DEFAULT_FROM_EMAIL
+            to_email = [email]
+            text_content = f"Clicca sul seguente link per reimpostare la tua password: {reset_link}"
+            html_content = f"""
+            <html>
+            <body>
+                <h2>Reimposta la tua password - ESN Polimi</h2>
+                <p>Abbiamo ricevuto una richiesta per reimpostare la password del tuo account.</p>
+                <p>Clicca sul pulsante qui sotto per continuare:</p>
+                <p><a href="{reset_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Reimposta Password</a></p>
+                <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
+                <p>{reset_link}</p>
+                <p>Questo link scadrà tra 24 ore.</p>
+                <p>Se non hai richiesto questa reimpostazione, puoi ignorare questa email in tutta sicurezza.</p>
+            </body>
+            </html>
+            """
+
+            email = EmailMultiAlternatives(subject, text_content, from_email, to_email)
+            email.attach_alternative(html_content, "text/html")
+            email.send(fail_silently=False)
+
+            print(f"Email di reset password inviata a {email}")
+        except Exception as e:
+            print(f"Errore nell'invio dell'email: {str(e)}")
+            return Response({"error": f"Errore nell'invio dell'email: {str(e)}"}, status=500)
+
+        return Response({
+            "message": "Se l'indirizzo email è associato a un account, riceverai un'email con le istruzioni per reimpostare la password."
+        })
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response({"error": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
+
+
+@api_view(['POST'])
+def reset_password(request, uid, token):
+    try:
+        # Verifica il token e l'uid
+        try:
+            uid = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({"error": "Link di reimpostazione password non valido."}, status=400)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({"error": "Link di reimpostazione password non valido o scaduto."}, status=400)
+
+        # Verifica la nuova password
+        password = request.data.get('password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not password or not confirm_password:
+            return Response({"error": "La password e la conferma della password sono obbligatorie."}, status=400)
+
+        if password != confirm_password:
+            return Response({"error": "Le password non corrispondono."}, status=400)
+
+        # Reimpostazione della password
+        user.set_password(password)
+        user.save()
+
+        return Response({"message": "La tua password è stata reimpostata con successo. Ora puoi accedere con la nuova password."})
+
+    except Exception as e:
+        logger.error(str(e))
+        return Response({"error": "Si è verificato un errore imprevisto durante la reimpostazione della password."}, status=500)
