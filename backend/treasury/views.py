@@ -171,7 +171,10 @@ def accounts_list(request):
         accounts = Account.objects.all().order_by('id')
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(accounts, request=request)
-        serializer = AccountDetailedViewSerializer(page, many=True)
+        if not request.user.has_perm('treasury.view_account'):
+            serializer = AccountListViewSerializer(page, many=True) # Do not return sensitive data, like balance
+        else:
+            serializer = AccountDetailedViewSerializer(page, many=True)
 
         # Get the paginated response
         response_data = paginator.get_paginated_response(serializer.data).data
@@ -213,7 +216,7 @@ def account_detail(request, pk):
             return Response(serializer.data, status=200)
 
         if request.method == 'PATCH':
-            if not request.user.has_perm('treasury.change_acconut'):
+            if not request.user.has_perm('treasury.change_account'):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
             data = request.data
