@@ -56,25 +56,15 @@ class TransactionViewSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# Serializer to view accounts
 class AccountDetailedViewSerializer(serializers.ModelSerializer):
-    # history = serializers.SerializerMethodField()
+    changed_by = serializers.SerializerMethodField()
 
     class Meta:
         model = Account
         fields = '__all__'
 
-    '''
-    @staticmethod
-    def get_history(obj):
-        return [
-            {
-                "date": history.history_date,
-                "user": (history.history_user.profile.name + history.history_user.profile.surname) if history.history_user else None,
-                "status": history.status,
-            }
-            for history in obj.history.all()
-        ]'''
+    def get_changed_by(self, obj):
+        return f"{obj.changed_by.profile.name} {obj.changed_by.profile.surname}"
 
 
 class AccountListViewSerializer(serializers.ModelSerializer):
