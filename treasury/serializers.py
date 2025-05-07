@@ -51,10 +51,26 @@ class TransactionCreateSerializer(serializers.ModelSerializer):
 
 # Serializer to view transactions
 class TransactionViewSerializer(serializers.ModelSerializer):
+    executor = serializers.SerializerMethodField()
+    account = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = '__all__'
 
+    @staticmethod
+    def get_executor(obj):
+        return {
+            "email": obj.executor.profile.email,
+            "name": f"{obj.executor.profile.name} {obj.executor.profile.surname}"
+        }
+
+    @staticmethod
+    def get_account(obj):
+        return {
+            "id": obj.account.id,
+            "name": f"{obj.account.name}"
+        }
 
 class AccountDetailedViewSerializer(serializers.ModelSerializer):
     changed_by = serializers.SerializerMethodField()
@@ -63,9 +79,12 @@ class AccountDetailedViewSerializer(serializers.ModelSerializer):
         model = Account
         fields = '__all__'
 
-    def get_changed_by(self, obj):
-        return f"{obj.changed_by.profile.name} {obj.changed_by.profile.surname}"
-
+    @staticmethod
+    def get_changed_by(obj):
+        return {
+            "email": obj.changed_by.profile.email,
+            "name": f"{obj.changed_by.profile.name} {obj.changed_by.profile.surname}"
+        }
 
 class AccountListViewSerializer(serializers.ModelSerializer):
     class Meta:
