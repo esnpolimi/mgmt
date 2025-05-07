@@ -28,12 +28,7 @@ export default function Sidebar() {
 
     const menuItems = [
         {text: "Home", icon: <HomeIcon/>, path: "/"},
-        {
-            text: "Tesoreria",
-            icon: <AccountBalanceIcon/>,
-            path: "/treasury",
-            requiredPermission: "change_account"
-        },
+        {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury", requiredPermission: "change_account"},
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
         {
             text: "Profili",

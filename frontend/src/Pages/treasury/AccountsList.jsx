@@ -70,7 +70,7 @@ export default function AccountsList() {
     const columns = useMemo(() => [
         {accessorKey: 'id', header: names.id, size: 50},
         {accessorKey: 'name', header: names.name, size: 150},
-        {accessorKey: 'changed_by', header: names.changed_by, size: 150},
+        {accessorKey: 'changed_by.name', header: names.changed_by, size: 150},
         {accessorKey: 'balance', header: names.balance, size: 100,
             Cell: ({cell}) => (
                 <Box>
