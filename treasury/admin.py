@@ -46,7 +46,7 @@ class AccountAdmin(admin.ModelAdmin):
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'account__name', 'amount_display', 'description', 'executor', 'subscription_link', 'created_at')
+    list_display = ('id', 'account__name', 'type', 'amount_display', 'description', 'executor', 'subscription_display', 'esncard', 'created_at')
     list_filter = ('account', 'created_at', 'executor')
     search_fields = ('description', 'account__name', 'executor__account__name')
     date_hierarchy = 'created_at'
@@ -59,11 +59,10 @@ class TransactionAdmin(admin.ModelAdmin):
 
     amount_display.short_description = 'Amount'
 
-    def subscription_link(self, obj):
+    @staticmethod
+    def subscription_display(obj):
         if obj.subscription:
-            return format_html('<a href="/admin/events/subscription/{}/">{}</a>',
-                               obj.subscription.pk,
-                               f"{obj.subscription.profile}")
+            return f"{obj.subscription.event.name} - {obj.subscription.profile.name} {obj.subscription.profile.surname}"
         return "-"
 
-    subscription_link.short_description = 'Subscription'
+    subscription_display.short_description = 'Subscription'
