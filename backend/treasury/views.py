@@ -118,7 +118,7 @@ def transaction_add(request):
 @permission_classes([IsAuthenticated])
 def transactions_list(request):
     try:
-        transactions = Transaction.objects.all()
+        transactions = Transaction.objects.all().order_by('-created_at')
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(transactions, request=request)
         serializer = TransactionViewSerializer(page, many=True)

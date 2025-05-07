@@ -41,6 +41,8 @@ class ESNcard(BaseEntity):
     def membership_year(self):
         return str(self.expiration.year - 1) + '/' + str(self.expiration.year)
 
+    def __str__(self):
+        return f"{self.number} - {self.profile.name} {self.profile.surname}"
 
 class Account(BaseEntity):
     id = models.AutoField(primary_key=True)
@@ -63,22 +65,39 @@ class Account(BaseEntity):
     def _history_user(self, value):
         self.changed_by = value
 
+    def __str__(self):
+        return f"Account {self.name}"
+
+
 
 class Transaction(BaseEntity):
+    class TransactionType(models.TextChoices):
+        SUBSCRIPTION = "subscription", _("Subscription")
+        ESNCARD = "esncard", _("ESNcard")
+        DEPOSIT = "deposit", _("Deposit")
+        WITHDRAWAL = "withdrawal", _("Withdrawal")
+
     id = models.AutoField(primary_key=True)
-    subscription = models.ForeignKey(Subscription, null=True, on_delete=models.SET_NULL)
+    type = models.CharField(max_length=12, choices=TransactionType.choices, default=TransactionType.DEPOSIT)
+    subscription = models.ForeignKey(Subscription, null=True, blank=True, on_delete=models.SET_NULL)
+    esncard = models.ForeignKey(ESNcard, null=True, blank=True, on_delete=models.SET_NULL)
     executor = models.ForeignKey(User, on_delete=models.CASCADE)
     account = models.ForeignKey(Account, on_delete=models.CASCADE)
     amount = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR')
     description = models.CharField(max_length=256)
 
     def clean(self):
+        # Validate fields based on transaction type
+        if self.type == self.TransactionType.SUBSCRIPTION and not self.subscription:
+            raise ValueError("Le transazioni di Iscrizione devono avere un'Iscrizione.")
+        if self.type == self.TransactionType.ESNCARD and not self.esncard:
+            raise ValueError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
+        if self.type == self.TransactionType.DEPOSIT or self.type == self.TransactionType.WITHDRAWAL and (self.subscription or self.esncard):
+            raise ValueError("Le transazioni di Deposito/Prelievo non devono avere un'Iscrizione o una ESNcard.")
         if self.account.status == "closed":
-            raise PermissionDenied("La cassa è chiusa")
+            raise PermissionDenied("La cassa è chiusa.")
         if self.amount + self.account.balance < Money(0.0, 'EUR'):
-            raise ValueError("Il saldo non può essere negativo")
-        # if not self.user.has_perm(''):
-        #     raise PermissionDenied("Permission denied")
+            raise ValueError("Il saldo non può essere negativo.")
         super(Transaction, self).clean()
 
     def save(self, *args, **kwargs):

@@ -43,7 +43,9 @@ export const accountDisplayNames = {
 export const transactionDisplayNames = {
     id: 'Id',
     date: 'Data',
-    subscription: 'Iscrizione',
+    type: 'Tipo',
+    subscription: 'Evento',
+    esncard: 'ESNcard',
     description: 'Descrizione',
     amount: 'Importo',
     executor: 'Eseguito da',

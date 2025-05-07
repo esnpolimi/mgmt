@@ -119,7 +119,7 @@ export default function Home() {
                                                 {names.balance}: <b>€{account.balance}</b>
                                             </Typography>
                                             <Typography variant="body2" sx={{color: "#607d8b"}}>
-                                                {names.changed_by}: {account.changed_by || "N/A"}
+                                                {names.changed_by}: {account.changed_by.name || "N/A"}
                                             </Typography>
                                         </>)}
                                     </CardContent>
