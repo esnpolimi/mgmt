@@ -31,6 +31,7 @@ class DocumentCreateSerializer(serializers.ModelSerializer):
 
 # Serializer to edit documents
 class DocumentEditSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Document
         fields = '__all__'

@@ -129,9 +129,9 @@ class Command(BaseCommand):
                                 )
                                 user.is_active = False  # Will be activated upon verification
                                 if row['status'] == 'Aspirante':
-                                    group, created = Group.objects.get_or_create(name="Aspirant")
+                                    group, created = Group.objects.get_or_create(name="Aspiranti")
                                 elif row['status'] == 'Associato':
-                                    group, created = Group.objects.get_or_create(name="Associate")
+                                    group, created = Group.objects.get_or_create(name="Attivi")
                                 user.groups.add(group)
 
                     success_count += 1
