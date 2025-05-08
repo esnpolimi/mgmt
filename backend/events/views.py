@@ -175,6 +175,7 @@ def subscription_create(request):
 
                 # Create transaction
                 t = Transaction(
+                    type=Transaction.TransactionType.SUBSCRIPTION,
                     account_id=serializer.account,
                     subscription=subscription,
                     executor=request.user,
@@ -233,6 +234,7 @@ def subscription_detail(request, pk):
 
                         # Create transaction
                         t = Transaction(
+                            type=Transaction.TransactionType.SUBSCRIPTION,
                             account_id=serializer.account_id,
                             subscription=subscription,
                             executor=request.user,
@@ -249,6 +251,7 @@ def subscription_detail(request, pk):
                         if subscription.enable_refund:
                             # Create refund transaction
                             t = Transaction(
+                                type=Transaction.TransactionType.SUBSCRIPTION,
                                 account_id=serializer.account_id,
                                 subscription=subscription,
                                 executor=request.user,
@@ -261,6 +264,22 @@ def subscription_detail(request, pk):
                         transaction_del = Transaction.objects.filter(subscription=subscription).order_by('-id').first()
                         if transaction_del:
                             transaction_del.delete()
+
+                    elif old_status == 'paid' and subscription.status == 'paid':
+                        # Handle account change for paid subscriptions: delete old transaction and create a new one
+                        transaction_del = Transaction.objects.filter(subscription=subscription).order_by('-id').first()
+                        if transaction_del and serializer.account_id != transaction_del.account.id:
+                            transaction_del.delete()
+                            t = Transaction(
+                                type=Transaction.TransactionType.SUBSCRIPTION,
+                                account_id=serializer.account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=float(subscription.event.cost),
+                                description=f"Pagamento per {subscription.event.name}"
+                            )
+                            t.save()
+
                 return Response(serializer.data, status=200)
             else:
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)

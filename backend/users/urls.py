@@ -14,4 +14,5 @@ urlpatterns = [
     path('logout/', views.log_out),
     path('api/forgot-password/', views.forgot_password),
     path('api/reset-password/<uid>/<token>/', views.reset_password),
+    path('groups/', views.group_list),
 ]

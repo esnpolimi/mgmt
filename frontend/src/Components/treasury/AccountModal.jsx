@@ -1,21 +1,54 @@
-import React, {useState} from 'react';
-import {Modal, Box, TextField, Button, Typography, Grid, IconButton} from '@mui/material';
+import React, {useState, useEffect} from 'react';
+import {Modal, Box, TextField, Button, Typography, Grid, IconButton, Select, MenuItem, InputLabel, FormControl, Chip, OutlinedInput} from '@mui/material';
 import {styleESNcardModal as style} from '../../utils/sharedStyles';
 import Loader from '../Loader';
 import {fetchCustom} from '../../api/api';
 import {extractErrorMessage} from '../../utils/errorHandling';
 import CloseIcon from '@mui/icons-material/Close';
 import Popup from "../Popup";
+import {accountDisplayNames as names} from "../../utils/displayAttributes";
 
-export default function AccountCreationModal({open, onClose}) {
-    const [isLoading, setLoading] = useState(false);
+export default function AccountModal({open, onClose, account = null}) {
+    const [isLoading, setLoading] = useState(true);
     const [successPopup, setSuccessPopup] = useState(null);
-    const [data, setData] = useState({name: ''});
+    const [data, setData] = useState({name: '', visible_to_groups: []});
     const [errors, setErrors] = useState({name: [false, '']});
+    const [groups, setGroups] = useState([]);
+    const isEdit = account !== null;
+
+    useEffect(() => {
+        const fetchGroups = async () => {
+            try {
+                const resp = await fetchCustom('GET', '/groups/');
+                if (resp.ok) {
+                    const json = await resp.json();
+                    setGroups(json);
+                } else {
+                    const errorMessage = await extractErrorMessage(resp);
+                    setSuccessPopup({message: `Errore nel recupero dei gruppi: ${errorMessage}`, state: 'error'});
+                }
+            } catch (e) {
+                setSuccessPopup({message: `Errore nel recupero dei gruppi: ${e}`, state: 'error'});
+            }
+        };
+        fetchGroups().then();
+    }, []);
+
+    useEffect(() => {
+        if (isEdit && account)
+            setData({name: account.name || '', visible_to_groups: account.visible_to_groups?.map(g => g.id) || []});
+        else
+            setData({name: '', visible_to_groups: []});
+        setLoading(false);
+    }, [isEdit, account]);
 
     const handleInputChange = (event) => {
         const {name, value} = event.target;
         setData({...data, [name]: value});
+    };
+
+    const handleGroupsChange = (event) => {
+        setData({...data, visible_to_groups: event.target.value});
     };
 
     const handleSubmit = async (e) => {
@@ -29,16 +62,20 @@ export default function AccountCreationModal({open, onClose}) {
 
         setLoading(true);
         try {
-            const response = await fetchCustom('POST', '/account/', {name: data.name});
+            const payload = {name: data.name, visible_to_groups: data.visible_to_groups};
+            let response;
+            if (isEdit && account)
+                response = await fetchCustom('PATCH', `/account/${account.id}/`, payload);
+            else
+                response = await fetchCustom('POST', '/account/', payload);
 
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
-                setSuccessPopup({message: `Errore creazione cassa: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} cassa: ${errorMessage}`, state: 'error'});
             } else {
                 onClose(true);
             }
         } catch (error) {
-            console.error('Error creating account:', error);
             const errorMessage = await extractErrorMessage(error);
             setSuccessPopup({message: `Errore generale: ${errorMessage}`, state: 'error'});
         } finally {
@@ -54,32 +91,59 @@ export default function AccountCreationModal({open, onClose}) {
         <Modal open={open} onClose={handleClose}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate>
                 {isLoading ? <Loader/> : (<>
-                        <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                            <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
-                        </Box>
-                        <Typography variant="h5" gutterBottom align="center">Crea Cassa</Typography>
-                        {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
+                    <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
+                        <IconButton onClick={handleClose} sx={{minWidth: 0}}><CloseIcon/></IconButton>
+                    </Box>
+                    <Typography variant="h5" gutterBottom align="center" sx={{mb: 2}}>
+                        {isEdit ? `Modifica Cassa - ${account?.name}` : 'Crea Cassa'}
+                    </Typography>
+                    {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
 
-                        <Grid container spacing={2}>
-                            <Grid size={{xs: 12}}>
-                                <TextField
-                                    fullWidth
-                                    label="Nome della Cassa"
-                                    name="name"
-                                    value={data.name}
-                                    onChange={handleInputChange}
-                                    required
-                                    error={errors.name[0]}
-                                    helperText={errors.name[0] ? errors.name[1] : ''}
-                                />
-                            </Grid>
+                    <Grid container spacing={2}>
+                        <Grid size={{xs: 12}}>
+                            <TextField
+                                fullWidth
+                                label={names.name}
+                                name="name"
+                                value={data.name}
+                                onChange={handleInputChange}
+                                required
+                                error={errors.name[0]}
+                                helperText={errors.name[0] ? errors.name[1] : ''}/>
                         </Grid>
-
-                        <Box mt={2}>
-                            <Button variant="contained" color="primary" type="submit">Crea</Button>
-                        </Box>
-                    </>
-                )}
+                        <Grid size={{xs: 12}}>
+                            <FormControl fullWidth>
+                                <InputLabel id="groups-label">{names.visible_to_groups}</InputLabel>
+                                <Select
+                                    variant="outlined"
+                                    labelId="groups-label"
+                                    multiple
+                                    value={data.visible_to_groups}
+                                    onChange={handleGroupsChange}
+                                    input={<OutlinedInput label={names.visible_to_groups}/>}
+                                    renderValue={(selected) => (
+                                        <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
+                                            {selected.map((id) => {
+                                                const group = groups.find(g => g.id === id);
+                                                return <Chip key={id} label={group ? group.name : id}/>;
+                                            })}
+                                        </Box>
+                                    )}>
+                                    {groups.map((group) => (
+                                        <MenuItem key={group.id} value={group.id}>
+                                            {group.name}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                    </Grid>
+                    <Box mt={2}>
+                        <Button fullWidth variant="contained" color="primary" type="submit">
+                            {isEdit ? 'Salva Modifiche' : 'Crea'}
+                        </Button>
+                    </Box>
+                </>)}
             </Box>
         </Modal>
     );

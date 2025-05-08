@@ -1,3 +1,6 @@
+from datetime import date, datetime
+
+from django.contrib.auth.models import Group
 from rest_framework import serializers
 from profiles.serializers import ProfileListViewSerializer
 from .models import User
@@ -50,3 +53,18 @@ class UserReactSerializer(serializers.ModelSerializer):
         user_permissions = obj.user_permissions.values_list('codename', flat=True)
         group_permissions = obj.groups.values_list('permissions__codename', flat=True)
         return list(set(user_permissions).union(set(group_permissions)))
+
+
+    def to_representation(self, instance):
+        """ Convert date fields to ISO 8601 strings. """
+        representation = super().to_representation(instance)
+        for key, value in representation.items():
+            if isinstance(value, (date, datetime)):
+                representation[key] = value.isoformat()
+        return representation
+
+
+class GroupListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['id', 'name']

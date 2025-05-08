@@ -8,7 +8,6 @@ import {fetchCustom} from "../../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
 import {accountDisplayNames as names} from "../../utils/displayAttributes";
-import {transactionDisplayNames as tranNames} from "../../utils/displayAttributes";
 import Loader from "../../Components/Loader";
 import Popup from "../../Components/Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
@@ -18,14 +17,14 @@ export default function AccountsList() {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
     const [accountModalOpen, setAccountModalOpen] = useState(false);
-    const [expandedRow, setExpandedRow] = useState(null); // Track expanded row
-    const [transactions, setTransactions] = useState({}); // Store transactions per account
+    //const [expandedRow, setExpandedRow] = useState(null); // Track expanded row
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [selectedAccount, setSelectedAccount] = useState(null);
 
     useEffect(() => {
         refreshAccountsData().then();
-        fetchAllTransactions().then(); // Fetch all transactions on mount
+        //fetchAllTransactions().then(); // Fetch all transactions on mount
     }, []);
 
     const refreshAccountsData = async () => {
@@ -47,7 +46,7 @@ export default function AccountsList() {
         }
     };
 
-    const fetchAllTransactions = async () => {
+    /*const fetchAllTransactions = async () => {
         try {
             const response = await fetchCustom("GET", `/transactions/`);
             if (response.ok) {
@@ -60,12 +59,7 @@ export default function AccountsList() {
         } catch (error) {
             console.error("Error fetching transactions:", error);
         }
-    };
-
-    const handleRowClick = (row) => {
-        const accountId = row.original.id;
-        setExpandedRow(expandedRow === accountId ? null : accountId); // Toggle row expansion
-    };
+    };*/
 
     const columns = useMemo(() => [
         {accessorKey: 'id', header: names.id, size: 50},
@@ -89,24 +83,39 @@ export default function AccountsList() {
                             label={cell.getValue() === 'open' ? "Aperta" : "Chiusa"}
                             color={cell.getValue() === 'open' ? "success" : "error"}/>
                     ) : (
-                        <Chip label="Stato ignoto" color="warning"/>
+                        <Chip label="N/A" color="warning"/>
+                    )}
+                </Box>
+            ),
+        },
+        {
+            accessorKey: 'visible_to_groups', header: names.visible_to_groups, size: 150,
+            Cell: ({cell}) => (
+                <Box sx={{}}>
+                    {cell.getValue() !== null ? (
+                        cell.getValue().map((group) => (
+                            <Chip key={group.id} label={group.name} color="grey" sx={{mr: 1}}/>
+                        ))
+                    ) : (
+                        <Chip label="N/A" color="warning"/>
                     )}
                 </Box>
             ),
         },
     ], []);
 
-    const transactionColumns = useMemo(() => [
+    /*const transactionColumns = useMemo(() => [
         {accessorKey: 'created_at', header: tranNames.date, size: 150},
         {accessorKey: 'subscription', header: tranNames.subscription, size: 150},
         {accessorKey: 'executor', header: tranNames.executor, size: 150},
         {accessorKey: 'account', header: tranNames.account, size: 100},
         {accessorKey: 'amount', header: tranNames.amount, size: 100},
-    ], []);
+    ], []);*/
 
     const table = useMaterialReactTable({
         columns,
         data,
+        enablePagination: false,
         enableStickyHeader: true,
         enableStickyFooter: true,
         enableColumnFilterModes: true,
@@ -133,25 +142,21 @@ export default function AccountsList() {
                 balance: true
             },
         },
-        paginationDisplayMode: 'pages',
         positionToolbarAlertBanner: 'bottom',
         muiSearchTextFieldProps: {
             size: 'small',
             variant: 'outlined',
         },
-        muiPaginationProps: {
-            color: 'secondary',
-            rowsPerPageOptions: [10, 20, 30],
-            shape: 'rounded',
-            variant: 'outlined',
-        },
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
-            onClick: () => handleRowClick(row),
+            onClick: () => {
+                setSelectedAccount(row.original);
+                setAccountModalOpen(true);
+            },
             sx: {cursor: 'pointer'},
         }),
-        renderDetailPanel: ({row}) => {
-            /*const accountTransactions = transactions.filter((transaction) => transaction.account === row.original.id);
+        /*renderDetailPanel: ({row}) => {
+            const accountTransactions = transactions.filter((transaction) => transaction.account === row.original.id);
 
             const transactionTable = useMaterialReactTable({
                 columns: transactionColumns,
@@ -171,13 +176,13 @@ export default function AccountsList() {
                 }
             });
 
-            return (<MaterialReactTable table={transactionTable}/>);*/
-        },
+            return (<MaterialReactTable table={transactionTable}/>);
+        },*/
         renderTopToolbarCustomActions: () => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
                     <Button variant='contained' onClick={() => setAccountModalOpen(true)} sx={{width: '150px'}}>
-                        Crea Nuova Cassa
+                        Nuova Cassa
                     </Button>
                 </Box>
             );
@@ -189,6 +194,7 @@ export default function AccountsList() {
             setShowSuccessPopup({message: "Cassa creata con successo!", state: "success"});
             await refreshAccountsData();
         }
+        setSelectedAccount(null);
         setAccountModalOpen(false);
     };
 
@@ -199,6 +205,7 @@ export default function AccountsList() {
                 open={accountModalOpen}
                 onClose={handleCloseAccountModal}
                 isEdit={false}
+                account={selectedAccount}
             />}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>

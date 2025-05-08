@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, Autocomplete, Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from "@mui/material";
+import {Autocomplete, Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
@@ -115,10 +116,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         }
 
         // Confirmation if payment is involved (new paid or status changed to paid)
-        if (
-            (data.status === 'paid' && (!isEdit || originalStatus !== 'paid'))
-            || (isEdit && originalStatus === 'paid' && data.status !== 'paid')
-        ) {
+        if ((data.status === 'paid' && (!isEdit || originalStatus !== 'paid'))
+            || (isEdit && originalStatus === 'paid' && data.status !== 'paid')) {
             let msg = '';
             if (data.status === 'paid' && (!isEdit || originalStatus !== 'paid')) {
                 msg = 'Confermi di registrare un pagamento di €' + event.cost + ' per questa iscrizione?';
@@ -126,6 +125,15 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 msg = 'Confermi di annullare un pagamento di €' + event.cost + ' per questa iscrizione?';
             }
             setConfirmDialog({open: true, action: () => doSubmit(), message: msg});
+            return;
+        }
+
+        if (data.status === 'paid' && isEdit && originalStatus === 'paid' && data.account_id !== originalAccountId) {
+            setConfirmDialog({
+                open: true,
+                action: () => doSubmit(),
+                message: 'Confermi di voler cambiare la cassa associata a questo pagamento? Verranno spostati €' + event.cost + ' da ' + data.account_name + ' a ' + accounts.find(account => account.id === data.account_id)?.name + '.'
+            })
             return;
         }
 

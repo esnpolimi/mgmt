@@ -74,8 +74,8 @@ def initiate_profile_creation(request):
                         password=data.get('password')
                     )
                     user.is_active = False  # Will be activated upon verification
-                    aspirant_group, created = Group.objects.get_or_create(name="Aspirant")
-                    user.groups.add(aspirant_group)
+                    aspiranti_group, created = Group.objects.get_or_create(name="Aspiranti")
+                    user.groups.add(aspiranti_group)
 
             # Generate verification token and send verification email
             uid = urlsafe_base64_encode(force_bytes(profile.pk))
