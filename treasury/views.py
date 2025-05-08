@@ -44,6 +44,8 @@ def esncard_emission(request):
 
             # Create the transaction
             t = Transaction(
+                type=Transaction.TransactionType.ESNCARD,
+                esncard=esncard,
                 account=esncard_serializer.validated_data['account_id'],
                 executor=request.user,
                 amount=amount,
@@ -169,13 +171,13 @@ def esncard_fees(request):
 def accounts_list(request):
     try:
         accounts = Account.objects.all().order_by('id')
+        visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
         paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(accounts, request=request)
-        if not request.user.has_perm('treasury.view_account'):
+        page = paginator.paginate_queryset(visible_accounts, request=request)
+        if request.user.groups.filter(name="Aspirante").exists():
             serializer = AccountListViewSerializer(page, many=True) # Do not return sensitive data, like balance
         else:
-            serializer = AccountDetailedViewSerializer(page, many=True)
-
+            serializer = AccountDetailedViewSerializer(page, many=True, context={'request': request})
         # Get the paginated response
         response_data = paginator.get_paginated_response(serializer.data).data
 
@@ -212,7 +214,10 @@ def account_detail(request, pk):
         account = Account.objects.get(pk=pk)
 
         if request.method == 'GET':
-            serializer = AccountDetailedViewSerializer(account)
+            if request.user.groups.filter(name="Aspirante").exists():
+                serializer = AccountListViewSerializer(account)  # Do not return sensitive data, like balance
+            else:
+                serializer = AccountDetailedViewSerializer(account, context={'request': request})
             return Response(serializer.data, status=200)
 
         if request.method == 'PATCH':

@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
 from django.utils.encoding import force_bytes, force_str
@@ -11,7 +12,7 @@ from treasury.models import Account
 from treasury.serializers import AccountListViewSerializer
 from users.models import User
 from rest_framework.pagination import PageNumberPagination
-from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer, UserReactSerializer
+from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer, UserReactSerializer, GroupListSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth import authenticate
@@ -42,10 +43,8 @@ def log_in(request):
             refresh = RefreshToken.for_user(user)
 
             # Add custom payload fields to the token
-            accounts = Account.objects.all().order_by('id')
+            # print("Serialized user data:", UserReactSerializer(user).data)
             refresh['user'] = UserReactSerializer(user).data  # Serialize the user object
-            refresh['accounts'] = AccountListViewSerializer(accounts, many=True).data
-
             access_token = str(refresh.access_token)
             print(f"User {user} logged in")
 
@@ -87,9 +86,7 @@ def refresh_token_view(request):
     if user is not None:
         try:
             refresh = RefreshToken(str(refresh_token))
-            accounts = Account.objects.all().order_by('id')
             refresh['user'] = UserReactSerializer(user).data
-            refresh['accounts'] = AccountListViewSerializer(accounts, many=True).data
             access_token = str(refresh.access_token)
             return Response({'access': access_token}, status=200)
         except TokenError as e:
@@ -258,3 +255,15 @@ def reset_password(request, uid, token):
     except Exception as e:
         logger.error(str(e))
         return Response({"error": "Si è verificato un errore imprevisto durante la reimpostazione della password."}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_list(request):
+    try:
+        groups = Group.objects.all()
+        serializer = GroupListSerializer(groups, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        logger.error(str(e))
+        return Response(status=500)
