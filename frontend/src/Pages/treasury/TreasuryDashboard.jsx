@@ -31,7 +31,7 @@ export default function TreasuryDashboard() {
                     <Grid size={{xs: 12, md: 8}}>
                         <Paper elevation={3} sx={{p: 2}}>
                             <Typography variant="h6" sx={{mb: 2}}>Ultime Transazioni</Typography>
-                            <ReceiptsDash limit={10}/>
+                            <ReceiptsDash limit={3}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
                                 <Button
                                     variant="outlined"

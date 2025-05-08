@@ -1,4 +1,6 @@
 from datetime import date
+
+from django.contrib.auth.models import Group
 from django.db import models, transaction
 from events.models import Subscription
 from django.utils.translation import gettext_lazy as _
@@ -44,6 +46,7 @@ class ESNcard(BaseEntity):
     def __str__(self):
         return f"{self.number} - {self.profile.name} {self.profile.surname}"
 
+
 class Account(BaseEntity):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=64, unique=True)
@@ -55,6 +58,11 @@ class Account(BaseEntity):
 
     status = models.CharField(choices=Status.choices, max_length=8, default="closed")
     balance = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=0.0)
+    visible_to_groups = models.ManyToManyField(Group, blank=True)
+
+    def is_visible_to_user(self, user):
+        return self.visible_to_groups.filter(user=user).exists() or not self.visible_to_groups.exists()
+
     history = HistoricalRecords()
 
     @property
@@ -67,7 +75,6 @@ class Account(BaseEntity):
 
     def __str__(self):
         return f"Account {self.name}"
-
 
 
 class Transaction(BaseEntity):

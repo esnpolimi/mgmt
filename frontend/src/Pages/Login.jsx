@@ -33,17 +33,10 @@ export default function Login() {
     };
 
     const handleLogin = async () => {
-        try {
-            const success = await login(username, password);
-            if (success) {
-                navigate("/");
-            } else {
-                setStatusMessage({message: 'Credenziali Invalide', state: 'error'});
-            }
-        } catch (error) {
-            console.error("Login error:", error);
-            setStatusMessage({message: 'Errore generale durante il login, contatta il WG Informatica :)', state: 'error'});
-        }
+        setStatusMessage(null);
+        const success = await login(username, password);
+        if (success === true) navigate("/");
+        else setStatusMessage({message: `Errore durante il login: ${success}`, state: 'error'});
     };
 
     return (
@@ -57,7 +50,6 @@ export default function Login() {
                     alignItems: 'center',
                 }}>
                 <img alt='' src={logo || ''} style={{height: '25vh'}}/>
-                {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
                 <Box>
                     {!isResetSubmitted && (
                         <TextField
@@ -100,12 +92,17 @@ export default function Login() {
                         <Link
                             component="button"
                             variant="body2"
-                            onClick={() => {setIsForgotPassword(!isForgotPassword); setResetSubmitted(false); setStatusMessage(null);}}
+                            onClick={() => {
+                                setIsForgotPassword(!isForgotPassword);
+                                setResetSubmitted(false);
+                                setStatusMessage(null);
+                            }}
                             sx={{textAlign: 'center'}}>
                             {isForgotPassword ? 'Torna al Login' : 'Password dimenticata?'}
                         </Link>
                     </Box>
                 </Box>
+                {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
             </Box>
         </Container>
     );

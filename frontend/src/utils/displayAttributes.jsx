@@ -38,6 +38,7 @@ export const accountDisplayNames = {
     status: 'Stato',
     balance: 'Saldo',
     changed_by: 'Ultima Modifica',
+    visible_to_groups: 'Gruppi di Visibilità',
 };
 
 export const transactionDisplayNames = {
