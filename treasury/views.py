@@ -174,7 +174,8 @@ def accounts_list(request):
         visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(visible_accounts, request=request)
-        if request.user.groups.filter(name="Aspirante").exists():
+        print("User " + str(request.user) + " group: " + str(request.user.groups.all()))
+        if request.user.groups.filter(name="Aspiranti").exists():
             serializer = AccountListViewSerializer(page, many=True) # Do not return sensitive data, like balance
         else:
             serializer = AccountDetailedViewSerializer(page, many=True, context={'request': request})
@@ -214,7 +215,7 @@ def account_detail(request, pk):
         account = Account.objects.get(pk=pk)
 
         if request.method == 'GET':
-            if request.user.groups.filter(name="Aspirante").exists():
+            if request.user.groups.filter(name="Aspiranti").exists():
                 serializer = AccountListViewSerializer(account)  # Do not return sensitive data, like balance
             else:
                 serializer = AccountDetailedViewSerializer(account, context={'request': request})

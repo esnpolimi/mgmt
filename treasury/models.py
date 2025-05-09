@@ -1,5 +1,4 @@
 from datetime import date
-
 from django.contrib.auth.models import Group
 from django.db import models, transaction
 from events.models import Subscription
@@ -58,7 +57,7 @@ class Account(BaseEntity):
 
     status = models.CharField(choices=Status.choices, max_length=8, default="closed")
     balance = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=0.0)
-    visible_to_groups = models.ManyToManyField(Group, blank=True)
+    visible_to_groups = models.ManyToManyField(Group)
 
     def is_visible_to_user(self, user):
         return self.visible_to_groups.filter(user=user).exists() or not self.visible_to_groups.exists()
