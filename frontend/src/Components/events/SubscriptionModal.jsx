@@ -12,8 +12,8 @@ import {useAuth} from "../../Context/AuthContext";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
     const [isLoading, setLoading] = useState(true);
-    const {accounts} = useAuth();
     const [successPopup, setSuccessPopup] = useState(null);
+    const [accounts, setAccounts] = useState([]);
     const [profiles, setProfiles] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchLoading, setSearchLoading] = useState(false);
@@ -58,7 +58,23 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             setOriginalStatus(subscription.status);
         }
         setLoading(false);
+        fetchAccounts().then();
     }, [isEdit])
+
+    const fetchAccounts = async () => {
+        try {
+            const response = await fetchCustom("GET", "/accounts/");
+            if (response.ok) {
+                const json = await response.json();
+                setAccounts(json.results);
+            } else {
+                const errorMessage = await extractErrorMessage(response);
+                setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
+            }
+        } catch (error) {
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        }
+    }
 
     // Fetch profiles based on search query
     useEffect(() => {
@@ -346,8 +362,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                         error={errors.account_id && errors.account_id[0]}
                                         onChange={handleChange}>
                                         {accounts.map((account) => (
-                                            <MenuItem key={account.id} value={account.id}>
-                                                {account.name}
+                                            <MenuItem
+                                                key={account.id}
+                                                value={account.id}
+                                                disabled={account.status === 'closed'}
+                                                style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
+                                                {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
                                             </MenuItem>
                                         ))}
                                     </Select>

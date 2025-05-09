@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {Modal, Box, TextField, Button, Typography, Grid, IconButton, Select, MenuItem, InputLabel, FormControl, Chip, OutlinedInput} from '@mui/material';
+import {Modal, Box, TextField, Button, Typography, Grid, IconButton, Select, MenuItem, InputLabel, FormControl, Chip, OutlinedInput, FormHelperText} from '@mui/material';
 import {styleESNcardModal as style} from '../../utils/sharedStyles';
 import Loader from '../Loader';
 import {fetchCustom} from '../../api/api';
@@ -12,7 +12,7 @@ export default function AccountModal({open, onClose, account = null}) {
     const [isLoading, setLoading] = useState(true);
     const [successPopup, setSuccessPopup] = useState(null);
     const [data, setData] = useState({name: '', visible_to_groups: []});
-    const [errors, setErrors] = useState({name: [false, '']});
+    const [errors, setErrors] = useState({name: [false, ''], visible_to_groups: [false, '']});
     const [groups, setGroups] = useState([]);
     const isEdit = account !== null;
 
@@ -54,11 +54,17 @@ export default function AccountModal({open, onClose, account = null}) {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!data.name.trim()) {
-            setErrors({name: [true, 'Il nome è obbligatorio']});
-            setSuccessPopup({message: 'Errore: Il nome è obbligatorio', state: 'error'});
-            return;
-        }
+        const newErrors = {...errors};
+
+        if (!data.name.trim()) newErrors.name = [true, 'Il nome è obbligatorio'];
+        else newErrors.name = [false, ''];
+
+        if (data.visible_to_groups.length === 0) newErrors.visible_to_groups = [true, 'Seleziona almeno un gruppo'];
+        else newErrors.visible_to_groups = [false, ''];
+
+        setErrors(newErrors);
+        if (newErrors.name[0] || newErrors.visible_to_groups[0]) return;
+
 
         setLoading(true);
         try {
@@ -112,7 +118,7 @@ export default function AccountModal({open, onClose, account = null}) {
                                 helperText={errors.name[0] ? errors.name[1] : ''}/>
                         </Grid>
                         <Grid size={{xs: 12}}>
-                            <FormControl fullWidth>
+                            <FormControl fullWidth error={errors.visible_to_groups[0]}>
                                 <InputLabel id="groups-label">{names.visible_to_groups}</InputLabel>
                                 <Select
                                     variant="outlined"
@@ -135,6 +141,9 @@ export default function AccountModal({open, onClose, account = null}) {
                                         </MenuItem>
                                     ))}
                                 </Select>
+                                {errors.visible_to_groups[0] && (
+                                    <FormHelperText>{errors.visible_to_groups[1]}</FormHelperText>
+                                )}
                             </FormControl>
                         </Grid>
                     </Grid>
