@@ -10,12 +10,11 @@ import {useAuth} from "../../Context/AuthContext";
 import Loader from "../Loader";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
-    const {accounts} = useAuth();
     const [amount, setAmount] = useState(0);
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [successPopup, setSuccessPopup] = useState(null);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const [isLoading, setLoading] = useState(true);
-
+    const [accounts, setAccounts] = useState([]);
 
     const [data, setData] = useState({  /* profile fields */
         esncard_number: '',
@@ -34,28 +33,45 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
 
     useEffect(() => {
         setLoading(true);
-        const retrieveFees = async () => {
-            try {
-                const response = await fetchCustom("GET", '/esncard_fees/');
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
-                    setShowSuccessPopup({message: `Errore fees ESNcard: ${errorMessage}`, state: 'error'});
-                } else {
-                    const json = await response.json();
-                    console.log("ESNcard fees:", json);
-                    if (profile.latest_esncard && profile.latest_esncard?.is_valid)
-                        setAmount(parseFloat(json.esncard_lost_fee.replace('€', '')));
-                    else
-                        setAmount(parseFloat(json.esncard_release_fee.replace('€', '')));
-                }
-            } catch (error) {
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setLoading(false);
-            }
-        };
+        fetchAccounts().then();
         retrieveFees().then();
     }, []);
+
+    const retrieveFees = async () => {
+        try {
+            const response = await fetchCustom("GET", '/esncard_fees/');
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(response);
+                setSuccessPopup({message: `Errore fees ESNcard: ${errorMessage}`, state: 'error'});
+            } else {
+                const json = await response.json();
+                console.log("ESNcard fees:", json);
+                if (profile.latest_esncard && profile.latest_esncard?.is_valid)
+                    setAmount(parseFloat(json.esncard_lost_fee.replace('€', '')));
+                else
+                    setAmount(parseFloat(json.esncard_release_fee.replace('€', '')));
+            }
+        } catch (error) {
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchAccounts = async () => {
+        try {
+            const response = await fetchCustom("GET", "/accounts/");
+            if (response.ok) {
+                const json = await response.json();
+                setAccounts(json.results);
+            } else {
+                const errorMessage = await extractErrorMessage(response);
+                setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
+            }
+        } catch (error) {
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        }
+    }
 
     const resetErrors = () => {
         const resetObj = {};
@@ -96,10 +112,10 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             });
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore durante l\'emissione della ESNcard: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore durante l\'emissione della ESNcard: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -153,7 +169,13 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                                         error={errors.account_id[0]}
                                         onChange={handleChange}>
                                         {accounts.map((account) => (
-                                            <MenuItem key={account.id} value={account.id}>{account.name}</MenuItem>
+                                            <MenuItem
+                                                key={account.id}
+                                                value={account.id}
+                                                disabled={account.status === 'closed'}
+                                                style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
+                                                {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
+                                            </MenuItem>
                                         ))}
                                     </Select>
                                     {errors.account_id[0] && <FormHelperText>{errors.account_id[1]}</FormHelperText>}
@@ -162,7 +184,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                         </Grid>
 
                         <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>Conferma</Button>
-                        {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                        {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
                         <ConfirmDialog
                             open={confirmDialog.open}
                             message={confirmDialog.message}
