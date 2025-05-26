@@ -55,10 +55,10 @@ export default function TransactionsDash({limit = 5}) {
                     withdrawal: 'error',
                 };
                 const labelMap = {
-                    subscription: 'Iscrizione',
-                    esncard: 'ESNcard',
-                    deposit: 'Deposito',
-                    withdrawal: 'Prelievo',
+                    subscription: names.type_event,
+                    esncard: names.type_esncard,
+                    deposit: names.type_deposit,
+                    withdrawal: names.type_withdrawal,
                 };
                 return (
                     <Chip
@@ -66,12 +66,20 @@ export default function TransactionsDash({limit = 5}) {
                         color={colorMap[type] || 'default'}
                         variant="outlined"
                     />
-                )
-                    ;
+                );
             },
         },
         {accessorKey: 'executor.name', header: names.executor, size: 150},
-        {accessorKey: 'account.name', header: names.account, size: 100},
+        {
+            accessorKey: 'account.name',
+            header: names.account,
+            size: 100,
+            Cell: ({cell}) => (
+                <Box component="span" fontWeight="bold">
+                    {cell.getValue()}
+                </Box>
+            ),
+        },
         {
             accessorKey: 'amount', header: names.amount, size: 100,
             Cell: ({cell}) => (

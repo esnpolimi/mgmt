@@ -45,10 +45,13 @@ export const transactionDisplayNames = {
     id: 'Id',
     date: 'Data',
     type: 'Tipo',
-    subscription: 'Evento',
-    esncard: 'ESNcard',
     description: 'Descrizione',
     amount: 'Importo',
     executor: 'Eseguito da',
     account: 'Cassa',
+    type_event: 'Evento',
+    type_esncard: 'ESNcard',
+    type_deposit: 'Deposito',
+    type_withdrawal: 'Prelievo',
+
 }

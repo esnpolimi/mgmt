@@ -15,6 +15,7 @@ import Event from './Pages/events/Event.jsx';
 import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 import EmailVerification from './Pages/EmailVerification.jsx';
 import ResetPassword from "./Pages/ResetPassword.jsx";
+import TransactionsList from "./Pages/treasury/TransactionsList.jsx";
 
 function App() {
     return (
@@ -32,6 +33,7 @@ function App() {
                         <Route path='/esner_form' element={<ESNerForm/>}/>
                         <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>
                         <Route path='/treasury/accounts_list' element={<ProtectedRoute requiredPermission="change_account"><AccountsList/></ProtectedRoute>}/>
+                        <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                         <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
                         <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
                     </Routes>
