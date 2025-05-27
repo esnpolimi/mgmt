@@ -1,6 +1,6 @@
 import React, {useEffect, useState, useMemo} from 'react';
-import {Box, Typography, Button, IconButton, Collapse, Chip} from '@mui/material';
-import {MaterialReactTable, MRT_Table, useMaterialReactTable} from 'material-react-table';
+import {Box, Typography, Button, IconButton, Chip} from '@mui/material';
+import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
 import StoreIcon from '@mui/icons-material/Store';
 import AccountModal from '../../Components/treasury/AccountModal.jsx';
@@ -17,14 +17,12 @@ export default function AccountsList() {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
     const [accountModalOpen, setAccountModalOpen] = useState(false);
-    //const [expandedRow, setExpandedRow] = useState(null); // Track expanded row
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [selectedAccount, setSelectedAccount] = useState(null);
 
     useEffect(() => {
         refreshAccountsData().then();
-        //fetchAllTransactions().then(); // Fetch all transactions on mount
     }, []);
 
     const refreshAccountsData = async () => {
@@ -45,21 +43,6 @@ export default function AccountsList() {
             setLoading(false);
         }
     };
-
-    /*const fetchAllTransactions = async () => {
-        try {
-            const response = await fetchCustom("GET", `/transactions/`);
-            if (response.ok) {
-                const json = await response.json();
-                setTransactions(json.results);
-                console.log("All Transactions:", json.results);
-            } else {
-                console.error("Failed to fetch transactions.");
-            }
-        } catch (error) {
-            console.error("Error fetching transactions:", error);
-        }
-    };*/
 
     const columns = useMemo(() => [
         {accessorKey: 'id', header: names.id, size: 50},
@@ -104,14 +87,6 @@ export default function AccountsList() {
         },
     ], []);
 
-    /*const transactionColumns = useMemo(() => [
-        {accessorKey: 'created_at', header: tranNames.date, size: 150},
-        {accessorKey: 'subscription', header: tranNames.subscription, size: 150},
-        {accessorKey: 'executor', header: tranNames.executor, size: 150},
-        {accessorKey: 'account', header: tranNames.account, size: 100},
-        {accessorKey: 'amount', header: tranNames.amount, size: 100},
-    ], []);*/
-
     const table = useMaterialReactTable({
         columns,
         data,
@@ -155,29 +130,6 @@ export default function AccountsList() {
             },
             sx: {cursor: 'pointer'},
         }),
-        /*renderDetailPanel: ({row}) => {
-            const accountTransactions = transactions.filter((transaction) => transaction.account === row.original.id);
-
-            const transactionTable = useMaterialReactTable({
-                columns: transactionColumns,
-                data: accountTransactions,
-                enablePagination: false,
-                enableSorting: true,
-                enableColumnFilters: false,
-                enableGlobalFilter: false,
-                enableRowSelection: false,
-                enableRowActions: false,
-                muiTableContainerProps: {sx: {maxHeight: 300}},
-                localization: MRT_Localization_IT,
-                renderTopToolbarCustomActions: () => {
-                    return (
-                        <Typography variant="h6" sx={{ml: 2, mt: 2}}>Transazioni Cassa {row.original.name}</Typography>
-                    );
-                }
-            });
-
-            return (<MaterialReactTable table={transactionTable}/>);
-        },*/
         renderTopToolbarCustomActions: () => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
@@ -204,7 +156,6 @@ export default function AccountsList() {
             {accountModalOpen && <AccountModal
                 open={accountModalOpen}
                 onClose={handleCloseAccountModal}
-                isEdit={false}
                 account={selectedAccount}
             />}
             <Box sx={{mx: '5%'}}>

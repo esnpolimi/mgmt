@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from "@mui/material";
-import {Autocomplete, Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
+import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
@@ -8,15 +8,12 @@ import Popup from "../Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
-import {useAuth} from "../../Context/AuthContext";
+import ProfileSearch from "../ProfileSearch";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
     const [isLoading, setLoading] = useState(true);
     const [successPopup, setSuccessPopup] = useState(null);
     const [accounts, setAccounts] = useState([]);
-    const [profiles, setProfiles] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchLoading, setSearchLoading] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const title = isEdit ? 'Modifica Iscrizione' : 'Iscrizione Evento';
     const originalAccountId = isEdit ? subscription.account_id || null : null; // 'paid' to 'pending' status needs the original account_id
@@ -75,37 +72,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
-
-    // Fetch profiles based on search query
-    useEffect(() => {
-        const searchProfiles = async () => {
-            if (searchQuery.length < 3) {
-                setProfiles([]);
-                return;
-            }
-            setSearchLoading(true);
-            try {
-                const response = await fetchCustom("GET", `/profiles/search/?q=${searchQuery}&valid_only=true&esner_only=false`);
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
-                    setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                } else {
-                    const json = await response.json();
-                    setProfiles(json.results || []);
-                }
-            } catch (error) {
-                setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setSearchLoading(false);
-            }
-        };
-        const debounceTimer = setTimeout(() => {
-            if (searchQuery.length >= 2) {
-                searchProfiles().then();
-            }
-        }, 300);
-        return () => clearTimeout(debounceTimer);
-    }, [searchQuery]);
 
     const resetErrors = () => {
         const resetObj = {};
@@ -221,51 +187,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         });
     };
 
-    const getOptionLabel = (option) => {
-        return `${option.name} ${option.surname}`;
-    };
-
-    const renderOption = (props, option) => {
-        const {key, ...otherProps} = props;
-        const hasEsncard = option.latest_esncard && option.latest_esncard.number;
-        const esnCardExpired = hasEsncard && !option.latest_esncard.is_valid;
-
-        return (
-            <li key={key} {...otherProps}>
-                <Grid container spacing={1} sx={{width: '100%'}}>
-                    <Grid size={{xs: 4}}>
-                        <Typography>{option.name} {option.surname}</Typography>
-                    </Grid>
-                    <Grid size={{xs: 4}}>
-                        <Typography
-                            component="span"
-                            sx={{color: hasEsncard ? (esnCardExpired ? 'error.main' : 'text.primary') : 'error.main'}}
-                        >
-                            {hasEsncard
-                                ? (esnCardExpired ? `${option.latest_esncard.number} (Scaduta)` : option.latest_esncard.number)
-                                : 'No ESNcard'}
-                        </Typography>
-                    </Grid>
-
-                    <Grid size={{xs: 4}}>
-                        <Typography
-                            component="span"
-                            sx={{
-                                color: option.is_esner ? 'primary.main' : 'success.main',
-                                fontWeight: 'bold',
-                                textAlign: 'right',
-                                display: 'block'
-                            }}
-                        >
-                            {option.is_esner ? 'ESNer' : 'Erasmus'}
-                        </Typography>
-                    </Grid>
-                </Grid>
-            </li>
-        );
-    };
-
-
     return (
         <Modal
             open={open}
@@ -294,31 +215,22 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
                     <Grid container spacing={2} direction="column">
                         <Grid size={{xs: 12}} sx={{mt: 2}}>
-                            <Autocomplete
-                                id="profile-search"
-                                options={profiles}
-                                loading={searchLoading}
-                                getOptionLabel={getOptionLabel}
-                                renderOption={renderOption}
+                            <ProfileSearch
+                                value={data.profile_id ? {
+                                    id: data.profile_id,
+                                    name: data.profile_name
+                                } : null}
                                 onChange={(event, newValue) => {
-                                    setData({...data, profile_id: newValue?.id});
+                                    setData({
+                                        ...data,
+                                        profile_id: newValue?.id,
+                                        profile_name: newValue ? `${newValue.name} ${newValue.surname}` : ''
+                                    });
                                 }}
-                                onInputChange={(event, newInputValue) => {
-                                    setSearchQuery(newInputValue);
-                                }}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label={isEdit ? data.profile_name : "Cerca profilo"}
-                                        variant="outlined"
-                                        fullWidth
-                                        required
-                                        error={errors.profile_id && errors.profile_id[0]}
-                                        helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
-                                    />
-                                )}
-                                noOptionsText="Nessun profilo trovato"
-                                loadingText="Caricamento..."
+                                error={errors.profile_id && errors.profile_id[0]}
+                                helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
+                                label={isEdit ? data.profile_name : "Cerca profilo"}
+                                required
                                 disabled={isEdit}
                             />
                         </Grid>

@@ -9,12 +9,12 @@ import Popup from "../Popup";
 import {accountDisplayNames as names} from "../../utils/displayAttributes";
 
 export default function AccountModal({open, onClose, account = null}) {
+    const isEdit = account !== null;
     const [isLoading, setLoading] = useState(true);
     const [successPopup, setSuccessPopup] = useState(null);
     const [data, setData] = useState({name: '', visible_to_groups: []});
     const [errors, setErrors] = useState({name: [false, ''], visible_to_groups: [false, '']});
     const [groups, setGroups] = useState([]);
-    const isEdit = account !== null;
 
     useEffect(() => {
         const fetchGroups = async () => {

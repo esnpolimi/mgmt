@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from profiles.models import Profile
+from users.models import User
 from treasury.models import Transaction, Account, ESNcard, Settings
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer
@@ -132,13 +133,55 @@ def transactions_list(request):
 
 
 # Endpoint to retrive transaction details based on id
-@api_view(['GET'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def transaction_detail(request, pk):
     try:
-        transaction = Transaction.objects.get(pk=pk)
-        serializer = TransactionViewSerializer(transaction)
-        return Response(serializer.data, status=200)
+        transaction_obj = Transaction.objects.get(pk=pk)
+
+        if request.method == 'GET':
+            serializer = TransactionViewSerializer(transaction_obj)
+            return Response(serializer.data, status=200)
+
+        elif request.method == 'PATCH':
+            if not request.user.has_perm('treasury.change_transaction'):
+                return Response({'error': 'Non autorizzato.'}, status=401)
+
+            # Retrieve the User regardless of whether an id or email is passed
+            executor = request.data.get('executor')
+            try:
+                executor_user = User.objects.get(profile__id=int(executor))
+            except (ValueError, User.DoesNotExist):
+                try:
+                    executor_user = User.objects.get(profile__email=executor)
+                except User.DoesNotExist:
+                    return Response({'error': 'Invalid executor information'}, status=400)
+            request.data['executor'] = executor_user.pk
+
+            with transaction.atomic():
+                if int(request.data.get('account', transaction_obj.account.id)) != transaction_obj.account.id:
+                    # Only if the account has changed, delete old transaction and create a new one
+                    transaction_obj.delete()
+                    t = Transaction(
+                        type=transaction_obj.type,
+                        account_id=request.data['account'],
+                        executor_id=request.data['executor'],
+                        amount=float(request.data['amount']),
+                        description=request.data.get('description', ''),
+                        esncard=transaction_obj.esncard,
+                        subscription=transaction_obj.subscription
+                    )
+                    t.save()
+                else:
+                    # Just update the non-critical fields
+                    transaction_obj.amount = float(request.data['amount'])
+                    transaction_obj.executor_id = request.data['executor']
+                    transaction_obj.description = request.data.get('description', '')
+                    transaction_obj.save()
+
+                return Response(status=200)
+        else:
+            return Response("Metodo non consentito", status=405)
 
     except Transaction.DoesNotExist:
         return Response({'error': 'Transazione non trovata.'}, status=404)
@@ -224,10 +267,8 @@ def account_detail(request, pk):
         if request.method == 'PATCH':
             if not request.user.has_perm('treasury.change_account'):
                 return Response({'error': 'Non autorizzato.'}, status=401)
-
             data = request.data
             data['changed_by'] = request.user
-
             serializer = AccountEditSerializer(account, data=data, partial=True)
             if not serializer.is_valid():
                 return Response(serializer.errors, status=400)

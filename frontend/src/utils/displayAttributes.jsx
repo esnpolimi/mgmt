@@ -49,9 +49,11 @@ export const transactionDisplayNames = {
     amount: 'Importo',
     executor: 'Eseguito da',
     account: 'Cassa',
-    type_event: 'Evento',
-    type_esncard: 'ESNcard',
-    type_deposit: 'Deposito',
-    type_withdrawal: 'Prelievo',
-
+    tran_type: {
+        event: 'Evento',
+        esncard: 'ESNcard',
+        deposit: 'Deposito',
+        withdrawal: 'Prelievo',
+        subscription: 'Iscrizione'
+    },
 }
