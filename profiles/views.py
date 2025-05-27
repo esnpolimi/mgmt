@@ -299,8 +299,7 @@ def document_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def search_profiles(request):
     try:
-        query = request.GET.get('q', '')
-        print("AA Query: ", query)
+        query = request.GET.get('q', '').strip()
         valid_only = request.GET.get('valid_only', 'false').lower() == 'true'
         esner_only = request.GET.get('esner_only', 'false').lower() == 'true'
 
@@ -308,11 +307,15 @@ def search_profiles(request):
             return Response({"results": []})
 
         # Search by name, surname, or esncard
-        profiles = Profile.objects.filter(
-            Q(name__icontains=query) |
-            Q(surname__icontains=query) |
-            Q(esncard__number__icontains=query)
-        ).distinct()
+        tokens = query.split()
+        q_filter = Q()
+        for token in tokens:
+            q_filter &= (
+                    Q(name__icontains=token) |
+                    Q(surname__icontains=token) |
+                    Q(esncard__enabled=True, esncard__number__icontains=token)
+            )
+        profiles = Profile.objects.filter(q_filter).distinct()
 
         if valid_only:
             profiles = profiles.filter(enabled=True, email_is_verified=True)
