@@ -119,4 +119,4 @@ class AccountCreateSerializer(serializers.ModelSerializer):
 class AccountEditSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ['name', 'status', 'visible_to_groups']
+        fields = ['name', 'status', 'visible_to_groups', 'changed_by']
