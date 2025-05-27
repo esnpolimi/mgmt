@@ -12,28 +12,47 @@ import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
 import ClearIcon from '@mui/icons-material/Clear';
+import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
+import Popup from "../../Components/Popup";
 
+const TRANSACTION_CONFIGS = {
+    subscription: { label: names.tran_type["subscription"], color: 'primary' },
+    esncard: { label: names.tran_type["esncard"], color: 'secondary' },
+    deposit: { label: names.tran_type["deposit"], color: 'success' },
+    withdrawal: { label: names.tran_type["withdrawal"], color: 'error' }
+};
+
+// For the filter dropdown
 const transactionTypes = [
-    {value: '', label: 'Tutti'},
-    {value: 'subscription', label: names.type_event, color: 'primary'},
-    {value: 'esncard', label: names.type_esncard, color: 'secondary'},
-    {value: 'deposit', label: names.type_deposit, color: 'success'},
-    {value: 'withdrawal', label: names.type_withdrawal, color: 'error'},
+    { value: '', label: 'Tutti' },
+    ...Object.entries(TRANSACTION_CONFIGS).map(([value, config]) => ({
+        value,
+        label: config.label,
+        color: config.color
+    }))
 ];
 
 export default function TransactionsList() {
     const [isLoading, setLoading] = useState(true);
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
+    const navigate = useNavigate();
+    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [transactionModalOpen, setTransactionModalOpen] = useState(false);
+    const [selectedTransaction, setSelectedTransaction] = useState(null);
+
     const [filters, setFilters] = useState({
         account: [],
         type: [],
         dateFrom: null,
         dateTo: null,
     });
-    const navigate = useNavigate();
 
     useEffect(() => {
+        refreshTransactionsData().then();
+    }, []);
+
+    const refreshTransactionsData = async () => {
         setLoading(true);
         Promise.all([
             fetchCustom('GET', '/transactions/'),
@@ -44,7 +63,7 @@ export default function TransactionsList() {
             setTransactions(txJson.results || []);
             setAccounts(accJson.results || []);
         }).finally(() => setLoading(false));
-    }, []);
+    };
 
     const filteredData = useMemo(() => {
         return transactions.filter(tx => {
@@ -72,22 +91,11 @@ export default function TransactionsList() {
             accessorKey: 'type', header: names.type, size: 100,
             Cell: ({cell}) => {
                 const type = cell.getValue();
-                const colorMap = {
-                    subscription: 'primary',
-                    esncard: 'secondary',
-                    deposit: 'success',
-                    withdrawal: 'error',
-                };
-                const labelMap = {
-                    subscription: names.type_event,
-                    esncard: names.type_esncard,
-                    deposit: names.type_deposit,
-                    withdrawal: names.type_withdrawal,
-                }
+                const config = TRANSACTION_CONFIGS[type] || {label: 'Sconosciuto', color: 'default'};
                 return (
                     <Chip
-                        label={labelMap[type] || 'Sconosciuto'}
-                        color={colorMap[type] || 'default'}
+                        label={config.label}
+                        color={config.color}
                         variant="outlined"
                     />
                 );
@@ -160,7 +168,23 @@ export default function TransactionsList() {
             variant: 'outlined',
         },
         localization: MRT_Localization_IT,
+        muiTableBodyRowProps: ({row}) => ({
+            onClick: () => {
+                setSelectedTransaction(row.original);
+                setTransactionModalOpen(true);
+            },
+            sx: {cursor: 'pointer'},
+        })
     });
+
+    const handleCloseTransactionModal = async (success) => {
+        if (success) {
+            setShowSuccessPopup({message: "Transazione modificata con successo!", state: "success"});
+            await refreshTransactionsData();
+        }
+        setSelectedTransaction(null);
+        setTransactionModalOpen(false);
+    };
 
     const handleDateChange = (name, value) => {
         setFilters(prev => {
@@ -197,6 +221,11 @@ export default function TransactionsList() {
     return (
         <Box>
             <Sidebar/>
+            {transactionModalOpen && <TransactionModal
+                open={transactionModalOpen}
+                onClose={handleCloseTransactionModal}
+                transaction={selectedTransaction}
+            />}
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
@@ -280,7 +309,8 @@ export default function TransactionsList() {
                         </Grid>
                     )}
                 </Grid>
-                {isLoading ? <Loader/> : <MaterialReactTable  sx={{mt: 2}} table={table}/>}
+                {isLoading ? <Loader/> : <MaterialReactTable sx={{mt: 2}} table={table}/>}
+                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
         </Box>
     );

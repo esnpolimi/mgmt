@@ -109,7 +109,17 @@ class Transaction(BaseEntity):
     def save(self, *args, **kwargs):
         with transaction.atomic():
             self.clean()
-            self.account.balance += self.amount
+
+            # If this is an update (existing transaction)
+            if self.pk:
+                original_transaction = Transaction.objects.get(pk=self.pk)
+                # Only update balance with the difference between new and old amount
+                amount_difference = self.amount - original_transaction.amount
+                self.account.balance += amount_difference
+            else:
+                # For new transactions, add the full amount
+                self.account.balance += self.amount
+
             self.account.save()
             super(Transaction, self).save(*args, **kwargs)
 

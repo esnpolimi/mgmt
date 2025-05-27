@@ -6,6 +6,13 @@ import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip} from "@mui/material";
 
+const TRANSACTION_CONFIGS = {
+    subscription: { label: names.tran_type["subscription"], color: 'primary' },
+    esncard: { label: names.tran_type["esncard"], color: 'secondary' },
+    deposit: { label: names.tran_type["deposit"], color: 'success' },
+    withdrawal: { label: names.tran_type["withdrawal"], color: 'error' }
+};
+
 export default function TransactionsDash({limit = 5}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
@@ -48,26 +55,15 @@ export default function TransactionsDash({limit = 5}) {
             accessorKey: 'type', header: names.type, size: 100,
             Cell: ({cell}) => {
                 const type = cell.getValue();
-                const colorMap = {
-                    subscription: 'primary',
-                    esncard: 'secondary',
-                    deposit: 'success',
-                    withdrawal: 'error',
-                };
-                const labelMap = {
-                    subscription: names.type_event,
-                    esncard: names.type_esncard,
-                    deposit: names.type_deposit,
-                    withdrawal: names.type_withdrawal,
-                };
+                const config = TRANSACTION_CONFIGS[type] || {label: 'Sconosciuto', color: 'default'};
                 return (
                     <Chip
-                        label={labelMap[type] || 'Sconosciuto'}
-                        color={colorMap[type] || 'default'}
+                        label={config.label}
+                        color={config.color}
                         variant="outlined"
                     />
                 );
-            },
+            }
         },
         {accessorKey: 'executor.name', header: names.executor, size: 150},
         {
