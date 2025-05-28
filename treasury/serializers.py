@@ -47,7 +47,7 @@ class ESNcardSerializer(serializers.ModelSerializer):
 class TransactionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ['subscription', 'account', 'executor', 'amount', 'description']
+        fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type']
 
 
 # Serializer to view transactions
