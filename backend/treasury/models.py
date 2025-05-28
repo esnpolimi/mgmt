@@ -98,7 +98,8 @@ class Transaction(BaseEntity):
             raise ValueError("Le transazioni di Iscrizione devono avere un'Iscrizione.")
         if self.type == self.TransactionType.ESNCARD and not self.esncard:
             raise ValueError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
-        if self.type == self.TransactionType.DEPOSIT or self.type == self.TransactionType.WITHDRAWAL and (self.subscription or self.esncard):
+        if (self.type == self.TransactionType.DEPOSIT or self.type == self.TransactionType.WITHDRAWAL) and (self.subscription or self.esncard):
+            print("DEBUG: subscription:", self.subscription, "esncard:", self.esncard, "type:", self.type)
             raise ValueError("Le transazioni di Deposito/Prelievo non devono avere un'Iscrizione o una ESNcard.")
         if self.account.status == "closed":
             raise PermissionDenied("La cassa è chiusa.")

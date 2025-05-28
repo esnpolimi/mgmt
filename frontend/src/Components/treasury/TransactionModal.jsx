@@ -155,7 +155,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 fullWidth
                                 error={errors.amount[0]}
                                 type="number"
-                                slotProps={{htmlInput: {min: "0", step: "0.01"}}}
+                                slotProps={{htmlInput: {min: "0.01", step: "0.01"}}}
                             />
                         </Grid>
                         <Grid size={{xs: 12}}>

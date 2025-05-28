@@ -12,6 +12,8 @@ import Loader from "../../Components/Loader";
 import Popup from "../../Components/Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import TransactionAdd from "../../Components/treasury/TransactionAdd";
+import EditIcon from '@mui/icons-material/Edit';
 
 export default function AccountsList() {
     const [data, setData] = useState([]);
@@ -20,6 +22,7 @@ export default function AccountsList() {
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [selectedAccount, setSelectedAccount] = useState(null);
+    const [transactionModalOpen, setTransactionModalOpen] = useState(false);
 
     useEffect(() => {
         refreshAccountsData().then();
@@ -48,12 +51,13 @@ export default function AccountsList() {
         {accessorKey: 'id', header: names.id, size: 50},
         {accessorKey: 'name', header: names.name, size: 150},
         {accessorKey: 'changed_by.name', header: names.changed_by, size: 150},
-        {accessorKey: 'balance', header: names.balance, size: 100,
+        {
+            accessorKey: 'balance', header: names.balance, size: 100,
             Cell: ({cell}) => (
                 <Box>
                     {cell.getValue() !== null ? (
                         <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
-                            <Chip label="N/A" color="warning"/>)}
+                        <Chip label="N/A" color="warning"/>)}
                 </Box>
             ),
         },
@@ -82,6 +86,31 @@ export default function AccountsList() {
                     ) : (
                         <Chip label="N/A" color="warning"/>
                     )}
+                </Box>
+            ),
+        },
+        {
+            header: 'Azioni',
+            size: 150,
+            Cell: ({row}) => (
+                <Box sx={{display: 'flex', gap: 1}}>
+                    <IconButton
+                        color="primary"
+                        onClick={() => {
+                            setSelectedAccount(row.original);
+                            setAccountModalOpen(true);
+                        }}>
+                        <EditIcon/>
+                    </IconButton>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => {
+                            setSelectedAccount(row.original);
+                            setTransactionModalOpen(true);
+                        }}>
+                        Deposita/Preleva
+                    </Button>
                 </Box>
             ),
         },
@@ -123,12 +152,8 @@ export default function AccountsList() {
             variant: 'outlined',
         },
         localization: MRT_Localization_IT,
-        muiTableBodyRowProps: ({row}) => ({
-            onClick: () => {
-                setSelectedAccount(row.original);
-                setAccountModalOpen(true);
-            },
-            sx: {cursor: 'pointer'},
+        muiTableBodyRowProps: () => ({
+            sx: {cursor: 'default'},
         }),
         renderTopToolbarCustomActions: () => {
             return (
@@ -158,6 +183,12 @@ export default function AccountsList() {
                 onClose={handleCloseAccountModal}
                 account={selectedAccount}
             />}
+            <TransactionAdd
+                open={transactionModalOpen}
+                onClose={() => setTransactionModalOpen(false)}
+                account={selectedAccount}
+                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || 'success'})}
+            />
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>

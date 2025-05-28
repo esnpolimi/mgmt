@@ -291,7 +291,7 @@ export default function Event() {
         return lists.map(listConfig => {
             const {listId, listName, capacity, subscriptions, tableOptions} = listConfig;
             const occupancyPercentage = Math.round((subscriptions.length / capacity) * 100) || 0;
-            const occupancyColor = occupancyPercentage >= 60 ? 'warning' : occupancyPercentage >= 70 ? 'error' : 'success';
+            const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 60 ? 'warning' : 'success';
             const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
             const list = useMaterialReactTable(fixedTableOptions);
 
@@ -391,7 +391,9 @@ export default function Event() {
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                            <IconButton onClick={() => {navigate(-1);}} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
+                            <IconButton onClick={() => {
+                                navigate(-1);
+                            }} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
                             <EventIcon sx={{marginRight: '10px'}}/>
                             <Typography variant="h4">Evento - {data.name}</Typography>
                         </Box>

@@ -10,6 +10,7 @@ import logo from '../assets/esnpolimi-logo.png';
 import Popup from "../Components/Popup";
 import {accountDisplayNames as names} from "../utils/displayAttributes";
 import {extractErrorMessage} from "../utils/errorHandling";
+import TransactionAdd from "../Components/treasury/TransactionAdd";
 
 const style = {
     display: "flex",
@@ -28,6 +29,7 @@ export default function Home() {
     const [actionType, setActionType] = useState(""); // "open" or "close"
     const [casseOpen, setCasseOpen] = useState(false);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const accountsDetails = user?.permissions.includes("change_account");
 
     useEffect(() => {
@@ -135,14 +137,25 @@ export default function Home() {
                                                     Apri Cassa
                                                 </Button>
                                             )}
-                                            {account.status === "open" && (
-                                                <Button
-                                                    variant="contained"
-                                                    color="error"
-                                                    onClick={() => handleAction(account, "close")}
-                                                    sx={{minWidth: 120, fontWeight: 600}}>
-                                                    Chiudi Cassa
-                                                </Button>
+                                            {account.status === "open" && (<>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="error"
+                                                        onClick={() => handleAction(account, "close")}
+                                                        sx={{minWidth: 120, fontWeight: 600, mb: 1}}>
+                                                        Chiudi Cassa
+                                                    </Button>
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        onClick={() => {
+                                                            setSelectedAccount(account);
+                                                            setTransactionModalOpen(true);
+                                                        }}
+                                                        sx={{minWidth: 120, fontWeight: 600}}>
+                                                        Deposita/Preleva
+                                                    </Button>
+                                                </>
                                             )}
                                         </CardActions>
                                     ) : (
@@ -173,6 +186,12 @@ export default function Home() {
                 message={`Confermi la presenza di €${selectedAccount?.balance} nella cassa "${selectedAccount?.name}" prima di ${actionType === "open" ? "aprirla" : "chiuderla"}?`}
                 onConfirm={confirmAction}
                 onClose={() => setConfirmDialogOpen(false)}
+            />
+            <TransactionAdd
+                open={transactionModalOpen}
+                onClose={() => setTransactionModalOpen(false)}
+                account={selectedAccount}
+                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || 'success'})}
             />
             {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
         </Box>
