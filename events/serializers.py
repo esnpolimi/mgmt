@@ -179,7 +179,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
-    account_id = serializers.IntegerField(write_only=True, required=False)
+    account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     status = serializers.CharField(default='pending')
 
     class Meta:

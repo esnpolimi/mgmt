@@ -100,12 +100,13 @@ def esncard_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def transaction_add(request):
     try:
-        transaction_serializer = TransactionCreateSerializer(request.data)
+        transaction_serializer = TransactionCreateSerializer(data=request.data)
         if not transaction_serializer.is_valid():
             return Response(transaction_serializer.errors, status=400)
 
-        if transaction_serializer.validated_data['subscription'] is None:
-            if not request.user.has_perm('treasury.withdraw_deposit'):  # TODO: add permission via Meta in model
+        transaction_type = transaction_serializer.validated_data['type']
+        if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
+            if not request.user.has_perm('treasury.add_transaction'):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
         transaction_serializer.save()
