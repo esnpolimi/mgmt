@@ -1,3 +1,4 @@
+from django.contrib.auth.models import Group
 from rest_framework import serializers
 from treasury.models import ESNcard, Transaction, Account
 from profiles.models import Profile
@@ -34,33 +35,71 @@ class ESNcardEmissionSerializer(serializers.ModelSerializer):
 
 # Serializer to view ESNcard
 class ESNcardSerializer(serializers.ModelSerializer):
+    expiration = serializers.DateField(format="%Y-%m-%d")  # Format date as string
+    is_valid = serializers.ReadOnlyField()
+
     class Meta:
         model = ESNcard
         exclude = ['profile']
-
-    expiration = serializers.ReadOnlyField()
-    is_valid = serializers.ReadOnlyField()
 
 
 # Serializer to create transactions
 class TransactionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ['subscription', 'account', 'executor', 'amount', 'description']
+        fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type']
 
 
 # Serializer to view transactions
 class TransactionViewSerializer(serializers.ModelSerializer):
+    executor = serializers.SerializerMethodField()
+    account = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = '__all__'
 
+    @staticmethod
+    def get_executor(obj):
+        return {
+            "email": obj.executor.profile.email,
+            "name": f"{obj.executor.profile.name} {obj.executor.profile.surname}"
+        }
 
-# Serializer to view accounts
+    @staticmethod
+    def get_account(obj):
+        return {
+            "id": obj.account.id,
+            "name": f"{obj.account.name}"
+        }
+
+
 class AccountDetailedViewSerializer(serializers.ModelSerializer):
+    changed_by = serializers.SerializerMethodField()
+
     class Meta:
         model = Account
         fields = '__all__'
+
+    @staticmethod
+    def get_changed_by(obj):
+        return {
+            "email": obj.changed_by.profile.email,
+            "name": f"{obj.changed_by.profile.name} {obj.changed_by.profile.surname}"
+        }
+
+    def to_representation(self, instance):  # Return account visibilty only to Board group members
+        representation = super().to_representation(instance)
+        request_user = self.context.get('request').user  # Safely retrieve the request object
+        board_group = Group.objects.filter(name="Board").first()
+
+        if board_group and board_group in request_user.groups.all():
+            representation['visible_to_groups'] = [
+                {"id": group.id, "name": group.name} for group in instance.visible_to_groups.all()
+            ]
+        else:
+            representation.pop('visible_to_groups', None)
+        return representation
 
 
 class AccountListViewSerializer(serializers.ModelSerializer):
@@ -73,11 +112,11 @@ class AccountListViewSerializer(serializers.ModelSerializer):
 class AccountCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ['name']
+        fields = ['name', 'visible_to_groups']
 
 
 # Serializer to edit accounts
 class AccountEditSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ['name', 'status']
+        fields = ['name', 'status', 'visible_to_groups', 'changed_by']

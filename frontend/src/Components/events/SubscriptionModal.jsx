@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, Autocomplete, Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from "@mui/material";
+import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
@@ -7,15 +8,12 @@ import Popup from "../Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
-import {useAuth} from "../../Context/AuthContext";
+import ProfileSearch from "../ProfileSearch";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
     const [isLoading, setLoading] = useState(true);
-    const {accounts} = useAuth();
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-    const [profiles, setProfiles] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchLoading, setSearchLoading] = useState(false);
+    const [successPopup, setSuccessPopup] = useState(null);
+    const [accounts, setAccounts] = useState([]);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const title = isEdit ? 'Modifica Iscrizione' : 'Iscrizione Evento';
     const originalAccountId = isEdit ? subscription.account_id || null : null; // 'paid' to 'pending' status needs the original account_id
@@ -57,38 +55,23 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             setOriginalStatus(subscription.status);
         }
         setLoading(false);
+        fetchAccounts().then();
     }, [isEdit])
 
-    // Fetch profiles based on search query
-    useEffect(() => {
-        const searchProfiles = async () => {
-            if (searchQuery.length < 3) {
-                setProfiles([]);
-                return;
+    const fetchAccounts = async () => {
+        try {
+            const response = await fetchCustom("GET", "/accounts/");
+            if (response.ok) {
+                const json = await response.json();
+                setAccounts(json.results);
+            } else {
+                const errorMessage = await extractErrorMessage(response);
+                setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
-            setSearchLoading(true);
-            try {
-                const response = await fetchCustom("GET", `/profiles/search/?q=${searchQuery}&valid_only=true&esner_only=false`);
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                } else {
-                    const json = await response.json();
-                    setProfiles(json.results || []);
-                }
-            } catch (error) {
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setSearchLoading(false);
-            }
-        };
-        const debounceTimer = setTimeout(() => {
-            if (searchQuery.length >= 2) {
-                searchProfiles().then();
-            }
-        }, 300);
-        return () => clearTimeout(debounceTimer);
-    }, [searchQuery]);
+        } catch (error) {
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        }
+    }
 
     const resetErrors = () => {
         const resetObj = {};
@@ -115,10 +98,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         }
 
         // Confirmation if payment is involved (new paid or status changed to paid)
-        if (
-            (data.status === 'paid' && (!isEdit || originalStatus !== 'paid'))
-            || (isEdit && originalStatus === 'paid' && data.status !== 'paid')
-        ) {
+        if ((data.status === 'paid' && (!isEdit || originalStatus !== 'paid'))
+            || (isEdit && originalStatus === 'paid' && data.status !== 'paid')) {
             let msg = '';
             if (data.status === 'paid' && (!isEdit || originalStatus !== 'paid')) {
                 msg = 'Confermi di registrare un pagamento di €' + event.cost + ' per questa iscrizione?';
@@ -126,6 +107,15 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 msg = 'Confermi di annullare un pagamento di €' + event.cost + ' per questa iscrizione?';
             }
             setConfirmDialog({open: true, action: () => doSubmit(), message: msg});
+            return;
+        }
+
+        if (data.status === 'paid' && isEdit && originalStatus === 'paid' && data.account_id !== originalAccountId) {
+            setConfirmDialog({
+                open: true,
+                action: () => doSubmit(),
+                message: 'Confermi di voler cambiare la cassa associata a questo pagamento? Verranno spostati €' + event.cost + ' da ' + data.account_name + ' a ' + accounts.find(account => account.id === data.account_id)?.name + '.'
+            })
             return;
         }
 
@@ -145,10 +135,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             });
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
         } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -172,12 +162,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             const response = await fetchCustom("DELETE", `/subscription/${data.id}/`);
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
             } else {
                 onClose(true, "Eliminazione avvenuta con successo");
             }
         } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -196,51 +186,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             ...(data.status === 'paid' ? {account_id: ''} : {})
         });
     };
-
-    const getOptionLabel = (option) => {
-        return `${option.name} ${option.surname}`;
-    };
-
-    const renderOption = (props, option) => {
-        const {key, ...otherProps} = props;
-        const hasEsncard = option.latest_esncard && option.latest_esncard.number;
-        const esnCardExpired = hasEsncard && !option.latest_esncard.is_valid;
-
-        return (
-            <li key={key} {...otherProps}>
-                <Grid container spacing={1} sx={{width: '100%'}}>
-                    <Grid size={{xs: 4}}>
-                        <Typography>{option.name} {option.surname}</Typography>
-                    </Grid>
-                    <Grid size={{xs: 4}}>
-                        <Typography
-                            component="span"
-                            sx={{color: hasEsncard ? (esnCardExpired ? 'error.main' : 'text.primary') : 'error.main'}}
-                        >
-                            {hasEsncard
-                                ? (esnCardExpired ? `${option.latest_esncard.number} (Scaduta)` : option.latest_esncard.number)
-                                : 'No ESNcard'}
-                        </Typography>
-                    </Grid>
-
-                    <Grid size={{xs: 4}}>
-                        <Typography
-                            component="span"
-                            sx={{
-                                color: option.is_esner ? 'primary.main' : 'success.main',
-                                fontWeight: 'bold',
-                                textAlign: 'right',
-                                display: 'block'
-                            }}
-                        >
-                            {option.is_esner ? 'ESNer' : 'Erasmus'}
-                        </Typography>
-                    </Grid>
-                </Grid>
-            </li>
-        );
-    };
-
 
     return (
         <Modal
@@ -270,31 +215,22 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
                     <Grid container spacing={2} direction="column">
                         <Grid size={{xs: 12}} sx={{mt: 2}}>
-                            <Autocomplete
-                                id="profile-search"
-                                options={profiles}
-                                loading={searchLoading}
-                                getOptionLabel={getOptionLabel}
-                                renderOption={renderOption}
+                            <ProfileSearch
+                                value={data.profile_id ? {
+                                    id: data.profile_id,
+                                    name: data.profile_name
+                                } : null}
                                 onChange={(event, newValue) => {
-                                    setData({...data, profile_id: newValue?.id});
+                                    setData({
+                                        ...data,
+                                        profile_id: newValue?.id,
+                                        profile_name: newValue ? `${newValue.name} ${newValue.surname}` : ''
+                                    });
                                 }}
-                                onInputChange={(event, newInputValue) => {
-                                    setSearchQuery(newInputValue);
-                                }}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label={isEdit ? data.profile_name : "Cerca profilo"}
-                                        variant="outlined"
-                                        fullWidth
-                                        required
-                                        error={errors.profile_id && errors.profile_id[0]}
-                                        helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
-                                    />
-                                )}
-                                noOptionsText="Nessun profilo trovato"
-                                loadingText="Caricamento..."
+                                error={errors.profile_id && errors.profile_id[0]}
+                                helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
+                                label={isEdit ? data.profile_name : "Cerca profilo"}
+                                required
                                 disabled={isEdit}
                             />
                         </Grid>
@@ -337,9 +273,13 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                         value={data.account_id || ''}
                                         error={errors.account_id && errors.account_id[0]}
                                         onChange={handleChange}>
-                                        {accounts.results.map((account) => (
-                                            <MenuItem key={account.id} value={account.id}>
-                                                {account.name}
+                                        {accounts.map((account) => (
+                                            <MenuItem
+                                                key={account.id}
+                                                value={account.id}
+                                                disabled={account.status === 'closed'}
+                                                style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
+                                                {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
                                             </MenuItem>
                                         ))}
                                     </Select>
@@ -386,7 +326,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             Elimina Iscrizione
                         </Button>
                     )}
-                    {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                    {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
                 </>)}
                 <ConfirmDialog
                     open={confirmDialog.open}
