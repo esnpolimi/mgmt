@@ -36,4 +36,24 @@ export const accountDisplayNames = {
     id: 'Id',
     name: 'Nome',
     status: 'Stato',
+    balance: 'Saldo',
+    changed_by: 'Ultima Modifica',
+    visible_to_groups: 'Gruppi di Visibilità',
 };
+
+export const transactionDisplayNames = {
+    id: 'Id',
+    date: 'Data',
+    type: 'Tipo',
+    description: 'Descrizione',
+    amount: 'Importo',
+    executor: 'Eseguito da',
+    account: 'Cassa',
+    tran_type: {
+        event: 'Evento',
+        esncard: 'ESNcard',
+        deposit: 'Deposito',
+        withdrawal: 'Prelievo',
+        subscription: 'Iscrizione'
+    },
+}

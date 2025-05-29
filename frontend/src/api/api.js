@@ -2,7 +2,7 @@ export const fetchCustom = async (method, path, body = null, options = {}, auth 
     const accessToken = localStorage.getItem("accessToken");
     const API_HOST = import.meta.env.VITE_API_HOST;
     const url = `${API_HOST}${path}`;
-    //console.log('Url', url);
+    // console.log('Url', url.toString());
 
     if (auth && !accessToken) {
         throw new Error("No access token available");
