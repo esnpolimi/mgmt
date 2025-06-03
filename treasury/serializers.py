@@ -35,7 +35,7 @@ class ESNcardEmissionSerializer(serializers.ModelSerializer):
 
 # Serializer to view ESNcard
 class ESNcardSerializer(serializers.ModelSerializer):
-    expiration = serializers.DateField(format="%Y-%m-%d")  # Format date as string
+    expiration = serializers.DateField(format="%Y-%m-%d", read_only=True)  # Format date as string
     is_valid = serializers.ReadOnlyField()
 
     class Meta:

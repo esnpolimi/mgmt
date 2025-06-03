@@ -124,6 +124,7 @@ def transactions_list(request):
     try:
         transactions = Transaction.objects.all().order_by('-created_at')
         paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(transactions, request=request)
         serializer = TransactionViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -217,6 +218,7 @@ def accounts_list(request):
         accounts = Account.objects.all().order_by('id')
         visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
         paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(visible_accounts, request=request)
         print("User " + str(request.user) + " group: " + str(request.user.groups.all()))
         if request.user.groups.filter(name="Aspiranti").exists():

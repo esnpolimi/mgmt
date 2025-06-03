@@ -25,6 +25,7 @@ def events_list(request):
     try:
         events = Event.objects.all().order_by('-created_at')
         paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(events, request=request)
         serializer = EventsListSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
