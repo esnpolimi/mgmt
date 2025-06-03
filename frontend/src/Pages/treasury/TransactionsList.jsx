@@ -40,6 +40,8 @@ export default function TransactionsList() {
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
+const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
+    const [rowCount, setRowCount] = useState(0);
 
     const [filters, setFilters] = useState({
         account: [],
@@ -50,16 +52,17 @@ export default function TransactionsList() {
 
     useEffect(() => {
         refreshTransactionsData().then();
-    }, []);
+    }, [pagination.pageIndex, pagination.pageSize]);
 
     const refreshTransactionsData = async () => {
         setLoading(true);
         Promise.all([
-            fetchCustom('GET', '/transactions/'),
+            fetchCustom('GET', `/transactions/?page=${pagination.pageIndex + 1}&page_size=${pagination.pageSize}`),
             fetchCustom('GET', '/accounts/')
         ]).then(async ([txRes, accRes]) => {
             const txJson = txRes.ok ? await txRes.json() : {results: []};
             const accJson = accRes.ok ? await accRes.json() : {results: []};
+            setRowCount(txJson.count || 0);
             setTransactions(txJson.results || []);
             setAccounts(accJson.results || []);
         }).finally(() => setLoading(false));
@@ -167,6 +170,10 @@ export default function TransactionsList() {
             shape: 'rounded',
             variant: 'outlined',
         },
+        manualPagination: true,
+        rowCount,
+        onPaginationChange: setPagination,
+        state: {pagination},
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {

@@ -123,6 +123,7 @@ def user_with_profile_list(request):
     try:
         profiles = User.objects.filter(profile__is_esner=True).order_by('-profile__created_at')
         paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(profiles, request=request)
         serializer = UserWithProfileAndGroupsSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)

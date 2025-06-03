@@ -86,7 +86,7 @@ class Document(BaseEntity):
 
     class Type(models.TextChoices):
         PASSPORT = "Passport", _("Passport")
-        NATIONAL_ID = "National ID Card", _("National ID Card")
+        NATIONAL_ID = "ID Card", _("ID Card")
         DRIVING_LICENSE = "Driving License", _("Driving License")
         RESIDENCY_PERMIT = "Residency Permit", _("Residency Permit")
         OTHER = "Other", _("Other")

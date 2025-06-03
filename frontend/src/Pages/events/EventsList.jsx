@@ -20,10 +20,12 @@ export default function EventsList() {
     const [eventModalOpen, setEventModalOpen] = useState(false);
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
+    const [rowCount, setRowCount] = useState(0);
 
     useEffect(() => {
         refreshEventsData().then();
-    }, []);
+    }, [pagination.pageIndex, pagination.pageSize]);
 
     const columns = useMemo(() => [
         {
@@ -116,6 +118,10 @@ export default function EventsList() {
             shape: 'rounded',
             variant: 'outlined',
         },
+        manualPagination: true,
+        rowCount,
+        onPaginationChange: setPagination,
+        state: {pagination},
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {
@@ -136,12 +142,13 @@ export default function EventsList() {
     const refreshEventsData = async () => {
         setLoading(true);
         try {
-            const response = await fetchCustom("GET", '/events/');
+            const response = await fetchCustom("GET", `/events/?page=${pagination.pageIndex + 1}&page_size=${pagination.pageSize}`);
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(response);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
                 const json = await response.json();
+                setRowCount(json.count || 0);
                 setData(json.results);
                 console.log("Event List Data: ", json.results);
             }

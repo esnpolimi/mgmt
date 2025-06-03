@@ -29,6 +29,7 @@ def erasmus_profile_list(request):
     try:
         profiles = Profile.objects.filter(is_esner=False).order_by('-created_at')
         paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(profiles, request=request)
         serializer = ProfileListViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -327,6 +328,7 @@ def search_profiles(request):
         profiles = profiles.order_by('-created_at')
 
         paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(profiles, request=request)
         serializer = ProfileListViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
