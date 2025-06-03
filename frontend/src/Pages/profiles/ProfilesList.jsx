@@ -11,12 +11,16 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     const [isLoading, setLoading] = useState(true);
     const [modalOpen, toggleModal] = useState(false);
     const [selectedProfile, setSelectedProfile] = useState({});
+    const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
+    const [rowCount, setRowCount] = useState(0);
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             try {
-                const response = await fetchCustom('GET', apiEndpoint);
+                const response = await fetchCustom('GET', `${apiEndpoint}?page=${pagination.pageIndex + 1}&page_size=${pagination.pageSize}`);
                 const json = await response.json();
+                setRowCount(json.count || 0);
                 if (profileType === 'ESNer') {
                     const formattedData = json.results.map(({profile, ...rest}) => ({
                         ...rest,
@@ -25,14 +29,14 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                     }));
                     setData(formattedData);
                 } else setData(json.results);
-                setLoading(false);
             } catch (error) {
                 console.error('Error fetching data:', error);
+            } finally {
                 setLoading(false);
             }
         };
         fetchData().then();
-    }, [apiEndpoint]);
+    }, [apiEndpoint, pagination.pageIndex, pagination.pageSize]);
 
     const table = useMaterialReactTable({
         columns,
@@ -69,6 +73,10 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
             shape: 'rounded',
             variant: 'outlined',
         },
+        manualPagination: true,
+        rowCount,
+        onPaginationChange: setPagination,
+        state: {pagination},
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: ({row}) => ({
             onClick: () => {

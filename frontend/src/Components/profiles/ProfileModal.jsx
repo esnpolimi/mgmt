@@ -14,6 +14,7 @@ import ESNcardEmissionModal from "./ESNcardEmissionModal";
 import Loader from "../Loader";
 import countryCodes from "../../data/countryCodes.json";
 import {extractErrorMessage} from "../../utils/errorHandling";
+import {Person, School, Group} from '@mui/icons-material';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -29,6 +30,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
     const [ESNcardModalOpen, setESNcardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
+    const [groups, setGroups] = useState([]);
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
     // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
@@ -50,6 +52,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         matricola_expiration: '',
         documents: [],
         esncards: [],
+        group: ''
     });
     const [updatedData, setUpdatedData] = useState({    /* profile fields when edited */
         email: '',
@@ -66,6 +69,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         course: '',
         matricola_number: '',
         matricola_expiration: '',
+        group: ''
     });
     const [errors, setErrors] = useState({  /* validation errors */
         email: [false, ''],
@@ -126,6 +130,21 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         fetchData().then();
     }, []);
 
+    useEffect(() => {
+        const fetchGroups = async () => {
+            try {
+                const response = await fetchCustom("GET", "/groups/");
+                if (response.ok) {
+                    const json = await response.json();
+                    setGroups(json);
+                }
+            } catch (error) {
+                console.error("Error fetching groups:", error);
+            }
+        };
+        fetchGroups().then();
+    }, []);
+
     const rules = profileFieldRules[profileType] || {hideFields: []};
     const shouldHideField = (fieldName) => {
         return rules.hideFields.includes(fieldName);
@@ -167,7 +186,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         {
             accessorKey: 'number',
             header: 'Numero',
-            size: 150,
+            size: 100,
             muiEditTextFieldProps: {
                 required: true,
                 helperText: esncardErrors?.number,
@@ -225,9 +244,9 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         {
             accessorKey: 'type',
             header: 'Tipo',
-            size: 80,
+            size: 100,
             editVariant: 'select',
-            editSelectOptions: ['Passport', 'National ID Card', 'Driving License', 'Residency Permit', 'Other'],
+            editSelectOptions: ['Passport', 'ID Card', 'Driving License', 'Residency Permit', 'Other'],
             muiEditTextFieldProps: {
                 select: true,
                 helperText: documentErrors?.type,
@@ -237,7 +256,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         {
             accessorKey: 'number',
             header: 'Numero',
-            size: 100,
+            size: 60,
             muiEditTextFieldProps: {
                 required: true,
                 helperText: documentErrors?.number,
@@ -247,7 +266,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         {
             accessorKey: 'expiration',
             header: 'Scadenza',
-            size: 100,
+            size: 60,
             muiEditTextFieldProps: {
                 required: true,
                 helperText: documentErrors?.expiration,
@@ -289,26 +308,25 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
 
     /* document creation */
     const createDocument = async (values) => {
-            let val = {...values, profile: profile.id};
-            try {
-                const response = await fetchCustom("POST", '/document/', val);
-                if (!response.ok) {
-                    response.json().then((errors) => setDocumentErrors(errors))
-                    const errorMessage = await extractErrorMessage(response);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                    return false;
-                } else {
-                    setDocumentErrors({});
-                    setShowSuccessPopup({message: "Documento aggiunto con successo!", state: "success"});
-                    await refreshProfileData();
-                    return true;
-                }
-            } catch (error) {
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        let val = {...values, profile: profile.id};
+        try {
+            const response = await fetchCustom("POST", '/document/', val);
+            if (!response.ok) {
+                response.json().then((errors) => setDocumentErrors(errors))
+                const errorMessage = await extractErrorMessage(response);
+                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
+            } else {
+                setDocumentErrors({});
+                setShowSuccessPopup({message: "Documento aggiunto con successo!", state: "success"});
+                await refreshProfileData();
+                return true;
             }
+        } catch (error) {
+            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            return false;
         }
-    ;
+    };
 
     /* save edited document */
     const saveDocument = async (row, values) => {
@@ -418,8 +436,24 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                 {loading ? <Loader/> : (<>
                         <Card sx={{p: '20px'}}>
                             <Grid container spacing={2}>
+                                {/* --- Personal Information Section --- */}
+                                <Grid container size={{xs: 12}} alignItems="center">
+                                    <Person/>
+                                    <Typography variant="h6" sx={{m: 0}}>Informazioni Personali</Typography>
+                                    <Grid sx={{marginLeft: 'auto'}}>
+                                        <EditButton
+                                            onEdit={() => toggleEdit(true)}
+                                            onCancel={() => {
+                                                toggleEdit(false);
+                                                setUpdatedData(data);
+                                            }}
+                                            saving={saving}
+                                            onSave={handleSave}
+                                        />
+                                    </Grid>
+                                </Grid>
                                 {!shouldHideField('name') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
                                         <TextField
                                             label={names.name}
                                             name='name'
@@ -433,7 +467,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                     </Grid>
                                 )}
                                 {!shouldHideField('surname') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
                                         <TextField
                                             label={names.surname}
                                             name='surname'
@@ -447,7 +481,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                     </Grid>
                                 )}
                                 {!shouldHideField('email') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
                                         <TextField
                                             label={names.email}
                                             name='email'
@@ -460,131 +494,8 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                             onChange={handleChange} fullWidth/>
                                     </Grid>
                                 )}
-                                {!shouldHideField('phone_prefix') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <FormControl fullWidth required>
-                                            <InputLabel id="phone-prefix-label">{names.phone_prefix}</InputLabel>
-                                            <Select
-                                                variant="outlined"
-                                                labelId="phone-prefix-label"
-                                                id="phone-prefix"
-                                                name="phone_prefix"
-                                                value={updatedData.phone_prefix || ''}
-                                                onChange={handleChange}
-                                                slotProps={{input: {readOnly: readOnly.phone_number}}}
-                                                sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
-                                                label={names.phone_prefix}
-                                                renderValue={(value) => value}
-                                            >
-                                                {countryCodes.map((country) => (
-                                                    <MenuItem key={country.code} value={country.dial}>
-                                                        {country.dial} ({country.name})
-                                                    </MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                )}
-                                {!shouldHideField('phone_number') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <TextField
-                                            label={names.phone_number}
-                                            name='phone_number'
-                                            value={updatedData.phone_number || ''}
-                                            error={errors.phone_number[0]}
-                                            helperText={errors.phone_number[1]}
-                                            onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.phone_number}}}
-                                            sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
-                                            fullWidth/>
-                                    </Grid>
-                                )}
-                                {!shouldHideField('whatsapp_prefix') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <FormControl fullWidth required>
-                                            <InputLabel id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
-                                            <Select
-                                                variant="outlined"
-                                                labelId="whatsapp-prefix-label"
-                                                id="whatsapp-prefix"
-                                                name="whatsapp_prefix"
-                                                value={updatedData.whatsapp_prefix || ''}
-                                                onChange={handleChange}
-                                                slotProps={{input: {readOnly: readOnly.whatsapp_prefix}}}
-                                                sx={{backgroundColor: readOnly.whatsapp_prefix ? 'grey.200' : 'white'}}
-                                                label={names.whatsapp_prefix}
-                                                renderValue={(value) => value}
-                                            >
-                                                {countryCodes.map((country) => (
-                                                    <MenuItem key={country.code} value={country.dial}>
-                                                        {country.dial} ({country.name})
-                                                    </MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                )}
-                                {!shouldHideField('whatsapp_number') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <TextField
-                                            label={names.whatsapp_number}
-                                            name='whatsapp_number'
-                                            value={updatedData.whatsapp_number || ''}
-                                            error={errors.whatsapp_number[0]}
-                                            helperText={errors.whatsapp_number[1]}
-                                            onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.whatsapp_number}}}
-                                            sx={{backgroundColor: readOnly.whatsapp_number ? 'grey.200' : 'white'}}
-                                            fullWidth/>
-                                    </Grid>
-                                )}
-                                {!shouldHideField('domicile') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <TextField
-                                            label={names.domicile}
-                                            name='domicile'
-                                            value={updatedData.domicile}
-                                            error={errors.domicile[0]}
-                                            helperText={errors.domicile[1]}
-                                            onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.domicile}}}
-                                            sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
-                                            fullWidth/>
-                                    </Grid>
-                                )}
-                                {!shouldHideField('person_code') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <TextField
-                                            label={names.person_code}
-                                            name='person_code'
-                                            value={updatedData.person_code || ''}
-                                            error={errors.person_code[0]}
-                                            helperText={errors.person_code[1]}
-                                            onChange={handleChange}
-                                            slotProps={{input: {readOnly: readOnly.person_code}}}
-                                            sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
-                                            fullWidth/>
-                                    </Grid>
-                                )}
-                                {!shouldHideField('birthdate') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                            <DatePicker
-                                                label={names.birthdate}
-                                                value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
-                                                readOnly={readOnly.birthdate}
-                                                onChange={(date) => handleDateChange('birthdate', date)}
-                                                sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
-                                                renderInput={(params) => <TextField {...params}
-                                                                                    fullWidth
-                                                                                    required
-                                                />}
-                                            />
-                                        </LocalizationProvider>
-                                    </Grid>
-                                )}
                                 {!shouldHideField('country') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
                                         <FormControl fullWidth required>
                                             <InputLabel id="country-label">{names.country}</InputLabel>
                                             <Select
@@ -607,6 +518,135 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                             </Select>
 
                                         </FormControl>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('domicile') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 5}}>
+                                        <TextField
+                                            label={names.domicile}
+                                            name='domicile'
+                                            value={updatedData.domicile}
+                                            error={errors.domicile[0]}
+                                            helperText={errors.domicile[1]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.domicile}}}
+                                            sx={{backgroundColor: readOnly.domicile ? 'grey.200' : 'white'}}
+                                            fullWidth/>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('birthdate') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                            <DatePicker
+                                                label={names.birthdate}
+                                                value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
+                                                readOnly={readOnly.birthdate}
+                                                onChange={(date) => handleDateChange('birthdate', date)}
+                                                sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
+                                                renderInput={(params) => <TextField {...params}
+                                                                                    fullWidth
+                                                                                    required
+                                                />}
+                                            />
+                                        </LocalizationProvider>
+                                    </Grid>
+                                )}
+                                {/* --- Phone numbers --- */}
+                                {!shouldHideField('phone_prefix') && !shouldHideField('phone_number') && (
+                                    <Grid size={{xs: 12}} container spacing={2}>
+                                        <Grid size={{xs: 1.5}}>
+                                            <FormControl fullWidth required>
+                                                <InputLabel id="phone-prefix-label">{names.phone_prefix}</InputLabel>
+                                                <Select
+                                                    variant="outlined"
+                                                    labelId="phone-prefix-label"
+                                                    id="phone-prefix"
+                                                    name="phone_prefix"
+                                                    value={updatedData.phone_prefix || ''}
+                                                    onChange={handleChange}
+                                                    slotProps={{input: {readOnly: readOnly.phone_number}}}
+                                                    sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
+                                                    label={names.phone_prefix}
+                                                    renderValue={(value) => value}
+                                                >
+                                                    {countryCodes.map((country) => (
+                                                        <MenuItem key={country.code} value={country.dial}>
+                                                            {country.dial} ({country.name})
+                                                        </MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        </Grid>
+                                        <Grid size={{xs: 3}}>
+                                            <TextField
+                                                label={names.phone_number}
+                                                name='phone_number'
+                                                value={updatedData.phone_number || ''}
+                                                error={errors.phone_number[0]}
+                                                helperText={errors.phone_number[1]}
+                                                onChange={handleChange}
+                                                slotProps={{input: {readOnly: readOnly.phone_number}}}
+                                                sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
+                                                fullWidth/>
+                                        </Grid>
+                                    </Grid>
+                                )}
+                                {!shouldHideField('whatsapp_prefix') && !shouldHideField('whatsapp_number') && (
+                                    <Grid size={{xs: 12}} container spacing={2}>
+                                        <Grid size={{xs: 1.5}}>
+                                            <FormControl fullWidth required>
+                                                <InputLabel id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
+                                                <Select
+                                                    variant="outlined"
+                                                    labelId="whatsapp-prefix-label"
+                                                    id="whatsapp-prefix"
+                                                    name="whatsapp_prefix"
+                                                    value={updatedData.whatsapp_prefix || ''}
+                                                    onChange={handleChange}
+                                                    slotProps={{input: {readOnly: readOnly.whatsapp_prefix}}}
+                                                    sx={{backgroundColor: readOnly.whatsapp_prefix ? 'grey.200' : 'white'}}
+                                                    label={names.whatsapp_prefix}
+                                                    renderValue={(value) => value}
+                                                >
+                                                    {countryCodes.map((country) => (
+                                                        <MenuItem key={country.code} value={country.dial}>
+                                                            {country.dial} ({country.name})
+                                                        </MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        </Grid>
+                                        <Grid size={{xs: 3}}>
+                                            <TextField
+                                                label={names.whatsapp_number}
+                                                name='whatsapp_number'
+                                                value={updatedData.whatsapp_number || ''}
+                                                error={errors.whatsapp_number[0]}
+                                                helperText={errors.whatsapp_number[1]}
+                                                onChange={handleChange}
+                                                slotProps={{input: {readOnly: readOnly.whatsapp_number}}}
+                                                sx={{backgroundColor: readOnly.whatsapp_number ? 'grey.200' : 'white'}}
+                                                fullWidth/>
+                                        </Grid>
+                                    </Grid>
+                                )}
+                                {/* --- Polimi fields --- */}
+                                <Grid container size={{xs: 12}} sx={{mt: 2}} alignItems="center">
+                                    <School/>
+                                    <Typography variant="h6" sx={{m: 0}}>Dati Studente</Typography>
+                                </Grid>
+                                {!shouldHideField('person_code') && (
+                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                        <TextField
+                                            label={names.person_code}
+                                            name='person_code'
+                                            value={updatedData.person_code || ''}
+                                            error={errors.person_code[0]}
+                                            helperText={errors.person_code[1]}
+                                            onChange={handleChange}
+                                            slotProps={{input: {readOnly: readOnly.person_code}}}
+                                            sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
+                                            fullWidth/>
                                     </Grid>
                                 )}
                                 {!shouldHideField('course') && (
@@ -663,62 +703,76 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                         </LocalizationProvider>
                                     </Grid>
                                 )}
-                                <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                    <EditButton
-                                        onEdit={() => toggleEdit(true)}
-                                        onCancel={() => {
-                                            toggleEdit(false);
-                                            setUpdatedData(data);
-                                        }}
-                                        saving={saving}
-                                        onSave={handleSave}
-                                    />
+                                <Grid container alignItems="center" spacing={1} sx={{width: '100%'}}>
+                                    <Group/>
+                                    <Grid size={{xs: 2}}>
+                                        <FormControl fullWidth required>
+                                            <InputLabel id="group-label">Gruppo</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                labelId="group-label"
+                                                label="Gruppo"
+                                                name="group"
+                                                value={updatedData.group || ''}
+                                                onChange={handleChange}
+                                                sx={{backgroundColor: readOnly.group ? 'grey.200' : 'white'}}
+                                            >
+                                                {groups.map((group) => (
+                                                    <MenuItem key={group.id} value={group.id}>
+                                                        {group.name}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Grid>
                                 </Grid>
                             </Grid>
                         </Card>
-                        <Toolbar sx={{justifyContent: 'space-between', mt: 2}}>
-                            <Typography variant="h6">Azioni</Typography>
-                            {!profile.latest_esncard ? (
-                                <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
-                                    Rilascia ESNcard
+                        <Card sx={{p: 1, mt: 2, mb: 2, minHeight: '80px', display: 'flex', alignItems: 'center'}}>
+                            <Toolbar sx={{justifyContent: 'space-between', width: '100%', p: 0}}>
+                                <Typography variant="h6">Azioni</Typography>
+                                <Button variant="contained" color="primary">
+                                    Esporta Profilo
                                 </Button>
-                            ) : (
-                                <Button variant="contained" color="primary" onClick={handleOpenESNcardModal}>
-                                    {profile.latest_esncard.is_valid ? 'ESNcard smarrita' : 'Rinnova ESNcard'}
-                                </Button>
-                            )}
-                        </Toolbar>
-                        {ESNcardModalOpen &&
-                            <ESNcardEmissionModal
-                                open={ESNcardModalOpen}
-                                profile={profile}
-                                onClose={handleCloseESNcardModal}
-                            />}
-                        <Box sx={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around', mt: '20px'}}>
-                            <CrudTable
-                                cols={document_columns}
-                                canCreate={user.permissions.includes('add_document')}
-                                canEdit={user.permissions.includes('change_document')}
-                                canDelete={user.permissions.includes('delete_document')}
-                                onCreate={createDocument}
-                                onSave={saveDocument}
-                                onDelete={deleteDocument}
-                                initialData={data.documents}
-                                title={'Documenti'}
-                                sortColumn={'expiration'}/>
-                            <CrudTable
-                                cols={esncard_columns}
-                                canEdit={user.permissions.includes('change_esncard')}
-                                onSave={saveESNcard}
-                                initialData={data.esncards}
-                                title={'ESNcards'}
-                                sortColumn={'expiration'}/>
-                        </Box>
+                            </Toolbar>
+                            {ESNcardModalOpen &&
+                                <ESNcardEmissionModal
+                                    open={ESNcardModalOpen}
+                                    profile={profile}
+                                    onClose={handleCloseESNcardModal}
+                                />}
+                        </Card>
+                        <Grid container sx={{width: '100%'}} spacing={2}>
+                            <Grid size={{xs: 12, md: 6}}>
+                                <CrudTable
+                                    cols={document_columns}
+                                    canCreate={user.permissions.includes('add_document')}
+                                    canEdit={user.permissions.includes('change_document')}
+                                    canDelete={user.permissions.includes('delete_document')}
+                                    onCreate={createDocument}
+                                    onSave={saveDocument}
+                                    onDelete={deleteDocument}
+                                    initialData={data.documents}
+                                    title={'Documenti'}
+                                    sortColumn={'expiration'}/>
+                            </Grid>
+                            <Grid size={{xs: 12, md: 6}}>
+                                <CrudTable
+                                    cols={esncard_columns}
+                                    canCreate={user.permissions.includes('add_esncard')}
+                                    onCreate={() => setESNcardModalOpen(true)}
+                                    createText={!profile.latest_esncard ? "Rilascia" : (profile.latest_esncard.is_valid ? "Card Smarrita" : "Rinnova")}
+                                    canEdit={user.permissions.includes('change_esncard')}
+                                    onSave={saveESNcard}
+                                    initialData={data.esncards}
+                                    title={'ESNcards'}
+                                    sortColumn={'expiration'}/>
+                            </Grid>
+                        </Grid>
                         {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
                     </>
                 )}
             </Box>
         </Modal>
-    )
-        ;
+    );
 }

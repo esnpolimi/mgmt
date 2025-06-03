@@ -398,7 +398,7 @@ export default function ErasmusForm() {
                             error={formErrors['document-type'][0]}
                         >
                             <MenuItem value="Passport">Passport</MenuItem>
-                            <MenuItem value="National ID Card">National ID Card</MenuItem>
+                            <MenuItem value="ID Card">ID Card</MenuItem>
                             <MenuItem value="Driving License">Driving License</MenuItem>
                             <MenuItem value="Residency Permit">Residency Permit</MenuItem>
                             <MenuItem value="Other">Other</MenuItem>

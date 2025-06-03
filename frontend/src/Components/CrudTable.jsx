@@ -1,6 +1,6 @@
-import {useState, useMemo, useEffect} from 'react';
+import React, {useState, useMemo, useEffect} from 'react';
 import {useMaterialReactTable, MaterialReactTable} from 'material-react-table';
-import {Box, IconButton, Tooltip} from '@mui/material';
+import {Box, Button, IconButton, Tooltip} from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
@@ -11,12 +11,12 @@ import {MRT_Localization_IT} from 'material-react-table/locales/it';
     Same goes for the create function.
 */
 
-export default function CrudTable({cols, initialData, title, onSave, onDelete, onCreate, canCreate, canDelete, canEdit, sortColumn}) {
+export default function CrudTable({cols, initialData, title, onSave, onDelete, onCreate, createText, canCreate, canDelete, canEdit, sortColumn}) {
     const columns = useMemo(() => cols, [cols]);
     const [data, setData] = useState([])
     const canEditText = <span style={{color: 'green'}}>(Hai i permessi per eseguire modifiche)</span>;
     const cannotEditText = <span style={{color: 'red'}}>(Non hai i permessi per eseguire modifiche)</span>;
-    const editText = canEdit? canEditText : cannotEditText;
+    const editText = canEdit ? canEditText : cannotEditText;
 
     useEffect(() => {
         setData(initialData);
@@ -41,9 +41,6 @@ export default function CrudTable({cols, initialData, title, onSave, onDelete, o
         initialState: {
             sorting: [{id: sortColumn, desc: true}],
         },
-        onCreatingRowCancel:
-            () => {
-            },
         onCreatingRowSave:
             async ({values, table}) => {
                 let new_doc = await onCreate(values);
@@ -63,15 +60,11 @@ export default function CrudTable({cols, initialData, title, onSave, onDelete, o
                     table.setEditingRow(null);
                 }
             },
-        onEditingRowCancel:
-            () => {
-            },
-        getRowId:
-            (row) => row.id,
+        getRowId: (row) => row.id,
         renderRowActions:
             ({row, table}) => {
                 return (
-                    <Box sx={{display: 'flex', gap: '1rem'}}>
+                    <Box sx={{display: 'flex'}}>
                         <Tooltip title="Modifica">
                             <IconButton onClick={() => table.setEditingRow(row)}>
                                 <EditIcon/>
@@ -93,16 +86,25 @@ export default function CrudTable({cols, initialData, title, onSave, onDelete, o
         renderTopToolbarCustomActions:
             ({table}) => {
                 return (
-                    <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                        {canCreate ? (<IconButton onClick={() => {
-                            table.setCreatingRow(true);
-                        }}>
-                            <AddCircleOutlineIcon/>
-                        </IconButton>) : (<></>)}
-                        <Box sx={{ml: '20px'}}>
+                    <Box sx={{display: 'flex', alignItems: 'center', width: '100%'}}>
+                        <Box sx={{ml: 3}}>
                             <h3>{title}</h3>
                             <h5>{editText}</h5>
                         </Box>
+                        {createText != null ? (
+                            <Button variant="contained" color="primary" onClick={onCreate}
+                                    sx={{ml: 'auto', mr: 2, visibility: canCreate ? 'visible' : 'hidden'}}>
+                                {createText}
+                            </Button>
+                        ) : (
+                            <IconButton
+                                sx={{ml: 'auto', mr: 2, visibility: canCreate ? 'visible' : 'hidden'}}
+                                onClick={() => {
+                                    table.setCreatingRow(true);
+                                }}>
+                                <AddCircleOutlineIcon/>
+                            </IconButton>
+                        )}
                     </Box>
                 );
             },
