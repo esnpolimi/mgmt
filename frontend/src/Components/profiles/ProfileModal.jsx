@@ -1,4 +1,4 @@
-import {Box, Button, Card, FormControl, InputLabel, MenuItem, Modal, Select, TextField, Toolbar, Typography, Grid} from "@mui/material";
+import {Box, Button, Card, FormControl, InputLabel, MenuItem, Modal, Select, TextField, Toolbar, Typography, Grid, IconButton} from "@mui/material";
 import React, {useEffect, useMemo, useState} from 'react';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
@@ -15,13 +15,14 @@ import Loader from "../Loader";
 import countryCodes from "../../data/countryCodes.json";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import {Person, School, Group} from '@mui/icons-material';
+import CloseIcon from "@mui/icons-material/Close";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
-    Erasmus: {hideFields: ['groups']}
+    Erasmus: {hideFields: ['group']}
 };
 
-export default function ProfileModal({open, handleClose, inProfile, profileType, updateProfile}) {
+export default function ProfileModal({open, onClose, inProfile, profileType, updateProfile}) {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const [loading, setLoading] = useState(true);
     const {user} = useAuth();
@@ -86,6 +87,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         course: [false, ''],
         matricola_number: [false, ''],
         matricola_expiration: [false, ''],
+        group: [false, '']
     });
     const [readOnly, setReadOnly] = useState({  /* readonly states for profile fields */
         email: true,
@@ -102,6 +104,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         course: true,
         matricola_number: true,
         matricola_expiration: true,
+        group: true
     });
 
     useEffect(() => {
@@ -137,9 +140,10 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                 if (response.ok) {
                     const json = await response.json();
                     setGroups(json);
-                }
+                } else setShowSuccessPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(response)}`, state: "error"});
             } catch (error) {
                 console.error("Error fetching groups:", error);
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             }
         };
         fetchGroups().then();
@@ -176,7 +180,6 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
         if (success) {
             setShowSuccessPopup({message: "ESNcard emessa con successo!", state: "success"});
             await refreshProfileData();
-            // set profile latest esncard to the latest one
         }
         setESNcardModalOpen(false);
     };
@@ -350,6 +353,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
     }
 
     const formatDateString = (date) => {
+        if (!date) return null;
         return dayjs(date).format('YYYY-MM-DD');
     };
 
@@ -428,8 +432,11 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
     };
 
     return (
-        <Modal open={open} onClose={handleClose}>
+        <Modal open={open} onClose={onClose}>
             <Box sx={style} onKeyDown={(e) => e.stopPropagation()}>
+                <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
+                    <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
+                </Box>
                 <Typography variant="h5" gutterBottom align="center">
                     Profilo {profileType}
                 </Typography>
@@ -489,8 +496,8 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                             value={updatedData.email}
                                             error={errors.email[0]}
                                             helperText={errors.email[1]}
-                                            slotProps={{input: {readOnly: readOnly.email}}}
-                                            sx={{backgroundColor: readOnly.email ? 'grey.200' : 'white'}}
+                                            slotProps={{input: {readOnly: true}}}
+                                            sx={{backgroundColor: 'grey.200'}}
                                             onChange={handleChange} fullWidth/>
                                     </Grid>
                                 )}
@@ -691,7 +698,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                             <DatePicker
                                                 label={names.matricola_expiration}
-                                                value={dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD')}
+                                                value={() => formatDateString(updatedData.matricola_expiration)}
                                                 readOnly={readOnly.matricola_expiration}
                                                 onChange={(date) => handleDateChange('matricola_expiration', date)}
                                                 sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
@@ -703,29 +710,27 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                         </LocalizationProvider>
                                     </Grid>
                                 )}
-                                <Grid container alignItems="center" spacing={1} sx={{width: '100%'}}>
-                                    <Group/>
-                                    <Grid size={{xs: 2}}>
-                                        <FormControl fullWidth required>
-                                            <InputLabel id="group-label">Gruppo</InputLabel>
-                                            <Select
-                                                variant="outlined"
-                                                labelId="group-label"
-                                                label="Gruppo"
-                                                name="group"
-                                                value={updatedData.group || ''}
-                                                onChange={handleChange}
-                                                sx={{backgroundColor: readOnly.group ? 'grey.200' : 'white'}}
-                                            >
-                                                {groups.map((group) => (
-                                                    <MenuItem key={group.id} value={group.id}>
-                                                        {group.name}
-                                                    </MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
+                                {!shouldHideField('group') && (
+                                    <Grid container alignItems="center" spacing={1} sx={{width: '100%', mt: 2}}>
+                                        <Group/>
+                                        <Grid size={{xs: 2}}>
+                                            <FormControl fullWidth required>
+                                                <InputLabel id="group-label">{names.group}</InputLabel>
+                                                <Select
+                                                    variant="outlined"
+                                                    labelId="group-label"
+                                                    label={names.group}
+                                                    name="group"
+                                                    value={updatedData.group || ''}
+                                                    onChange={handleChange}
+                                                    slotProps={{input: {readOnly: readOnly.group}}}
+                                                    sx={{backgroundColor: readOnly.group ? 'grey.200' : 'white'}}>
+                                                    {groups.map((group) => (<MenuItem key={group.name} value={group.name}>{group.name}</MenuItem>))}
+                                                </Select>
+                                            </FormControl>
+                                        </Grid>
                                     </Grid>
-                                </Grid>
+                                )}
                             </Grid>
                         </Card>
                         <Card sx={{p: 1, mt: 2, mb: 2, minHeight: '80px', display: 'flex', alignItems: 'center'}}>
@@ -760,7 +765,7 @@ export default function ProfileModal({open, handleClose, inProfile, profileType,
                                 <CrudTable
                                     cols={esncard_columns}
                                     canCreate={user.permissions.includes('add_esncard')}
-                                    onCreate={() => setESNcardModalOpen(true)}
+                                    onCreate={handleOpenESNcardModal}
                                     createText={!profile.latest_esncard ? "Rilascia" : (profile.latest_esncard.is_valid ? "Card Smarrita" : "Rinnova")}
                                     canEdit={user.permissions.includes('change_esncard')}
                                     onSave={saveESNcard}

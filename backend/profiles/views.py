@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from django.conf import settings
 from profiles.models import Profile, Document
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
-from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer, ProfileBasicEditSerializer
+from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
 from users.models import User
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
@@ -17,6 +17,8 @@ from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.core.mail import EmailMultiAlternatives
 from django.db.models import Q
+
+from users.serializers import UserGroupEditSerializer
 
 logger = logging.getLogger(__name__)
 HOSTNAME = settings.HOSTNAME
@@ -217,13 +219,24 @@ def profile_detail(request, pk):
         elif request.method == 'PATCH':
             if request.user.has_perm('profiles.change_profile'):
                 serializer = ProfileFullEditSerializer(profile, data=request.data, partial=True)
-            elif request.user.has_perm('profiles.change_person_code'):  # TODO: permission to define via Meta in the model
-                serializer = ProfileBasicEditSerializer(profile, data=request.data, partial=True)
             else:
                 return Response({'error': 'Non hai i permessi per modificare questo profilo.'}, status=403)
 
             if serializer.is_valid():
                 serializer.save()
+                # Check if user has permission to add/edit groups and update the user's group
+                if request.user.has_perm('auth.change_group'):
+                    try:
+                        user = User.objects.get(profile=profile)
+                        group_serializer = UserGroupEditSerializer(user, data=request.data, partial=True)
+                        if group_serializer.is_valid():
+                            group_serializer.save()
+                            response_data = serializer.data
+                            return Response(response_data)
+                        else:
+                            return Response(group_serializer.errors, status=400)
+                    except User.DoesNotExist:
+                        pass
                 return Response(serializer.data)
             return Response(serializer.errors, status=400)
 

@@ -29,12 +29,17 @@ class LoginSerializer(serializers.Serializer):
 
 
 class UserWithProfileAndGroupsSerializer(serializers.ModelSerializer):
-    profile = ProfileListViewSerializer(read_only=True)  # Nested serializer for profile details
-    groups = serializers.StringRelatedField(many=True)  # Fetch group names directly
+    profile = ProfileListViewSerializer(read_only=True)
+    group = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['profile', 'groups']  # Include profile and groups
+        fields = ['profile', 'group']
+
+    @staticmethod
+    def get_group(obj):
+        first_group = obj.groups.first()
+        return first_group.name if first_group else None
 
 
 # Serializer for React, fetched at login time
@@ -54,7 +59,6 @@ class UserReactSerializer(serializers.ModelSerializer):
         group_permissions = obj.groups.values_list('permissions__codename', flat=True)
         return list(set(user_permissions).union(set(group_permissions)))
 
-
     def to_representation(self, instance):
         """ Convert date fields to ISO 8601 strings. """
         representation = super().to_representation(instance)
@@ -68,3 +72,21 @@ class GroupListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ['id', 'name']
+
+
+class UserGroupEditSerializer(serializers.ModelSerializer):
+    group = serializers.CharField(required=False, write_only=True)
+
+    class Meta:
+        model = User
+        fields = ['group']
+
+    def update(self, instance, validated_data):
+        group_name = validated_data.pop('group', None)
+        if group_name is not None:
+            try:
+                group = Group.objects.get(name=group_name)
+                instance.groups.set([group])
+            except Group.DoesNotExist:
+                raise serializers.ValidationError({'group': 'Il gruppo specificato non esiste.'})
+        return super().update(instance, validated_data)
