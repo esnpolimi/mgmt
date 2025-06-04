@@ -3,6 +3,7 @@ from django_countries.serializer_fields import CountryField
 from rest_framework.fields import SerializerMethodField
 from profiles.models import Profile, Document
 from treasury.serializers import ESNcardSerializer
+from users.models import User
 
 
 # Serializers are classes that take an object from the database and
@@ -44,6 +45,7 @@ class ProfileDetailViewSerializer(serializers.ModelSerializer):
     country = CountryField()
     latest_esncard = ESNcardSerializer(read_only=True)
     latest_document = DocumentViewSerializer(read_only=True)
+    group = SerializerMethodField()
 
     class Meta:
         model = Profile
@@ -61,6 +63,21 @@ class ProfileDetailViewSerializer(serializers.ModelSerializer):
         enabled_documents = obj.document_set.filter(enabled=True)
         return DocumentViewSerializer(enabled_documents, many=True).data
 
+    @staticmethod
+    def get_group(obj):
+        try:
+            user = User.objects.get(profile=obj)
+            group_obj = user.groups.first()
+            return group_obj.name if group_obj else None
+        except User.DoesNotExist:
+            return None
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if data.get('group') is None:
+            data.pop('group')
+        return data
+
 
 # Serializer to view a profile overview (i.e. including just the latest esncard, document, matricola)
 class ProfileListViewSerializer(serializers.ModelSerializer):
@@ -73,18 +90,11 @@ class ProfileListViewSerializer(serializers.ModelSerializer):
     latest_document = DocumentViewSerializer()
 
 
-# Serializer for editing a profile (except for id, created_at, updated_at and enabled fields).
+# Serializer for editing a profile (except for specified fields)
 class ProfileFullEditSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        exclude = ['id', 'created_at', 'updated_at', 'enabled']
-
-
-# Serializer for editing a profile's person code.
-class ProfileBasicEditSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Profile
-        fields = ['person_code']
+        exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email']
 
 
 class ProfileCreateSerializer(serializers.ModelSerializer):

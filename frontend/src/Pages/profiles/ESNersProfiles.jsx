@@ -25,8 +25,8 @@ export default function ESNersProfiles() {
             size: 150,
         },
         {
-            accessorKey: 'groups',
-            header: names.groups,
+            accessorKey: 'group',
+            header: names.group,
             size: 150,
         },
         {

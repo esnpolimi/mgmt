@@ -87,7 +87,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     });
 
     const updateProfile = (newData) => {
-        console.log("New data: ", newData);
         setData((prevProfiles) => {
             return prevProfiles.map((profile) => {
                 if (profile.id === newData.id) {
@@ -117,7 +116,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                 open={modalOpen}
                 inProfile={selectedProfile}
                 profileType={profileType}
-                handleClose={handleProfileClose}
+                onClose={handleProfileClose}
                 updateProfile={updateProfile}
             />}
         </Box>
