@@ -8,7 +8,6 @@ urlpatterns = [
     path('api/token/refresh/', views.refresh_token_view),  # Refresh token
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # Verify token
     path('users/', views.user_list),
-    path('user_profiles/', views.user_with_profile_list),
     path('users/<str:pk>/', views.user_detail),
     path('login/', views.log_in),
     path('logout/', views.log_out),
