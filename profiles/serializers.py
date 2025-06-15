@@ -81,13 +81,24 @@ class ProfileDetailViewSerializer(serializers.ModelSerializer):
 
 # Serializer to view a profile overview (i.e. including just the latest esncard, document, matricola)
 class ProfileListViewSerializer(serializers.ModelSerializer):
+    group = serializers.SerializerMethodField()
+    country = CountryField()
+    latest_esncard = ESNcardSerializer()
+    latest_document = DocumentViewSerializer()
+
     class Meta:
         model = Profile
         fields = '__all__'
 
-    country = CountryField()
-    latest_esncard = ESNcardSerializer()
-    latest_document = DocumentViewSerializer()
+    def get_group(self, obj):
+        if getattr(obj, 'is_esner', False):
+            try:
+                user = User.objects.get(profile=obj)
+                group_obj = user.groups.first()
+                return group_obj.name if group_obj else None
+            except User.DoesNotExist:
+                return None
+        return None
 
 
 # Serializer for editing a profile (except for specified fields)

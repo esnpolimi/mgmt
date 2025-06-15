@@ -116,23 +116,6 @@ def user_list(request):
         return Response(status=405)
 
 
-# Endpoint to retrieve a list of ESNers profiles. Pagination is implemented
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def user_with_profile_list(request):
-    try:
-        profiles = User.objects.filter(profile__is_esner=True).order_by('-profile__created_at')
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(profiles, request=request)
-        serializer = UserWithProfileAndGroupsSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-
-    except Exception as e:
-        logger.error(str(e))
-        return Response(status=500)
-
-
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def user_detail(request, pk):
