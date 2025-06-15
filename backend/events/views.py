@@ -2,6 +2,7 @@ import logging
 
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -24,6 +25,31 @@ logger = logging.getLogger(__name__)
 def events_list(request):
     try:
         events = Event.objects.all().order_by('-created_at')
+        search = request.GET.get('search', '').strip()
+        if search:
+            events = events.filter(Q(name__icontains=search))
+
+        subscription_statuses = request.GET.getlist('subscription_status')
+        if subscription_statuses:
+            from django.utils import timezone
+            now = timezone.now()
+            q = Q()
+            for status in subscription_statuses:
+                if status == 'open':
+                    q |= Q(subscription_start_date__lte=now, subscription_end_date__gte=now)
+                elif status == 'not_yet':
+                    q |= Q(subscription_start_date__gt=now)
+                elif status == 'closed':
+                    q |= Q(subscription_end_date__lt=now)
+            events = events.filter(q)
+
+        date_from = request.GET.get('dateFrom')
+        if date_from:
+            events = events.filter(subscription_start_date__gte=date_from)
+        date_to = request.GET.get('dateTo')
+        if date_to:
+            events = events.filter(subscription_end_date__lte=date_to)
+
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(events, request=request)

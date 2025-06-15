@@ -1,6 +1,8 @@
 import logging
 from django.db import transaction
 from django.contrib.auth.models import Group
+from treasury.models import ESNcard
+from users.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +11,6 @@ from django.conf import settings
 from profiles.models import Profile, Document
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
 from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
-from users.models import User
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from profiles.tokens import email_verification_token
@@ -24,12 +25,51 @@ logger = logging.getLogger(__name__)
 HOSTNAME = settings.HOSTNAME
 
 
-# Endpoint to retrieve a list of the Erasmus profiles. Pagination is implemented
+# Endpoint to retrieve a list of Erasmus or ESNers profiles. Pagination is implemented
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def erasmus_profile_list(request):
+def profile_list(request, is_esner):
     try:
-        profiles = Profile.objects.filter(is_esner=False).order_by('-created_at')
+        profiles = Profile.objects.filter(is_esner=is_esner).order_by('-created_at')
+        search = request.GET.get('search', '').strip()
+        if search:
+            profiles = profiles.filter(
+                Q(name__icontains=search) |
+                Q(surname__icontains=search) |
+                Q(email__icontains=search) |
+                Q(phone_number__icontains=search) |
+                Q(whatsapp_number__icontains=search)
+            )
+
+        # Filter by user's group (only if ESNer)
+        if is_esner:
+            group_param = request.GET.get('group', '')
+            if group_param:
+                group_names = [g.strip() for g in group_param.split(',') if g.strip()]
+                if group_names:
+                    user_profile_ids = User.objects.filter(groups__name__in=group_names) \
+                        .values_list('profile__id', flat=True).distinct()
+                    profiles = profiles.filter(id__in=user_profile_ids)
+
+        # Updated ESNcard validity multi-selection filtering (union logic)
+        esncard_validity_param = request.GET.get('esncardValidity', '')
+        if esncard_validity_param:
+            validity_values = [v.strip() for v in esncard_validity_param.split(',') if v.strip()]
+            profiles = profiles.prefetch_related('esncard_set')
+            profiles_list = list(profiles)
+            union_ids = set()
+            for profile in profiles_list:
+                card = profile.latest_esncard
+                if card:
+                    if card.is_valid and 'valid' in validity_values:
+                        union_ids.add(profile.id)
+                    elif not card.is_valid and 'expired' in validity_values:
+                        union_ids.add(profile.id)
+                else:
+                    if 'absent' in validity_values:
+                        union_ids.add(profile.id)
+            profiles = profiles.filter(id__in=union_ids) if union_ids else profiles.none()
+
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(profiles, request=request)

@@ -28,6 +28,14 @@ export default function ESNersProfiles() {
             accessorKey: 'group',
             header: names.group,
             size: 150,
+            Cell: ({cell}) => {
+                const value = cell.getValue();
+                let chipColor = "default";
+                if(value === "Aspiranti") chipColor = "info";
+                else if(value === "Attivi") chipColor = "success";
+                else if(value === "Board") chipColor = "warning";
+                return <Chip label={value} color={chipColor} />;
+            },
         },
         {
             accessorKey: 'email',
@@ -64,9 +72,20 @@ export default function ESNersProfiles() {
             size: 100,
         },
         {
+            accessorKey: 'phone_prefix',
+            header: 'Prefisso Telefono',
+            size: 60,
+        },
+        {
+            accessorKey: 'phone_number',
+            header: 'Numero Telefono (no prefisso)',
+            size: 120,
+        },
+        {
             id: 'fullPhoneNumber',
             header: names.phone_number,
             size: 150,
+            accessorFn: row => `(${row.phone_prefix || 'vuoto'}) ${row.phone_number || '(vuoto)'}`,
             Cell: ({row}) => (
                 <span>({row.original.phone_prefix || 'vuoto'}) {row.original.phone_number || '(vuoto)'}</span>
             ),
@@ -106,7 +125,9 @@ export default function ESNersProfiles() {
         domicile: false,
         matricola_number: false,
         'latest_document.number': false,
-    }
+        phone_prefix: false,
+        phone_number: false
+    };
 
     return (
         <Box>
@@ -118,7 +139,7 @@ export default function ESNersProfiles() {
                 </Box>
             </Box>
             <ProfilesList
-                apiEndpoint="/user_profiles/"
+                apiEndpoint="/esner_profiles/"
                 columns={columns}
                 columnVisibility={columnVisibility}
                 profileType="ESNer"

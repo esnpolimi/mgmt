@@ -1,5 +1,5 @@
-import React, {useEffect, useState, useMemo} from 'react';
-import {Box, Typography, Chip, Button} from '@mui/material';
+import React, {useEffect, useState, useMemo, useRef} from 'react';
+import {Box, Typography, Chip, Button, Grid, OutlinedInput, IconButton, FormControl, InputLabel, Select, MenuItem} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
 import EventIcon from '@mui/icons-material/Event';
@@ -12,7 +12,17 @@ import Loader from "../../Components/Loader";
 import dayjs from "dayjs";
 import Popup from "../../Components/Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
+import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
+import itLocale from 'date-fns/locale/it';
 
+const SUBSCRIPTION_STATUS_OPTIONS = [
+    {value: 'open', label: 'Iscrizioni aperte'},
+    {value: 'not_yet', label: 'Non ancora aperte'},
+    {value: 'closed', label: 'Iscrizioni chiuse'}
+];
 
 export default function EventsList() {
     const [data, setData] = useState([]);
@@ -20,12 +30,56 @@ export default function EventsList() {
     const [eventModalOpen, setEventModalOpen] = useState(false);
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
+    const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
+    const [search, setSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
+    const [filters, setFilters] = useState({
+        subscriptionStatus: [],
+        dateFrom: null,
+        dateTo: null,
+    });
+
+    const [localLoading, setLocalLoading] = useState(false);
+    const searchInputRef = useRef(null);
 
     useEffect(() => {
-        refreshEventsData().then();
-    }, [pagination.pageIndex, pagination.pageSize]);
+        let ignore = false;
+        const fetchData = async () => {
+            setLocalLoading(true);
+            try {
+                const params = new URLSearchParams();
+                params.append('page', pagination.pageIndex + 1);
+                params.append('page_size', pagination.pageSize);
+                if (appliedSearch) params.append('search', appliedSearch);
+                if (filters.subscriptionStatus.length)
+                    filters.subscriptionStatus.forEach(s => params.append('subscription_status', s));
+                if (filters.dateFrom)
+                    params.append('dateFrom', filters.dateFrom.toISOString());
+                if (filters.dateTo)
+                    params.append('dateTo', filters.dateTo.toISOString());
+                const response = await fetchCustom("GET", `/events/?${params.toString()}`);
+                if (!response.ok) {
+                    const errorMessage = await extractErrorMessage(response);
+                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                } else {
+                    const json = await response.json();
+                    if (!ignore) {
+                        setRowCount(json.count || 0);
+                        setData(json.results);
+                    }
+                }
+            } catch (error) {
+                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            } finally {
+                setLocalLoading(false);
+            }
+        };
+        fetchData().then();
+        return () => {
+            ignore = true;
+        };
+    }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
     const columns = useMemo(() => [
         {
@@ -83,7 +137,7 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
         data,
         enableStickyHeader: true,
         enableStickyFooter: true,
-        enableColumnFilterModes: true,
+        enableColumnFilters: false, // Disabled cause it only allows to search in the current page
         enableColumnOrdering: true,
         enableGrouping: true,
         enableColumnPinning: true,
@@ -108,10 +162,7 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
         },
         paginationDisplayMode: 'pages',
         positionToolbarAlertBanner: 'bottom',
-        muiSearchTextFieldProps: {
-            size: 'small',
-            variant: 'outlined',
-        },
+        enableGlobalFilter: false,
         muiPaginationProps: {
             color: 'secondary',
             rowsPerPageOptions: [10, 20, 30],
@@ -139,30 +190,70 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
         },
     });
 
-    const refreshEventsData = async () => {
-        setLoading(true);
-        try {
-            const response = await fetchCustom("GET", `/events/?page=${pagination.pageIndex + 1}&page_size=${pagination.pageSize}`);
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
-                const json = await response.json();
-                setRowCount(json.count || 0);
-                setData(json.results);
-                console.log("Event List Data: ", json.results);
-            }
-        } catch (error) {
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
+    // Manual search handlers
+    const handleSearchApply = () => {
+        setAppliedSearch(search);
+        setPagination(prev => ({...prev, pageIndex: 0}));
+    };
+    const handleSearchClear = () => {
+        setSearch('');
+        setAppliedSearch('');
+        setPagination(prev => ({...prev, pageIndex: 0}));
+        if (searchInputRef.current) searchInputRef.current.focus();
+    };
+
+    // Manual filter apply
+    const handleFiltersApply = () => {
+        setAppliedFilters(filters);
+        setPagination(prev => ({...prev, pageIndex: 0}));
+    };
+
+    const handleFilterChange = (e) => {
+        const {name, value} = e.target;
+        setFilters(prev => ({
+            ...prev,
+            [name]: typeof value === 'string' ? value.split(',') : value
+        }));
+    };
+
+    const handleDateChange = (name, value) => {
+        setFilters(prev => {
+            let newFilters = {...prev, [name]: value};
+            // Prevent invalid date ranges
+            if (name === 'dateFrom' && newFilters.dateTo && value && value > newFilters.dateTo)
+                newFilters.dateTo = value;
+            if (name === 'dateTo' && newFilters.dateFrom && value && value < newFilters.dateFrom)
+                newFilters.dateFrom = value;
+            return newFilters;
+        });
+    };
+
+    const handleClearDates = () => {
+        setFilters(prev => ({
+            ...prev,
+            dateFrom: null,
+            dateTo: null,
+        }));
+    };
+
+    const handleClearFilters = () => {
+        setFilters({
+            subscriptionStatus: [],
+            dateFrom: null,
+            dateTo: null,
+        });
+        setAppliedFilters({
+            subscriptionStatus: [],
+            dateFrom: null,
+            dateTo: null,
+        });
+        setPagination(prev => ({...prev, pageIndex: 0}));
     };
 
     const handleCloseEventModal = async (success) => {
         if (success) {
             setShowSuccessPopup({message: "Evento creato con successo!", state: "success"});
-            await refreshEventsData();
+            setAppliedFilters(filters); // reload with current filters
         }
         setEventModalOpen(false);
     };
@@ -176,16 +267,103 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
                 isEdit={false}
             />}
             <Box sx={{mx: '5%'}}>
-                {isLoading ? <Loader/> : (<>
-                        <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                            <EventIcon sx={{marginRight: '10px'}}/>
-                            <Typography variant="h4">Lista Eventi</Typography>
-                        </Box>
-                        <MaterialReactTable table={table}/>
-                    </>
-                )}
+                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                    <EventIcon sx={{marginRight: '10px'}}/>
+                    <Typography variant="h4">Lista Eventi</Typography>
+                </Box>
+                <Grid container spacing={2} sx={{mb: 2}} alignItems="center" justifyContent="flex-end">
+                    <Grid size={{xs: 12, sm: 2}}>
+                        <FormControl fullWidth>
+                            <InputLabel id="subscription-status-label">Stato iscrizione</InputLabel>
+                            <Select
+                                labelId="subscription-status-label"
+                                name="subscriptionStatus"
+                                multiple
+                                value={filters.subscriptionStatus}
+                                onChange={handleFilterChange}
+                                input={<OutlinedInput label="Stato iscrizione"/>}
+                                variant="outlined"
+                                renderValue={(selected) =>
+                                    SUBSCRIPTION_STATUS_OPTIONS.filter(opt => selected.includes(opt.value)).map(opt => opt.label).join(', ')
+                                }
+                            >
+                                {SUBSCRIPTION_STATUS_OPTIONS.map(opt => (
+                                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    <Grid size={{xs: 12, sm: 2}}>
+                        <FormControl fullWidth>
+                            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={itLocale}>
+                                <DatePicker
+                                    label="Inizio Iscrizioni"
+                                    value={filters.dateFrom}
+                                    maxDate={filters.dateTo || undefined}
+                                    onChange={date => handleDateChange('dateFrom', date)}
+                                    format="d MMM yyyy"/>
+                            </LocalizationProvider>
+                        </FormControl>
+                    </Grid>
+                    <Grid size={{xs: 12, sm: 2}}>
+                        <FormControl fullWidth>
+                            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={itLocale}>
+                                <DatePicker
+                                    label="Fine Iscrizioni"
+                                    value={filters.dateTo}
+                                    minDate={filters.dateFrom || undefined}
+                                    onChange={date => handleDateChange('dateTo', date)}
+                                    format="d MMM yyyy"/>
+                            </LocalizationProvider>
+                        </FormControl>
+                    </Grid>
+                    {(filters.dateFrom || filters.dateTo) && (
+                        <Grid size={{xs: 12, sm: 2}} sx={{display: 'flex', alignItems: 'center'}}>
+                            <Button
+                                variant="outlined"
+                                color="secondary"
+                                startIcon={<ClearIcon/>}
+                                onClick={handleClearDates}
+                                sx={{height: '100%', minWidth: 0, px: 1, mr: 1}}>
+                                Azzera date
+                            </Button>
+                        </Grid>
+                    )}
+                    <Grid size={{xs: 12, sm: 2}} sx={{ml: 'auto'}}>
+                        <OutlinedInput
+                            inputRef={searchInputRef}
+                            size="small"
+                            placeholder="Cerca"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') handleSearchApply();
+                            }}
+                            endAdornment={
+                                search && appliedSearch === search ? (
+                                    <IconButton
+                                        aria-label="clear"
+                                        onClick={handleSearchClear}
+                                        edge="end">
+                                        <ClearIcon/>
+                                    </IconButton>
+                                ) : (
+                                    <IconButton
+                                        aria-label="search"
+                                        onClick={handleSearchApply}
+                                        edge="end">
+                                        <SearchIcon/>
+                                    </IconButton>
+                                )
+                            }
+                        />
+                    </Grid>
+                </Grid>
+                {localLoading
+                    ? <Loader/>
+                    : <MaterialReactTable table={table}/>}
+                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
-            {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
         </Box>
     );
 }

@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useMemo} from 'react';
+import React, {useState, useEffect, useMemo, useRef} from 'react';
 import {Box, Typography, FormControl, InputLabel, Select, MenuItem, OutlinedInput, Grid, IconButton, Chip, Button} from '@mui/material';
 import Sidebar from '../../Components/Sidebar.jsx';
 import Loader from '../../Components/Loader';
@@ -11,20 +11,22 @@ import {useNavigate} from "react-router-dom";
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
+import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
 import Popup from "../../Components/Popup";
 
+
 const TRANSACTION_CONFIGS = {
-    subscription: { label: names.tran_type["subscription"], color: 'primary' },
-    esncard: { label: names.tran_type["esncard"], color: 'secondary' },
-    deposit: { label: names.tran_type["deposit"], color: 'success' },
-    withdrawal: { label: names.tran_type["withdrawal"], color: 'error' }
+    subscription: {label: names.tran_type["subscription"], color: 'primary'},
+    esncard: {label: names.tran_type["esncard"], color: 'secondary'},
+    deposit: {label: names.tran_type["deposit"], color: 'success'},
+    withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
 };
 
 // For the filter dropdown
 const transactionTypes = [
-    { value: '', label: 'Tutti' },
+    {value: '', label: 'Tutti'},
     ...Object.entries(TRANSACTION_CONFIGS).map(([value, config]) => ({
         value,
         label: config.label,
@@ -40,7 +42,7 @@ export default function TransactionsList() {
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
-const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
+    const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
 
     const [filters, setFilters] = useState({
@@ -49,35 +51,43 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
         dateFrom: null,
         dateTo: null,
     });
+    const [search, setSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
+    const searchInputRef = useRef(null);
 
     useEffect(() => {
         refreshTransactionsData().then();
-    }, [pagination.pageIndex, pagination.pageSize]);
+    }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
     const refreshTransactionsData = async () => {
         setLoading(true);
-        Promise.all([
-            fetchCustom('GET', `/transactions/?page=${pagination.pageIndex + 1}&page_size=${pagination.pageSize}`),
-            fetchCustom('GET', '/accounts/')
-        ]).then(async ([txRes, accRes]) => {
+        try {
+            // Build query params for pagination, search, and filters
+            const params = new URLSearchParams();
+            params.append('page', pagination.pageIndex + 1);
+            params.append('page_size', pagination.pageSize);
+            if (appliedSearch) params.append('search', appliedSearch);
+            if (filters.account.length)
+                filters.account.forEach(acc => params.append('account', acc));
+            if (filters.type.length)
+                filters.type.forEach(t => params.append('type', t));
+            if (filters.dateFrom)
+                params.append('dateFrom', filters.dateFrom.toISOString());
+            if (filters.dateTo)
+                params.append('dateTo', filters.dateTo.toISOString());
+            const [txRes, accRes] = await Promise.all([
+                fetchCustom('GET', `/transactions/?${params.toString()}`),
+                fetchCustom('GET', '/accounts/')
+            ]);
             const txJson = txRes.ok ? await txRes.json() : {results: []};
             const accJson = accRes.ok ? await accRes.json() : {results: []};
             setRowCount(txJson.count || 0);
             setTransactions(txJson.results || []);
             setAccounts(accJson.results || []);
-        }).finally(() => setLoading(false));
+        } finally {
+            setLoading(false);
+        }
     };
-
-    const filteredData = useMemo(() => {
-        return transactions.filter(tx => {
-            const matchAccount = !filters.account.length || (tx.account && filters.account.includes(tx.account.id));
-            const matchType = !filters.type.length || filters.type.includes(tx.type);
-            const txDate = new Date(tx.created_at);
-            const matchFrom = !filters.dateFrom || txDate >= filters.dateFrom;
-            const matchTo = !filters.dateTo || txDate <= filters.dateTo;
-            return matchAccount && matchType && matchFrom && matchTo;
-        });
-    }, [transactions, filters]);
 
     const columns = useMemo(() => [
         {
@@ -139,10 +149,10 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
 
     const table = useMaterialReactTable({
         columns,
-        data: filteredData,
+        data: transactions,
         enableStickyHeader: true,
         enableStickyFooter: true,
-        enableColumnFilterModes: true,
+        enableColumnFilters: false, // Disable MUI filters, because they only search in the current page
         enableColumnOrdering: true,
         enableGrouping: true,
         enableFacetedValues: true,
@@ -160,10 +170,7 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
         },
         paginationDisplayMode: 'pages',
         positionToolbarAlertBanner: 'bottom',
-        muiSearchTextFieldProps: {
-            size: 'small',
-            variant: 'outlined',
-        },
+        enableGlobalFilter: false,
         muiPaginationProps: {
             color: 'secondary',
             rowsPerPageOptions: [10, 20, 30],
@@ -183,6 +190,18 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
             sx: {cursor: 'pointer'},
         })
     });
+
+    const handleSearchApply = () => {
+        setAppliedSearch(search);
+        setPagination(prev => ({...prev, pageIndex: 0}));
+    };
+
+    const handleSearchClear = () => {
+        setSearch('');
+        setAppliedSearch('');
+        setPagination(prev => ({...prev, pageIndex: 0}));
+        if (searchInputRef.current) searchInputRef.current.focus();
+    };
 
     const handleCloseTransactionModal = async (success) => {
         if (success) {
@@ -239,7 +258,7 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
                     <Typography variant="h4">Lista Transazioni</Typography>
                 </Box>
                 <Grid container spacing={2} sx={{mb: 2, mt: 4}} alignItems="center">
-                    <Grid size={{xs: 12, sm: 3}}>
+                    <Grid size={{xs: 12, sm: 2}}>
                         <FormControl fullWidth>
                             <InputLabel id="account-label">Cassa</InputLabel>
                             <Select
@@ -259,7 +278,7 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
                             </Select>
                         </FormControl>
                     </Grid>
-                    <Grid size={{xs: 12, sm: 3}}>
+                    <Grid size={{xs: 12, sm: 2}}>
                         <FormControl fullWidth>
                             <InputLabel id="type-label">Tipo</InputLabel>
                             <Select
@@ -311,10 +330,41 @@ const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
                                 startIcon={<ClearIcon/>}
                                 onClick={handleClearDates}
                                 sx={{height: '100%', minWidth: 0, px: 1}}>
-                                Azzera filtri date
+                                Azzera date
                             </Button>
                         </Grid>
                     )}
+                    <Grid size={{xs: 12, sm: 2}} sx={{ml: 'auto'}}>
+                        <FormControl fullWidth>
+                            <OutlinedInput
+                                inputRef={searchInputRef}
+                                size="small"
+                                placeholder="Cerca"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSearchApply();
+                                }}
+                                endAdornment={
+                                    search && appliedSearch === search ? (
+                                        <IconButton
+                                            aria-label="clear"
+                                            onClick={handleSearchClear}
+                                            edge="end">
+                                            <ClearIcon/>
+                                        </IconButton>
+                                    ) : (
+                                        <IconButton
+                                            aria-label="search"
+                                            onClick={handleSearchApply}
+                                            edge="end">
+                                            <SearchIcon/>
+                                        </IconButton>
+                                    )
+                                }
+                            />
+                        </FormControl>
+                    </Grid>
                 </Grid>
                 {isLoading ? <Loader/> : <MaterialReactTable sx={{mt: 2}} table={table}/>}
                 {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}

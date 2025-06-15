@@ -546,7 +546,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                             <DatePicker
                                                 label={names.birthdate}
-                                                value={dayjs(updatedData.birthdate, 'YYYY-MM-DD')}
+                                                value={updatedData.birthdate ? dayjs(updatedData.birthdate, 'YYYY-MM-DD') : null}
                                                 readOnly={readOnly.birthdate}
                                                 onChange={(date) => handleDateChange('birthdate', date)}
                                                 sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
@@ -698,7 +698,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                             <DatePicker
                                                 label={names.matricola_expiration}
-                                                value={() => formatDateString(updatedData.matricola_expiration)}
+                                                value={updatedData.matricola_expiration ? dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD') : null}
                                                 readOnly={readOnly.matricola_expiration}
                                                 onChange={(date) => handleDateChange('matricola_expiration', date)}
                                                 sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
