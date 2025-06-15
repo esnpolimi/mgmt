@@ -122,17 +122,16 @@ export default function AccountsList() {
         enablePagination: false,
         enableStickyHeader: true,
         enableStickyFooter: true,
-        enableColumnFilterModes: true,
+        enableColumnFilters: false,
         enableColumnOrdering: true,
         enableGrouping: true,
-        enableColumnPinning: true,
+        enableColumnPinning: false,
         enableFacetedValues: true,
         enableRowActions: false,
         enableRowSelection: false,
         enableRowPinning: false,
         enableExpandAll: false,
         initialState: {
-            showColumnFilters: false,
             showGlobalFilter: true,
             columnPinning: {
                 left: ['mrt-row-expand', 'mrt-row-select'],
@@ -147,10 +146,6 @@ export default function AccountsList() {
             },
         },
         positionToolbarAlertBanner: 'bottom',
-        muiSearchTextFieldProps: {
-            size: 'small',
-            variant: 'outlined',
-        },
         localization: MRT_Localization_IT,
         muiTableBodyRowProps: () => ({
             sx: {cursor: 'default'},

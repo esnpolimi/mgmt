@@ -1,49 +1,85 @@
-import React, {useEffect, useState} from 'react';
-import {Box} from '@mui/material';
+import React, {useEffect, useState, useRef} from 'react';
+import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
 import ProfileModal from '../../Components/profiles/ProfileModal.jsx';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import Loader from "../../Components/Loader";
+import ClearIcon from "@mui/icons-material/Clear";
+import SearchIcon from "@mui/icons-material/Search";
+
+const ESNCARD_VALIDITY_OPTIONS = [
+    {value: 'valid', label: 'Valida'},
+    {value: 'expired', label: 'Scaduta'},
+    {value: 'absent', label: 'Assente'}
+];
 
 export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
     const [data, setData] = useState([]);
-    const [isLoading, setLoading] = useState(true);
     const [modalOpen, toggleModal] = useState(false);
     const [selectedProfile, setSelectedProfile] = useState({});
     const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
+    const [groups, setGroups] = useState([]);
+    const [filters, setFilters] = useState({esncardValidity: [], group: []});
+    const [search, setSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
+    const [internalLoading, setInternalLoading] = useState(true);
+    const searchInputRef = useRef(null);
+
 
     useEffect(() => {
+        // Only fetch data when appliedSearch changes (icon click), or filters/pagination change
+        setInternalLoading(true);
         const fetchData = async () => {
-            setLoading(true);
             try {
-                const response = await fetchCustom('GET', `${apiEndpoint}?page=${pagination.pageIndex + 1}&page_size=${pagination.pageSize}`);
+                const params = new URLSearchParams();
+                params.append('page', pagination.pageIndex + 1);
+                params.append('page_size', pagination.pageSize);
+                if (appliedSearch) params.append('search', appliedSearch);
+                if (filters.esncardValidity.length)
+                    params.append('esncardValidity', filters.esncardValidity.join(','));
+                if (filters.group.length)
+                    params.append('group', filters.group.join(','));
+                const response = await fetchCustom('GET', `${apiEndpoint}?${params.toString()}`);
                 const json = await response.json();
                 setRowCount(json.count || 0);
-                if (profileType === 'ESNer') {
-                    const formattedData = json.results.map(({profile, ...rest}) => ({
-                        ...rest,
-                        ...profile,
-                        id: profile.id,
-                    }));
-                    setData(formattedData);
-                } else setData(json.results);
+                setData(json.results);
             } catch (error) {
                 console.error('Error fetching data:', error);
             } finally {
-                setLoading(false);
+                setInternalLoading(false);
             }
         };
         fetchData().then();
-    }, [apiEndpoint, pagination.pageIndex, pagination.pageSize]);
+
+        if (profileType === 'ESNer') {
+            fetchCustom("GET", "/groups/").then(response => {
+                if (response.ok) {
+                    response.json().then(json => setGroups(json));
+                }
+            });
+        }
+    }, [apiEndpoint, pagination.pageIndex, pagination.pageSize, profileType, filters, appliedSearch]);
+
+    const handleSearchApply = () => {
+        setAppliedSearch(search);
+        setPagination(prev => ({...prev, pageIndex: 0}));
+    };
+
+    const handleSearchClear = () => {
+        setSearch('');
+        setAppliedSearch('');
+        setPagination(prev => ({...prev, pageIndex: 0}));
+        if (searchInputRef.current) searchInputRef.current.focus();
+    };
 
     const table = useMaterialReactTable({
         columns,
         data,
         enableStickyHeader: true,
         enableStickyFooter: true,
-        enableColumnFilterModes: true,
+        enableColumnFilters: false, // Disabled cause it only allows to search in the current page
         enableColumnOrdering: true,
         enableGrouping: true,
         enableColumnPinning: true,
@@ -63,13 +99,10 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         },
         paginationDisplayMode: 'pages',
         positionToolbarAlertBanner: 'bottom',
-        muiSearchTextFieldProps: {
-            size: 'small',
-            variant: 'outlined',
-        },
+        enableGlobalFilter: false,
         muiPaginationProps: {
             color: 'secondary',
-            rowsPerPageOptions: [10, 20, 30],
+            rowsPerPageOptions: [10, 20, 50],
             shape: 'rounded',
             variant: 'outlined',
         },
@@ -89,18 +122,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     const updateProfile = (newData) => {
         setData((prevProfiles) => {
             return prevProfiles.map((profile) => {
-                if (profile.id === newData.id) {
-                    // For ESNers, maintain the structure with profile as nested object
-                    if (profileType === 'ESNer') {
-                        return {
-                            ...profile,
-                            ...newData,
-                            profile: {...profile.profile, ...newData}
-                        };
-                    }
-                    return newData;
-                }
-                return profile;
+                return (profile.id === newData.id) ? newData : profile;
             });
         });
     };
@@ -109,9 +131,92 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         toggleModal(false);
     };
 
+    const handleFilterChange = (e) => {
+        const {name, value} = e.target;
+        setFilters(prev => ({
+            ...prev,
+            [name]: typeof value === 'string' ? value.split(',') : value
+        }));
+    };
+
     return (
         <Box sx={{mx: '5%'}}>
-            {isLoading ? <Loader/> : <MaterialReactTable table={table}/>}
+            <Grid container spacing={2} sx={{mb: 2, mt: 2}} alignItems="center" justifyContent="flex-end">
+                <Grid size={{xs: 12, sm: 2}}>
+                    <FormControl fullWidth>
+                        <InputLabel id="esncard-validity-label">Validità ESNcard</InputLabel>
+                        <Select
+                            labelId="esncard-validity-label"
+                            name="esncardValidity"
+                            variant="outlined"
+                            multiple
+                            value={filters.esncardValidity}
+                            onChange={handleFilterChange}
+                            input={<OutlinedInput label="Validità ESNcard"/>}
+                            renderValue={(selected) =>
+                                ESNCARD_VALIDITY_OPTIONS.filter(opt => selected.includes(opt.value)).map(opt => opt.label).join(', ')
+                            }>
+                            {ESNCARD_VALIDITY_OPTIONS.map(opt => (
+                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Grid>
+                {profileType === 'ESNer' && groups.length > 0 && (
+                    <Grid size={{xs: 12, sm: 2}}>
+                        <FormControl fullWidth>
+                            <InputLabel id="group-label">Gruppo</InputLabel>
+                            <Select
+                                labelId="group-label"
+                                name="group"
+                                variant="outlined"
+                                multiple
+                                value={filters.group}
+                                onChange={handleFilterChange}
+                                input={<OutlinedInput label="Gruppo"/>}
+                                renderValue={(selected) =>
+                                    groups.filter(opt => selected.includes(opt.name)).map(opt => opt.name).join(', ')
+                                }>
+                                {groups.map(opt => (
+                                    <MenuItem key={opt.name} value={opt.name}>{opt.name}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                )}
+                <Grid size={{xs: 12, sm: 2}} sm="auto">
+                    <OutlinedInput
+                        inputRef={searchInputRef}
+                        size="small"
+                        placeholder="Cerca"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') handleSearchApply();
+                        }}
+                        endAdornment={
+                            search && appliedSearch === search ? (
+                                <IconButton
+                                    aria-label="clear"
+                                    onClick={handleSearchClear}
+                                    edge="end">
+                                    <ClearIcon/>
+                                </IconButton>
+                            ) : (
+                                <IconButton
+                                    aria-label="search"
+                                    onClick={handleSearchApply}
+                                    edge="end">
+                                    <SearchIcon/>
+                                </IconButton>
+                            )
+                        }
+                    />
+                </Grid>
+            </Grid>
+            {internalLoading ? <Loader/> :
+                <MaterialReactTable table={table}/>
+            }
             {modalOpen && <ProfileModal
                 open={modalOpen}
                 inProfile={selectedProfile}

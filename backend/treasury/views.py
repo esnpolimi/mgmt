@@ -1,6 +1,7 @@
 import logging
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -123,6 +124,29 @@ def transaction_add(request):
 def transactions_list(request):
     try:
         transactions = Transaction.objects.all().order_by('-created_at')
+        search = request.GET.get('search', '').strip()
+        if search:
+            transactions = transactions.filter(
+                Q(account__name__icontains=search) |
+                Q(description__icontains=search) |
+                Q(executor__profile__name__icontains=search) |
+                Q(executor__profile__surname__icontains=search)
+            )
+        # Filtering by account (multi)
+        account_ids = request.GET.getlist('account')
+        if account_ids:
+            transactions = transactions.filter(account__id__in=account_ids)
+        # Filtering by type (multi)
+        types = request.GET.getlist('type')
+        if types:
+            transactions = transactions.filter(type__in=types)
+        # Filtering by dateFrom/dateTo
+        date_from = request.GET.get('dateFrom')
+        if date_from:
+            transactions = transactions.filter(created_at__gte=date_from)
+        date_to = request.GET.get('dateTo')
+        if date_to:
+            transactions = transactions.filter(created_at__lte=date_to)
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(transactions, request=request)

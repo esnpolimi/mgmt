@@ -64,17 +64,39 @@ export default function ErasmusProfiles() {
             size: 100,
         },
         {
+            accessorKey: 'phone_prefix',
+            header: 'Prefisso Telefono',
+            size: 60,
+        },
+        {
+            accessorKey: 'phone_number',
+            header: 'Numero Telefono (no prefisso)',
+            size: 120,
+        },
+        {
             id: 'fullPhoneNumber',
             header: names.phone_number,
             size: 150,
+            accessorFn: row => `(${row.phone_prefix || 'vuoto'}) ${row.phone_number || '(vuoto)'}`,
             Cell: ({row}) => (
                 <span>({row.original.phone_prefix || 'vuoto'}) {row.original.phone_number || '(vuoto)'}</span>
             ),
         },
         {
+            accessorKey: 'whatsapp_prefix',
+            header: 'Prefisso WhatsApp',
+            size: 60,
+        },
+        {
+            accessorKey: 'whatsapp_number',
+            header: 'Numero WhatsApp (no prefisso)',
+            size: 120,
+        },
+        {
             id: 'fullWANumber',
             header: names.whatsapp_number,
             size: 150,
+            accessorFn: row => `(${row.whatsapp_prefix || 'vuoto'}) ${row.whatsapp_number || '(vuoto)'}`,
             Cell: ({row}) => (
                 <span>({row.original.whatsapp_prefix || 'vuoto'}) {row.original.whatsapp_number || '(vuoto)'}</span>
             ),
@@ -117,6 +139,10 @@ export default function ErasmusProfiles() {
         matricola_number: false,
         matricola_expiration: false,
         'latest_document.number': false,
+        phone_prefix: false,
+        phone_number: false,
+        whatsapp_prefix: false,
+        whatsapp_number: false
     }
 
     return (
