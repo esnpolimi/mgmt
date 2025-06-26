@@ -4,6 +4,6 @@ __pycache__/
 /venv
 .idea
 *.xlsx
-/backend/backend/
+/backend/backend/settings
 *.env*
 *.env.*
