@@ -30,7 +30,7 @@ class Profile(BaseEntity):
         DESIGN = "Design", _("Design")
 
     id = models.AutoField(primary_key=True)  # primary key
-    email = models.EmailField(max_length=256, unique=True)
+    email = models.EmailField(max_length=200, unique=True)
 
     # This field is set to true if the email is verified, i.e. the user has received the automatic email sent by us
     email_is_verified = models.BooleanField(default=False)
