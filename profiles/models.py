@@ -1,8 +1,7 @@
 from datetime import date
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django_countries.fields import CountryField
-from simple_history.models import HistoricalRecords
 
 
 # Base class that will be extended by all models in the database. In this way
@@ -42,18 +41,15 @@ class Profile(BaseEntity):
     country = models.CharField(max_length=2, null=True)  # Store country code (e.g., 'IT')
     course = models.CharField(max_length=32, choices=Course.choices, null=True)
     phone_prefix = models.CharField(max_length=10, null=True)
-    phone_number = models.PositiveIntegerField(null=True)
+    phone_number = models.CharField(max_length=20, null=True)
     whatsapp_prefix = models.CharField(max_length=10, null=True)
-    whatsapp_number = models.PositiveIntegerField(null=True)
-    person_code = models.PositiveIntegerField(unique=True, null=True)
+    whatsapp_number = models.CharField(max_length=20, null=True)
+    person_code = models.CharField(max_length=10, unique=True, null=True)
     domicile = models.CharField(max_length=256, null=True)
     is_esner = models.BooleanField(default=False)
-    # Special fields that records all modifications made to the object.
-    # Useful for rolling back to previous versions of the object. 
-    history = HistoricalRecords()
 
     # Matricola fields: expiration tightly coupled with the number, and with the exchange end date
-    matricola_number = models.IntegerField(unique=True, null=True)
+    matricola_number = models.CharField(max_length=10, unique=True, null=True)
     matricola_expiration = models.DateField(null=True)
 
     # Return a string format of the profile object, contains only name, surname and email
