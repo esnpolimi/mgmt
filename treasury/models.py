@@ -8,7 +8,6 @@ from users.models import User
 from profiles.models import Profile, BaseEntity
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
-from simple_history.models import HistoricalRecords
 
 
 class Settings(models.Model):
@@ -61,16 +60,6 @@ class Account(BaseEntity):
 
     def is_visible_to_user(self, user):
         return self.visible_to_groups.filter(user=user).exists() or not self.visible_to_groups.exists()
-
-    history = HistoricalRecords()
-
-    @property
-    def _history_user(self):
-        return self.changed_by
-
-    @_history_user.setter
-    def _history_user(self, value):
-        self.changed_by = value
 
     def __str__(self):
         return f"Account {self.name}"
