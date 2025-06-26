@@ -28,28 +28,35 @@ def events_list(request):
         search = request.GET.get('search', '').strip()
         if search:
             events = events.filter(Q(name__icontains=search))
-
-        subscription_statuses = request.GET.getlist('subscription_status')
-        if subscription_statuses:
+        # --- New filters ---
+        subscription_status = request.GET.get('subscription_status', '').strip()
+        if subscription_status:
             from django.utils import timezone
             now = timezone.now()
-            q = Q()
-            for status in subscription_statuses:
-                if status == 'open':
-                    q |= Q(subscription_start_date__lte=now, subscription_end_date__gte=now)
-                elif status == 'not_yet':
-                    q |= Q(subscription_start_date__gt=now)
-                elif status == 'closed':
-                    q |= Q(subscription_end_date__lt=now)
-            events = events.filter(q)
-
+            if subscription_status == 'open':
+                events = events.filter(
+                    subscription_start_date__lte=now,
+                    subscription_end_date__gte=now
+                )
+            elif subscription_status == 'not_yet':
+                events = events.filter(
+                    subscription_start_date__gt=now
+                )
+            elif subscription_status == 'closed':
+                events = events.filter(
+                    subscription_end_date__lt=now
+                )
+            elif subscription_status == 'not_available':
+                events = events.filter(
+                    subscription_start_date__isnull=True
+                )
         date_from = request.GET.get('dateFrom')
         if date_from:
-            events = events.filter(subscription_start_date__gte=date_from)
+            events = events.filter(date__gte=date_from)
         date_to = request.GET.get('dateTo')
         if date_to:
-            events = events.filter(subscription_end_date__lte=date_to)
-
+            events = events.filter(date__lte=date_to)
+        # --- End new filters ---
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(events, request=request)
