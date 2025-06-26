@@ -1,8 +1,0 @@
-# To upgrade packages, React:
-npm install -g npm-check-updates
-npx npm-check-updates -u
-npm install
-
-# Django
-pip install pip-upgrader
-pip-upgrade
