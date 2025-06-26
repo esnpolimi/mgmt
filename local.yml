@@ -1,4 +1,26 @@
 services:
+  db:
+    image: mariadb:10.6
+    environment:
+      MYSQL_DATABASE: newgest
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    depends_on:
+      - db
+
   backend:
     build: ./backend
     volumes:
@@ -7,6 +29,14 @@ services:
         target: /app
     ports:
       - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      DB_NAME: newgest
+      DB_USER: user
+      DB_PASS: password
+      DB_HOST: db
+      DB_PORT: 3306
 
   frontend:
     build: ./frontend
@@ -16,4 +46,6 @@ services:
         target: /app/src
     ports:
       - "3000:3000"
-  
+
+volumes:
+  mariadb_data:

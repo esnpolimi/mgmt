@@ -2,7 +2,6 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from simple_history.models import HistoricalRecords
 from profiles.models import Profile, BaseEntity
 
 
@@ -101,8 +100,6 @@ class Subscription(BaseEntity):
     # color = models.CharField(max_length=9, blank=True, null=True)
     # For tracking subscription source
     created_by_form = models.BooleanField(default=False)
-
-    history = HistoricalRecords()
 
     class Meta:
         constraints = [
