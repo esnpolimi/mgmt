@@ -1,4 +1,4 @@
-import {HashRouter as Router, Routes, Route} from 'react-router-dom';
+import {BrowserRouter as Router, Routes, Route} from 'react-router-dom';
 import './App.css';
 import {AuthProvider} from "./Context/AuthContext.jsx";
 import {SidebarProvider} from './Context/SidebarContext.jsx';
