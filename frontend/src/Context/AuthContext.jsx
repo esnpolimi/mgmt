@@ -4,7 +4,6 @@ import {jwtDecode} from "jwt-decode";
 import {extractErrorMessage} from "../utils/errorHandling";
 
 const AuthContext = createContext(null);
-const ACCESS_TOKEN_LIFETIME_MINUTES = import.meta.env.VITE_ACCESS_TOKEN_LIFETIME_MINUTES;
 
 export const AuthProvider = ({children}) => {
         const refreshTimer = useRef(null);
@@ -116,7 +115,7 @@ export const AuthProvider = ({children}) => {
 
             const {exp} = jwtDecode(accessToken);
             const now = Math.floor(Date.now() / 1000);
-            const refreshTime = (exp - now - 30) * 1000 * ACCESS_TOKEN_LIFETIME_MINUTES; // Refresh 30s before expiry
+            const refreshTime = (exp - now - 30) * 1000; // Refresh 30s before expiry
 
             const expDate = new Date(exp * 1000);
             const nowDate = new Date(now * 1000);
@@ -141,7 +140,6 @@ export const AuthProvider = ({children}) => {
             };
         }, [accessToken, refreshAccessToken]);
 
-
         useEffect(() => {
             const initializeAuth = async () => {
                 const storedToken = localStorage.getItem("accessToken");
@@ -156,11 +154,11 @@ export const AuthProvider = ({children}) => {
                             setAccessToken(storedToken);
                             setUser(JSON.parse(storedUser));
                         } else {
-                            await logout();
+                            await logout({skipApiCall: true}); // token expired
                         }
                     } catch (e) {
                         console.error("Token decode error", e);
-                        await logout();
+                        await logout({skipApiCall: true}); // invalid token
                     }
                 }
 
