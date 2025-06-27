@@ -41,8 +41,24 @@ export default function Login() {
         setStatusMessage(null);
         const success = await login(username, password);
         setIsLoading(false);
-        if (success === true) navigate("/");
-        else setStatusMessage({message: `Errore durante il login: ${success}`, state: 'error'});
+        if (success === true) {
+            navigate("/");
+        } else if (
+            typeof success === "string" &&
+            (success.trim().startsWith("<!DOCTYPE html") || success.trim().startsWith("<html"))
+        ) {
+            // Open the HTML error in a new tab
+            const newWindow = window.open();
+            if (newWindow) {
+                newWindow.document.open();
+                newWindow.document.write(success);
+                newWindow.document.close();
+            } else {
+                setStatusMessage({message: "Impossibile aprire la pagina di errore in una nuova scheda.", state: 'error'});
+            }
+        } else {
+            setStatusMessage({message: `Errore durante il login: ${success}`, state: 'error'});
+        }
     };
 
     return (
