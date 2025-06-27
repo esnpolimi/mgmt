@@ -1,26 +1,23 @@
 import logging
 
+from django.conf import settings
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from profiles.models import Profile
-from treasury.models import Account
-from treasury.serializers import AccountListViewSerializer
 from users.models import User
-from rest_framework.pagination import PageNumberPagination
-from users.serializers import UserSerializer, LoginSerializer, UserWithProfileAndGroupsSerializer, UserReactSerializer, GroupListSerializer
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
-from django.contrib.auth import authenticate
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.views import TokenObtainPairView
 from users.serializers import CustomTokenObtainPairSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.conf import settings
+from users.serializers import UserSerializer, LoginSerializer, UserReactSerializer, GroupListSerializer
 
 logger = logging.getLogger(__name__)
 HOSTNAME = settings.HOSTNAME
@@ -43,10 +40,10 @@ def log_in(request):
             refresh = RefreshToken.for_user(user)
 
             # Add custom payload fields to the token
-            # print("Serialized user data:", UserReactSerializer(user).data)
+            # logger.info("Serialized user data:", UserReactSerializer(user).data)
             refresh['user'] = UserReactSerializer(user).data  # Serialize the user object
             access_token = str(refresh.access_token)
-            print(f"User {user} logged in")
+            logger.info(f"User {user} logged in")
 
             response = Response({'access': access_token}, status=200)
             # Set refresh token as HTTP-only cookie
@@ -193,9 +190,9 @@ def forgot_password(request):
             email.attach_alternative(html_content, "text/html")
             email.send(fail_silently=False)
 
-            print(f"Email di reset password inviata a {email}")
+            logger.info(f"Email di reset password inviata a {email}")
         except Exception as e:
-            print(f"Errore nell'invio dell'email: {str(e)}")
+            logger.info(f"Errore nell'invio dell'email: {str(e)}")
             return Response({"error": f"Errore nell'invio dell'email: {str(e)}"}, status=500)
 
         return Response({

@@ -8,6 +8,9 @@ from users.models import User
 from profiles.models import Profile, BaseEntity
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(models.Model):
@@ -88,7 +91,7 @@ class Transaction(BaseEntity):
         if self.type == self.TransactionType.ESNCARD and not self.esncard:
             raise ValueError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
         if (self.type == self.TransactionType.DEPOSIT or self.type == self.TransactionType.WITHDRAWAL) and (self.subscription or self.esncard):
-            print("DEBUG: subscription:", self.subscription, "esncard:", self.esncard, "type:", self.type)
+            logger.info("DEBUG: subscription:", self.subscription, "esncard:", self.esncard, "type:", self.type)
             raise ValueError("Le transazioni di Deposito/Prelievo non devono avere un'Iscrizione o una ESNcard.")
         if self.account.status == "closed":
             raise PermissionDenied("La cassa è chiusa.")
