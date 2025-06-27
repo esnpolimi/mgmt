@@ -1,4 +1,4 @@
-import {Button, Box, Container, Link, TextField, CssBaseline} from '@mui/material';
+import {Button, Box, Container, Link, TextField, CssBaseline, CircularProgress} from '@mui/material';
 import React, {useState} from 'react';
 import {useNavigate} from "react-router-dom";
 import {useAuth} from "../Context/AuthContext";
@@ -15,8 +15,10 @@ export default function Login() {
     const navigate = useNavigate();
     const [statusMessage, setStatusMessage] = useState(null);
     const [isResetSubmitted, setResetSubmitted] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleForgotPassword = async () => {
+        setIsLoading(true);
         try {
             console.log("Sending forgot password request for:", username);
             const response = await fetchCustom("POST", '/api/forgot-password/', {email: username}, {}, false);
@@ -29,12 +31,16 @@ export default function Login() {
             }
         } catch (error) {
             setStatusMessage({message: `Errore generale: ${error}`, state: 'error'});
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleLogin = async () => {
+        setIsLoading(true);
         setStatusMessage(null);
         const success = await login(username, password);
+        setIsLoading(false);
         if (success === true) navigate("/");
         else setStatusMessage({message: `Errore durante il login: ${success}`, state: 'error'});
     };
@@ -84,8 +90,13 @@ export default function Login() {
                             fullWidth
                             variant="contained"
                             sx={{mt: 3, mb: 2, backgroundColor: 'black'}}
-                            onClick={isForgotPassword ? handleForgotPassword : handleLogin}>
-                            {isForgotPassword ? 'Invia Email di Reset' : 'Log In'}
+                            onClick={isForgotPassword ? handleForgotPassword : handleLogin}
+                            disabled={isLoading}>
+                            {isLoading ? (
+                                <CircularProgress size={24} color="inherit" />
+                            ) : (
+                                isForgotPassword ? 'Invia Email di Reset' : 'Log In'
+                            )}
                         </Button>
                     )}
                     <Box sx={{display: 'flex', justifyContent: 'center', width: '100%'}}>

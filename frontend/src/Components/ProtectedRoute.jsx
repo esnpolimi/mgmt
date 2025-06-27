@@ -2,18 +2,24 @@ import {useAuth} from "../Context/AuthContext";
 import {useNavigate} from "react-router-dom";
 import {useEffect} from "react";
 
-const ProtectedRoute = ({children, requiredPermission}) => {
-    const {accessToken, user} = useAuth();
+export default function ProtectedRoute({children, requiredPermission}) {
+    const {accessToken, user, loading} = useAuth(); // assuming `loading` tracks auth check
     const navigate = useNavigate();
 
     useEffect(() => {
-        if (!accessToken || (requiredPermission && !user?.permissions.includes(requiredPermission))) {
-            console.log("PR: Redirecting to login or insufficient permissions...");
-            navigate("/login");
+        if (!loading && (!accessToken || (requiredPermission && !user?.permissions.includes(requiredPermission)))) {
+            console.log("Redirecting to login...");
+            navigate("/login", {replace: true});
         }
-    }, [accessToken, user, requiredPermission, navigate]);
+    }, [loading, accessToken, user, requiredPermission, navigate]);
 
-    return accessToken && (!requiredPermission || user?.permissions.includes(requiredPermission)) ? children : null;
+    if (loading) {
+        return <div>Loading...</div>; // Prevent early rendering
+    }
+
+    if (!accessToken || (requiredPermission && !user?.permissions.includes(requiredPermission))) {
+        return null; // Prevent rendering children during navigation
+    }
+
+    return children;
 };
-
-export default ProtectedRoute;
