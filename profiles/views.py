@@ -170,9 +170,9 @@ def initiate_profile_creation(request):
                 email.attach_alternative(html_content, "text/html")
                 email.send(fail_silently=False)
 
-                print(f"Email sent to {profile.email}")
+                logger.info(f"Email sent to {profile.email}")
             except Exception as e:
-                print(f"Email error: {str(e)}")
+                logger.info(f"Email error: {str(e)}")
                 # Don't delete profile on email error, just return the error
                 return Response({"error": f"{error_message}{str(e)}"}, status=500)
 

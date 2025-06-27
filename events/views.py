@@ -100,7 +100,7 @@ def event_detail(request, pk):
                 # Check for existing subscriptions
                 has_subscriptions = Subscription.objects.filter(event=event).exists()
                 data_to_validate = request.data
-                print("Event data: ", data_to_validate)
+                logger.info("Event data: ", data_to_validate)
                 start_date = parse_datetime(data_to_validate.get('subscription_start_date'))
                 end_date = parse_datetime(data_to_validate.get('subscription_end_date'))
 
@@ -109,8 +109,8 @@ def event_detail(request, pk):
                     # Not possible to modify start date
                     formatted_start = start_date.strftime('%Y-%m-%d %H:%M:%S')
                     existing_date = event.subscription_start_date.strftime('%Y-%m-%d %H:%M:%S')
-                    print(f"Start date: {start_date}, existing: {event.subscription_start_date}")
-                    print(f"Start date: {formatted_start}, existing: {existing_date}")
+                    logger.info(f"Start date: {start_date}, existing: {event.subscription_start_date}")
+                    logger.info(f"Start date: {formatted_start}, existing: {existing_date}")
                     if formatted_start != existing_date:
                         return Response("Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni", status=400)
 

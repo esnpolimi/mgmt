@@ -23,7 +23,7 @@ def esncard_emission(request):
     try:
         profile = Profile.objects.filter(id=request.data['profile_id']).first()
         latest_card = profile.latest_esncard if profile else None
-        print("Latest card for" + str(profile) + ": " + str(latest_card))
+        logger.info("Latest card for" + str(profile) + ": " + str(latest_card))
         esncard_serializer = ESNcardEmissionSerializer(data=request.data)
         if not esncard_serializer.is_valid():
             return Response(esncard_serializer.errors, status=400)
@@ -244,9 +244,9 @@ def accounts_list(request):
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(visible_accounts, request=request)
-        print("User " + str(request.user) + " group: " + str(request.user.groups.all()))
+        logger.info("User " + str(request.user) + " group: " + str(request.user.groups.all()))
         if request.user.groups.filter(name="Aspiranti").exists():
-            serializer = AccountListViewSerializer(page, many=True) # Do not return sensitive data, like balance
+            serializer = AccountListViewSerializer(page, many=True)  # Do not return sensitive data, like balance
         else:
             serializer = AccountDetailedViewSerializer(page, many=True, context={'request': request})
         # Get the paginated response
