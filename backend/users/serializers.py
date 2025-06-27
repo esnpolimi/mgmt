@@ -6,11 +6,15 @@ from profiles.serializers import ProfileListViewSerializer
 from .models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
-        print(f"Authenticating user: {user}")
+        logger.info(f"Authenticating user: {user}")
         token = super().get_token(user)
         token['user_id'] = user.profile.email
 
