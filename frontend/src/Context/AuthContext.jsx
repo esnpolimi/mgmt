@@ -10,6 +10,18 @@ export const AuthProvider = ({children}) => {
         const refreshTimer = useRef(null);
         const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken")); // localStorage needed for when refreshing pages
         const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
+        const [loading, setLoading] = useState(true);
+
+
+        const parseUserFromToken = (token) => {
+            try {
+                const {user} = jwtDecode(token);
+                return user;
+            } catch (e) {
+                console.error("Invalid JWT token", e);
+                return null;
+            }
+        };
 
         const login = async (username, password) => {
             try {
@@ -18,15 +30,15 @@ export const AuthProvider = ({children}) => {
                 );
                 if (response.ok) {
                     const data = await response.json();
-                    const decodedToken = jwtDecode(data.access);
+                    const user = parseUserFromToken(data.access);
                     console.log("Login successful");
                     setAccessToken(data.access) // Fetch access token
                     // Fetch user data
-                    console.log("Decoded access token:", decodedToken.user);
-                    setUser(decodedToken.user);
+                    console.log("Decoded access token:", user);
+                    setUser(user);
                     // Store data in localStorage
                     localStorage.setItem("accessToken", data.access);
-                    localStorage.setItem("user", JSON.stringify(decodedToken.user));
+                    localStorage.setItem("user", JSON.stringify(user));
                     return true;
                 } else {
                     console.error("Login error");
@@ -38,41 +50,39 @@ export const AuthProvider = ({children}) => {
             }
         };
 
-        const logout = useCallback(async () => {
+        const logout = useCallback(async ({skipApiCall = false} = {}) => {
             console.log("Logout function called");
+
             if (refreshTimer.current) {
                 console.log("Aborting refresh timer...");
                 clearTimeout(refreshTimer.current);
                 refreshTimer.current = null;
             }
-            try {
-                await fetchCustom("POST", "/logout/").then(
-                    () => {
-                        localStorage.removeItem("accessToken");
-                        localStorage.removeItem("user");
-                        setAccessToken(null);
-                        setUser(null); // Clear user data on logout
-                        console.log("Logged out successfully");
-                    }
-                )
-            } catch (error) {
-                console.error("Logout error:", error);
-            }
-        }, [refreshTimer]);
+
+            if (!skipApiCall)
+                await fetchCustom("POST", "/logout/");
+
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("user");
+            setAccessToken(null);
+            setUser(null);
+            console.log("Logged out successfully");
+        }, []);
+
 
         const refreshAccessToken = useCallback(async () => {
             if (accessToken) {
                 try {
-                    const email = user.profile.email; // Include user email to retrieve updated user data
+                    const email = user?.profile?.email;
                     const response = await fetchCustom("POST", "/api/token/refresh/",
                         {email}, {}, false);
                     if (response.ok) {
                         const data = await response.json();
-                        const decodedToken = jwtDecode(data.access);
+                        const user = parseUserFromToken(data.access);
                         setAccessToken(data.access);
-                        setUser(decodedToken.user);
+                        setUser(user);
                         localStorage.setItem("accessToken", data.access);
-                        localStorage.setItem("user", JSON.stringify(decodedToken.user));
+                        localStorage.setItem("user", JSON.stringify(user));
                         return true;
                     } else {
                         console.warn("Token refresh failed. Logging out...");
@@ -92,46 +102,76 @@ export const AuthProvider = ({children}) => {
 
 
         useEffect(() => {
-            const scheduleTokenRefresh = () => {
-                if (accessToken) {
-                    const {exp} = jwtDecode(accessToken);
-                    const now = Math.floor(Date.now() / 1000);
-                    const refreshTime = (exp - now - 30) * 1000 * ACCESS_TOKEN_LIFETIME_MINUTES; // Refresh 30 seconds before expiry
-                    const expDate = new Date(exp * 1000);
-                    const nowDate = new Date(now * 1000);
-                    console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
-
-                    if (refreshTime > 0) {
-                        if (refreshTimer.current) {
-                            clearTimeout(refreshTimer.current);
-                            refreshTimer.current = null;
-                        }
-                        refreshTimer.current = setTimeout(() => {
-                            //console.log("Refreshing access token...");
-                            refreshAccessToken().then();
-                        }, refreshTime);
-
-                        return () => {
-                            console.log("Clearing refresh timer");
-                            if (refreshTimer.current) {
-                                clearTimeout(refreshTimer.current);
-                                refreshTimer.current = null;
-                            }
-                        };
-                    } else {
-                        console.log("Refresh time is not valid, no timer set");
-                        setAccessToken(null);
-                    }
-                } else {
-                    console.log("No access token found, skipping refresh scheduling");
+            const clearRefreshTimer = () => {
+                if (refreshTimer.current) {
+                    clearTimeout(refreshTimer.current);
+                    refreshTimer.current = null;
                 }
             };
 
-            scheduleTokenRefresh();
-        }, [refreshTimer, accessToken, refreshAccessToken]);
+            if (!accessToken) {
+                console.log("No access token found, skipping refresh scheduling");
+                return;
+            }
+
+            const {exp} = jwtDecode(accessToken);
+            const now = Math.floor(Date.now() / 1000);
+            const refreshTime = (exp - now - 30) * 1000 * ACCESS_TOKEN_LIFETIME_MINUTES; // Refresh 30s before expiry
+
+            const expDate = new Date(exp * 1000);
+            const nowDate = new Date(now * 1000);
+            console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
+
+            if (refreshTime <= 0) {
+                console.log("Refresh time is not valid, no timer set");
+                setAccessToken(null);
+                return;
+            }
+
+            clearRefreshTimer();
+
+            refreshTimer.current = setTimeout(() => {
+                console.log("Refreshing access token...");
+                refreshAccessToken().then();
+            }, refreshTime);
+
+            return () => {
+                console.log("Clearing refresh timer");
+                clearRefreshTimer();
+            };
+        }, [accessToken, refreshAccessToken]);
+
+
+        useEffect(() => {
+            const initializeAuth = async () => {
+                const storedToken = localStorage.getItem("accessToken");
+                const storedUser = localStorage.getItem("user");
+
+                if (storedToken && storedUser) {
+                    try {
+                        const decodedToken = jwtDecode(storedToken);
+                        const now = Math.floor(Date.now() / 1000);
+
+                        if (decodedToken.exp > now) {
+                            setAccessToken(storedToken);
+                            setUser(JSON.parse(storedUser));
+                        } else {
+                            await logout();
+                        }
+                    } catch (e) {
+                        console.error("Token decode error", e);
+                        await logout();
+                    }
+                }
+
+                setLoading(false);
+            };
+
+            initializeAuth().then();
+        }, [logout]);
 
         return (
-            <AuthContext.Provider value={{user, accessToken, refreshAccessToken, logout, login}}>
+            <AuthContext.Provider value={{user, accessToken, refreshAccessToken, logout, login, loading}}>
                 {children}
             </AuthContext.Provider>
         );
