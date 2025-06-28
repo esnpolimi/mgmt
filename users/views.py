@@ -32,11 +32,16 @@ def log_in(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
 
-        username = serializer.validated_data['username']
+        email = serializer.validated_data['email']
         password = serializer.validated_data['password']
-        user = authenticate(username=username, password=password)
+        user = authenticate(username=email, password=password)
 
         if user is not None:
+
+            profile = Profile.objects.get_or_create(email=request.data.get('email'))[0]
+            if not profile.email_is_verified:
+                return Response({'detail': 'Email non verificata'}, status=403)
+
             refresh = RefreshToken.for_user(user)
 
             # Add custom payload fields to the token
@@ -51,8 +56,8 @@ def log_in(request):
                 key='refresh_token',
                 value=str(refresh),
                 httponly=True,
-                secure=False,  # Use True in production (requires HTTPS)
-                samesite='Lax',  # Use Strict or Lax depending on whether the frontend and backend are on the same origin
+                secure=True,  # Use True in production (requires HTTPS)
+                samesite='Strict',  # Use Strict or Lax depending on whether the frontend and backend are on the same origin
                 max_age=settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds(),
             )
             return response
