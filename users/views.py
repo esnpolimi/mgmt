@@ -20,7 +20,7 @@ from users.serializers import CustomTokenObtainPairSerializer
 from users.serializers import UserSerializer, LoginSerializer, UserReactSerializer, GroupListSerializer
 
 logger = logging.getLogger(__name__)
-HOSTNAME = settings.HOSTNAME
+SCHEME_HOST = settings.SCHEME_HOST
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -163,7 +163,7 @@ def forgot_password(request):
         # Genera token e link per il reset della password
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
-        reset_link = f"http://{HOSTNAME}:3000/#/reset-password/{uid}/{token}"  # Ajuste la URL según tu frontend
+        reset_link = f"{SCHEME_HOST}/reset-password/{uid}/{token}"
 
         # Invia email di reset password
         try:

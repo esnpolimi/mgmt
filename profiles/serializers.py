@@ -90,7 +90,8 @@ class ProfileListViewSerializer(serializers.ModelSerializer):
         model = Profile
         fields = '__all__'
 
-    def get_group(self, obj):
+    @staticmethod
+    def get_group(obj):
         if getattr(obj, 'is_esner', False):
             try:
                 user = User.objects.get(profile=obj)
@@ -112,3 +113,4 @@ class ProfileCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email_is_verified']
+

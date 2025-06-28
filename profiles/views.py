@@ -22,7 +22,7 @@ from django.db.models import Q
 from users.serializers import UserGroupEditSerializer
 
 logger = logging.getLogger(__name__)
-HOSTNAME = settings.HOSTNAME
+SCHEME_HOST = settings.SCHEME_HOST
 
 
 # Endpoint to retrieve a list of Erasmus or ESNers profiles. Pagination is implemented
@@ -89,7 +89,7 @@ def initiate_profile_creation(request):
         # Validate data but don't save yet
         profile_serializer = ProfileCreateSerializer(data=data)
         document_serializer = DocumentCreateSerializer(
-            data={k[9:]: v for k, v in data.items() if k.startswith('document-')},
+            data={k[9:]: v for k, v in data.items() if k.startswith('document_')},
             partial=True
         )
 
@@ -123,7 +123,7 @@ def initiate_profile_creation(request):
             # Generate verification token and send verification email
             uid = urlsafe_base64_encode(force_bytes(profile.pk))
             token = email_verification_token.make_token(profile)
-            verification_link = f"http://{HOSTNAME}:3000/#/verify-email/{uid}/{token}"  # TODO: set proper url
+            verification_link = f"{SCHEME_HOST}/verify-email/{uid}/{token}"
 
             # Language selection
             if is_esner:
@@ -185,7 +185,7 @@ def initiate_profile_creation(request):
             if not profile_valid:
                 errors.update({k: v[0] for k, v in profile_serializer.errors.items()})
             if not document_valid:
-                errors.update({'document-' + k: v[0] for k, v in document_serializer.errors.items()})
+                errors.update({'document_' + k: v[0] for k, v in document_serializer.errors.items()})
             return Response(errors, status=400)
 
     except Exception as e:
@@ -207,7 +207,7 @@ def verify_email_and_enable_profile(request, uid, token):
             if profile.is_esner:
                 return Response({"error": "Link di verifica non valido o scaduto."}, status=400)
             else:
-                return Response({"error": "Invalid or expired verification link."}, status=400)
+                return Response({"error": "Invalid or expired verification link. Please contact us at informatica@esnpolimi.it"}, status=400)
 
         if profile.email_is_verified:
             if profile.is_esner:
@@ -243,7 +243,7 @@ def verify_email_and_enable_profile(request, uid, token):
         if 'profile' in locals() and hasattr(profile, 'is_esner') and profile.is_esner:
             return Response({"error": "Si è verificato un errore imprevisto."}, status=500)
         else:
-            return Response({"error": "An unexpected error occurred."}, status=500)
+            return Response({"error": "An unexpected error occurred. Please contact us at informatica@esnpolimi.it"}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
