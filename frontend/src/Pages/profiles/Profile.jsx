@@ -1,37 +1,41 @@
-import {Box, Button, Card, FormControl, InputLabel, MenuItem, Modal, Select, TextField, Toolbar, Typography, Grid, IconButton} from "@mui/material";
+import {Box, Button, Card, FormControl, InputLabel, MenuItem, Select, TextField, Toolbar, Typography, Grid, IconButton} from "@mui/material";
 import React, {useEffect, useMemo, useState} from 'react';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import EditButton from "../EditButton";
-import CrudTable from "../CrudTable";
+import EditButton from "../../Components/EditButton";
+import CrudTable from "../../Components/CrudTable";
 import {fetchCustom} from "../../api/api";
-import {style} from '../../utils/sharedStyles'
 import {useAuth} from "../../Context/AuthContext";
-import Popup from '../Popup'
+import Popup from '../../Components/Popup'
 import {profileDisplayNames as names} from '../../utils/displayAttributes';
-import ESNcardEmissionModal from "./ESNcardEmissionModal";
-import Loader from "../Loader";
+import ESNcardEmissionModal from "../../Components/profiles/ESNcardEmissionModal";
+import Loader from "../../Components/Loader";
 import countryCodes from "../../data/countryCodes.json";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import {Person, School, Group} from '@mui/icons-material';
-import CloseIcon from "@mui/icons-material/Close";
+import {useNavigate, useParams} from "react-router-dom";
+import Sidebar from "../../Components/Sidebar";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
     Erasmus: {hideFields: ['group']}
 };
 
-export default function ProfileModal({open, onClose, inProfile, profileType, updateProfile}) {
+export default function Profile() {
+    const {user} = useAuth();
+    const {id} = useParams();
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const [loading, setLoading] = useState(true);
-    const {user} = useAuth();
-    const [profile, setProfile] = useState(inProfile);
+    const [profile, setProfile] = useState(null);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [ESNcardModalOpen, setESNcardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
     const [groups, setGroups] = useState([]);
+    const [profileType, setProfileType] = useState(null);
+    const navigate = useNavigate();
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
     // user.permissions = user.permissions.filter((permission) => !['delete_document', 'change_document', 'add_document'].includes(permission));
@@ -111,7 +115,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
         setLoading(true);
         const fetchData = async () => {
             try {
-                const response = await fetchCustom("GET", `/profile/${profile.id.toString()}/`);
+                const response = await fetchCustom("GET", `/profile/${id}/`);
                 const json = await response.json();
                 if (!response.ok) {
                     const errorMessage = await extractErrorMessage(json, response.status);
@@ -123,6 +127,8 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                     });
                     setData(update)
                     setUpdatedData(update)
+                    setProfile(json);
+                    setProfileType(json.is_esner ? "ESNer" : "Erasmus");
                 }
             } catch (error) {
                 setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
@@ -147,6 +153,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
         };
         fetchGroups().then();
     }, []);
+
 
     const rules = profileFieldRules[profileType] || {hideFields: []};
     const shouldHideField = (fieldName) => {
@@ -435,15 +442,14 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
     };
 
     return (
-        <Modal open={open} onClose={onClose}>
-            <Box sx={style} onKeyDown={(e) => e.stopPropagation()}>
-                <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                    <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
-                </Box>
-                <Typography variant="h5" gutterBottom align="center">
-                    Profilo {profileType}
-                </Typography>
-                {loading ? <Loader/> : (<>
+        <Box>
+            <Sidebar/>
+            {loading ? <Loader/> : (<>
+                    <Box sx={{mx: '5%'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                            <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
+                            <Typography variant="h4">Profilo {profileType}</Typography>
+                        </Box>
                         <Card sx={{p: '20px'}}>
                             <Grid container spacing={2}>
                                 {/* --- Personal Information Section --- */}
@@ -458,12 +464,12 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                 setUpdatedData(data);
                                             }}
                                             saving={saving}
-                                            onSave={handleSave}
-                                        />
+                                            onSave={handleSave}/>
+
                                     </Grid>
                                 </Grid>
                                 {!shouldHideField('name') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <TextField
                                             label={names.name}
                                             name='name'
@@ -477,7 +483,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                     </Grid>
                                 )}
                                 {!shouldHideField('surname') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <TextField
                                             label={names.surname}
                                             name='surname'
@@ -491,7 +497,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                     </Grid>
                                 )}
                                 {!shouldHideField('email') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <TextField
                                             label={names.email}
                                             name='email'
@@ -504,8 +510,21 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                             onChange={handleChange} fullWidth/>
                                     </Grid>
                                 )}
+                                {!shouldHideField('birthdate') && (
+                                    <Grid size={{xs: 12, md: 3}}>
+                                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                            <DatePicker
+                                                label={names.birthdate}
+                                                value={updatedData.birthdate ? dayjs(updatedData.birthdate, 'YYYY-MM-DD') : null}
+                                                readOnly={readOnly.birthdate}
+                                                onChange={(date) => handleDateChange('birthdate', date)}
+                                                sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
+                                                renderInput={(params) => <TextField {...params} fullWidth required/>}/>
+                                        </LocalizationProvider>
+                                    </Grid>
+                                )}
                                 {!shouldHideField('country') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 4}}>
+                                    <Grid size={{xs: 12, md: 2}}>
                                         <FormControl fullWidth required>
                                             <InputLabel id="country-label">{names.country}</InputLabel>
                                             <Select
@@ -517,8 +536,8 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                 error={errors.country[0]}
                                                 onChange={handleChange}
                                                 slotProps={{input: {readOnly: readOnly.country}}}
-                                                sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}
-                                            >
+                                                sx={{backgroundColor: readOnly.country ? 'grey.200' : 'white'}}>
+
                                                 <MenuItem value=""><em>None</em></MenuItem>
                                                 {countryCodes.map((country) => (
                                                     <MenuItem key={country.code} value={country.code}>
@@ -526,12 +545,11 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                     </MenuItem>
                                                 ))}
                                             </Select>
-
                                         </FormControl>
                                     </Grid>
                                 )}
                                 {!shouldHideField('domicile') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 5}}>
+                                    <Grid size={{xs: 12, md: 4}}>
                                         <TextField
                                             label={names.domicile}
                                             name='domicile'
@@ -544,27 +562,10 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                             fullWidth/>
                                     </Grid>
                                 )}
-                                {!shouldHideField('birthdate') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
-                                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                            <DatePicker
-                                                label={names.birthdate}
-                                                value={updatedData.birthdate ? dayjs(updatedData.birthdate, 'YYYY-MM-DD') : null}
-                                                readOnly={readOnly.birthdate}
-                                                onChange={(date) => handleDateChange('birthdate', date)}
-                                                sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
-                                                renderInput={(params) => <TextField {...params}
-                                                                                    fullWidth
-                                                                                    required
-                                                />}
-                                            />
-                                        </LocalizationProvider>
-                                    </Grid>
-                                )}
                                 {/* --- Phone numbers --- */}
                                 {!shouldHideField('phone_prefix') && !shouldHideField('phone_number') && (
                                     <Grid size={{xs: 12}} container spacing={2}>
-                                        <Grid size={{xs: 1.5}}>
+                                        <Grid size={{xs: 12, md: 1}}>
                                             <FormControl fullWidth required>
                                                 <InputLabel id="phone-prefix-label">{names.phone_prefix}</InputLabel>
                                                 <Select
@@ -577,8 +578,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                     slotProps={{input: {readOnly: readOnly.phone_number}}}
                                                     sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
                                                     label={names.phone_prefix}
-                                                    renderValue={(value) => value}
-                                                >
+                                                    renderValue={(value) => value}>
                                                     {countryCodes.map((country) => (
                                                         <MenuItem key={country.code} value={country.dial}>
                                                             {country.dial} ({country.name})
@@ -587,7 +587,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                 </Select>
                                             </FormControl>
                                         </Grid>
-                                        <Grid size={{xs: 3}}>
+                                        <Grid size={{xs: 12, md: 2}}>
                                             <TextField
                                                 label={names.phone_number}
                                                 name='phone_number'
@@ -603,7 +603,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                 )}
                                 {!shouldHideField('whatsapp_prefix') && !shouldHideField('whatsapp_number') && (
                                     <Grid size={{xs: 12}} container spacing={2}>
-                                        <Grid size={{xs: 1.5}}>
+                                        <Grid size={{xs: 12, md: 1}}>
                                             <FormControl fullWidth required>
                                                 <InputLabel id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
                                                 <Select
@@ -616,8 +616,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                     slotProps={{input: {readOnly: readOnly.whatsapp_prefix}}}
                                                     sx={{backgroundColor: readOnly.whatsapp_prefix ? 'grey.200' : 'white'}}
                                                     label={names.whatsapp_prefix}
-                                                    renderValue={(value) => value}
-                                                >
+                                                    renderValue={(value) => value}>
                                                     {countryCodes.map((country) => (
                                                         <MenuItem key={country.code} value={country.dial}>
                                                             {country.dial} ({country.name})
@@ -626,7 +625,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                 </Select>
                                             </FormControl>
                                         </Grid>
-                                        <Grid size={{xs: 3}}>
+                                        <Grid size={{xs: 12, md: 2}}>
                                             <TextField
                                                 label={names.whatsapp_number}
                                                 name='whatsapp_number'
@@ -646,7 +645,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                     <Typography variant="h6" sx={{m: 0}}>Dati Studente</Typography>
                                 </Grid>
                                 {!shouldHideField('person_code') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <TextField
                                             label={names.person_code}
                                             name='person_code'
@@ -660,7 +659,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                     </Grid>
                                 )}
                                 {!shouldHideField('course') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <FormControl fullWidth required>
                                             <InputLabel id="course-label">{names.course}</InputLabel>
                                             <Select
@@ -671,18 +670,16 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                 value={updatedData.course || ''}
                                                 onChange={handleChange}
                                                 slotProps={{input: {readOnly: readOnly.course}}}
-                                                sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}
-                                            >
+                                                sx={{backgroundColor: readOnly.course ? 'grey.200' : 'white'}}>
                                                 <MenuItem value="Engineering">Ingegneria</MenuItem>
                                                 <MenuItem value="Design">Design</MenuItem>
                                                 <MenuItem value="Architecture">Architettura</MenuItem>
-                                                {/* TODO Add more values here */}
                                             </Select>
                                         </FormControl>
                                     </Grid>
                                 )}
                                 {!shouldHideField('matricola_number') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <TextField
                                             label={names.matricola_number}
                                             name='matricola_number'
@@ -697,7 +694,7 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                     </Grid>
                                 )}
                                 {!shouldHideField('matricola_expiration') && (
-                                    <Grid size={{xs: 12, md: 4, lg: 3}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                             <DatePicker
                                                 label={names.matricola_expiration}
@@ -705,18 +702,14 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                                 readOnly={readOnly.matricola_expiration}
                                                 onChange={(date) => handleDateChange('matricola_expiration', date)}
                                                 sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
-                                                renderInput={(params) => <TextField {...params}
-                                                                                    fullWidth
-                                                                                    required
-                                                />}
-                                            />
+                                                renderInput={(params) => <TextField {...params} fullWidth required/>}/>
                                         </LocalizationProvider>
                                     </Grid>
                                 )}
                                 {!shouldHideField('group') && (
                                     <Grid container alignItems="center" spacing={1} sx={{width: '100%', mt: 2}}>
                                         <Group/>
-                                        <Grid size={{xs: 2}}>
+                                        <Grid size={{xs: 12, md: 2}}>
                                             <FormControl fullWidth required>
                                                 <InputLabel id="group-label">{names.group}</InputLabel>
                                                 <Select
@@ -747,10 +740,10 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                                 <ESNcardEmissionModal
                                     open={ESNcardModalOpen}
                                     profile={profile}
-                                    onClose={handleCloseESNcardModal}
-                                />}
+                                    onClose={handleCloseESNcardModal}/>
+                            }
                         </Card>
-                        <Grid container sx={{width: '100%'}} spacing={2}>
+                        <Grid container sx={{width: '100%', mb: 5}} spacing={2}>
                             <Grid size={{xs: 12, md: 6}}>
                                 <CrudTable
                                     cols={document_columns}
@@ -778,9 +771,10 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
                             </Grid>
                         </Grid>
                         {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
-                    </>
-                )}
-            </Box>
-        </Modal>
+                    </Box>
+                </>
+            )}
+        </Box>
     );
 }
+

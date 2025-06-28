@@ -16,6 +16,7 @@ import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 import EmailVerification from './Pages/EmailVerification.jsx';
 import ResetPassword from "./Pages/ResetPassword.jsx";
 import TransactionsList from "./Pages/treasury/TransactionsList.jsx";
+import Profile from "./Pages/profiles/Profile.jsx";
 
 function App() {
     return (
@@ -29,6 +30,7 @@ function App() {
                         <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
                         <Route path='/profiles/erasmus' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
                         <Route path='/profiles/esners' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
+                        <Route path='/profile/:id' element={<ProtectedRoute><Profile/></ProtectedRoute>}/>
                         <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                         <Route path='/esner_form' element={<ESNerForm/>}/>
                         <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>

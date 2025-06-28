@@ -2,11 +2,12 @@ import React, {useEffect, useState, useRef} from 'react';
 import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
-import ProfileModal from '../../Components/profiles/ProfileModal.jsx';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import Loader from "../../Components/Loader";
 import ClearIcon from "@mui/icons-material/Clear";
 import SearchIcon from "@mui/icons-material/Search";
+import EditIcon from "@mui/icons-material/Edit";
+import {useNavigate} from 'react-router-dom';
 
 const ESNCARD_VALIDITY_OPTIONS = [
     {value: 'valid', label: 'Valida'},
@@ -16,8 +17,6 @@ const ESNCARD_VALIDITY_OPTIONS = [
 
 export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
     const [data, setData] = useState([]);
-    const [modalOpen, toggleModal] = useState(false);
-    const [selectedProfile, setSelectedProfile] = useState({});
     const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
     const [groups, setGroups] = useState([]);
@@ -26,6 +25,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     const [appliedSearch, setAppliedSearch] = useState('');
     const [internalLoading, setInternalLoading] = useState(true);
     const searchInputRef = useRef(null);
+    const navigate = useNavigate();
 
 
     useEffect(() => {
@@ -84,9 +84,9 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         enableGrouping: true,
         enableColumnPinning: true,
         enableFacetedValues: true,
-        enableRowActions: false,
+        enableRowActions: true,
         enableRowSelection: false,
-        enableRowPinning: true,
+        enableRowPinning: false,
         enableExpandAll: false,
         initialState: {
             showColumnFilters: false,
@@ -111,12 +111,18 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
-        muiTableBodyRowProps: ({row}) => ({
-            onClick: () => {
-                setSelectedProfile(row.original);
-                toggleModal(true);
-            },
-        }),
+        muiTableBodyRowProps: () => ({}), // No row click navigation
+        renderRowActions: ({row}) => (
+            <IconButton
+                aria-label="Modifica profilo"
+                onClick={e => {
+                    e.stopPropagation();
+                    navigate(`/profile/${row.original.id.toString()}`);
+                }}
+            >
+                <EditIcon/>
+            </IconButton>
+        ),
     });
 
     const updateProfile = (newData) => {
@@ -125,10 +131,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                 return (profile.id === newData.id) ? newData : profile;
             });
         });
-    };
-
-    const handleProfileClose = () => {
-        toggleModal(false);
     };
 
     const handleFilterChange = (e) => {
@@ -217,13 +219,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
             {internalLoading ? <Loader/> :
                 <MaterialReactTable table={table}/>
             }
-            {modalOpen && <ProfileModal
-                open={modalOpen}
-                inProfile={selectedProfile}
-                profileType={profileType}
-                onClose={handleProfileClose}
-                updateProfile={updateProfile}
-            />}
         </Box>
     );
 }

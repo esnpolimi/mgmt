@@ -1,6 +1,6 @@
-import React from 'react';
-import {Link} from 'react-router-dom';
-import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, ListItemButton, IconButton, Collapse} from '@mui/material';
+import React, {useCallback} from 'react';
+import {Link, useNavigate} from 'react-router-dom';
+import {Box, Drawer, List, ListItem, ListItemIcon, ListItemText, ListItemButton, IconButton, Collapse, Typography} from '@mui/material';
 import {
     Menu as MenuIcon,
     Home as HomeIcon,
@@ -12,14 +12,15 @@ import {
     ExpandLess,
     ExpandMore,
 } from "@mui/icons-material";
-import ProfileSidebarBox from './profiles/ProfileSidebarBox';
+import LogoutButton from './LogoutButton';
 import {useAuth} from "../Context/AuthContext";
 import {useSidebar} from "../Context/SidebarContext";
 
 
 export default function Sidebar() {
-    const {isDrawerOpen, toggleDrawer, expandedSection, handleExpand} = useSidebar();
+    const {isDrawerOpen, toggleDrawer, closeDrawer, expandedSection, handleExpand} = useSidebar();
     const {user} = useAuth();
+    const navigate = useNavigate();
 
     // Helper function to check permissions
     const hasPermission = (permission) => {
@@ -40,28 +41,38 @@ export default function Sidebar() {
         },
     ].filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
 
+    // Inline ProfileSidebarBox logic here
+    const handleProfileOpen = useCallback(() => {
+        navigate(`/profile/${user.profile.id.toString()}`);
+    }, [navigate, user?.profile?.id]);
+
+    const handleNavClick = (e) => {
+        if (e.button === 0 || e.button === 1) { // left or middle click
+            closeDrawer();
+        }
+    };
+
     const drawer = (
-        <Box
-            sx={{
-                width: 250,
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%'
-            }}
-            role="presentation"
-            onClick={toggleDrawer(false)}
-            onKeyDown={toggleDrawer(false)}
-        >
+        <Box sx={{
+            width: 250,
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%'
+        }}
+             role="presentation"
+             onClick={toggleDrawer(false)}
+             onKeyDown={toggleDrawer(false)}>
             <Box sx={{flexGrow: 1}}>
                 {menuItems.map((item) => (
                     <React.Fragment key={item.text}>
                         {!item.children ? (
-                            <ListItem component={Link} to={item.path} key={item.text}>
+                            <ListItem component={Link}
+                                      to={item.path}
+                                      key={item.text}
+                                      onClick={handleNavClick}
+                                      onAuxClick={handleNavClick}>
                                 <ListItemIcon>{item.icon}</ListItemIcon>
-                                <ListItemText
-                                    primary={item.text}
-                                    slotProps={{primary: {style: {color: "black"},}}}
-                                />
+                                <ListItemText primary={item.text} slotProps={{primary: {style: {color: "black"},}}}/>
                             </ListItem>
                         ) : (
                             <React.Fragment key={item.text}>
@@ -70,30 +81,20 @@ export default function Sidebar() {
                                     handleExpand(item.text);
                                 }}>
                                     <ListItemIcon>{item.icon}</ListItemIcon>
-                                    <ListItemText
-                                        primary={item.text}
-                                        slotProps={{primary: {style: {color: "black"},}}}
-                                    />
+                                    <ListItemText primary={item.text} slotProps={{primary: {style: {color: "black"},}}}/>
                                     {expandedSection === item.text ? <ExpandLess/> : <ExpandMore/>}
                                 </ListItemButton>
-                                <Collapse
-                                    in={expandedSection === item.text}
-                                    timeout="auto"
-                                    unmountOnExit
-                                >
+                                <Collapse in={expandedSection === item.text} timeout="auto" unmountOnExit>
                                     <List component="div" disablePadding>
                                         {item.children?.map((child) => (
-                                            <ListItem
-                                                component={Link}
-                                                to={child.path}
-                                                key={child.text}
-                                                sx={{pl: 4}}
-                                            >
+                                            <ListItem component={Link}
+                                                      to={child.path}
+                                                      key={child.text}
+                                                      onClick={handleNavClick}
+                                                      onAuxClick={handleNavClick}
+                                                      sx={{pl: 4}}>
                                                 <ListItemIcon>{child.icon}</ListItemIcon>
-                                                <ListItemText
-                                                    primary={child.text}
-                                                    slotProps={{primary: {style: {color: "black"},}}}
-                                                />
+                                                <ListItemText primary={child.text} slotProps={{primary: {style: {color: "black"}}}}/>
                                             </ListItem>
                                         )) || []}
                                     </List>
@@ -104,8 +105,16 @@ export default function Sidebar() {
                 ))}
             </Box>
             {user && (
-                <Box sx={{mt: 'auto', mb: 2}}>
-                    <ProfileSidebarBox user={user}/>
+                <Box sx={{mt: 'auto', mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px'}}>
+                    <IconButton onClick={handleProfileOpen} aria-label="Profile">
+                        <PersonIcon/>
+                    </IconButton>
+                    <Box sx={{flexGrow: 1, marginLeft: '10px'}}>
+                        <Typography variant="body2">
+                            {user.profile.name} {user.profile.surname} ({user.groups[0]})
+                        </Typography>
+                        <LogoutButton/>
+                    </Box>
                 </Box>
             )}
         </Box>
@@ -118,8 +127,7 @@ export default function Sidebar() {
                 color="inherit"
                 aria-label="menu"
                 onClick={toggleDrawer(true)}
-                sx={{margin: "10px"}}
-            >
+                sx={{margin: "10px"}}>
                 <MenuIcon/>
             </IconButton>
             <Drawer anchor="left" open={isDrawerOpen} onClose={toggleDrawer(false)}>
@@ -128,4 +136,3 @@ export default function Sidebar() {
         </Box>
     );
 }
-

@@ -84,10 +84,6 @@ export default function Event() {
         }
     };
 
-    const handleBack = () => {
-        navigate(-1);
-    };
-
     const handleOpenEventModal = () => {
         setEventModalOpen(true);
     };

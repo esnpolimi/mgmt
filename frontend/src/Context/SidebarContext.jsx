@@ -6,7 +6,6 @@ export function SidebarProvider({children}) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [expandedSection, setExpandedSection] = useState(null);
 
-    // Optional: Save state to localStorage
     useEffect(() => {
         const savedDrawerState = localStorage.getItem('sidebarDrawerState');
         if (savedDrawerState) {
@@ -29,10 +28,13 @@ export function SidebarProvider({children}) {
         setExpandedSection((prevSection) => prevSection === section ? null : section);
     };
 
+    const closeDrawer = () => setIsDrawerOpen(false);
+
     return (
         <SidebarContext.Provider value={{
             isDrawerOpen,
             toggleDrawer,
+            closeDrawer,
             expandedSection,
             handleExpand
         }}>

@@ -23,7 +23,7 @@ export default function ESNerForm() {
     const [isLoading, setIsLoading] = useState(false);
     const names = profileDisplayNames;
 
-    /*const [formData, setFormData] = React.useState({
+    const [formData, setFormData] = React.useState({
         'email': '',
         'email_confirm': '',
         'password': '',
@@ -41,9 +41,9 @@ export default function ESNerForm() {
         'document_expiration': dayjs(),
         'matricola_number': '',
         'is_esner': true
-    });*/
+    });
 
-    const [formData, setFormData] = React.useState({
+    /*const [formData, setFormData] = React.useState({
         email: 'teopompil@gmail.com',
         email_confirm: 'teopompil@gmail.com',
         password: '1Unoduetrequattro',
@@ -61,7 +61,7 @@ export default function ESNerForm() {
         document_expiration: dayjs(),
         matricola_number: '263544',
         is_esner: true
-    });
+    });*/
 
     const initialFormErrors = {
         email: [false, ''],
