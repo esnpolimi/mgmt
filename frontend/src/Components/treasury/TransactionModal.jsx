@@ -88,7 +88,8 @@ export default function TransactionModal({open, onClose, transaction}) {
             };
             const response = await fetchCustom('PATCH', `/transaction/${transaction.id}/`, payload);
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {

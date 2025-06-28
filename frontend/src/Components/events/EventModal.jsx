@@ -211,14 +211,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 ? await fetchCustom("PATCH", `/event/${data.id}/`, convert(data))
                 : await fetchCustom("POST", '/event/', convert(data));
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setStatusMessage({message: `Errore ${isEdit ? 'modifica' : 'creazione'} evento: ${errorMessage}`, state: 'error'});
                 scrollUp();
             } else onClose(true);
         } catch (error) {
-            console.error("Error creating/updating event:", error);
-            const errorMessage = await extractErrorMessage(error);
-            setStatusMessage({message: `Errore generale: ${errorMessage}`, state: "error"});
+            setStatusMessage({message: `Errore generale: ${error}`, state: "error"});
             scrollUp();
         }
     }

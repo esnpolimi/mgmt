@@ -32,11 +32,11 @@ export default function AccountsList() {
         setLoading(true);
         try {
             const response = await fetchCustom("GET", '/accounts/');
+            const json = await response.json();
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
-                const json = await response.json();
                 setData(json.results);
                 console.log("Account List Data: ", json.results);
             }

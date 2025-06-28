@@ -19,12 +19,12 @@ export default function AccountModal({open, onClose, account = null}) {
     useEffect(() => {
         const fetchGroups = async () => {
             try {
-                const resp = await fetchCustom('GET', '/groups/');
-                if (resp.ok) {
-                    const json = await resp.json();
+                const response = await fetchCustom('GET', '/groups/');
+                const json = await response.json();
+                if (response.ok) {
                     setGroups(json);
                 } else {
-                    const errorMessage = await extractErrorMessage(resp);
+                    const errorMessage = await extractErrorMessage(json, response.status);
                     setSuccessPopup({message: `Errore nel recupero dei gruppi: ${errorMessage}`, state: 'error'});
                 }
             } catch (e) {
@@ -70,20 +70,17 @@ export default function AccountModal({open, onClose, account = null}) {
         try {
             const payload = {name: data.name, visible_to_groups: data.visible_to_groups};
             let response;
-            if (isEdit && account)
-                response = await fetchCustom('PATCH', `/account/${account.id}/`, payload);
-            else
-                response = await fetchCustom('POST', '/account/', payload);
-
+            if (isEdit && account) response = await fetchCustom('PATCH', `/account/${account.id}/`, payload);
+            else response = await fetchCustom('POST', '/account/', payload);
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} cassa: ${errorMessage}`, state: 'error'});
             } else {
                 onClose(true);
             }
         } catch (error) {
-            const errorMessage = await extractErrorMessage(error);
-            setSuccessPopup({message: `Errore generale: ${errorMessage}`, state: 'error'});
+            setSuccessPopup({message: `Errore generale: ${error}`, state: 'error'});
         } finally {
             setLoading(false);
         }

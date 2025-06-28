@@ -40,11 +40,11 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
     const retrieveFees = async () => {
         try {
             const response = await fetchCustom("GET", '/esncard_fees/');
+            const json = await response.json();
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore fees ESNcard: ${errorMessage}`, state: 'error'});
             } else {
-                const json = await response.json();
                 console.log("ESNcard fees:", json);
                 if (profile.latest_esncard && profile.latest_esncard?.is_valid)
                     setAmount(parseFloat(json.esncard_lost_fee.replace('€', '')));
@@ -61,11 +61,10 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
     const fetchAccounts = async () => {
         try {
             const response = await fetchCustom("GET", "/accounts/");
-            if (response.ok) {
-                const json = await response.json();
-                setAccounts(json.results);
-            } else {
-                const errorMessage = await extractErrorMessage(response);
+            const json = await response.json();
+            if (response.ok) setAccounts(json.results);
+            else {
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
@@ -111,7 +110,8 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                 amount: amount
             });
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore durante l\'emissione della ESNcard: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {

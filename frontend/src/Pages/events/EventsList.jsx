@@ -59,11 +59,11 @@ export default function EventsList() {
                 if (filters.dateTo)
                     params.append('dateTo', filters.dateTo.toISOString());
                 const response = await fetchCustom("GET", `/events/?${params.toString()}`);
+                const json = await response.json();
                 if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
+                    const errorMessage = await extractErrorMessage(json, response.status);
                     setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 } else {
-                    const json = await response.json();
                     if (!ignore) {
                         setRowCount(json.count || 0);
                         setData(json.results);

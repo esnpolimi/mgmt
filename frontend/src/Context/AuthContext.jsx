@@ -22,13 +22,13 @@ export const AuthProvider = ({children}) => {
             }
         };
 
-        const login = async (username, password) => {
+        const login = async (email, password) => {
             try {
                 const response = await fetchCustom("POST", "/login/",
-                    {username, password}, {}, false
+                    {email, password}, {}, false
                 );
+                const data = await response.json();
                 if (response.ok) {
-                    const data = await response.json();
                     const user = parseUserFromToken(data.access);
                     console.log("Login successful");
                     setAccessToken(data.access) // Fetch access token
@@ -41,7 +41,7 @@ export const AuthProvider = ({children}) => {
                     return true;
                 } else {
                     console.error("Login error");
-                    return await extractErrorMessage(response);
+                    return await extractErrorMessage(data, response.status);
                 }
             } catch (error) {
                 console.error("Login error:", error);

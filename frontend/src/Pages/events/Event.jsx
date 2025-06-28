@@ -48,11 +48,11 @@ export default function Event() {
                 // Use ID from URL params if available, otherwise from state
                 const eventId = id || eventFromState?.id;
                 const response = await fetchCustom("GET", `/event/${eventId}/`);
+                const json = await response.json();
                 if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
+                    const errorMessage = await extractErrorMessage(json, response.status);
                     setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 } else {
-                    const json = await response.json();
                     setData(json);
                     console.log("Event Data: ", json);
                 }
@@ -69,11 +69,11 @@ export default function Event() {
         setLoading(true);
         try {
             const response = await fetchCustom("GET", `/event/${data.id}/`);
+            const json = await response.json();
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
-                const json = await response.json();
                 setData(json);
                 setLoading(false);
             }

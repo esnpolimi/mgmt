@@ -28,7 +28,8 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
                 targetListId: selectedListId,
             });
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
