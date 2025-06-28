@@ -109,7 +109,7 @@ export default function Login() {
                             onClick={isForgotPassword ? handleForgotPassword : handleLogin}
                             disabled={isLoading}>
                             {isLoading ? (
-                                <CircularProgress size={24} color="inherit" />
+                                <CircularProgress size={24} color="inherit"/>
                             ) : (
                                 isForgotPassword ? 'Invia Email di Reset' : 'Log In'
                             )}
@@ -126,6 +126,13 @@ export default function Login() {
                             }}
                             sx={{textAlign: 'center'}}>
                             {isForgotPassword ? 'Torna al Login' : 'Password dimenticata?'}
+                        </Link>
+                        <Link
+                            component="button"
+                            variant="body2"
+                            onClick={() => navigate('/esner_form')}
+                            sx={{textAlign: 'center', marginLeft: 2}}>
+                            Non hai un account? Registrati
                         </Link>
                     </Box>
                 </Box>

@@ -18,7 +18,7 @@ export default function EmailVerification() {
                 const response = await fetchCustom('GET', `/api/profile/verify-email/${uid}/${token}/`, null, {}, false);
                 const data = await response.json();
                 if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
+                    const errorMessage = extractErrorMessage(data, response.status);
                     setStatusMessage({message: errorMessage, state: 'error'});
                 } else {
                     setStatusMessage({message: data.message, state: 'success'});
@@ -55,8 +55,6 @@ export default function EmailVerification() {
                     message={statusMessage.message}
                     state={statusMessage.state}
                     loadingText="Verifying your email address..."
-                    successText="Your email address has been verified and your account is now active."
-                    errorText="We couldn't verify your email address. The verification link may be expired or invalid. Please contact us."
                 />
             </Box>
         </Container>
