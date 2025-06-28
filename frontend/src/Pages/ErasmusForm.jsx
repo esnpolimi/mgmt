@@ -10,81 +10,165 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {fetchCustom} from "../api/api";
 import countryCodes from "../data/countryCodes.json";
 import StatusBanner from '../Components/StatusBanner';
+import Link from '@mui/material/Link';
+import CircularProgress from '@mui/material/CircularProgress';
+import LoginIcon from '@mui/icons-material/Login';
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
     const [sameWAasPhone, setSameWAasPhone] = React.useState(true);
     const [statusMessage, setStatusMessage] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Add checkbox state and error state
+    const [checkboxes, setCheckboxes] = useState({
+        acceptStatute: false,
+        acceptPurposes: false,
+        acceptRegulation: false,
+        acceptPrivacy: false,
+    });
+    const [checkboxErrors, setCheckboxErrors] = useState({
+        acceptStatute: false,
+        acceptPurposes: false,
+        acceptRegulation: false,
+        acceptPrivacy: false,
+    });
+
+    const links = {
+        statute: "https://drive.google.com/file/d/1b0gpA3x9yRuAcdEWQyc9KvrnZzm0l-dB/view?usp=sharing", // In English
+        regulation: "https://drive.google.com/file/d/1_s0uBvqfOLRz5rQp1EEeNgtxRjs7Pgxy/view?usp=sharing", // In English
+        privacy: "https://drive.google.com/file/d/12LY0y49cCyjqdF0RotsO6srHrGkinNln/view?usp=sharing" // In English
+    };
 
     const [formData, setFormData] = React.useState({
-        'name': '',
-        'surname': '',
-        'email': '',
-        'email_confirm': '',
-        'birthdate': dayjs(),
-        'country': '',
-        'phone_prefix': '+39',
-        'phone_number': '',
-        'whatsapp_prefix': '+39',
-        'whatsapp_number': '',
-        'person_code': '',
-        'domicile': '',
-        'course': '',
-        'document-type': '',
-        'document-number': '',
-        'document-expiration': dayjs(),
-        'matricola_number': '',
-        'matricola_expiration': dayjs(),
-        'is_esner': false
+        name: '',
+        surname: '',
+        email: '',
+        email_confirm: '',
+        birthdate: dayjs(),
+        country: '',
+        phone_prefix: '+39',
+        phone_number: '',
+        whatsapp_prefix: '+39',
+        whatsapp_number: '',
+        person_code: '',
+        domicile: '',
+        course: '',
+        document_type: 'ID Card',
+        document_number: '',
+        document_expiration: dayjs(),
+        matricola_number: '',
+        matricola_expiration: dayjs(),
+        is_esner: false
     });
 
-    const [formErrors, setFormErrors] = React.useState({
-        'email': [false, ''],
-        'email_confirm': [false, ''],
-        'name': [false, ''],
-        'surname': [false, ''],
-        'birthdate': [false, ''],
-        'country': [false, ''],
-        'phone_prefix': [false, ''],
-        'phone_number': [false, ''],
-        'whatsapp_prefix': [false, ''],
-        'whatsapp_number': [false, ''],
-        'person_code': [false, ''],
-        'domicile': [false, ''],
-        'course': [false, ''],
-        'document-type': [false, ''],
-        'document-number': [false, ''],
-        'document-expiration': [false, ''],
-        'matricola_number': [false, ''],
-        'matricola_expiration': [false, ''],
-        'is_esner': [false, '']
-    });
+    /*const [formData, setFormData] = React.useState({
+        'name': 'Giampiero',
+        'surname': 'Bassini',
+        'email': 'teopompil@gmail.com',
+        'email_confirm': 'teopompil@gmail.com',
+        'birthdate': dayjs(),
+        'password': '1Unoduetrequattro',
+        'password_confirm': '1Unoduetrequattro',
+        'country': 'IT',
+        'phone_prefix': '+39',
+        'phone_number': '11111111',
+        'whatsapp_prefix': '+39',
+        'whatsapp_number': '',
+        'person_code': '65432101',
+        'domicile': 'via bassini 1, Milano',
+        'course': 'Design',
+        'document_type': 'ID Card',
+        'document_number': '324153gfd',
+        'document_expiration': dayjs(),
+        'matricola_number': '653423',
+        'matricola_expiration': dayjs(),
+        'is_esner': false
+    });*/
+
+    const initialFormErrors = {
+        email: [false, ''],
+        email_confirm: [false, ''],
+        name: [false, ''],
+        surname: [false, ''],
+        birthdate: [false, ''],
+        country: [false, ''],
+        phone_prefix: [false, ''],
+        phone_number: [false, ''],
+        whatsapp_prefix: [false, ''],
+        whatsapp_number: [false, ''],
+        person_code: [false, ''],
+        domicile: [false, ''],
+        course: [false, ''],
+        document_type: [false, ''],
+        document_number: [false, ''],
+        document_expiration: [false, ''],
+        matricola_number: [false, ''],
+        matricola_expiration: [false, ''],
+        is_esner: [false, '']
+    };
+
+    const [formErrors, setFormErrors] = React.useState(initialFormErrors);
 
     const validateForm = () => {
         let valid = true;
         const newErrors = {...formErrors};
+        const newCheckboxErrors = {...checkboxErrors};
+
+        // Required fields
+        const requiredFields = [
+            'email', 'email_confirm', 'name', 'surname', 'birthdate', 'country', 'phone_prefix',
+            'phone_number', 'person_code', 'domicile', 'course', 'document_type',
+            'document_number', 'document_expiration', 'matricola_number', 'matricola_expiration'
+        ];
+        requiredFields.forEach(field => {
+            if (!formData[field] || (typeof formData[field] === 'string' && formData[field].trim() === '')) {
+                newErrors[field] = [true, 'This field is required'];
+                valid = false;
+            } else {
+                newErrors[field] = [false, ''];
+            }
+        });
 
         // Validate matricola (exactly 6 digits)
         const matricolaRegex = /^\d{6}$/;
-        if (!matricolaRegex.test(formData['matricola_number'])) {
-            newErrors['matricola_number'] = [true, 'Matricola must be exactly 6 digits'];
+        if (!matricolaRegex.test(formData.matricola_number)) {
+            newErrors.matricola_number = [true, 'Matricola must be exactly 6 digits'];
             valid = false;
-        } else newErrors['matricola_number'] = [false, ''];
+        } else newErrors.matricola_number = [false, ''];
 
         // Validate person code (exactly 8 digits)
         const personCodeRegex = /^\d{8}$/;
-        if (!personCodeRegex.test(formData['person_code'])) {
-            newErrors['person_code'] = [true, 'Person Code must be exactly 8 digits'];
+        if (!personCodeRegex.test(formData.person_code)) {
+            newErrors.person_code = [true, 'Person Code must be exactly 8 digits'];
             valid = false;
-        } else newErrors['person_code'] = [false, ''];
+        } else newErrors.person_code = [false, ''];
+
+        // Email format regex (simple version)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (formData.email && !emailRegex.test(formData.email)) {
+            newErrors.email = [true, 'Invalid email format'];
+            valid = false;
+        }
 
         // Validate emails equality
-        if (formData['email'] !== formData['email_confirm']) {
-            newErrors['email_confirm'] = [true, 'Emails do not match'];
+        if (formData.email !== formData.email_confirm) {
+            newErrors.email_confirm = [true, 'Emails do not match'];
             valid = false;
-        } else newErrors['email_confirm'] = [false, ''];
+        } else newErrors.email_confirm = [false, ''];
+
+        // Checkbox validation
+        Object.entries(checkboxes).forEach(([key, value]) => {
+            if (!value) {
+                newCheckboxErrors[key] = true;
+                valid = false;
+            } else {
+                newCheckboxErrors[key] = false;
+            }
+        });
 
         setFormErrors(newErrors);
+        setCheckboxErrors(newCheckboxErrors);
         return valid;
     };
 
@@ -104,6 +188,13 @@ export default function ErasmusForm() {
             ...formData,
             [e.target.name]: e.target.value,
         });
+        // Reset error for this field
+        if (formErrors[e.target.name]) {
+            setFormErrors({
+                ...formErrors,
+                [e.target.name]: [false, '']
+            });
+        }
     };
 
     const handleDateChange = (name, date) => {
@@ -111,6 +202,21 @@ export default function ErasmusForm() {
             ...formData,
             [name]: date,
         });
+    };
+
+    const handleCheckboxChange = (e) => {
+        const {name, checked} = e.target;
+        setCheckboxes({
+            ...checkboxes,
+            [name]: checked
+        });
+        // Reset checkbox error when checked
+        if (checked) {
+            setCheckboxErrors({
+                ...checkboxErrors,
+                [name]: false
+            });
+        }
     };
 
     const handleSubmit = (e) => {
@@ -121,19 +227,22 @@ export default function ErasmusForm() {
             return;
         }
 
+        setIsLoading(true);
+
         let body = {
             ...formData,
-            'whatsapp_prefix': sameWAasPhone ? formData['phone_prefix'] : formData['whatsapp_prefix'],
-            'whatsapp_number': sameWAasPhone ? formData['phone_number'] : formData['whatsapp_number'],
-            'birthdate': formatDateString(formData['birthdate']),
-            'document-expiration': formatDateString(formData['document-expiration']),
-            'matricola_expiration': formatDateString(formData['matricola_expiration']),
+            whatsapp_prefix: sameWAasPhone ? formData.phone_prefix : formData.whatsapp_prefix,
+            whatsapp_number: sameWAasPhone ? formData.phone_number : formData.whatsapp_number,
+            birthdate: formatDateString(formData.birthdate),
+            document_expiration: formatDateString(formData.document_expiration),
+            matricola_expiration: formatDateString(formData.matricola_expiration),
         }
 
         const submit = async () => {
             try {
                 const response = await fetchCustom("POST", '/profile/initiate-creation/', body, {}, false);
                 const data = await response.json();
+                setFormErrors(initialFormErrors);
                 if (!response.ok) {
                     setStatusMessage({message: 'Failed to submit application: see errors below', state: 'error'});
                     const newErrors = {...formErrors};
@@ -146,10 +255,11 @@ export default function ErasmusForm() {
                 }
             } catch (error) {
                 setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});
+            } finally {
+                setIsLoading(false);
             }
         };
         submit().then();
-        scrollUp();
     }
 
     const handleSameNumberChange = (e) => {
@@ -165,14 +275,12 @@ export default function ErasmusForm() {
 
     if (isSubmitted) {
         return (
-            <Box
-                display="flex"
-                flexDirection="column"
-                alignItems="center"
-                justifyContent="center"
-                height="100vh"
-                bgcolor="#fff"
-            >
+            <Box display="flex"
+                 flexDirection="column"
+                 alignItems="center"
+                 justifyContent="center"
+                 height="100vh"
+                 bgcolor="#fff">
                 <CheckCircleOutlineIcon style={{fontSize: 100, color: green[500]}}/>
                 <Typography variant="h4" align="center" gutterBottom>
                     Your response has been sent.
@@ -180,17 +288,15 @@ export default function ErasmusForm() {
                 <Typography variant="subtitle1" align="center">
                     Check your inbox to verify your e-mail.
                 </Typography>
+                <Typography variant="body2" align="center" sx={{mt: 2}}>
+                    In case you do not receive an email, please check your spam folder or contact us at <Link href="mailto: informatica@esnpolimi.it">informatica@esnpolimi.it</Link>
+                </Typography>
             </Box>
         );
     }
 
     return (
-        <Box
-            component="form"
-            sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
-            onSubmit={handleSubmit}
-        >
-
+        <Box component="form" noValidate sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}} onSubmit={handleSubmit}>
             <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi Registration - International Student</Typography>
 
             {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
@@ -202,23 +308,24 @@ export default function ErasmusForm() {
                         label="Name"
                         variant="outlined"
                         name="name"
-                        value={formData['name']}
+                        value={formData.name}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['name'][0]}
-                    />
+                        error={formErrors.name[0]}
+                        helperText={formErrors.name[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 4}}>
                     <TextField
                         label="Surname"
                         variant="outlined"
                         name="surname"
-                        value={formData['surname']}
+                        value={formData.surname}
                         onChange={handleChange}
                         fullWidth
                         required
-                    />
+                        error={formErrors.surname[0]}
+                        helperText={formErrors.surname[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
@@ -226,10 +333,8 @@ export default function ErasmusForm() {
                             label="Birthdate"
                             value={formData.birthdate}
                             onChange={(date) => handleDateChange('birthdate', date)}
-                            renderInput={(params) => <TextField {...params}
-                                                                fullWidth
-                                                                required
-                            />}
+                            maxDate={dayjs()}
+                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}
                         />
                     </LocalizationProvider>
                 </Grid>
@@ -239,13 +344,12 @@ export default function ErasmusForm() {
                         variant="outlined"
                         name="email"
                         type="email"
-                        value={formData['email']}
+                        value={formData.email}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['email'][0]}
-                        helperText={formErrors['email'][1]}
-                    />
+                        error={formErrors.email[0]}
+                        helperText={formErrors.email[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
@@ -253,13 +357,12 @@ export default function ErasmusForm() {
                         variant="outlined"
                         name="email_confirm"
                         type="email"
-                        value={formData['email_confirm']}
+                        value={formData.email_confirm}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['email_confirm'][0]}
-                        helperText={formErrors['email_confirm'][1]}
-                    />
+                        error={formErrors.email_confirm[0]}
+                        helperText={formErrors.email_confirm[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <FormControl fullWidth required>
@@ -268,14 +371,10 @@ export default function ErasmusForm() {
                             variant="outlined"
                             labelId="country-label"
                             name="country"
-                            value={formData['country']}
+                            value={formData.country}
                             onChange={handleChange}
                             label="Home University Country"
-                            error={formErrors['country'][0]}
-                        >
-                            <MenuItem value="">
-                                <em>None</em>
-                            </MenuItem>
+                            error={formErrors.country[0]}>
                             {countryCodes.map((country) => (
                                 <MenuItem key={country.code} value={country.code}>
                                     {country.name}
@@ -289,11 +388,12 @@ export default function ErasmusForm() {
                         label="Home Domicile"
                         variant="outlined"
                         name="domicile"
-                        value={formData['domicile']}
+                        value={formData.domicile}
                         onChange={handleChange}
                         fullWidth
                         required
-                    />
+                        error={formErrors.domicile[0]}
+                        helperText={formErrors.domicile[1]}/>
                 </Grid>
                 <Grid size={{xs: 4, sm: 2}}>
                     <FormControl fullWidth>
@@ -307,7 +407,7 @@ export default function ErasmusForm() {
                             onChange={handleChange}
                             label="Prefix"
                             renderValue={(value) => value}
-                        >
+                            error={formErrors.phone_prefix[0]}>
                             {countryCodes.map((country) => (
                                 <MenuItem key={country.code} value={country.dial}>
                                     {country.dial} ({country.name})
@@ -327,8 +427,7 @@ export default function ErasmusForm() {
                         fullWidth
                         required
                         error={formErrors.phone_number[0]}
-                        helperText={formErrors.phone_number[1]}
-                    />
+                        helperText={formErrors.phone_number[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <FormControlLabel
@@ -337,8 +436,7 @@ export default function ErasmusForm() {
                                 checked={sameWAasPhone}
                                 onChange={handleSameNumberChange}
                                 name="sameAsPhone"
-                                color="primary"
-                            />
+                                color="primary"/>
                         }
                         label="Same number for WhatsApp"
                     />
@@ -356,7 +454,7 @@ export default function ErasmusForm() {
                                 onChange={handleChange}
                                 label="Prefix"
                                 renderValue={(value) => value}
-                            >
+                                error={formErrors.whatsapp_prefix[0]}>
                                 {countryCodes.map((country) => (
                                     <MenuItem key={country.code} value={country.dial}>
                                         {country.dial} ({country.name})
@@ -376,8 +474,7 @@ export default function ErasmusForm() {
                             fullWidth
                             required
                             error={formErrors.whatsapp_number[0]}
-                            helperText={formErrors.whatsapp_number[1]}
-                        />
+                            helperText={formErrors.whatsapp_number[1]}/>
                     </Grid>
                 </>)}
             </Grid>
@@ -390,13 +487,12 @@ export default function ErasmusForm() {
                         <Select
                             variant="outlined"
                             labelId="document-type-label"
-                            name="document-type"
-                            value={formData['document-type']}
+                            name="document_type"
+                            value={formData.document_type}
                             onChange={handleChange}
                             label="Type"
                             required
-                            error={formErrors['document-type'][0]}
-                        >
+                            error={formErrors.document_type[0]}>
                             <MenuItem value="Passport">Passport</MenuItem>
                             <MenuItem value="ID Card">ID Card</MenuItem>
                             <MenuItem value="Driving License">Driving License</MenuItem>
@@ -409,23 +505,21 @@ export default function ErasmusForm() {
                     <TextField
                         label="Number"
                         variant="outlined"
-                        name="document-number"
-                        value={formData['document-number']}
+                        name="document_number"
+                        value={formData.document_number}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['document-number'][0]}
-                        helperText={formErrors['document-number'][1]}
-                    />
+                        error={formErrors.document_number[0]}
+                        helperText={formErrors.document_number[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Expiration Date"
-                            value={formData['document-expiration']}
-                            onChange={(date) => handleDateChange('document-expiration', date)}
-                            renderInput={(params) => <TextField {...params} fullWidth required/>}
-                        />
+                            value={formData.document_expiration}
+                            onChange={(date) => handleDateChange('document_expiration', date)}
+                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}/>
                     </LocalizationProvider>
                 </Grid>
             </Grid>
@@ -439,11 +533,10 @@ export default function ErasmusForm() {
                             variant="outlined"
                             labelId="course-label"
                             name="course"
-                            value={formData['course']}
+                            value={formData.course}
                             onChange={handleChange}
                             label="Field of Study"
-                            error={formErrors['course'][0]}
-                        >
+                            error={formErrors.course[0]}>
                             <MenuItem value="Engineering">Engineering</MenuItem>
                             <MenuItem value="Design">Design</MenuItem>
                             <MenuItem value="Architecture">Architecture</MenuItem>
@@ -454,10 +547,9 @@ export default function ErasmusForm() {
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
                             label="Exchange End Date"
-                            value={formData['matricola_expiration']}
+                            value={formData.matricola_expiration}
                             onChange={(date) => handleDateChange('matricola_expiration', date)}
-                            renderInput={(params) => <TextField {...params} fullWidth required/>}
-                        />
+                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}/>
                     </LocalizationProvider>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
@@ -466,13 +558,12 @@ export default function ErasmusForm() {
                         variant="outlined"
                         name="person_code"
                         type="number"
-                        value={formData['person_code']}
+                        value={formData.person_code}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['person_code'][0]}
-                        helperText={formErrors['person_code'][1]}
-                    />
+                        error={formErrors.person_code[0]}
+                        helperText={formErrors.person_code[1]}/>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
@@ -480,13 +571,12 @@ export default function ErasmusForm() {
                         variant="outlined"
                         name="matricola_number"
                         type="number"
-                        value={formData['matricola_number']}
+                        value={formData.matricola_number}
                         onChange={handleChange}
                         fullWidth
                         required
-                        error={formErrors['matricola_number'][0]}
-                        helperText={formErrors['matricola_number'][1]}
-                    />
+                        error={formErrors.matricola_number[0]}
+                        helperText={formErrors.matricola_number[1]}/>
                 </Grid>
                 <Grid size={{xs: 12}}>
                     <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
@@ -499,32 +589,98 @@ export default function ErasmusForm() {
             <Grid container spacing={3} mt={3}>
                 <Grid size={{xs: 12}}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptTerms" required/>}
-                        label="I declare that I read and have accepted the ESN Politecnico Milano Charter"
-                    />
+                        control={
+                            <Checkbox
+                                name="acceptStatute"
+                                checked={checkboxes.acceptStatute}
+                                onChange={handleCheckboxChange}
+                                required
+                                sx={{
+                                    color: checkboxErrors.acceptStatute ? 'red' : undefined,
+                                    '&.Mui-checked': {color: checkboxErrors.acceptStatute ? 'red' : undefined}
+                                }}/>
+                        }
+                        label={
+                            <span>
+                                I declare that I have read and accepted the{' '}
+                                <Link href={links.statute} target="_blank" rel="noopener noreferrer" underline="always">
+                                    ESN Politecnico Milano Charter
+                                </Link>
+                            </span>
+                        }/>
                 </Grid>
                 <Grid size={{xs: 12}}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptPrivacyPolicy" required/>}
+                        control={
+                            <Checkbox
+                                name="acceptPurposes"
+                                checked={checkboxes.acceptPurposes}
+                                onChange={handleCheckboxChange}
+                                required
+                                sx={{
+                                    color: checkboxErrors.acceptPurposes ? 'red' : undefined,
+                                    '&.Mui-checked': {color: checkboxErrors.acceptPurposes ? 'red' : undefined}
+                                }}/>
+                        }
                         label="I declare that I fully share the aims of the Association (ref. Article 2 of the Charter)"
                     />
                 </Grid>
                 <Grid size={{xs: 12}}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptPrivacyPolicy" required/>}
-                        label="I declare that I accept all the terms stated in the Charter, the Internal Rules and all subsequent changes and additions"
-                    />
+                        control={
+                            <Checkbox
+                                name="acceptRegulation"
+                                checked={checkboxes.acceptRegulation}
+                                onChange={handleCheckboxChange}
+                                required
+                                sx={{
+                                    color: checkboxErrors.acceptRegulation ? 'red' : undefined,
+                                    '&.Mui-checked': {color: checkboxErrors.acceptRegulation ? 'red' : undefined}
+                                }}/>
+                        }
+                        label={
+                            <span>
+                                I declare that I accept all the terms stated in the{' '}
+                                <Link href={links.regulation} target="_blank" rel="noopener noreferrer" underline="always">
+                                    Internal Rules
+                                </Link>
+                                {' '}and all subsequent changes and additions
+                            </span>
+                        }/>
                 </Grid>
                 <Grid size={{xs: 12}}>
                     <FormControlLabel
-                        control={<Checkbox name="acceptPrivacyPolicy" required/>}
-                        label="I declare that I have read the attached disclaimer about Privacy and that I agree to the usage of my personal data according to the Regulation EU 2016/679 (GDPR) and to be aware of my guaranteed rights by the afore-mentioned law"
-                    />
+                        control={
+                            <Checkbox
+                                name="acceptPrivacy"
+                                checked={checkboxes.acceptPrivacy}
+                                onChange={handleCheckboxChange}
+                                required
+                                sx={{
+                                    color: checkboxErrors.acceptPrivacy ? 'red' : undefined,
+                                    '&.Mui-checked': {color: checkboxErrors.acceptPrivacy ? 'red' : undefined}
+                                }}/>
+                        }
+                        label={
+                            <span>
+                                I declare that I have read the attached{' '}
+                                <Link href={links.privacy} target="_blank" rel="noopener noreferrer" underline="always">
+                                    Privacy Disclaimer
+                                </Link>
+                                {' '}and that I agree to the usage of my personal data according to the Regulation EU 2016/679 (GDPR) and to be aware of my guaranteed rights by the afore-mentioned law
+                            </span>
+                        }/>
                 </Grid>
             </Grid>
 
-            <Button type="submit" variant="contained" color="primary" fullWidth sx={{mt: 4}}>
-                Submit
+            <Button type="submit"
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    sx={{mt: 4}}
+                    startIcon={!isLoading && <LoginIcon/>}
+                    disabled={isLoading}>
+                {isLoading ? <CircularProgress size={24} color="inherit"/> : "Submit"}
             </Button>
         </Box>
     );
