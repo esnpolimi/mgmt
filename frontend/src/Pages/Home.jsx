@@ -39,11 +39,10 @@ export default function Home() {
     const fetchAccounts = async () => {
         try {
             const response = await fetchCustom("GET", "/accounts/");
-            if (response.ok) {
-                const json = await response.json();
-                setAccounts(json.results);
-            } else {
-                const errorMessage = await extractErrorMessage(response);
+            const json = await response.json();
+            if (response.ok) setAccounts(json.results);
+            else {
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {

@@ -16,12 +16,12 @@ export default function EmailVerification() {
         const verifyEmail = async () => {
             try {
                 const response = await fetchCustom('GET', `/api/profile/verify-email/${uid}/${token}/`, null, {}, false);
-                const data = await response.json();
+                const json = await response.json();
                 if (!response.ok) {
-                    const errorMessage = extractErrorMessage(data, response.status);
+                    const errorMessage = extractErrorMessage(json, response.status);
                     setStatusMessage({message: errorMessage, state: 'error'});
                 } else {
-                    setStatusMessage({message: data.message, state: 'success'});
+                    setStatusMessage({message: json.message, state: 'success'});
                 }
             } catch (error) {
                 setStatusMessage({message: `General error: ${error}`, state: 'error'});

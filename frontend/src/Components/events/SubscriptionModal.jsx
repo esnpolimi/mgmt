@@ -61,11 +61,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
     const fetchAccounts = async () => {
         try {
             const response = await fetchCustom("GET", "/accounts/");
-            if (response.ok) {
-                const json = await response.json();
-                setAccounts(json.results);
-            } else {
-                const errorMessage = await extractErrorMessage(response);
+            const json = await response.json();
+            if (response.ok) setAccounts(json.results);
+            else {
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
@@ -134,7 +133,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 status: data.status
             });
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
         } catch (error) {
@@ -161,11 +161,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         try {
             const response = await fetchCustom("DELETE", `/subscription/${data.id}/`);
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
-            } else {
-                onClose(true, "Eliminazione avvenuta con successo");
-            }
+            } else onClose(true, "Eliminazione avvenuta con successo");
         } catch (error) {
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }

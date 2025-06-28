@@ -8,7 +8,7 @@ import {fetchCustom} from "../api/api";
 import {extractErrorMessage} from "../utils/errorHandling";
 
 export default function Login() {
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isForgotPassword, setIsForgotPassword] = useState(false); // Toggle for forgot password
     const {login} = useAuth();
@@ -20,13 +20,14 @@ export default function Login() {
     const handleForgotPassword = async () => {
         setIsLoading(true);
         try {
-            console.log("Sending forgot password request for:", username);
-            const response = await fetchCustom("POST", '/api/forgot-password/', {email: username}, {}, false);
+            console.log("Sending forgot password request for:", email);
+            const response = await fetchCustom("POST", '/api/forgot-password/', {email: email}, {}, false);
             if (response.ok) {
                 setResetSubmitted(true);
-                setStatusMessage({message: 'Se il profilo è registrato, l\'email è stata inviata con successo a "' + username + '". Controlla la tua casella di posta.', state: 'success'});
+                setStatusMessage({message: 'Se il profilo è registrato, l\'email è stata inviata con successo a "' + email + '". Controlla la tua casella di posta.', state: 'success'});
             } else {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setStatusMessage({message: `Errore durante l\'invio dell\'email: ${errorMessage}`, state: 'error'});
             }
         } catch (error) {
@@ -39,7 +40,7 @@ export default function Login() {
     const handleLogin = async () => {
         setIsLoading(true);
         setStatusMessage(null);
-        const success = await login(username, password);
+        const success = await login(email, password);
         setIsLoading(false);
         if (success === true) {
             navigate("/");
@@ -83,7 +84,7 @@ export default function Login() {
                             name="email"
                             autoComplete="email"
                             autoFocus
-                            onChange={(e) => setUsername(e.target.value)}
+                            onChange={(e) => setEmail(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && (isForgotPassword ? handleForgotPassword() : handleLogin())}
                         />
                     )}

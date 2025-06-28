@@ -29,7 +29,8 @@ export default function ResetPassword() {
                 setSubmitted(true);
                 setStatusMessage({message: 'Password reimpostata con successo!', state: 'success'});
             } else {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setStatusMessage({message: `Errore durante il reset della password: ${errorMessage}`, state: 'error'});
             }
         } catch (error) {

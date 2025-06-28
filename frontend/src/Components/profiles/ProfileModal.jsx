@@ -112,11 +112,11 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
         const fetchData = async () => {
             try {
                 const response = await fetchCustom("GET", `/profile/${profile.id.toString()}/`);
+                const json = await response.json();
                 if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(response);
+                    const errorMessage = await extractErrorMessage(json, response.status);
                     setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 } else {
-                    const json = await response.json();
                     const update = {};
                     Object.keys(data).map((key) => {
                         update[key] = json[key];
@@ -137,10 +137,9 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
         const fetchGroups = async () => {
             try {
                 const response = await fetchCustom("GET", "/groups/");
-                if (response.ok) {
-                    const json = await response.json();
-                    setGroups(json);
-                } else setShowSuccessPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(response)}`, state: "error"});
+                const json = await response.json();
+                if (response.ok) setGroups(json);
+                else setShowSuccessPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
             } catch (error) {
                 console.error("Error fetching groups:", error);
                 setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
@@ -157,11 +156,11 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
     const refreshProfileData = async () => {
         try {
             const response = await fetchCustom("GET", `/profile/${profile.id.toString()}/`);
+            const json = await response.json();
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
-                const json = await response.json();
                 setData(json);
                 setUpdatedData(json);
                 if (updateProfile) updateProfile(json);
@@ -228,7 +227,8 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
         try {
             const response = await fetchCustom("PATCH", `/esncard/${row.id}/`, values);
             if (!response.ok) {
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
             } else {
@@ -296,7 +296,8 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
             const response = await fetchCustom("DELETE", `/document/${row.id}/`);
             if (!response.ok) {
                 response.json().then((errors) => setDocumentErrors(errors))
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
                 setDocumentErrors({});
@@ -316,7 +317,8 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
             const response = await fetchCustom("POST", '/document/', val);
             if (!response.ok) {
                 response.json().then((errors) => setDocumentErrors(errors))
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
             } else {
@@ -337,7 +339,8 @@ export default function ProfileModal({open, onClose, inProfile, profileType, upd
             const response = await fetchCustom("PATCH", `/document/${row.id}/`, values);
             if (!response.ok) {
                 response.json().then((errors) => setDocumentErrors(errors))
-                const errorMessage = await extractErrorMessage(response);
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
             } else {
