@@ -1,7 +1,8 @@
 import React from "react";
-import {Button} from "@mui/material";
+import {IconButton} from "@mui/material";
 import {useAuth} from "../Context/AuthContext";
 import {useNavigate} from "react-router-dom";
+import LogoutIcon from '@mui/icons-material/Logout';
 
 const LogoutButton = () => {
     const {logout} = useAuth();
@@ -13,13 +14,12 @@ const LogoutButton = () => {
     };
 
     return (
-        <Button
+        <IconButton
             variant="contained"
-            sx={{backgroundColor: "black", color: "white", marginTop: 2}}
-            onClick={handleLogout}
-        >
-            Logout
-        </Button>
+            sx={{backgroundColor: "black", color: "white"}}
+            onClick={handleLogout}>
+            <LogoutIcon/>
+        </IconButton>
     );
 };
 

@@ -22,7 +22,6 @@ export default function Sidebar() {
     const {user} = useAuth();
     const navigate = useNavigate();
 
-    // Helper function to check permissions
     const hasPermission = (permission) => {
         return user?.permissions?.includes(permission) || false;
     };
@@ -47,9 +46,7 @@ export default function Sidebar() {
     }, [navigate, user?.profile?.id]);
 
     const handleNavClick = (e) => {
-        if (e.button === 0 || e.button === 1) { // left or middle click
-            closeDrawer();
-        }
+        if (e.button === 0 || e.button === 1) closeDrawer();
     };
 
     const drawer = (
@@ -105,16 +102,50 @@ export default function Sidebar() {
                 ))}
             </Box>
             {user && (
-                <Box sx={{mt: 'auto', mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px'}}>
-                    <IconButton onClick={handleProfileOpen} aria-label="Profile">
-                        <PersonIcon/>
+                <Box
+                    sx={{
+                        mt: 'auto',
+                        mb: 2,
+                        ml: 0.5,
+                        mr: 0.5,
+                        px: 2,
+                        py: 1.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: 2,
+                        background: '#f5f5f5',
+                        boxShadow: 1,
+                        gap: 1,
+                    }}>
+                    <IconButton
+                        onClick={handleProfileOpen}
+                        aria-label="Profile"
+                        sx={{
+                            background: '#e0e0e0',
+                            mr: 0.5,
+                            width: 44,
+                            height: 44,
+                            '&:hover': {background: '#d1c4e9'},
+                        }}>
+                        <PersonIcon sx={{fontSize: 28}}/>
                     </IconButton>
-                    <Box sx={{flexGrow: 1, marginLeft: '10px'}}>
-                        <Typography variant="body2">
-                            {user.profile.name} {user.profile.surname} ({user.groups[0]})
+                    <Box sx={{flexGrow: 1, minWidth: 0}}>
+                        <Typography
+                            variant="title"
+                            sx={{
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                            {
+                                user.profile.name.length > 10
+                                    ? user.profile.name.slice(0, 10) + '...'
+                                    : user.profile.name
+                            }
                         </Typography>
-                        <LogoutButton/>
                     </Box>
+                    <LogoutButton/>
                 </Box>
             )}
         </Box>

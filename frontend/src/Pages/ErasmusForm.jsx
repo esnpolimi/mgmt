@@ -13,6 +13,8 @@ import StatusBanner from '../Components/StatusBanner';
 import Link from '@mui/material/Link';
 import CircularProgress from '@mui/material/CircularProgress';
 import LoginIcon from '@mui/icons-material/Login';
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -169,6 +171,7 @@ export default function ErasmusForm() {
 
         setFormErrors(newErrors);
         setCheckboxErrors(newCheckboxErrors);
+        if (!valid) setStatusMessage({message: "Error in form submission, check the errors below", state: 'error'});
         return valid;
     };
 
@@ -227,6 +230,7 @@ export default function ErasmusForm() {
             return;
         }
 
+        setStatusMessage(null);
         setIsLoading(true);
 
         let body = {
@@ -363,6 +367,19 @@ export default function ErasmusForm() {
                         required
                         error={formErrors.email_confirm[0]}
                         helperText={formErrors.email_confirm[1]}/>
+                    <Box sx={{mt: 1}}>
+                        {formData.email_confirm && (
+                            <Typography variant="caption" sx={{display: 'flex', alignItems: 'center', color: formData.email === formData.email_confirm ? 'green' : 'grey'}}>
+                                {formData.email === formData.email_confirm
+                                    ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
+                                    : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
+                                }
+                                {formData.email === formData.email_confirm
+                                    ? "The emails match"
+                                    : "The emails do not match"}
+                            </Typography>
+                        )}
+                    </Box>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <FormControl fullWidth required>
