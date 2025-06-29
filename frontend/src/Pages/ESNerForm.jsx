@@ -16,11 +16,13 @@ import CloseIcon from '@mui/icons-material/Close';
 import LoginIcon from '@mui/icons-material/Login';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 export default function ESNerForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
     const [statusMessage, setStatusMessage] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [capsLockActive, setCapsLockActive] = useState({password: false, password_confirm: false});
     const names = profileDisplayNames;
 
     const [formData, setFormData] = React.useState({
@@ -189,6 +191,7 @@ export default function ESNerForm() {
 
         setFormErrors(newErrors);
         setCheckboxErrors(newCheckboxErrors);
+        if (!valid) setStatusMessage({message: "Errore nella compilazione del form, controlla i campi evidenziati.", state: "error"});
         return valid;
     };
 
@@ -240,14 +243,30 @@ export default function ESNerForm() {
         }
     }
 
+    const handlePasswordKeyDown = (field) => (e) => {
+        setCapsLockActive((prev) => ({
+            ...prev,
+            [field]: e.getModifierState && e.getModifierState('CapsLock')
+        }));
+    };
+
+    const handlePasswordKeyUp = (field) => (e) => {
+        setCapsLockActive((prev) => ({
+            ...prev,
+            [field]: e.getModifierState && e.getModifierState('CapsLock')
+        }));
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
         if (!validateForm()) {
+            // Banner is already set in validateForm
             scrollUp();
             return;
         }
 
+        setStatusMessage(null);
         setIsLoading(true);
 
         let body = {
@@ -376,6 +395,19 @@ export default function ESNerForm() {
                         required
                         error={formErrors.email_confirm[0]}
                         helperText={formErrors.email_confirm[1]}/>
+                    <Box sx={{mt: 1}}>
+                        {formData.email_confirm && (
+                            <Typography variant="caption" sx={{display: 'flex', alignItems: 'center', color: formData.email === formData.email_confirm ? 'green' : 'grey'}}>
+                                {formData.email === formData.email_confirm
+                                    ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
+                                    : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
+                                }
+                                {formData.email === formData.email_confirm
+                                    ? "Le due email coincidono"
+                                    : "Le email non corrispondono"}
+                            </Typography>
+                        )}
+                    </Box>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
@@ -385,11 +417,19 @@ export default function ESNerForm() {
                         name="password"
                         value={formData.password}
                         onChange={handleChange}
+                        onKeyDown={handlePasswordKeyDown('password')}
+                        onKeyUp={handlePasswordKeyUp('password')}
                         fullWidth
                         required
                         error={formErrors.password[0]}
                         helperText={formErrors.password[1]}/>
-                    {/* Password requirements helper */}
+                    {/* Caps Lock warning */}
+                    {capsLockActive.password && (
+                        <Box sx={{display: 'flex', alignItems: 'center', color: 'orange', mt: 0.5}}>
+                            <WarningAmberIcon fontSize="small" sx={{mr: 0.5}}/>
+                            <Typography variant="caption">Attenzione: il tasto Bloc Maiusc è attivo</Typography>
+                        </Box>
+                    )}
                     <Box sx={{mt: 1, mb: 2}}>
                         <Typography variant="caption" color="text.secondary">
                             La password deve contenere:
@@ -415,11 +455,18 @@ export default function ESNerForm() {
                         name="password_confirm"
                         value={formData.password_confirm}
                         onChange={handleChange}
+                        onKeyDown={handlePasswordKeyDown('password_confirm')}
+                        onKeyUp={handlePasswordKeyUp('password_confirm')}
                         fullWidth
                         required
                         error={formErrors.password_confirm[0]}
                         helperText={formErrors.password_confirm[1]}/>
-                    {/* Passwords match check */}
+                    {capsLockActive.password_confirm && (
+                        <Box sx={{display: 'flex', alignItems: 'center', color: 'orange', mt: 0.5}}>
+                            <WarningAmberIcon fontSize="small" sx={{mr: 0.5}}/>
+                            <Typography variant="caption">Attenzione: il tasto Bloc Maiusc è attivo</Typography>
+                        </Box>
+                    )}
                     <Box sx={{mt: 1}}>
                         {formData.password_confirm && (
                             <Typography variant="caption" sx={{display: 'flex', alignItems: 'center', color: formData.password === formData.password_confirm ? 'green' : 'grey'}}>

@@ -170,7 +170,6 @@ export default function Profile() {
             } else {
                 setData(json);
                 setUpdatedData(json);
-                if (updateProfile) updateProfile(json);
                 setProfile(json);
             }
         } catch (error) {
