@@ -1,24 +1,25 @@
 import logging
-from django.db import transaction
+import sentry_sdk
+
+from django.conf import settings
 from django.contrib.auth.models import Group
-from treasury.models import ESNcard
-from users.models import User
+from django.core.mail import EmailMultiAlternatives
+from django.db import transaction
+from django.db.models import Q
+from django.utils.encoding import force_bytes
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from django.utils.http import urlsafe_base64_encode
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.conf import settings
-from profiles.models import Profile, Document
-from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
-from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from profiles.tokens import email_verification_token
-from django.utils.http import urlsafe_base64_decode
-from django.utils.encoding import force_str
-from django.core.mail import EmailMultiAlternatives
-from django.db.models import Q
 
+from profiles.models import Profile, Document
+from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
+from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
+from profiles.tokens import email_verification_token
+from users.models import User
 from users.serializers import UserGroupEditSerializer
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ def profile_list(request, is_esner):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(status=500)
 
 
@@ -190,6 +192,7 @@ def initiate_profile_creation(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({"error": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
 
 
@@ -240,10 +243,8 @@ def verify_email_and_enable_profile(request, uid, token):
 
     except Exception as e:
         logger.error(str(e))
-        if 'profile' in locals() and hasattr(profile, 'is_esner') and profile.is_esner:
-            return Response({"error": "Si è verificato un errore imprevisto."}, status=500)
-        else:
-            return Response({"error": "An unexpected error occurred. Please contact us at informatica@esnpolimi.it"}, status=500)
+        sentry_sdk.capture_exception(e)
+        return Response({"error": "An unexpected error occurred. Please contact us at informatica@esnpolimi.it"}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
@@ -294,6 +295,7 @@ def profile_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Si è verificato un errore imprevisto.'}, status=500)
 
 
@@ -313,6 +315,7 @@ def document_creation(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response('Si è verificato un errore imprevisto.', status=500)
 
 
@@ -346,6 +349,7 @@ def document_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(str(e), status=500)
 
 
@@ -388,4 +392,5 @@ def search_profiles(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({"error": "Si è verificato un errore: " + str(e)}, status=500)

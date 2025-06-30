@@ -1,7 +1,6 @@
 from django.contrib import admin
-from treasury.models import ESNcard, Transaction, Account, Settings
-from events.models import Event, Subscription
 from django.utils.html import format_html
+from treasury.models import ESNcard, Transaction, Account, Settings
 
 
 @admin.register(Settings)

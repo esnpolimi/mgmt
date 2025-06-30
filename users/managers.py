@@ -27,9 +27,9 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
 
-        if extra_fields.get("is_staff") is not True:
+        if not extra_fields.get("is_staff"):
             raise ValueError(_("Superuser must have is_staff=True."))
-        if extra_fields.get("is_superuser") is not True:
+        if not extra_fields.get("is_superuser"):
             raise ValueError(_("Superuser must have is_superuser=True."))
 
         return self.create_user(profile, password, **extra_fields)
@@ -38,4 +38,4 @@ class UserManager(BaseUserManager):
                              allowed_chars='abcdefghjkmnpqrstuvwxyz'
                                            'ABCDEFGHJKLMNPQRSTUVWXYZ'
                                            '23456789'):
-        return ''.join(random.choice(allowed_chars) for i in range(length))
+        return ''.join(random.choice(allowed_chars) for _ in range(length))
