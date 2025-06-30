@@ -1,3 +1,8 @@
+// Import Sentry and tracing
+import * as Sentry from "@sentry/react";
+// import {BrowserTracing} from "@sentry/tracing";
+// import {browserTracingIntegration} from "@sentry/react";
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
@@ -7,10 +12,14 @@ import {createTheme, ThemeProvider} from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import {itIT} from '@mui/material/locale';
 
-// Import Sentry and tracing
-import * as Sentry from "@sentry/react";
-// import {BrowserTracing} from "@sentry/tracing";
-// import {browserTracingIntegration} from "@sentry/react";
+Sentry.init({
+    dsn: "https://f7ee9b97bae2c35e767d8e156eb7b116@o4509581352828928.ingest.de.sentry.io/4509581461487696",
+    sendDefaultPii: true,
+    environment: import.meta.env.MODE,
+    //integrations: [Sentry.browserTracingIntegration()],
+    //tracesSampleRate: 1.0,  // Adjust in production to reduce volume
+    //tracePropagationTargets: ["localhost", /^https:\/\/mgmt.esnpolimi.it\.io\/api/],
+});
 
 const theme = createTheme({
     typography: {
@@ -30,19 +39,11 @@ const theme = createTheme({
     },
 });
 
-Sentry.init({
-    dsn: "https://f7ee9b97bae2c35e767d8e156eb7b116@o4509581352828928.ingest.de.sentry.io/4509581461487696",
-    sendDefaultPii: true,
-    //integrations: [Sentry.browserTracingIntegration()],
-    //tracesSampleRate: 1.0,  // Adjust in production to reduce volume
-    //tracePropagationTargets: ["localhost", /^https:\/\/mgmt.esnpolimi.it\.io\/api/],
-});
-
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
     <React.StrictMode>
-        <Sentry.ErrorBoundary>
+        <Sentry.ErrorBoundary fallback={<p>An unexpected error occurred.</p>}>
             <ThemeProvider theme={createTheme(theme, itIT)}>
                 <CssBaseline/>
                 <App/>
