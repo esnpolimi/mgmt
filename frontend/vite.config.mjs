@@ -1,9 +1,19 @@
+import 'dotenv/config'; // ⬅️ loads .env/.env.production into process.env
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
+import {sentryVitePlugin} from '@sentry/vite-plugin'
 
 export default defineConfig({
     base: '/',
-    plugins: [react()],
+    plugins: [
+        react(),
+        sentryVitePlugin({
+            org: 'esn-politecnico-milano',
+            project: 'javascript-react',
+            /* eslint-env node */
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            // Uploads source maps and sets debug flag automatically
+        }),],
     server: {
         port: 3000, // You can use the same port as CRA
         open: false, // Opens the browser automatically. Set to false to avoid errors when containerized in docker
@@ -12,6 +22,7 @@ export default defineConfig({
     },
     build: {
         outDir: "build",
+        sourcemap: true,
         chunkSizeWarningLimit: 1000,
         rollupOptions: {
             output: {
@@ -22,8 +33,5 @@ export default defineConfig({
                 }
             }
         }
-    },
-    define: {
-        __SENTRY_DEBUG__: false,
     },
 });
