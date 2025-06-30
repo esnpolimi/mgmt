@@ -1,5 +1,5 @@
 import {Box, Button, Card, FormControl, InputLabel, MenuItem, Select, TextField, Toolbar, Typography, Grid, IconButton} from "@mui/material";
-import React, {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -17,6 +17,7 @@ import {Person, School, Group} from '@mui/icons-material';
 import {useNavigate, useParams} from "react-router-dom";
 import Sidebar from "../../Components/Sidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import * as Sentry from "@sentry/react";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -131,6 +132,7 @@ export default function Profile() {
                     setProfileType(json.is_esner ? "ESNer" : "Erasmus");
                 }
             } catch (error) {
+                Sentry.captureException(error);
                 setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setLoading(false);
@@ -147,7 +149,7 @@ export default function Profile() {
                 if (response.ok) setGroups(json);
                 else setShowSuccessPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
             } catch (error) {
-                console.error("Error fetching groups:", error);
+                Sentry.captureException(error);
                 setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             }
         };
@@ -173,6 +175,7 @@ export default function Profile() {
                 setProfile(json);
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
@@ -244,6 +247,7 @@ export default function Profile() {
                 return true;
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
@@ -312,6 +316,7 @@ export default function Profile() {
                 return true;
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
@@ -334,6 +339,7 @@ export default function Profile() {
                 return true;
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             return false;
         }
@@ -356,6 +362,7 @@ export default function Profile() {
                 return true;
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             return false;
         }
@@ -432,6 +439,7 @@ export default function Profile() {
                 }
             }
         } catch (error) {
+            Sentry.captureException(error);
             setUpdatedData(data);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             toggleEdit(false);
@@ -518,7 +526,7 @@ export default function Profile() {
                                                 readOnly={readOnly.birthdate}
                                                 onChange={(date) => handleDateChange('birthdate', date)}
                                                 sx={{backgroundColor: readOnly.birthdate ? 'grey.200' : 'white'}}
-                                                renderInput={(params) => <TextField {...params} fullWidth required/>}/>
+                                                slotProps={{textField: {variant: 'outlined'}}}/>
                                         </LocalizationProvider>
                                     </Grid>
                                 )}
@@ -701,7 +709,7 @@ export default function Profile() {
                                                 readOnly={readOnly.matricola_expiration}
                                                 onChange={(date) => handleDateChange('matricola_expiration', date)}
                                                 sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
-                                                renderInput={(params) => <TextField {...params} fullWidth required/>}/>
+                                                slotProps={{textField: {variant: 'outlined'}}}/>
                                         </LocalizationProvider>
                                     </Grid>
                                 )}

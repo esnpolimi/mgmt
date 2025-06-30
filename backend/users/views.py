@@ -1,5 +1,5 @@
 import logging
-
+import sentry_sdk
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
@@ -13,7 +13,6 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
-
 from profiles.models import Profile
 from users.models import User
 from users.serializers import CustomTokenObtainPairSerializer
@@ -206,6 +205,7 @@ def forgot_password(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({"error": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
 
 
@@ -240,6 +240,7 @@ def reset_password(request, uid, token):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({"error": "Si è verificato un errore imprevisto durante la reimpostazione della password."}, status=500)
 
 
@@ -252,4 +253,5 @@ def group_list(request):
         return Response(serializer.data)
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(status=500)

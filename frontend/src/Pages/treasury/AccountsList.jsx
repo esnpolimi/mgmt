@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo} from 'react';
+import {useEffect, useState, useMemo} from 'react';
 import {Box, Typography, Button, IconButton, Chip} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
@@ -14,6 +14,7 @@ import {extractErrorMessage} from "../../utils/errorHandling";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import TransactionAdd from "../../Components/treasury/TransactionAdd";
 import EditIcon from '@mui/icons-material/Edit';
+import * as Sentry from "@sentry/react";
 
 export default function AccountsList() {
     const [data, setData] = useState([]);
@@ -41,6 +42,7 @@ export default function AccountsList() {
                 console.log("Account List Data: ", json.results);
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setLoading(false);

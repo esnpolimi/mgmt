@@ -1,10 +1,11 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {useParams, useNavigate} from 'react-router-dom';
 import {Container, TextField, Button, Box, Typography, Link} from '@mui/material';
 import StatusBanner from '../Components/StatusBanner';
 import logo from '../assets/esnpolimi-logo.png';
 import {extractErrorMessage} from "../utils/errorHandling";
 import {fetchCustom} from "../api/api";
+import * as Sentry from "@sentry/react";
 
 export default function ResetPassword() {
     const {uid, token} = useParams();
@@ -34,6 +35,7 @@ export default function ResetPassword() {
                 setStatusMessage({message: `Errore durante il reset della password: ${errorMessage}`, state: 'error'});
             }
         } catch (error) {
+            Sentry.captureException(error);
             setStatusMessage({message: `Errore generale: ${error}`, state: 'error'});
         }
     };

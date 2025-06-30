@@ -1,4 +1,3 @@
-import React from 'react';
 import {CircularProgress, Box} from '@mui/material';
 
 export default function Loader({size = 40, fullScreen = false}) {
@@ -15,8 +14,7 @@ export default function Loader({size = 40, fullScreen = false}) {
                 left: 0,
                 zIndex: fullScreen ? 1300 : 1,
                 backgroundColor: fullScreen ? 'rgba(255, 255, 255, 0.7)' : 'transparent'
-            }}
-        >
+            }}>
             <CircularProgress size={size}/>
         </Box>
     );

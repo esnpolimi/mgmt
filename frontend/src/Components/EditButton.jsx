@@ -1,9 +1,9 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {CircularProgress, IconButton, Box} from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
-
+import * as Sentry from "@sentry/react";
 
 const EditButton = ({onEdit, onCancel, onSave, saving}) => {
     const [loading, setLoading] = useState(false);
@@ -29,7 +29,7 @@ const EditButton = ({onEdit, onCancel, onSave, saving}) => {
                 if (result !== false) setIsEditing(false);
             } else setIsEditing(false);
         } catch (error) {
-            console.error("Error during save:", error);
+            Sentry.captureException(error);
         } finally {
             setLoading(false);
         }

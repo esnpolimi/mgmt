@@ -1,4 +1,5 @@
 import logging
+import sentry_sdk
 
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
@@ -31,25 +32,30 @@ def events_list(request):
         # --- New filters ---
         subscription_status = request.GET.get('subscription_status', '').strip()
         if subscription_status:
-            from django.utils import timezone
             now = timezone.now()
-            if subscription_status == 'open':
-                events = events.filter(
-                    subscription_start_date__lte=now,
-                    subscription_end_date__gte=now
-                )
-            elif subscription_status == 'not_yet':
-                events = events.filter(
-                    subscription_start_date__gt=now
-                )
-            elif subscription_status == 'closed':
-                events = events.filter(
-                    subscription_end_date__lt=now
-                )
-            elif subscription_status == 'not_available':
-                events = events.filter(
-                    subscription_start_date__isnull=True
-                )
+            # Split comma-separated statuses and remove whitespace
+            status_list = [s.strip() for s in subscription_status.split(',') if s.strip()]
+            if status_list:
+                status_q = Q()
+                for status in status_list:
+                    if status == 'open':
+                        status_q |= Q(
+                            subscription_start_date__lte=now,
+                            subscription_end_date__gte=now
+                        )
+                    elif status == 'not_yet':
+                        status_q |= Q(
+                            subscription_start_date__gt=now
+                        )
+                    elif status == 'closed':
+                        status_q |= Q(
+                            subscription_end_date__lt=now
+                        )
+                    elif status == 'not_available':
+                        status_q |= Q(
+                            subscription_start_date__isnull=True
+                        )
+                events = events.filter(status_q)
         date_from = request.GET.get('dateFrom')
         if date_from:
             events = events.filter(date__gte=date_from)
@@ -65,6 +71,7 @@ def events_list(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(status=500)
 
 
@@ -82,6 +89,7 @@ def event_creation(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(status=500)
 
 
@@ -167,6 +175,7 @@ def event_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({"message": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
 
 
@@ -231,6 +240,7 @@ def subscription_create(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(str(e), status=500)
 
 
@@ -345,6 +355,7 @@ def subscription_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(str(e), status=500)
 
 
@@ -409,6 +420,7 @@ def profile_lookup(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(status=500)
 
 
@@ -459,6 +471,7 @@ def form_subscription_creation(request):
         return Response(str(e), status=400)
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': str(e)}, status=500)
 
 '''

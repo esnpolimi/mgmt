@@ -5,14 +5,14 @@ import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon} from '@mui/icons-material';
 import {fetchCustom} from "../../api/api";
-import {style, colorOptions} from '../../utils/sharedStyles'
+import {style} from '../../utils/sharedStyles'
 import {eventDisplayNames as eventNames} from '../../utils/displayAttributes';
 import CustomEditor from '../CustomEditor';
 import Loader from "../Loader";
 import StatusBanner from "../StatusBanner";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import CloseIcon from '@mui/icons-material/Close';
-
+import * as Sentry from "@sentry/react";
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
@@ -217,6 +217,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 scrollUp();
             } else onClose(true);
         } catch (error) {
+            Sentry.captureException(error);
             setStatusMessage({message: `Errore generale: ${error}`, state: "error"});
             scrollUp();
         }
@@ -333,10 +334,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     value={data.date}
                                     onChange={handleEventDateChange}
                                     minDate={isEdit ? null : dayjs()}
-                                    renderInput={(params) => <TextField {...params} fullWidth required/>}
+                                    slotProps={{textField: {variant: 'outlined'}}}
                                     required
-                                    error={errors.date[0]}
-                                />
+                                    error={errors.date[0]}/>
                             </LocalizationProvider>
                         </Grid>
                         <Grid size={{xs: 12, md: 3}}>

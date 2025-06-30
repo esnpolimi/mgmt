@@ -1,4 +1,3 @@
-import React from 'react';
 import {Typography, Box, Alert} from '@mui/material';
 
 const StatusBanner = ({message, state, successText, errorText}) => {

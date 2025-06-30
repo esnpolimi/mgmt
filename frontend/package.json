@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "devDependencies": {
+    "@babel/eslint-parser": "^7.27.5",
     "@babel/plugin-transform-private-property-in-object": "^7.27.1",
+    "@babel/preset-react": "^7.27.1",
     "eslint": "^9.29.0",
     "eslint-plugin-react": "^7.37.5",
     "prettier": "^3.6.1"
@@ -46,10 +48,32 @@
     "preview": "vite preview"
   },
   "eslintConfig": {
+    "settings": {
+      "react": {
+        "version": "detect"
+      }
+    },
+    "env": {
+      "browser": true,
+      "es2021": true
+    },
+    "parser": "@babel/eslint-parser",
+    "parserOptions": {
+      "requireConfigFile": false,
+      "babelOptions": {
+        "presets": [
+          "@babel/preset-react"
+        ]
+      }
+    },
     "extends": [
       "eslint:recommended",
       "plugin:react/recommended"
-    ]
+    ],
+    "rules": {
+      "react/prop-types": "off",
+      "react/react-in-jsx-scope": "off"
+    }
   },
   "browserslist": {
     "production": [

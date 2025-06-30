@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -9,6 +9,7 @@ import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
+import * as Sentry from "@sentry/react";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
     const [isLoading, setLoading] = useState(true);
@@ -68,6 +69,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
+            Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
@@ -138,6 +140,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
         } catch (error) {
+            Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
@@ -166,6 +169,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 setSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
             } else onClose(true, "Eliminazione avvenuta con successo");
         } catch (error) {
+            Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };

@@ -17,6 +17,7 @@ import LoginIcon from '@mui/icons-material/Login';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import * as Sentry from "@sentry/react";
 
 export default function ESNerForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -292,6 +293,7 @@ export default function ESNerForm() {
                     setSubmitted(true);
                 }
             } catch (error) {
+                Sentry.captureException(error);
                 setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});
             } finally {
                 setIsLoading(false);
@@ -316,7 +318,7 @@ export default function ESNerForm() {
                     Controlla la tua email per ulteriori istruzioni.
                 </Typography>
                 <Typography variant="body2" align="center" sx={{mt: 2}}>
-                    In caso non avessi ricevuto nulla, controlla la cartella spam o contattaci all'indirizzo <Link href="mailto: informatica@esnpolimi.it">informatica@esnpolimi.it</Link>
+                    In caso non avessi ricevuto nulla, controlla la cartella spam o contattaci all&apos;indirizzo <Link href="mailto: informatica@esnpolimi.it">informatica@esnpolimi.it</Link>
                 </Typography>
                 <Link href="/login" underline="always" sx={{mt: 3}}>
                     Torna al Login
@@ -366,8 +368,7 @@ export default function ESNerForm() {
                             onChange={(date) => handleDateChange('birthdate', date)}
                             maxDate={dayjs()}
                             required
-                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}
-                        />
+                            slotProps={{textField: {variant: 'outlined'}}}/>
                     </LocalizationProvider>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
@@ -587,8 +588,7 @@ export default function ESNerForm() {
                             label="Data di Scadenza"
                             value={formData.document_expiration}
                             onChange={(date) => handleDateChange('document_expiration', date)}
-                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}
-                        />
+                            slotProps={{textField: {variant: 'outlined'}}}/>
                     </LocalizationProvider>
                 </Grid>
             </Grid>
@@ -700,7 +700,7 @@ export default function ESNerForm() {
                         }
                         label={
                             <span>
-                                Dichiaro di aver letto l'
+                                Dichiaro di aver letto l&apos;
                                 <Link href={links.privacy} target="_blank" rel="noopener noreferrer" underline="always">
                                     Informativa sulla Privacy
                                 </Link>

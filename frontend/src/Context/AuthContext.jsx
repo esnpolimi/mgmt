@@ -1,7 +1,8 @@
-import React, {createContext, useCallback, useContext, useEffect, useState, useRef} from "react";
+import {createContext, useCallback, useContext, useEffect, useState, useRef} from "react";
 import {fetchCustom} from "../api/api";
 import {jwtDecode} from "jwt-decode";
 import {extractErrorMessage} from "../utils/errorHandling";
+import * as Sentry from "@sentry/react";
 
 const AuthContext = createContext(null);
 
@@ -17,6 +18,7 @@ export const AuthProvider = ({children}) => {
                 const {user} = jwtDecode(token);
                 return user;
             } catch (e) {
+                Sentry.captureException(e);
                 console.error("Invalid JWT token", e);
                 return null;
             }
@@ -40,11 +42,10 @@ export const AuthProvider = ({children}) => {
                     localStorage.setItem("user", JSON.stringify(user));
                     return true;
                 } else {
-                    console.error("Login error");
                     return await extractErrorMessage(data, response.status);
                 }
             } catch (error) {
-                console.error("Login error:", error);
+                Sentry.captureException(error);
                 return error;
             }
         };
@@ -89,6 +90,7 @@ export const AuthProvider = ({children}) => {
                         return false;
                     }
                 } catch (error) {
+                    Sentry.captureException(error);
                     console.error("Refresh token error:", error);
                     await logout();
                     return false;
@@ -157,6 +159,7 @@ export const AuthProvider = ({children}) => {
                             await logout({skipApiCall: true}); // token expired
                         }
                     } catch (e) {
+                        Sentry.captureException(e);
                         console.error("Token decode error", e);
                         await logout({skipApiCall: true}); // invalid token
                     }

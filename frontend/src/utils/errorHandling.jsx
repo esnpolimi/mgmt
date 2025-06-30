@@ -5,7 +5,7 @@ export const extractErrorMessage = (data, status) => {
     if (data.message) return data.message;
     if (data.non_field_errors) return data.non_field_errors.join(', ');
     if (data.lists?.non_field_errors) return `Error in lists format: ${data.lists.non_field_errors.join(', ')}`;
-    for (const [_, errors] of Object.entries(data)) {
+    for (const [, errors] of Object.entries(data)) {
         if (errors) return Array.isArray(errors) ? errors.join(', ') : errors.toString();
     }
     return JSON.stringify(data);

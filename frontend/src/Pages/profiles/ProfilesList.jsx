@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from 'react';
+import {useEffect, useState, useRef} from 'react';
 import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
@@ -6,8 +6,9 @@ import {MRT_Localization_IT} from "material-react-table/locales/it";
 import Loader from "../../Components/Loader";
 import ClearIcon from "@mui/icons-material/Clear";
 import SearchIcon from "@mui/icons-material/Search";
-import EditIcon from "@mui/icons-material/Edit";
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import {useNavigate} from 'react-router-dom';
+import * as Sentry from "@sentry/react";
 
 const ESNCARD_VALIDITY_OPTIONS = [
     {value: 'valid', label: 'Valida'},
@@ -27,7 +28,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     const searchInputRef = useRef(null);
     const navigate = useNavigate();
 
-
     useEffect(() => {
         // Only fetch data when appliedSearch changes (icon click), or filters/pagination change
         setInternalLoading(true);
@@ -46,7 +46,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                 setRowCount(json.count || 0);
                 setData(json.results);
             } catch (error) {
-                console.error('Error fetching data:', error);
+                Sentry.captureException(error);
             } finally {
                 setInternalLoading(false);
             }
@@ -118,20 +118,11 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                 onClick={e => {
                     e.stopPropagation();
                     navigate(`/profile/${row.original.id.toString()}`);
-                }}
-            >
-                <EditIcon/>
+                }}>
+                <ManageAccountsIcon/>
             </IconButton>
         ),
     });
-
-    const updateProfile = (newData) => {
-        setData((prevProfiles) => {
-            return prevProfiles.map((profile) => {
-                return (profile.id === newData.id) ? newData : profile;
-            });
-        });
-    };
 
     const handleFilterChange = (e) => {
         const {name, value} = e.target;
@@ -186,7 +177,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                         </FormControl>
                     </Grid>
                 )}
-                <Grid size={{xs: 12, sm: 2}} sm="auto">
+                <Grid size={{xs: 12, sm: "auto"}}>
                     <OutlinedInput
                         inputRef={searchInputRef}
                         size="small"

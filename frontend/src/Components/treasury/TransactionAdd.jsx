@@ -1,9 +1,10 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Button, TextField, FormControl, InputLabel, Select, MenuItem, Typography, IconButton, Box, Modal, Grid} from '@mui/material';
 import {fetchCustom} from '../../api/api';
 import CloseIcon from "@mui/icons-material/Close";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {useAuth} from "../../Context/AuthContext";
+import * as Sentry from "@sentry/react";
 
 export default function TransactionAdd({open, onClose, account, onSuccess}) {
     const {user} = useAuth();
@@ -31,6 +32,7 @@ export default function TransactionAdd({open, onClose, account, onSuccess}) {
                 onSuccess('Errore durante la registrazione: ' + JSON.stringify(error), 'error');
             }
         } catch (error) {
+            Sentry.captureException(error);
             onSuccess('Errore durante la registrazione: ' + error.message, 'error');
         }
     };
