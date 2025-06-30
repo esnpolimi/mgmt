@@ -1,10 +1,11 @@
-import React, {useEffect, useState, useMemo} from 'react';
+import {useEffect, useState, useMemo} from 'react';
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {accountDisplayNames as names} from '../../utils/displayAttributes';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip} from "@mui/material";
+import * as Sentry from "@sentry/react";
 
 export default function AccountsDash({limit = 5}) {
     const [data, setData] = useState([]);
@@ -20,7 +21,7 @@ export default function AccountsDash({limit = 5}) {
                     setData(json.results);
                 }
             } catch (e) {
-                // Optionally handle error
+                Sentry.captureException(e);
             } finally {
                 setLoading(false);
             }
@@ -30,12 +31,13 @@ export default function AccountsDash({limit = 5}) {
 
     const columns = useMemo(() => [
         {accessorKey: 'name', header: names.name, size: 100},
-        {accessorKey: 'balance', header: names.balance, size: 100,
+        {
+            accessorKey: 'balance', header: names.balance, size: 100,
             Cell: ({cell}) => (
                 <Box>
                     {cell.getValue() !== null ? (
                         <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
-                            <Chip label="N/A" color="warning"/>)}
+                        <Chip label="N/A" color="warning"/>)}
                 </Box>
             ),
         },

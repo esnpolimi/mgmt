@@ -15,6 +15,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import LoginIcon from '@mui/icons-material/Login';
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import * as Sentry from "@sentry/react";
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -258,6 +259,7 @@ export default function ErasmusForm() {
                     setSubmitted(true);
                 }
             } catch (error) {
+                Sentry.captureException(error);
                 setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});
             } finally {
                 setIsLoading(false);
@@ -338,8 +340,7 @@ export default function ErasmusForm() {
                             value={formData.birthdate}
                             onChange={(date) => handleDateChange('birthdate', date)}
                             maxDate={dayjs()}
-                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}
-                        />
+                            slotProps={{textField: {variant: 'outlined'}}}/>
                     </LocalizationProvider>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
@@ -536,7 +537,7 @@ export default function ErasmusForm() {
                             label="Expiration Date"
                             value={formData.document_expiration}
                             onChange={(date) => handleDateChange('document_expiration', date)}
-                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}/>
+                            slotProps={{textField: {variant: 'outlined'}}}/>
                     </LocalizationProvider>
                 </Grid>
             </Grid>
@@ -566,7 +567,7 @@ export default function ErasmusForm() {
                             label="Exchange End Date"
                             value={formData.matricola_expiration}
                             onChange={(date) => handleDateChange('matricola_expiration', date)}
-                            renderInput={(params) => (<TextField {...params} fullWidth required/>)}/>
+                            slotProps={{textField: {variant: 'outlined'}}}/>
                     </LocalizationProvider>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
@@ -598,7 +599,7 @@ export default function ErasmusForm() {
                 <Grid size={{xs: 12}}>
                     <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
                         You can find your Person Code and Matricola in the Polimi App under your profile section, or from the Online Services.
-                        <br/> In case the university has not provided you a Matricola yet, you can fill the field with 6 '0's.
+                        <br/> In case the university has not provided you a Matricola yet, you can fill the field with 6 0s.
                     </Typography>
                 </Grid>
             </Grid>

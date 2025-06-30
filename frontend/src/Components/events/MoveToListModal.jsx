@@ -1,10 +1,11 @@
-import React, {useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {Modal, Box, Button, Typography, FormControl, InputLabel, Select, MenuItem, IconButton} from '@mui/material';
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {fetchCustom} from "../../api/api";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Popup from "../Popup";
 import CloseIcon from "@mui/icons-material/Close";
+import * as Sentry from "@sentry/react";
 
 export default function MoveToListModal({open, onClose, selectedRows, event, listId}) {
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
@@ -33,6 +34,7 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
                 setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };

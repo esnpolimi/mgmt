@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo, useRef} from 'react';
+import {useEffect, useState, useMemo, useRef} from 'react';
 import {Box, Typography, Chip, Button, Grid, OutlinedInput, IconButton, FormControl, InputLabel, Select, MenuItem} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
@@ -17,6 +17,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
+import * as Sentry from "@sentry/react";
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
     {value: 'open', label: 'Iscrizioni aperte'},
@@ -26,7 +27,6 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
 
 export default function EventsList() {
     const [data, setData] = useState([]);
-    const [isLoading, setLoading] = useState(true);
     const [eventModalOpen, setEventModalOpen] = useState(false);
     const navigate = useNavigate();
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
@@ -43,6 +43,10 @@ export default function EventsList() {
     const [localLoading, setLocalLoading] = useState(false);
     const searchInputRef = useRef(null);
 
+    const formatDateString = (date) => {
+        return dayjs(date).format('YYYY-MM-DD');
+    };
+
     useEffect(() => {
         let ignore = false;
         const fetchData = async () => {
@@ -53,11 +57,11 @@ export default function EventsList() {
                 params.append('page_size', pagination.pageSize);
                 if (appliedSearch) params.append('search', appliedSearch);
                 if (filters.subscriptionStatus.length)
-                    filters.subscriptionStatus.forEach(s => params.append('subscription_status', s));
+                    params.append('subscription_status', filters.subscriptionStatus.join(','));
                 if (filters.dateFrom)
-                    params.append('dateFrom', filters.dateFrom.toISOString());
+                    params.append('dateFrom', formatDateString(filters.dateFrom));
                 if (filters.dateTo)
-                    params.append('dateTo', filters.dateTo.toISOString());
+                    params.append('dateTo', formatDateString(filters.dateTo));
                 const response = await fetchCustom("GET", `/events/?${params.toString()}`);
                 const json = await response.json();
                 if (!response.ok) {
@@ -70,6 +74,7 @@ export default function EventsList() {
                     }
                 }
             } catch (error) {
+                Sentry.captureException(error);
                 setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setLocalLoading(false);
@@ -202,12 +207,6 @@ export default function EventsList() {
         if (searchInputRef.current) searchInputRef.current.focus();
     };
 
-    // Manual filter apply
-    const handleFiltersApply = () => {
-        setAppliedFilters(filters);
-        setPagination(prev => ({...prev, pageIndex: 0}));
-    };
-
     const handleFilterChange = (e) => {
         const {name, value} = e.target;
         setFilters(prev => ({
@@ -236,24 +235,9 @@ export default function EventsList() {
         }));
     };
 
-    const handleClearFilters = () => {
-        setFilters({
-            subscriptionStatus: [],
-            dateFrom: null,
-            dateTo: null,
-        });
-        setAppliedFilters({
-            subscriptionStatus: [],
-            dateFrom: null,
-            dateTo: null,
-        });
-        setPagination(prev => ({...prev, pageIndex: 0}));
-    };
-
     const handleCloseEventModal = async (success) => {
         if (success) {
             setShowSuccessPopup({message: "Evento creato con successo!", state: "success"});
-            setAppliedFilters(filters); // reload with current filters
         }
         setEventModalOpen(false);
     };
@@ -285,8 +269,7 @@ export default function EventsList() {
                                 variant="outlined"
                                 renderValue={(selected) =>
                                     SUBSCRIPTION_STATUS_OPTIONS.filter(opt => selected.includes(opt.value)).map(opt => opt.label).join(', ')
-                                }
-                            >
+                                }>
                                 {SUBSCRIPTION_STATUS_OPTIONS.map(opt => (
                                     <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
                                 ))}
@@ -297,7 +280,7 @@ export default function EventsList() {
                         <FormControl fullWidth>
                             <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={itLocale}>
                                 <DatePicker
-                                    label="Inizio Iscrizioni"
+                                    label="Inizio Data Evento"
                                     value={filters.dateFrom}
                                     maxDate={filters.dateTo || undefined}
                                     onChange={date => handleDateChange('dateFrom', date)}
@@ -309,7 +292,7 @@ export default function EventsList() {
                         <FormControl fullWidth>
                             <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={itLocale}>
                                 <DatePicker
-                                    label="Fine Iscrizioni"
+                                    label="Fine Data Evento"
                                     value={filters.dateTo}
                                     minDate={filters.dateFrom || undefined}
                                     onChange={date => handleDateChange('dateTo', date)}
@@ -367,3 +350,4 @@ export default function EventsList() {
         </Box>
     );
 }
+

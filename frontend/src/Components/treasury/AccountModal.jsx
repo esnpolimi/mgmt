@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import {useState, useEffect} from 'react';
 import {Modal, Box, TextField, Button, Typography, Grid, IconButton, Select, MenuItem, InputLabel, FormControl, Chip, OutlinedInput, FormHelperText} from '@mui/material';
 import {styleESNcardModal as style} from '../../utils/sharedStyles';
 import Loader from '../Loader';
@@ -7,6 +7,7 @@ import {extractErrorMessage} from '../../utils/errorHandling';
 import CloseIcon from '@mui/icons-material/Close';
 import Popup from "../Popup";
 import {accountDisplayNames as names} from "../../utils/displayAttributes";
+import * as Sentry from "@sentry/react";
 
 export default function AccountModal({open, onClose, account = null}) {
     const isEdit = account !== null;
@@ -28,6 +29,7 @@ export default function AccountModal({open, onClose, account = null}) {
                     setSuccessPopup({message: `Errore nel recupero dei gruppi: ${errorMessage}`, state: 'error'});
                 }
             } catch (e) {
+                Sentry.captureException(e);
                 setSuccessPopup({message: `Errore nel recupero dei gruppi: ${e}`, state: 'error'});
             }
         };
@@ -80,6 +82,7 @@ export default function AccountModal({open, onClose, account = null}) {
                 onClose(true);
             }
         } catch (error) {
+            Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: 'error'});
         } finally {
             setLoading(false);

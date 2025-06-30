@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import {useState, useEffect} from 'react';
 import {
     Modal, Box, Typography, Grid, IconButton, TextField, Button,
     FormControl, InputLabel, Select, MenuItem, OutlinedInput, FormHelperText
@@ -11,6 +11,7 @@ import {fetchCustom} from '../../api/api';
 import {extractErrorMessage} from '../../utils/errorHandling';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import ProfileSearch from '../ProfileSearch';
+import * as Sentry from "@sentry/react";
 
 export default function TransactionModal({open, onClose, transaction}) {
     const [isLoading, setLoading] = useState(true);
@@ -93,6 +94,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                 setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
+            Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: 'error'});
         } finally {
             setLoading(false);

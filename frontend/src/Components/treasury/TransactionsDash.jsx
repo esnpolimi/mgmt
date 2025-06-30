@@ -1,16 +1,17 @@
-import React, {useEffect, useState, useMemo} from 'react';
+import {useEffect, useState, useMemo} from 'react';
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip} from "@mui/material";
+import * as Sentry from "@sentry/react";
 
 const TRANSACTION_CONFIGS = {
-    subscription: { label: names.tran_type["subscription"], color: 'primary' },
-    esncard: { label: names.tran_type["esncard"], color: 'secondary' },
-    deposit: { label: names.tran_type["deposit"], color: 'success' },
-    withdrawal: { label: names.tran_type["withdrawal"], color: 'error' }
+    subscription: {label: names.tran_type["subscription"], color: 'primary'},
+    esncard: {label: names.tran_type["esncard"], color: 'secondary'},
+    deposit: {label: names.tran_type["deposit"], color: 'success'},
+    withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
 };
 
 export default function TransactionsDash({limit = 5}) {
@@ -28,7 +29,7 @@ export default function TransactionsDash({limit = 5}) {
                     console.log("Transactions data:", json.results);
                 }
             } catch (e) {
-                // Optionally handle error
+                Sentry.captureException(e);
             } finally {
                 setLoading(false);
             }

@@ -1,4 +1,4 @@
-import React, {useState, useMemo, useEffect} from 'react';
+import {useState, useMemo, useEffect} from 'react';
 import {useMaterialReactTable, MaterialReactTable} from 'material-react-table';
 import {Box, Button, IconButton, Tooltip} from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';

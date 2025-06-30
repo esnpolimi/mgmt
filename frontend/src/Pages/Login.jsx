@@ -1,16 +1,17 @@
 import {Button, Box, Container, Link, TextField, CssBaseline, CircularProgress} from '@mui/material';
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {useNavigate} from "react-router-dom";
 import {useAuth} from "../Context/AuthContext";
 import logo from '../assets/esnpolimi-logo.png';
 import StatusBanner from "../Components/StatusBanner";
 import {fetchCustom} from "../api/api";
 import {extractErrorMessage} from "../utils/errorHandling";
+import * as Sentry from "@sentry/react";
 
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isForgotPassword, setIsForgotPassword] = useState(false); // Toggle for forgot password
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
     const {login} = useAuth();
     const navigate = useNavigate();
     const [statusMessage, setStatusMessage] = useState(null);
@@ -28,9 +29,10 @@ export default function Login() {
             } else {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setStatusMessage({message: `Errore durante l\'invio dell\'email: ${errorMessage}`, state: 'error'});
+                setStatusMessage({message: `Errore durante l'invio dell'email: ${errorMessage}`, state: 'error'});
             }
         } catch (error) {
+            Sentry.captureException(error);
             setStatusMessage({message: `Errore generale: ${error}`, state: 'error'});
         } finally {
             setIsLoading(false);

@@ -22,6 +22,7 @@ import {MRT_Localization_IT} from "material-react-table/locales/it";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import {extractErrorMessage} from "../../utils/errorHandling";
+import * as Sentry from "@sentry/react";
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
@@ -57,6 +58,7 @@ export default function Event() {
                     console.log("Event Data: ", json);
                 }
             } catch (error) {
+                Sentry.captureException(error);
                 setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setLoading(false);
@@ -78,6 +80,7 @@ export default function Event() {
                 setLoading(false);
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setLoading(false);
@@ -276,7 +279,7 @@ export default function Event() {
             }
         }));
     }, [listConfigs]);
-
+    
     const ListAccordions = React.memo(() => {
         if (!lists || lists.length === 0) {
             return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
@@ -333,7 +336,8 @@ export default function Event() {
             );
         });
     });
-
+    ListAccordions.displayName = "ListAccordions";
+    
     // Handlers for actions
     const handleMoveToList = (selectedRows, listId) => {
         console.log("Moving selected rows to another list:", selectedRows);

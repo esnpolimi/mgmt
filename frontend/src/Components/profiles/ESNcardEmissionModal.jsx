@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import {useEffect, useState} from "react";
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
@@ -6,8 +6,8 @@ import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import {extractErrorMessage} from "../../utils/errorHandling";
-import {useAuth} from "../../Context/AuthContext";
 import Loader from "../Loader";
+import * as Sentry from "@sentry/react";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
     const [amount, setAmount] = useState(0);
@@ -52,6 +52,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                     setAmount(parseFloat(json.esncard_release_fee.replace('€', '')));
             }
         } catch (error) {
+    Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setLoading(false);
@@ -68,6 +69,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                 setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
+    Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
@@ -112,9 +114,10 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore durante l\'emissione della ESNcard: ${errorMessage}`, state: 'error'});
+                setSuccessPopup({message: `Errore durante l'emissione della ESNcard: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
+    Sentry.captureException(error);
             setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }

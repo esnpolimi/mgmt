@@ -1,6 +1,6 @@
-import React, {useEffect, useState} from "react";
+import {useEffect, useState} from "react";
 import Sidebar from "../Components/Sidebar";
-import {Box, Typography, Card, CardContent, CardActions, Button, Collapse, IconButton, Stack, Paper} from "@mui/material";
+import {Box, Typography, Card, CardContent, CardActions, Button, Collapse, IconButton, Paper} from "@mui/material";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ConfirmDialog from "../Components/ConfirmDialog";
@@ -11,6 +11,7 @@ import Popup from "../Components/Popup";
 import {accountDisplayNames as names} from "../utils/displayAttributes";
 import {extractErrorMessage} from "../utils/errorHandling";
 import TransactionAdd from "../Components/treasury/TransactionAdd";
+import * as Sentry from "@sentry/react";
 
 const style = {
     display: "flex",
@@ -46,6 +47,7 @@ export default function Home() {
                 setShowSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
@@ -63,14 +65,14 @@ export default function Home() {
             });
             if (response.ok) {
                 console.log(`Account ${actionType}ed successfully.`);
-                fetchAccounts().then(); // Refresh account data
+                fetchAccounts().then();
                 setShowSuccessPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success"});
             } else {
                 console.error(`Failed to ${actionType} account.`);
                 setShowSuccessPopup({message: `Errore account: ${response.statusText}`, state: "error"});
             }
         } catch (error) {
-            console.error(`Error ${actionType}ing account:`, error);
+            Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setConfirmDialogOpen(false);
