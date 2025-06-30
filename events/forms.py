@@ -1,75 +1,77 @@
-from jsonschema import validate
-from profiles.models import Profile
-from events.models import Subscription, Event
 from django import forms
 from django.core.exceptions import ValidationError
+from jsonschema import validate
+from events.models import Subscription, Event
+
 
 class ProfileLookUpForm(forms.Form):
     email = forms.EmailField(max_length=256)
     event = forms.ModelChoiceField(queryset=Event.objects.all())
 
+
 class EventCreationForm(forms.ModelForm):
     class Meta:
         model = Event
-        exclude = ['id','created_at','updated_at','deleted_at','enabled']
+        exclude = ['id', 'created_at', 'updated_at', 'deleted_at', 'enabled']
+
 
 class JSONFieldsValidationForm(forms.Form):
-    
-    def __init__(self,*args,fields,office=False,editing=False,**kwargs):
-        super().__init__(*args,**kwargs)
-        self.fields_schema = {  
-            "type" : "object",
-            "patternProperties" :{
-                "^t_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "length":{
-                            "type":"integer",
-                            "minimum":1
+
+    def __init__(self, *args, fields, office=False, editing=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields_schema = {
+            "type": "object",
+            "patternProperties": {
+                "^t_.*$": {
+                    "type": "object",
+                    "properties": {
+                        "length": {
+                            "type": "integer",
+                            "minimum": 1
                         },
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
+                        "office_view": {"type": "boolean"},
+                        "office_edit": {"type": "boolean"},
                     },
-                    "additionalProperties":False,   
+                    "additionalProperties": False,
                 },
-                "^i_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
+                "^i_.*$": {
+                    "type": "object",
+                    "properties": {
+                        "office_view": {"type": "boolean"},
+                        "office_edit": {"type": "boolean"},
                     },
-                    "additionalProperties":False,
+                    "additionalProperties": False,
                 },
-                "^f_.*$" : {
-                    "type":"object",
-                    "properties":{
-                        "office_view":{"type":"boolean"},
-                        "office_edit":{"type":"boolean"},
+                "^f_.*$": {
+                    "type": "object",
+                    "properties": {
+                        "office_view": {"type": "boolean"},
+                        "office_edit": {"type": "boolean"},
                     },
-                    "additionalProperties":False,
+                    "additionalProperties": False,
                 },
-                "^(c_|m_).*$" : {
-                    "type":"object",
-                    "properties":{
-                        "choices":{
-                             "type":"object",
-                             "patternProperties":{
-                                 ".*": {"type":"string"} # color
-                             },
-                             "additionalProperties":False
-                         },
-                         "office_view":{"type":"boolean"},
-                         "office_edit":{"type":"boolean"},
+                "^(c_|m_).*$": {
+                    "type": "object",
+                    "properties": {
+                        "choices": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {"type": "string"}  # color
+                            },
+                            "additionalProperties": False
+                        },
+                        "office_view": {"type": "boolean"},
+                        "office_edit": {"type": "boolean"},
                     },
-                    "additionalProperties":False,
+                    "additionalProperties": False,
                 },
             },
-            "additionalProperties":False
+            "additionalProperties": False
         }
-        validate(fields,schema=self.fields_schema)
+        validate(fields, schema=self.fields_schema)
 
         for field_name in fields.keys():
-            if not office or ( editing and fields[field_name]['office_edit'] ) or ((not editing) and fields[field_name]['office_view'] ):
+            if not office or (editing and fields[field_name]['office_edit']) or ((not editing) and fields[field_name]['office_view']):
                 if field_name[0] == 't':
                     self.fields[field_name[2:]] = forms.CharField(max_length=fields[field_name]['length'])
                 elif field_name[0] == 'i':
@@ -77,15 +79,15 @@ class JSONFieldsValidationForm(forms.Form):
                 elif field_name[0] == 'f':
                     self.fields[field_name[2:]] = forms.FloatField()
                 elif field_name[0] == 'c':
-                    self.fields[field_name[2:]] = forms.ChoiceField(choices=tuple([(c,c) for c in fields[field_name]['choices'].keys()]))
+                    self.fields[field_name[2:]] = forms.ChoiceField(choices=tuple([(c, c) for c in fields[field_name]['choices'].keys()]))
                 elif field_name[0] == 'm':
-                    self.fields[field_name[2:]] = forms.MultipleChoiceField(choices=tuple([(c,c) for c in fields[field_name]['choices'].keys()]))
- 
+                    self.fields[field_name[2:]] = forms.MultipleChoiceField(choices=tuple([(c, c) for c in fields[field_name]['choices'].keys()]))
+
 
 class FormSubscriptionForm(forms.ModelForm):
     class Meta:
         model = Subscription
-        fields = ['event','form_data']
+        fields = ['event', 'form_data']
 
     email = forms.EmailField(max_length=256)
 
@@ -94,26 +96,25 @@ class FormSubscriptionForm(forms.ModelForm):
 
         form = JSONFieldsValidationForm(self.cleaned_data['form_data'], fields=self.cleaned_data['event'].form_fields)
         if not form.is_valid():
-            raise ValidationError({'form_data':form.errors})
+            raise ValidationError({'form_data': form.errors})
+
 
 class ManualSubscriptionForm(forms.ModelForm):
     class Meta:
         model = Subscription
-        fields = ['profile','event','event_data','additional_data']
+        fields = ['profile', 'event', 'event_data', 'additional_data']
 
     def clean(self):
-        cleaned_data = super(ManualSubscriptionForm,self).clean()
+        cleaned_data = super(ManualSubscriptionForm, self).clean()
 
         if not self.cleaned_data['additional_data'] is None:
             form = JSONFieldsValidationForm(self.cleaned_data['additional_data'], fields=self.cleaned_data['event'].additional_fields)
             if not form.is_valid():
-                self.add_error('form',{'additional_data':form.errors})
+                self.add_error('form', {'additional_data': form.errors})
 
-        return cleaned_data 
+        return cleaned_data
 
-
-
-# self.fields_schema = {  
+    # self.fields_schema = {
 #             "type" : "object",
 #             "patternProperties" :{
 #                 ".*" : {

@@ -1,4 +1,6 @@
 import logging
+import sentry_sdk
+
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
@@ -67,6 +69,7 @@ def esncard_emission(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(str(e), status=500)
 
 
@@ -93,6 +96,7 @@ def esncard_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response(str(e), status=500)
 
 
@@ -115,6 +119,7 @@ def transaction_add(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
@@ -155,6 +160,7 @@ def transactions_list(request):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
@@ -214,6 +220,7 @@ def transaction_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
@@ -231,6 +238,7 @@ def esncard_fees(request):
         return response
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
@@ -255,6 +263,7 @@ def accounts_list(request):
         return Response(response_data)
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
@@ -274,6 +283,7 @@ def account_creation(request):
         return Response(status=200)
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
@@ -310,4 +320,5 @@ def account_detail(request, pk):
 
     except Exception as e:
         logger.error(str(e))
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
-from treasury.models import Transaction, Account
+from treasury.models import Transaction
 
 
 # Serializers for EventList
@@ -195,7 +195,7 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This profile is already registered for this event")
 
         # Remove account id from validated_data as it's not a field in Subscription model
-        self.account = attrs.pop('account_id', None)
+        self.account_id = attrs.pop('account_id', None)
 
         return attrs
 
