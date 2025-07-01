@@ -83,6 +83,13 @@ export default function Home() {
         <Box>
             <Sidebar/>
             <Box sx={{width: "100%", maxWidth: "90%", mx: "auto", mt: 0}}>
+                <button
+                    type="button"
+                    onClick={() => {
+                        throw new Error("Sentry Test Error v3");
+                    }}>
+                    Sentry Test Error
+                </button>
                 <Paper elevation={3} sx={{p: 2, mb: 0, borderRadius: 5}}>
                     <Box sx={{display: "flex", alignItems: "center", cursor: "pointer"}} onClick={() => setCasseOpen(o => !o)}>
                         <Typography variant="h5" sx={{flexGrow: 1, fontWeight: 600}}>Casse</Typography>
