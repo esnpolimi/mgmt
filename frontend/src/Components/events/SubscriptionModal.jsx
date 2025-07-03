@@ -11,7 +11,7 @@ import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
 import * as Sentry from "@sentry/react";
 
-export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit}) {
+export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit, profileId, profileName}) {
     const [isLoading, setLoading] = useState(true);
     const [successPopup, setSuccessPopup] = useState(null);
     const [accounts, setAccounts] = useState([]);
@@ -27,7 +27,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         profile_name: '',
         status: 'pending',
         list_id: listId || '',
-        list_name: event.lists.find(list => list.id === listId)?.name || 'Lista non trovata',
+        list_name: (event.selectedList ? event.selectedList.name : (event.lists && listId ? (event.lists.find(list => list.id === listId)?.name || 'Lista non trovata') : 'Lista non trovata')),
         notes: '',
     });
 
@@ -54,10 +54,25 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             console.log('Setting Subscription:', subscription);
             setData(subscription)
             setOriginalStatus(subscription.status);
+        } else {
+            if (profileId) {
+                setData(d => ({
+                    ...d,
+                    profile_id: profileId,
+                    profile_name: profileName || ''
+                }));
+            }
+            if (event.selectedList) {
+                setData(d => ({
+                    ...d,
+                    list_id: event.selectedList.id,
+                    list_name: event.selectedList.name
+                }));
+            }
         }
         setLoading(false);
         fetchAccounts().then();
-    }, [isEdit])
+    }, [isEdit, profileId, profileName, event])
 
     const fetchAccounts = async () => {
         try {
@@ -191,14 +206,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
     };
 
     return (
-        <Modal
-            open={open}
-            onClose={() => {
-                onClose(false);
-            }}
-            aria-labelledby="modal-modal-title"
-            aria-describedby="modal-modal-description"
-        >
+        <Modal open={open}
+               onClose={() => {
+                   onClose(false);
+               }}
+               aria-labelledby="modal-modal-title"
+               aria-describedby="modal-modal-description">
             <Box sx={style}>
                 {isLoading ? <Loader/> : (<>
                     <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
@@ -215,7 +228,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                     <Typography variant="subtitle1" gutterBottom>
                         <b>Importo:</b> {event.cost}€
                     </Typography>
-
                     <Grid container spacing={2} direction="column">
                         <Grid size={{xs: 12}} sx={{mt: 2}}>
                             <ProfileSearch
@@ -234,7 +246,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                 helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
                                 label={isEdit ? data.profile_name : "Cerca profilo"}
                                 required
-                                disabled={isEdit}
+                                disabled={isEdit || !!profileId}
                             />
                         </Grid>
                         <Grid size={{xs: 12}}>

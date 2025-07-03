@@ -27,7 +27,7 @@ export const eventDisplayNames = {
     cost: 'Costo (€)',
     subscription_start_date: 'Data Apertura Iscrizioni',
     subscription_end_date: 'Data Chiusura Iscrizioni',
-    subscription_date_status: 'Stato Iscrizioni',
+    status: 'Stato Iscrizioni',
     list_name: 'Nome Lista',
     list_capacity: 'Capacità Lista'
 };

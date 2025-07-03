@@ -57,7 +57,7 @@ export default function EventsList() {
                 params.append('page_size', pagination.pageSize);
                 if (appliedSearch) params.append('search', appliedSearch);
                 if (filters.subscriptionStatus.length)
-                    params.append('subscription_status', filters.subscriptionStatus.join(','));
+                    params.append('status', filters.subscriptionStatus.join(','));
                 if (filters.dateFrom)
                     params.append('dateFrom', formatDateString(filters.dateFrom));
                 if (filters.dateTo)
@@ -108,30 +108,29 @@ export default function EventsList() {
             size: 150,
         },
         {
-            accessorKey: 'subscription_start_date',
-            header: names.subscription_date_status,
+            accessorKey: 'status',
+            header: names.status,
             size: 150,
             Cell: ({row}) => {
-                const now = dayjs();
-                const startDateTime = row.original.subscription_start_date ? dayjs(row.original.subscription_start_date) : null;
-                const endDateTime = row.original.subscription_end_date ? dayjs(row.original.subscription_end_date) : null;
-
-                let status = "Non disponibile";
-                let color = "error";
-
-                if (startDateTime && endDateTime) {
-                    if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
+                let status = row.original.status || '';
+                let color;
+                switch (status) {
+                    case 'open':
                         status = "Iscrizioni aperte";
                         color = "success";
-                    } else if (now.isBefore(startDateTime)) {
-                        status = "Iscrizioni non ancora aperte";
+                        break;
+                    case 'not_yet':
+                        status = "Non ancora aperte";
                         color = "warning";
-                    } else if (now.isAfter(endDateTime)) {
+                        break;
+                    case 'closed':
                         status = "Iscrizioni chiuse";
                         color = "error";
-                    }
+                        break;
+                    default:
+                        color = "error";
+                        status = "Stato sconosciuto";
                 }
-
                 return <Chip label={status} color={color}/>;
             },
         },
