@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useState, useRef} from "react";
 import Sidebar from "../Components/Sidebar";
 import {Box, Typography, Card, CardContent, CardActions, Button, Collapse, IconButton, Paper} from "@mui/material";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -13,13 +13,98 @@ import {extractErrorMessage} from "../utils/errorHandling";
 import TransactionAdd from "../Components/treasury/TransactionAdd";
 import * as Sentry from "@sentry/react";
 
+// --- Static content for useful links and office responsibles ---
+const staticLinks = [
+    {
+        topic: "LINK IMPORTANTI",
+        links: [
+            {
+                name: "FOGLIO TURNI UFFICIO",
+                description: "",
+                url: "https://docs.google.com/spreadsheets/d/1Bi_jw4_MgAPV3R_Cu-eCRlexbL23xJL63uey1rmY-P0/edit?gid=2036311463#gid=2036311463",
+                color: "#388e3c"
+            },
+            {
+                name: "FOGLIO CONTASOLDI",
+                description: "",
+                url: "https://docs.google.com/spreadsheets/d/1Ewt9DggEyDy8lT2Kh6YiN2k5SvGZnVkvPwpufZ0w5sU/edit",
+                color: "#f57c00"
+            },
+            {
+                name: "FORM REPORT UFFICI",
+                description: "",
+                url: "https://goo.gl/forms/xAusvfJZdKppn2D13",
+                color: "#d32f2f"
+            },
+            {
+                name: "FOGLI FIRME BANDI",
+                description: "",
+                url: "https://drive.google.com/drive/folders/1MBFMmga6IFPqPD_ER9HCdiHoI092y3Zs?usp=sharing",
+                color: "#7b1fa2"
+            },
+            {
+                name: "DATABASE HOUSING",
+                description: "",
+                url: "https://docs.google.com/spreadsheets/d/1vnjVct9Xqro2f9s_5t9Ap_jhagvitXOIyt45XnpahcY/edit#gid=0",
+                color: "#1976d2"
+            },
+        ]
+    },
+    {
+        topic: "WIKI E TUTORIAL",
+        links: [
+            {
+                name: "WIKI ESN POLIMI",
+                description: "",
+                url: "https://wiki.esnpolimi.it/",
+                color: "#512da8"
+            },
+            {
+                name: "TUTORIAL viaggi e attività",
+                description: "",
+                url: "https://drive.google.com/drive/folders/13DZUKo7D74VmbX2S3uKTOPrO5h1VFTGh",
+                color: "#0288d1"
+            },
+            {
+                name: "Importazione Contatti DI MASSA",
+                description: "",
+                url: "https://docs.google.com/document/d/1OnwtNsKL9R5ph30IQcFMtPoMxq8-HyDs/edit?usp=sharing&ouid=112656928168770237958&rtpof=true&sd=true",
+                color: "#0097a7"
+            },
+        ]
+    },
+    {
+        topic: "ISTRUZIONI RESPONSABILI UFFICIO",
+        descriptor: "PER APRIRE E CHIUDERE UFFICIO",
+        links: [
+            {
+                name: "1. Contare i soldi in cassa con il foglio contasoldi dell'ufficio giusto",
+                description: "",
+                url: "",
+                color: "#607d8b"
+            },
+            {
+                name: "2. Verificare che coincidano con quelli in cassa a gestionale (se non coincidono comunicarlo al tesoriere)",
+                description: "",
+                url: "",
+                color: "#607d8b"
+            },
+            {
+                name: "3. Aprire/chiudere cassa a gestionale",
+                description: "",
+                url: "",
+                color: "#607d8b"
+            }
+        ]
+    }
+];
+
 const style = {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    justifyContent: "top",
-    mt: 4,
-    minHeight: "100vh",
+    justifyContent: "flex-start",
+    mt: 2,
 };
 
 export default function Home() {
@@ -32,6 +117,7 @@ export default function Home() {
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const accountsDetails = user?.permissions.includes("change_account");
+    const casseRef = useRef(null);
 
     useEffect(() => {
         fetchAccounts().then();
@@ -79,19 +165,150 @@ export default function Home() {
         }
     };
 
+    const handleCasseToggle = () => {
+        setCasseOpen(o => {
+            const next = !o;
+            if (!o && casseRef.current) {
+                setTimeout(() => {
+                    casseRef.current.scrollIntoView({behavior: "smooth", block: "start"});
+                }, 150); // Wait for collapse animation to start
+            }
+            return next;
+        });
+    };
+
     return (
-        <Box>
+        <Box sx={{
+            minHeight: "100vh",
+            background: "#f9f9fb",
+            pb: 2,
+        }}>
+            {/* Sidebar */}
             <Sidebar/>
-            <Box sx={{width: "100%", maxWidth: "90%", mx: "auto", mt: 0}}>
-                <button
-                    type="button"
-                    onClick={() => {
-                        throw new Error("Sentry Test Error v3");
-                    }}>
-                    Sentry Test Error
-                </button>
-                <Paper elevation={3} sx={{p: 2, mb: 0, borderRadius: 5}}>
-                    <Box sx={{display: "flex", alignItems: "center", cursor: "pointer"}} onClick={() => setCasseOpen(o => !o)}>
+            {/* Simplified Centered Header */}
+            <Box sx={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                mt: -2,
+                mb: 2,
+            }}>
+                <img src={logo}
+                     alt="ESN Polimi Logo"
+                     style={{
+                         height: "15vh",
+                         width: "auto",
+                         objectFit: "contain",
+                         borderRadius: "8px",
+                     }}
+                />
+                <Typography variant="h4" sx={{fontWeight: 700, color: "#2d3a4b", mt: 1}}>
+                    Sistema di Gestione
+                </Typography>
+                <Typography variant="h5" sx={{fontWeight: 500, color: "#2d3a4b", mt: 1, mb: 2}}>
+                    Ciao, {user ? user.profile.name : "Sir"}!
+                </Typography>
+            </Box>
+            {/* Main Content */}
+            <Box sx={{...style}}>
+
+                <Box sx={{
+                    width: "100%",
+                    maxWidth: 1200,
+                    mb: 2,
+                    display: "grid",
+                    gridTemplateColumns: {
+                        xs: "1fr",
+                        sm: "1fr 1fr",
+                        md: "1fr 1fr 1fr"
+                    },
+                    gap: 2,
+                    justifyContent: "center",
+                }}>
+                    {staticLinks.map((section) => (
+                        <Paper key={section.topic}
+                               elevation={2}
+                               sx={{
+                                   p: 2,
+                                   borderRadius: 3,
+                                   background: "#fff",
+                                   boxShadow: "0 2px 8px rgba(60,80,120,0.06)",
+                                   display: "flex",
+                                   flexDirection: "column",
+                                   alignItems: "flex-start",
+                                   minWidth: 220,
+                               }}>
+                            <Typography variant="subtitle1" sx={{fontWeight: 700, color: "#2d3a4b", mb: 1}}>
+                                {section.topic}
+                            </Typography>
+                            {section.descriptor && (
+                                <Typography variant="body2" sx={{color: "#607d8b", mb: 1}}>
+                                    {section.descriptor}
+                                </Typography>
+                            )}
+                            <Box sx={{display: "flex", flexDirection: "column", gap: 1, width: "100%"}}>
+                                {section.links.map((link) => (
+                                    <Box key={link.name}
+                                         sx={{
+                                             mb: 0.5,
+                                             pl: link.url ? 2 : 0,
+                                             borderLeft: link.url ? `5px solid ${link.color}` : "none",
+                                             background: link.url ? "#f7fafd" : "none",
+                                             borderRadius: 1,
+                                             py: 0.5,
+                                         }}>
+                                        {link.url ? (
+                                            <a href={link.url}
+                                               style={{
+                                                   textDecoration: "none",
+                                                   color: link.color,
+                                                   fontWeight: 600,
+                                                   fontSize: "1rem",
+                                               }}
+                                               target="_blank"
+                                               rel="noopener noreferrer">
+                                                {link.name}
+                                            </a>
+                                        ) : (
+                                            <Typography variant="body2" sx={{color: link.color, fontWeight: 600}}>
+                                                {link.name}
+                                            </Typography>
+                                        )}
+                                        {link.description && (
+                                            <Typography variant="body2" sx={{color: "#607d8b"}}>
+                                                {link.description}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                ))}
+                            </Box>
+                        </Paper>
+                    ))}
+                </Box>
+            </Box>
+            {/* Casse Section at the bottom (Full Width) */}
+            <Box ref={casseRef}
+                 sx={{
+                     mx: 3,
+                     mt: 2,
+                     mb: 2,
+                     display: "flex",
+                     flexDirection: "column",
+                     alignItems: "center",
+                 }}>
+                <Paper elevation={4}
+                       sx={{
+                           p: 2,
+                           mb: 0,
+                           borderRadius: 6,
+                           background: "#fff",
+                           boxShadow: "0 8px 32px rgba(60,80,120,0.08)",
+                           border: "1px solid #e3e8f0",
+                           mt: 2,
+                           width: "100%",
+                       }}>
+                    <Box sx={{display: "flex", alignItems: "center", cursor: "pointer"}} onClick={handleCasseToggle}>
                         <Typography variant="h5" sx={{flexGrow: 1, fontWeight: 600}}>Casse</Typography>
                         <IconButton>
                             {casseOpen ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
@@ -182,13 +399,6 @@ export default function Home() {
                     </Collapse>
                 </Paper>
             </Box>
-            <Box sx={style}>
-                <Typography variant="h3" gutterBottom>
-                    Sistema di Gestione
-                </Typography>
-                <img src={logo || ''} alt="ESN Polimi Logo" style={{height: "25vh", marginTop: "2px"}}/>
-                <h1>Benvenuto, {user ? user.profile.name : "Sir"}!</h1>
-            </Box>
             <ConfirmDialog
                 open={confirmDialogOpen}
                 message={`Confermi la presenza di €${selectedAccount?.balance} nella cassa "${selectedAccount?.name}" prima di ${actionType === "open" ? "aprirla" : "chiuderla"}?`}
@@ -202,6 +412,11 @@ export default function Home() {
                 onSuccess={(message, state) => setShowSuccessPopup({message, state: state || 'success'})}
             />
             {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+            <button type="button" onClick={() => {
+                throw new Error("Sentry Test Error v3");
+            }}>
+                Sentry Test Error
+            </button>
         </Box>
     );
 }

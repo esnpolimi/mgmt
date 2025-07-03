@@ -1,4 +1,4 @@
-import {Button, Box, Container, Link, TextField, CssBaseline, CircularProgress} from '@mui/material';
+import {Button, Box, Container, Link, TextField, CssBaseline, CircularProgress, Typography} from '@mui/material';
 import {useState} from 'react';
 import {useNavigate} from "react-router-dom";
 import {useAuth} from "../Context/AuthContext";
@@ -74,7 +74,10 @@ export default function Login() {
                     flexDirection: 'column',
                     alignItems: 'center',
                 }}>
-                <img alt='' src={logo || ''} style={{height: '25vh'}}/>
+                <img src={logo} alt='ESN Polimi Logo' style={{height: '25vh', marginBottom: "4px"}}/>
+                <Typography variant="h5" gutterBottom align="center">
+                    Login al Sistema di Gestione
+                </Typography>
                 <Box>
                     {!isResetSubmitted && (
                         <TextField
