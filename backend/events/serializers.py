@@ -8,15 +8,14 @@ from treasury.models import Transaction
 class EventListSerializer(serializers.ModelSerializer):
     class Meta:
         model = EventList
-        fields = ['id', 'name', 'capacity', 'display_order']
+        fields = ['id', 'name', 'capacity', 'display_order', 'subscription_count']
 
 
 # Serializers for Event
 class EventsListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost',
-                  'subscription_start_date', 'subscription_end_date']
+        fields = ['id', 'name', 'date', 'cost', 'status']
 
 
 class EventOrganizerSerializer(serializers.ModelSerializer):
@@ -145,7 +144,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = ['id', 'name', 'date', 'description', 'cost', 'lists', 'organizers',
-                  'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at']
+                  'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status']
 
 
 # Serializers for Subscription
@@ -195,7 +194,7 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This profile is already registered for this event")
 
         # Remove account id from validated_data as it's not a field in Subscription model
-        self.account_id = attrs.pop('account_id', None)
+        self.account = attrs.pop('account_id', None)
 
         return attrs
 

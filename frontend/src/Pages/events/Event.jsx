@@ -212,6 +212,7 @@ export default function Event() {
                 listId: list.id,
                 listName: list.name,
                 capacity: list.capacity,
+                subscription_count: list.subscription_count,
                 subscriptions: listSubscriptions,
                 columns: listSubscriptionsColumns
             };
@@ -288,8 +289,8 @@ export default function Event() {
         const {isActive} = handleSubscriptionStatus();
 
         return lists.map(listConfig => {
-            const {listId, listName, capacity, subscriptions, tableOptions} = listConfig;
-            const occupancyPercentage = Math.round((subscriptions.length / capacity) * 100) || 0;
+            const {listId, listName, capacity, subscription_count, tableOptions} = listConfig;
+            const occupancyPercentage = capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
             const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 60 ? 'warning' : 'success';
             const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
             const list = useMaterialReactTable(fixedTableOptions);
@@ -304,8 +305,8 @@ export default function Event() {
                                 sx={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    cursor: subscriptions.length < capacity && isActive ? 'pointer' : 'not-allowed',
-                                    opacity: subscriptions.length < capacity && isActive ? 1 : 0.5,
+                                    cursor: (capacity === 0 || subscription_count < capacity) && isActive ? 'pointer' : 'not-allowed',
+                                    opacity: (capacity === 0 || subscription_count < capacity) && isActive ? 1 : 0.5,
                                     px: 2,
                                     py: 1,
                                     borderRadius: 1,
@@ -313,12 +314,12 @@ export default function Event() {
                                     color: 'white',
                                     ml: 2,
                                 }}
-                                onClick={subscriptions.length < capacity && isActive ? () => handleOpenSubscriptionModal(listId) : undefined}>
+                                onClick={(capacity === 0 || subscription_count < capacity) && isActive ? () => handleOpenSubscriptionModal(listId) : undefined}>
                                 <PersonAddIcon sx={{mr: 1}}/> ISCRIVI
                             </Box>
                             <Box sx={{width: '200px', ml: 2}}>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
-                                    <Typography variant="body2">{subscriptions.length}/{capacity}</Typography>
+                                    <Typography variant="body2">{subscription_count}/{capacity}</Typography>
                                 </Box>
                                 <LinearProgress
                                     variant="determinate"
@@ -392,7 +393,7 @@ export default function Event() {
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                             <IconButton onClick={() => {
-                                navigate(-1);
+                                navigate('/events/');
                             }} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
                             <EventIcon sx={{marginRight: '10px'}}/>
                             <Typography variant="h4">Evento - {data.name}</Typography>

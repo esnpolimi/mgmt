@@ -12,6 +12,7 @@ import {accountDisplayNames as names} from "../utils/displayAttributes";
 import {extractErrorMessage} from "../utils/errorHandling";
 import TransactionAdd from "../Components/treasury/TransactionAdd";
 import * as Sentry from "@sentry/react";
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 // --- Static content for useful links and office responsibles ---
 const staticLinks = [
@@ -116,6 +117,7 @@ export default function Home() {
     const [casseOpen, setCasseOpen] = useState(false);
     const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
+    const [casseLoading, setCasseLoading] = useState(false);
     const accountsDetails = user?.permissions.includes("change_account");
     const casseRef = useRef(null);
 
@@ -124,6 +126,7 @@ export default function Home() {
     }, [user]);
 
     const fetchAccounts = async () => {
+        setCasseLoading(true);
         try {
             const response = await fetchCustom("GET", "/accounts/");
             const json = await response.json();
@@ -135,6 +138,8 @@ export default function Home() {
         } catch (error) {
             Sentry.captureException(error);
             setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
+            setCasseLoading(false);
         }
     };
 
@@ -315,6 +320,16 @@ export default function Home() {
                         </IconButton>
                     </Box>
                     <Collapse in={casseOpen} timeout="auto" unmountOnExit>
+                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "flex-end", mt: 1, mb: 1}}>
+                            <IconButton variant="outlined"
+                                    color="primary"
+                                    size="small"
+                                    onClick={fetchAccounts}
+                                    disabled={casseLoading}
+                                    sx={{mr: 2}}>
+                                <RefreshIcon/>
+                            </IconButton>
+                        </Box>
                         <Box
                             sx={{
                                 display: "flex",

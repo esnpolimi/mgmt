@@ -2,6 +2,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from profiles.models import Profile, BaseEntity
 
 
@@ -27,6 +28,29 @@ class Event(BaseEntity):
 
     def __str__(self):
         return f"{self.name} ({self.date})"
+
+    @property
+    def status(self):
+        now = timezone.now()
+        if self.subscription_start_date and self.subscription_end_date:
+            if self.subscription_start_date <= now <= self.subscription_end_date:
+                return "open"
+            elif now < self.subscription_start_date:
+                return "not_yet"
+            else:
+                return "closed"
+        elif self.subscription_start_date and not self.subscription_end_date:
+            if now >= self.subscription_start_date:
+                return "open"
+            else:
+                return "not_yet"
+        elif not self.subscription_start_date and self.subscription_end_date:
+            if now <= self.subscription_end_date:
+                return "open"
+            else:
+                return "closed"
+        else:
+            return "open"
 
 
 class EventOrganizer(BaseEntity):
@@ -70,6 +94,10 @@ class EventList(BaseEntity):
 
     def __str__(self):
         return f"{self.name} ({self.event.name})"
+
+    @property
+    def subscription_count(self):
+        return self.subscriptions.count()
 
 
 class SubscriptionStatus(models.TextChoices):

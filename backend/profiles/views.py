@@ -15,6 +15,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from events.models import Subscription
 from profiles.models import Profile, Document
 from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
@@ -394,3 +395,30 @@ def search_profiles(request):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({"error": "Si è verificato un errore: " + str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def profile_subscriptions(request, pk):
+    """
+    Returns all subscriptions for a given profile, with event and list info.
+    """
+    try:
+        subs = Subscription.objects.filter(profile_id=pk)
+        # Compose a list of dicts with event and list info
+        result = []
+        for sub in subs.select_related('event', 'list'):
+            result.append({
+                "id": sub.id,
+                "event_id": sub.event.id,
+                "event_name": sub.event.name,
+                "event_date": sub.event.date,
+                "status": sub.status,
+                "list_name": sub.list.name if sub.list else None,
+                "subscribed_at": sub.created_at,
+            })
+        return Response(result, status=200)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({"error": str(e)}, status=500)

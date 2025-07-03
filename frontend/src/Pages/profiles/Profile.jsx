@@ -18,6 +18,11 @@ import {useNavigate, useParams} from "react-router-dom";
 import Sidebar from "../../Components/Sidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import * as Sentry from "@sentry/react";
+import SubscriptionModal from "../../Components/events/SubscriptionModal";
+import EventSelectorModal from "../../Components/events/EventSelectorModal";
+import {MRT_Table, useMaterialReactTable} from 'material-react-table';
+import {MRT_Localization_IT} from 'material-react-table/locales/it';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -36,6 +41,10 @@ export default function Profile() {
     const [documentErrors, setDocumentErrors] = useState({})
     const [groups, setGroups] = useState([]);
     const [profileType, setProfileType] = useState(null);
+    const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
+    const [subscriptionEvent, setSubscriptionEvent] = useState(null);
+    const [eventSelectorModalOpen, setEventSelectorModalOpen] = useState(false);
+    const [subscriptions, setSubscriptions] = useState([]); // For MRT_Table
     const navigate = useNavigate();
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
@@ -140,6 +149,22 @@ export default function Profile() {
         };
         fetchData().then();
     }, []);
+
+    // Fetch subscriptions for MRT_Table
+    useEffect(() => {
+        const fetchSubscriptions = async () => {
+            try {
+                const response = await fetchCustom("GET", `/profile_subscriptions/${id}/`);
+                const json = await response.json();
+                if (response.ok) setSubscriptions(json);
+                else setSubscriptions([]);
+            } catch (error) {
+                Sentry.captureException(error);
+                setSubscriptions([]);
+            }
+        };
+        fetchSubscriptions().then();
+    }, [id]);
 
     useEffect(() => {
         const fetchGroups = async () => {
@@ -448,6 +473,117 @@ export default function Profile() {
         }
     };
 
+    const handleIscriviAdEvento = () => {
+        setEventSelectorModalOpen(true);
+    };
+
+    const handleEventSelected = (event) => {
+        setSubscriptionEvent(event);
+        setEventSelectorModalOpen(false);
+        setSubscriptionModalOpen(true);
+    };
+
+    const handleSubscriptionModalClose = (success, msg) => {
+        setSubscriptionModalOpen(false);
+        setSubscriptionEvent(null);
+        if (success && msg) setShowSuccessPopup({message: msg, state: "success"});
+    };
+
+    const subscriptionsColumns = useMemo(() => [
+        {
+            accessorKey: 'subscribed_at',
+            header: 'Data e Ora Iscrizione',
+            size: 120,
+            Cell: ({cell}) => {
+                const date = cell.getValue();
+                if (!date) return '';
+                const d = new Date(date);
+                return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'}) + ' ' +
+                    d.toLocaleTimeString('it-IT');
+            }
+        },
+        {
+            accessorKey: 'event_name',
+            header: 'Evento',
+            size: 150,
+            Cell: ({row}) => (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(`/event/${row.original.event_id}`, '_blank', 'noopener,noreferrer')}>
+                        {row.original.event_name}
+                    </Button>
+                </span>
+            ),
+        },
+        {
+            accessorKey: 'list_name',
+            header: 'Lista',
+            size: 100,
+        },
+        {
+            accessorKey: 'event_date',
+            header: 'Data',
+            size: 100,
+            Cell: ({cell}) => {
+                const date = cell.getValue();
+                if (!date) return '';
+                const d = new Date(date);
+                return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'});
+            }
+        },
+        {
+            accessorKey: 'status',
+            header: 'Stato Pagamento',
+            size: 100,
+            Cell: ({cell}) => {
+                const status = cell.getValue();
+                let color;
+                let label;
+                switch (status) {
+                    case 'paid':
+                        color = "success";
+                        label = "Pagato";
+                        break;
+                    case 'pending':
+                        color = "warning";
+                        label = "In attesa";
+                        break;
+                    default:
+                        color = "error";
+                        label = status || "Sconosciuto";
+                }
+                return (
+                    <span style={{
+                        color:
+                            color === "success" ? "#388e3c" :
+                                color === "warning" ? "#f57c00" :
+                                    "#d32f2f",
+                        fontWeight: 600
+                    }}>
+                        {label}
+                    </span>
+                );
+            }
+        },
+    ], [navigate]);
+
+    const subscriptionsTable = useMaterialReactTable({
+        columns: subscriptionsColumns,
+        data: subscriptions,
+        enableKeyboardShortcuts: false,
+        enableColumnActions: false,
+        enableColumnFilters: false,
+        enablePagination: false,
+        enableSorting: false,
+        initialState: {showColumnFilters: false, showGlobalFilter: false},
+        paginationDisplayMode: 'default',
+        muiTableBodyRowProps: {hover: false},
+        localization: MRT_Localization_IT,
+    });
+
     return (
         <Box>
             <Sidebar/>
@@ -739,8 +875,8 @@ export default function Profile() {
                         <Card sx={{p: 1, mt: 2, mb: 2, minHeight: '80px', display: 'flex', alignItems: 'center'}}>
                             <Toolbar sx={{justifyContent: 'space-between', width: '100%', p: 0}}>
                                 <Typography variant="h6">Azioni</Typography>
-                                <Button variant="contained" color="primary">
-                                    Esporta Profilo
+                                <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
+                                    Iscrivi ad Evento
                                 </Button>
                             </Toolbar>
                             {ESNcardModalOpen &&
@@ -750,6 +886,25 @@ export default function Profile() {
                                     onClose={handleCloseESNcardModal}/>
                             }
                         </Card>
+                        {eventSelectorModalOpen && (
+                            <EventSelectorModal
+                                open={eventSelectorModalOpen}
+                                onSelect={handleEventSelected}
+                                onClose={() => setEventSelectorModalOpen(false)}
+                            />
+                        )}
+                        {subscriptionModalOpen && subscriptionEvent && (
+                            <SubscriptionModal
+                                open={subscriptionModalOpen}
+                                onClose={handleSubscriptionModalClose}
+                                event={subscriptionEvent}
+                                listId={subscriptionEvent.selectedList ? subscriptionEvent.selectedList.id : null}
+                                subscription={null}
+                                isEdit={false}
+                                profileId={profile.id}
+                                profileName={`${profile.name} ${profile.surname}`}
+                            />
+                        )}
                         <Grid container sx={{width: '100%', mb: 5}} spacing={2}>
                             <Grid size={{xs: 12, md: 6}}>
                                 <CrudTable
@@ -776,6 +931,12 @@ export default function Profile() {
                                     title={'ESNcards'}
                                     sortColumn={'expiration'}/>
                             </Grid>
+                            <Grid size={{xs: 12}}>
+                                <Card sx={{p: 2, mt: 2}}>
+                                    <Typography variant="h5" sx={{mb: 2}}>Iscrizioni</Typography>
+                                    <MRT_Table table={subscriptionsTable}/>
+                                </Card>
+                            </Grid>
                         </Grid>
                         {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
                     </Box>
@@ -784,4 +945,3 @@ export default function Profile() {
         </Box>
     );
 }
-

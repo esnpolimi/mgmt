@@ -29,33 +29,13 @@ def events_list(request):
         search = request.GET.get('search', '').strip()
         if search:
             events = events.filter(Q(name__icontains=search))
-        # --- New filters ---
-        subscription_status = request.GET.get('subscription_status', '').strip()
-        if subscription_status:
-            now = timezone.now()
-            # Split comma-separated statuses and remove whitespace
-            status_list = [s.strip() for s in subscription_status.split(',') if s.strip()]
+
+        status_param = request.GET.get('status', '').strip()
+        if status_param:
+            status_list = [s.strip() for s in status_param.split(',') if s.strip()]
             if status_list:
-                status_q = Q()
-                for status in status_list:
-                    if status == 'open':
-                        status_q |= Q(
-                            subscription_start_date__lte=now,
-                            subscription_end_date__gte=now
-                        )
-                    elif status == 'not_yet':
-                        status_q |= Q(
-                            subscription_start_date__gt=now
-                        )
-                    elif status == 'closed':
-                        status_q |= Q(
-                            subscription_end_date__lt=now
-                        )
-                    elif status == 'not_available':
-                        status_q |= Q(
-                            subscription_start_date__isnull=True
-                        )
-                events = events.filter(status_q)
+                events = [e for e in events if e.status in status_list]
+
         date_from = request.GET.get('dateFrom')
         if date_from:
             events = events.filter(date__gte=date_from)
