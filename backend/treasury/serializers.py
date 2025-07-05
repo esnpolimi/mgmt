@@ -8,6 +8,7 @@ from rest_framework import serializers
 from django.conf import settings
 from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
+from djmoney.money import Money
 
 
 # Serializer for ESNcard emission/renewal
@@ -132,10 +133,12 @@ class AccountEditSerializer(serializers.ModelSerializer):
 
 class ReimbursementRequestSerializer(serializers.ModelSerializer):
     receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
+    is_reimbursed = serializers.BooleanField(required=False)
+    account = serializers.PrimaryKeyRelatedField(queryset=Account.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = ReimbursementRequest
-        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'receiptFile']
+        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'receiptFile', 'is_reimbursed', 'account']
         read_only_fields = ['id', 'user', 'created_at', 'receipt_link']
 
     @staticmethod
@@ -209,21 +212,44 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         # Do NOT allow updating the file/image
         validated_data.pop('receiptFile', None)
-        # Only allow updating description and receipt_link
-        if 'description' in validated_data:
-            instance.description = validated_data['description']
-        if 'receipt_link' in validated_data:
-            instance.receipt_link = validated_data['receipt_link']
+        # Only allow updating description, receipt_link, account, and is_reimbursed
+        description = validated_data.get('description')
+        receipt_link = validated_data.get('receipt_link')
+        account = validated_data.get('account', None)
+        is_reimbursed = validated_data.get('is_reimbursed', None)
+
+        if description is not None:
+            instance.description = description
+        if receipt_link is not None:
+            instance.receipt_link = receipt_link
+        if account is not None:
+            instance.account = account
+
+        # Only allow is_reimbursed change to True and only if account is set
+        if is_reimbursed is True and not instance.is_reimbursed and instance.account:
+            account_obj = instance.account
+            if account_obj.status == "closed":
+                raise serializers.ValidationError("La cassa selezionata è chiusa.")
+            if account_obj.balance - instance.amount < Money(0, account_obj.balance.currency):
+                raise serializers.ValidationError("Il saldo della cassa non può andare in negativo.")
+            account_obj.balance -= instance.amount
+            account_obj.save()
+            instance.is_reimbursed = True
+        elif is_reimbursed is False and instance.is_reimbursed:
+            instance.is_reimbursed = False
+
         instance.save()
         return instance
 
 
 class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
+    is_reimbursed = serializers.BooleanField()
+    account = serializers.SerializerMethodField()
 
     class Meta:
         model = ReimbursementRequest
-        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at']
+        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'is_reimbursed', 'account']
 
     @staticmethod
     def get_user(obj):
@@ -242,3 +268,9 @@ class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
             "email": getattr(obj.user, 'email', ''),
             "name": None
         }
+
+    @staticmethod
+    def get_account(obj):
+        if obj.account:
+            return {"id": obj.account.id, "name": obj.account.name}
+        return None
