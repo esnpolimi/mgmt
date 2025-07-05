@@ -4,6 +4,7 @@ import sentry_sdk
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -362,23 +363,35 @@ def reimbursement_request_detail(request, pk):
             return Response(serializer.data, status=200)
 
         elif request.method == 'PATCH':
-            # Only allow the user who created the request or staff to edit
-            if not (request.user.is_staff or request.user == instance.user):
-                return Response({'error': 'Non autorizzato.'}, status=403)
-            # Only allow updating description and receipt_link
-            allowed_fields = {'description', 'receipt_link'}
-            data = {k: v for k, v in request.data.items() if k in allowed_fields}
-            serializer = ReimbursementRequestSerializer(instance, data=data, partial=True, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=200)
-            return Response(serializer.errors, status=400)
+            if request.user.has_perm('treasury.change_reimbursementrequest'):
+                allowed_fields = {'description', 'receipt_link', 'account', 'is_reimbursed'}
+                data = {k: v for k, v in request.data.items() if k in allowed_fields}
+                # Ensure is_reimbursed is a boolean if present
+                if 'is_reimbursed' in data:
+                    val = data['is_reimbursed']
+                    if isinstance(val, str):
+                        data['is_reimbursed'] = val.lower() == "true"
+                    else:
+                        data['is_reimbursed'] = bool(val)
+                serializer = ReimbursementRequestSerializer(instance, data=data, partial=True, context={'request': request})
+                if serializer.is_valid():
+                    try:
+                        serializer.save()
+                        # Reload instance to reflect changes (e.g., account deduction)
+                        instance.refresh_from_db()
+                        response_serializer = ReimbursementRequestViewSerializer(instance)
+                        return Response(response_serializer.data, status=200)
+                    except serializers.ValidationError as ve:
+                        return Response(ve.detail, status=400)
+                return Response(serializer.errors, status=400)
+            else:
+                return Response({'error': 'Non autorizzato.'}, status=401)
         else:
             return Response("Metodo non consentito", status=405)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': str(e)}, status=500)
 
 
 # Endpoint to retrieve list of reimbursement requests
