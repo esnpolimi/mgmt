@@ -17,6 +17,8 @@ from events.serializers import (
     EventWithSubscriptionsSerializer, SubscriptionSerializer
 )
 from treasury.models import Transaction
+from django.utils.dateparse import parse_datetime
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ def events_list(request):
             events = events.filter(date__gte=date_from)
         date_to = request.GET.get('dateTo')
         if date_to:
-            events = events.filter(date__lte=date_to)
+            events = events.filter(date__lte=parse_datetime(date_to) + timedelta(days=1))
         # --- End new filters ---
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'

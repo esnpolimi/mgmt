@@ -8,12 +8,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.utils.dateparse import parse_datetime
+from datetime import timedelta
 
 from profiles.models import Profile
 from users.models import User
-from treasury.models import Transaction, Account, ESNcard, Settings
+from treasury.models import Transaction, Account, ESNcard, Settings, ReimbursementRequest
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
-    ESNcardSerializer, AccountListViewSerializer
+    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,6 @@ def esncard_emission(request):
 
         with transaction.atomic():
             esncard = esncard_serializer.save()
-
-            # Get the appropriate fee amount from settings
             settings = Settings.get()
             if latest_card:
                 if latest_card.is_valid:
@@ -100,6 +100,24 @@ def esncard_detail(request, pk):
         return Response(str(e), status=500)
 
 
+# Endpoint to retrieve ensncard fees
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def esncard_fees(request):
+    try:
+        # Get the settings and add fee information
+        settings = Settings.get()
+        response = Response({
+            'esncard_release_fee': str(settings.esncard_release_fee),
+            'esncard_lost_fee': str(settings.esncard_lost_fee)
+        }, status=200)
+        return response
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
 #   Endpoint for adding a transaction
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -151,7 +169,17 @@ def transactions_list(request):
             transactions = transactions.filter(created_at__gte=date_from)
         date_to = request.GET.get('dateTo')
         if date_to:
-            transactions = transactions.filter(created_at__lte=date_to)
+            transactions = transactions.filter(created_at__lte=parse_datetime(date_to) + timedelta(days=1))
+        # Support limit param for dashboard
+        limit = request.GET.get('limit')
+        if limit:
+            try:
+                limit = int(limit)
+                transactions = transactions[:limit]
+                serializer = TransactionViewSerializer(transactions, many=True)
+                return Response({'results': serializer.data, 'count': transactions.count() if hasattr(transactions, 'count') else len(transactions)})
+            except ValueError:
+                pass
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(transactions, request=request)
@@ -224,25 +252,7 @@ def transaction_detail(request, pk):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
-# Endpoint to retrieve ensncard fees
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def esncard_fees(request):
-    try:
-        # Get the settings and add fee information
-        settings = Settings.get()
-        response = Response({
-            'esncard_release_fee': str(settings.esncard_release_fee),
-            'esncard_lost_fee': str(settings.esncard_lost_fee)
-        }, status=200)
-        return response
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
-# Endpoint to retrieve all accounts 
+# Endpoint to retrieve all accounts
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def accounts_list(request):
@@ -252,7 +262,6 @@ def accounts_list(request):
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(visible_accounts, request=request)
-        logger.info("User " + str(request.user) + " group: " + str(request.user.groups.all()))
         if request.user.groups.filter(name="Aspiranti").exists():
             serializer = AccountListViewSerializer(page, many=True)  # Do not return sensitive data, like balance
         else:
@@ -318,6 +327,100 @@ def account_detail(request, pk):
     except Account.DoesNotExist:
         return Response({'error': 'Account non trovato.'}, status=404)
 
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reimbursement_request_creation(request):
+    try:
+        serializer = ReimbursementRequestSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def reimbursement_request_detail(request, pk):
+    try:
+        try:
+            instance = ReimbursementRequest.objects.get(pk=pk)
+        except ReimbursementRequest.DoesNotExist:
+            return Response({'error': 'Richiesta di rimborso non trovata.'}, status=404)
+
+        if request.method == 'GET':
+            serializer = ReimbursementRequestViewSerializer(instance)
+            return Response(serializer.data, status=200)
+
+        elif request.method == 'PATCH':
+            # Only allow the user who created the request or staff to edit
+            if not (request.user.is_staff or request.user == instance.user):
+                return Response({'error': 'Non autorizzato.'}, status=403)
+            # Only allow updating description and receipt_link
+            allowed_fields = {'description', 'receipt_link'}
+            data = {k: v for k, v in request.data.items() if k in allowed_fields}
+            serializer = ReimbursementRequestSerializer(instance, data=data, partial=True, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=200)
+            return Response(serializer.errors, status=400)
+        else:
+            return Response("Metodo non consentito", status=405)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+# Endpoint to retrieve list of reimbursement requests
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def reimbursement_requests_list(request):
+    try:
+        requests = ReimbursementRequest.objects.all().order_by('-created_at')
+        search = request.GET.get('search', '').strip()
+        if search:
+            requests = requests.filter(
+                Q(description__icontains=search) |
+                Q(user__profile__name__icontains=search) |
+                Q(user__profile__surname__icontains=search) |
+                Q(user__email__icontains=search)
+            )
+        # Filtering by payment (multi)
+        payments = request.GET.getlist('payment')
+        if payments:
+            requests = requests.filter(payment__in=payments)
+        # Filtering by dateFrom/dateTo
+        date_from = request.GET.get('dateFrom')
+        if date_from:
+            requests = requests.filter(created_at__gte=date_from)
+        date_to = request.GET.get('dateTo')
+        if date_to:
+            requests = requests.filter(created_at__lte=parse_datetime(date_to) + timedelta(days=1))
+        # Support limit param for dashboard
+        limit = request.GET.get('limit')
+        if limit:
+            try:
+                limit = int(limit)
+                requests = requests[:limit]
+                serializer = ReimbursementRequestViewSerializer(requests, many=True)
+                return Response({'results': serializer.data, 'count': requests.count() if hasattr(requests, 'count') else len(requests)})
+            except ValueError:
+                pass
+        paginator = PageNumberPagination()
+        paginator.page_size_query_param = 'page_size'
+        page = paginator.paginate_queryset(requests, request=request)
+        serializer = ReimbursementRequestViewSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
