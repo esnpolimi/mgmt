@@ -9,6 +9,7 @@ from profiles.models import Profile, BaseEntity
 from djmoney.models.fields import MoneyField
 from djmoney.money import Money
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -121,3 +122,21 @@ class Transaction(BaseEntity):
             self.account.balance -= self.amount
             self.account.save()
             super(Transaction, self).delete(*args, **kwargs)
+
+
+class ReimbursementRequest(models.Model):
+    PAYMENT_CHOICES = [
+        ("cash", "Contanti"),
+        ("paypal", "PayPal"),
+        ("bonifico", "Bonifico Bancario"),
+    ]
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    amount = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR')
+    payment = models.CharField(max_length=16, choices=PAYMENT_CHOICES)
+    description = models.CharField(max_length=512)
+    receipt_link = models.URLField(max_length=512, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Reimbursement {self.id} by {self.user} - {self.amount} EUR"
