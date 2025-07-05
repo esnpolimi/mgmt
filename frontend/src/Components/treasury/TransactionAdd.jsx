@@ -62,7 +62,7 @@ export default function TransactionAdd({open, onClose, account, onSuccess}) {
                     </FormControl>
                     <TextField
                         margin="dense"
-                        label="Importo"
+                        label="Importo in € (decimali con punto)"
                         type="number"
                         fullWidth
                         value={formData.amount}

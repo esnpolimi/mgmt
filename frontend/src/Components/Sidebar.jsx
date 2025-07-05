@@ -11,6 +11,8 @@ import {
     BabyChangingStation as BabyChangingStationIcon,
     ExpandLess,
     ExpandMore,
+    HomeRepairService as HomeRepairServiceIcon,
+    ReceiptLong as ReceiptLongIcon
 } from "@mui/icons-material";
 import LogoutButton from './LogoutButton';
 import {useAuth} from "../Context/AuthContext";
@@ -38,9 +40,14 @@ export default function Sidebar() {
                 {text: 'ESNers', icon: <BabyChangingStationIcon/>, path: '/profiles/esners'},
             ],
         },
+        {
+            text: "Utils",
+            icon: <HomeRepairServiceIcon/>,
+            children: [
+            ],
+        },
     ].filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
 
-    // Inline ProfileSidebarBox logic here
     const handleProfileOpen = useCallback(() => {
         navigate(`/profile/${user.profile.id.toString()}`);
     }, [navigate, user?.profile?.id]);

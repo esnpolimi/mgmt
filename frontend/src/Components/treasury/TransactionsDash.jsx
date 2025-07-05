@@ -14,7 +14,7 @@ const TRANSACTION_CONFIGS = {
     withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
 };
 
-export default function TransactionsDash({limit = 5}) {
+export default function TransactionsDash({limit = 3}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
@@ -22,7 +22,7 @@ export default function TransactionsDash({limit = 5}) {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetchCustom("GET", '/transactions/');
+                const response = await fetchCustom("GET", `/transactions/?limit=${limit}`);
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.results);
@@ -35,7 +35,7 @@ export default function TransactionsDash({limit = 5}) {
             }
         };
         fetchData().then();
-    }, []);
+    }, [limit]);
 
     const columns = useMemo(() => [
         {

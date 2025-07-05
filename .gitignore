@@ -5,6 +5,7 @@ __pycache__/
 .idea
 *.xlsx
 /backend/backend/settings
+google-service-account.json
 *.env*
 *.env.*
 .vscode

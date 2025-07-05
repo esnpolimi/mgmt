@@ -2,6 +2,7 @@ import {Box, Typography, Paper, Button, Grid} from '@mui/material';
 import Sidebar from '../../Components/Sidebar';
 import AccountsDash from '../../Components/treasury/AccountsDash';
 import ReceiptsDash from '../../Components/treasury/TransactionsDash';
+import ReimbursementRequestsDash from '../../Components/treasury/ReimbursementRequestsDash';
 import {useNavigate} from 'react-router-dom';
 
 export default function TreasuryDashboard() {
@@ -28,7 +29,7 @@ export default function TreasuryDashboard() {
                         </Paper>
                     </Grid>
                     <Grid size={{xs: 12, md: 8}}>
-                        <Paper elevation={3} sx={{p: 2}}>
+                        <Paper elevation={3} sx={{p: 2, mb: 3}}>
                             <Typography variant="h6" sx={{mb: 2}}>Ultime Transazioni</Typography>
                             <ReceiptsDash limit={3}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
@@ -37,6 +38,18 @@ export default function TreasuryDashboard() {
                                     size="small"
                                     onClick={() => navigate('/treasury/transactions_list/')}>
                                     Gestisci Movimenti
+                                </Button>
+                            </Box>
+                        </Paper>
+                        <Paper elevation={3} sx={{p: 2}}>
+                            <Typography variant="h6" sx={{mb: 2}}>Ultime Richieste Rimborso</Typography>
+                            <ReimbursementRequestsDash limit={3}/>
+                            <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={() => navigate('/treasury/reimbursement_requests_list/')}>
+                                    Gestisci Rimborsi
                                 </Button>
                             </Box>
                         </Paper>

@@ -13,8 +13,10 @@ import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import EditIcon from '@mui/icons-material/Edit';
 import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
 import Popup from "../../Components/Popup";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 
 const TRANSACTION_CONFIGS = {
@@ -114,7 +116,20 @@ export default function TransactionsList() {
                 );
             }
         },
-        {accessorKey: 'executor.name', header: names.executor, size: 150},
+        {
+            accessorKey: 'executor.name', header: names.executor, size: 150,
+            Cell: ({row}) => (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(`/profile/${row.original.executor.id}`, '_blank', 'noopener,noreferrer')}>
+                        {row.original.executor.name}
+                    </Button>
+                </span>
+            )
+        },
         {
             accessorKey: 'account.name',
             header: names.account,
@@ -145,6 +160,24 @@ export default function TransactionsList() {
                 </Box>
             ),
         },
+        {
+            accessorKey: 'actions',
+            header: 'Azioni',
+            size: 80,
+            Cell: ({row}) => (
+                <IconButton
+                    color="primary"
+                    title="Modifica Transazione"
+                    onClick={() => {
+                        setSelectedTransaction(row.original);
+                        setTransactionModalOpen(true);
+                    }}>
+                    <EditIcon/>
+                </IconButton>
+            ),
+            enableSorting: false,
+            enableColumnActions: false,
+        }
     ], []);
 
     const table = useMaterialReactTable({
@@ -182,13 +215,6 @@ export default function TransactionsList() {
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
-        muiTableBodyRowProps: ({row}) => ({
-            onClick: () => {
-                setSelectedTransaction(row.original);
-                setTransactionModalOpen(true);
-            },
-            sx: {cursor: 'pointer'},
-        })
     });
 
     const handleSearchApply = () => {

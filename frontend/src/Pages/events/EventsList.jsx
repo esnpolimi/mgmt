@@ -18,6 +18,8 @@ import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
 import * as Sentry from "@sentry/react";
+import FestivalIcon from '@mui/icons-material/Festival';
+
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
     {value: 'open', label: 'Iscrizioni aperte'},
@@ -87,25 +89,29 @@ export default function EventsList() {
     }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
     const columns = useMemo(() => [
-        {
-            accessorKey: 'id',
-            header: names.id,
-            size: 50,
-        },
+        {accessorKey: 'id', header: names.id, size: 50},
         {
             accessorKey: 'name',
             header: names.name,
             size: 150,
+            Cell: ({cell}) => (
+                <Box component="span" fontWeight="bold">
+                    {cell.getValue()}
+                </Box>
+            ),
         },
-        {
-            accessorKey: 'date',
-            header: names.date,
-            size: 150,
-        },
+        {accessorKey: 'date', header: names.date, size: 150},
         {
             accessorKey: 'cost',
             header: names.cost,
             size: 150,
+            Cell: ({cell}) => (
+                <Box>
+                    {cell.getValue() !== null ? (
+                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                        <Chip label="N/A" color="warning"/>)}
+                </Box>
+            ),
         },
         {
             accessorKey: 'status',
@@ -134,6 +140,24 @@ export default function EventsList() {
                 return <Chip label={status} color={color}/>;
             },
         },
+        {
+            accessorKey: 'actions',
+            header: 'Azioni',
+            size: 80,
+            Cell: ({row}) => (
+                <IconButton
+                    title="Gestisci Evento"
+                    color="primary"
+                    onClick={e => {
+                        e.stopPropagation();
+                        navigate('/event/' + row.original.id, {state: {event: row.original}});
+                    }}>
+                    <FestivalIcon/>
+                </IconButton>
+            ),
+            enableSorting: false,
+            enableColumnActions: false,
+        }
     ], []);
 
     const table = useMaterialReactTable({
@@ -148,7 +172,7 @@ export default function EventsList() {
         enableFacetedValues: true,
         enableRowActions: false,
         enableRowSelection: false,
-        enableRowPinning: true,
+        enableRowPinning: false,
         enableExpandAll: false,
         initialState: {
             showColumnFilters: false,
@@ -158,7 +182,7 @@ export default function EventsList() {
                 right: ['mrt-row-actions'],
             },
             columnVisibility: {
-                id: true,
+                id: false,
                 name: true,
                 date: true,
                 cost: true
@@ -178,11 +202,6 @@ export default function EventsList() {
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
-        muiTableBodyRowProps: ({row}) => ({
-            onClick: () => {
-                navigate('/event/' + row.original.id, {state: {event: row.original}});
-            },
-        }),
         renderTopToolbarCustomActions: () => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
@@ -191,7 +210,7 @@ export default function EventsList() {
                     </Button>
                 </Box>
             );
-        },
+        }
     });
 
     // Manual search handlers

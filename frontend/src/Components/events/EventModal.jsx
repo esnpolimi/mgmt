@@ -380,7 +380,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 <div> {/* Wrapper div needed for Tooltip to work with disabled elements */}
                                     <TextField
                                         fullWidth
-                                        label={eventNames.cost}
+                                        label={eventNames.cost + " (decimali con punto)"}
                                         name="cost"
                                         type="number"
                                         slotProps={{htmlInput: {min: "0", step: "0.01"}}}

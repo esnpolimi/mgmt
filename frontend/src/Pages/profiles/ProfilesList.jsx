@@ -111,10 +111,10 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
-        muiTableBodyRowProps: () => ({}), // No row click navigation
         renderRowActions: ({row}) => (
             <IconButton
-                aria-label="Modifica profilo"
+                title="Gestisci profilo"
+                color="primary"
                 onClick={e => {
                     e.stopPropagation();
                     navigate(`/profile/${row.original.id.toString()}`);
