@@ -5,7 +5,6 @@ import Loader from '../../Components/Loader';
 import {fetchCustom} from '../../api/api';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
-import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {useNavigate} from "react-router-dom";
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
@@ -13,87 +12,86 @@ import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
-import EditIcon from '@mui/icons-material/Edit';
-import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
-import Popup from "../../Components/Popup";
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import ReimburseModal from '../../Components/treasury/ReimburseModal';
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
-
-const TRANSACTION_CONFIGS = {
-    subscription: {label: names.tran_type["subscription"], color: 'primary'},
-    esncard: {label: names.tran_type["esncard"], color: 'secondary'},
-    deposit: {label: names.tran_type["deposit"], color: 'success'},
-    withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
+const PAYMENT_CONFIGS = {
+    cash: {label: "Contanti", color: 'success'},
+    paypal: {label: "PayPal", color: 'info'},
+    bonifico: {label: "Bonifico Bancario", color: 'warning'}
 };
 
-// For the filter dropdown
-const transactionTypes = [
+const paymentTypes = [
     {value: '', label: 'Tutti'},
-    ...Object.entries(TRANSACTION_CONFIGS).map(([value, config]) => ({
+    ...Object.entries(PAYMENT_CONFIGS).map(([value, config]) => ({
         value,
         label: config.label,
         color: config.color
     }))
 ];
 
-export default function TransactionsList() {
+export default function ReimbursementRequestsList() {
     const [isLoading, setLoading] = useState(true);
-    const [transactions, setTransactions] = useState([]);
-    const [accounts, setAccounts] = useState([]);
-    const navigate = useNavigate();
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
-    const [transactionModalOpen, setTransactionModalOpen] = useState(false);
-    const [selectedTransaction, setSelectedTransaction] = useState(null);
-    const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
+    const [requests, setRequests] = useState([]);
     const [rowCount, setRowCount] = useState(0);
-
+    const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [filters, setFilters] = useState({
-        account: [],
-        type: [],
+        payment: [],
         dateFrom: null,
         dateTo: null,
     });
     const [search, setSearch] = useState('');
     const [appliedSearch, setAppliedSearch] = useState('');
+    const [reimburseModalOpen, setReimburseModalOpen] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState(null);
     const searchInputRef = useRef(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
-        refreshTransactionsData().then();
+        refreshRequestsData().then();
     }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
-    const refreshTransactionsData = async () => {
+    const refreshRequestsData = async () => {
         setLoading(true);
         try {
-            // Build query params for pagination, search, and filters
             const params = new URLSearchParams();
             params.append('page', pagination.pageIndex + 1);
             params.append('page_size', pagination.pageSize);
             if (appliedSearch) params.append('search', appliedSearch);
-            if (filters.account.length)
-                filters.account.forEach(acc => params.append('account', acc));
-            if (filters.type.length)
-                filters.type.forEach(t => params.append('type', t));
+            if (filters.payment.length)
+                filters.payment.forEach(p => params.append('payment', p));
             if (filters.dateFrom)
                 params.append('dateFrom', filters.dateFrom.toISOString());
             if (filters.dateTo)
                 params.append('dateTo', filters.dateTo.toISOString());
-            const [txRes, accRes] = await Promise.all([
-                fetchCustom('GET', `/transactions/?${params.toString()}`),
-                fetchCustom('GET', '/accounts/')
-            ]);
-            const txJson = txRes.ok ? await txRes.json() : {results: []};
-            const accJson = accRes.ok ? await accRes.json() : {results: []};
-            setRowCount(txJson.count || 0);
-            setTransactions(txJson.results || []);
-            setAccounts(accJson.results || []);
+            // TODO: Replace with actual endpoint when available
+            const res = await fetchCustom('GET', `/reimbursement_requests/?${params.toString()}`);
+            const json = res.ok ? await res.json() : {results: []};
+            setRowCount(json.count || 0);
+            setRequests(json.results || []);
         } finally {
             setLoading(false);
         }
     };
 
+    const handleOpenReimburseModal = (row) => {
+        setSelectedRequest(row.original);
+        setReimburseModalOpen(true);
+    };
+
+    const handleCloseReimburseModal = () => {
+        setReimburseModalOpen(false);
+        setSelectedRequest(null);
+    };
+
+    const handleReimbursed = () => {
+        refreshRequestsData().then();
+    };
+
     const columns = useMemo(() => [
         {
-            accessorKey: 'created_at', header: names.date, size: 120,
+            accessorKey: 'created_at', header: "Data richiesta", size: 120,
             Cell: ({cell}) => {
                 const date = new Date(cell.getValue());
                 return new Intl.DateTimeFormat('it-IT', {
@@ -103,10 +101,34 @@ export default function TransactionsList() {
             }
         },
         {
-            accessorKey: 'type', header: names.type, size: 100,
+            accessorKey: 'user.name', header: "Richiedente", size: 150,
+            Cell: ({row}) => (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(`/profile/${row.original.user.id}`, '_blank', 'noopener,noreferrer')}>
+                        {row.original.user.name}
+                    </Button>
+                </span>
+            )
+        },
+        {
+            accessorKey: 'amount', header: "Importo", size: 100,
+            Cell: ({cell}) => (
+                <Box>
+                    {cell.getValue() !== null ? (
+                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                        <Chip label="N/A" color="warning"/>)}
+                </Box>
+            ),
+        },
+        {
+            accessorKey: 'payment', header: "Metodo", size: 120,
             Cell: ({cell}) => {
-                const type = cell.getValue();
-                const config = TRANSACTION_CONFIGS[type] || {label: 'Sconosciuto', color: 'default'};
+                const payment = cell.getValue();
+                const config = PAYMENT_CONFIGS[payment] || {label: payment, color: 'default'};
                 return (
                     <Chip
                         label={config.label}
@@ -117,42 +139,8 @@ export default function TransactionsList() {
             }
         },
         {
-            accessorKey: 'executor.name', header: names.executor, size: 150,
-            Cell: ({row}) => (
-                <span>
-                    <Button variant="text"
-                            color="primary"
-                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                            endIcon={<OpenInNewIcon fontSize="small"/>}
-                            onClick={() => window.open(`/profile/${row.original.executor.id}`, '_blank', 'noopener,noreferrer')}>
-                        {row.original.executor.name}
-                    </Button>
-                </span>
-            )
-        },
-        {
-            accessorKey: 'account.name',
-            header: names.account,
-            size: 120,
-            Cell: ({cell}) => (
-                <Box component="span" fontWeight="bold">
-                    {cell.getValue()}
-                </Box>
-            ),
-        },
-        {
-            accessorKey: 'amount', header: names.amount, size: 100,
-            Cell: ({cell}) => (
-                <Box>
-                    {cell.getValue() !== null ? (
-                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
-                        <Chip label="N/A" color="warning"/>)}
-                </Box>
-            ),
-        },
-        {
             accessorKey: 'description',
-            header: names.description,
+            header: "Descrizione",
             size: 200,
             Cell: ({cell}) => (
                 <Box component="span" fontStyle="italic">
@@ -161,33 +149,34 @@ export default function TransactionsList() {
             ),
         },
         {
-            accessorKey: 'actions',
-            header: 'Azioni',
+            accessorKey: 'receipt_link',
+            header: "Ricevuta",
+            size: 100,
+            Cell: ({cell}) => cell.getValue() ?
+                <a href={cell.getValue()} target="_blank" rel="noopener noreferrer">Apri</a> : "-"
+        },
+        {
+            header: "Azioni",
+            id: "actions",
             size: 80,
             Cell: ({row}) => (
-                <IconButton
-                    color="primary"
-                    title="Modifica Transazione"
-                    onClick={() => {
-                        setSelectedTransaction(row.original);
-                        setTransactionModalOpen(true);
-                    }}>
-                    <EditIcon/>
+                <IconButton color="success"
+                            title="Rimborsa"
+                            onClick={() => handleOpenReimburseModal(row)}>
+                    <PointOfSaleIcon/>
                 </IconButton>
-            ),
-            enableSorting: false,
-            enableColumnActions: false,
+            )
         }
     ], []);
 
     const table = useMaterialReactTable({
         columns,
-        data: transactions,
+        data: requests,
         enableStickyHeader: true,
         enableStickyFooter: true,
-        enableColumnFilters: false, // Disable MUI filters, because they only search in the current page
+        enableColumnFilters: false,
         enableColumnOrdering: true,
-        enableGrouping: true,
+        enableGrouping: false,
         enableFacetedValues: true,
         enableRowActions: false,
         enableRowSelection: false,
@@ -229,19 +218,9 @@ export default function TransactionsList() {
         if (searchInputRef.current) searchInputRef.current.focus();
     };
 
-    const handleCloseTransactionModal = async (success) => {
-        if (success) {
-            setShowSuccessPopup({message: "Transazione modificata con successo!", state: "success"});
-            await refreshTransactionsData();
-        }
-        setSelectedTransaction(null);
-        setTransactionModalOpen(false);
-    };
-
     const handleDateChange = (name, value) => {
         setFilters(prev => {
             let newFilters = {...prev, [name]: value};
-            // Prevent invalid date ranges
             if (name === 'dateFrom' && newFilters.dateTo && value && value > newFilters.dateTo)
                 newFilters.dateTo = value;
             if (name === 'dateTo' && newFilters.dateFrom && value && value < newFilters.dateFrom)
@@ -254,8 +233,7 @@ export default function TransactionsList() {
         const {name, value} = e.target;
         setFilters(prev => {
             let newFilters = {...prev, [name]: value};
-            // For multi-selects
-            if (name === 'account' || name === 'type') {
+            if (name === 'payment') {
                 newFilters[name] = typeof value === 'string' ? value.split(',') : value;
             }
             return newFilters;
@@ -273,52 +251,27 @@ export default function TransactionsList() {
     return (
         <Box>
             <Sidebar/>
-            {transactionModalOpen && <TransactionModal
-                open={transactionModalOpen}
-                onClose={handleCloseTransactionModal}
-                transaction={selectedTransaction}
-            />}
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
                     <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
-                    <Typography variant="h4">Lista Transazioni</Typography>
+                    <Typography variant="h4">Richieste di Rimborso</Typography>
                 </Box>
                 <Grid container spacing={2} sx={{mb: 2, mt: 4}} alignItems="center">
                     <Grid size={{xs: 12, sm: 2}}>
                         <FormControl fullWidth>
-                            <InputLabel id="account-label">Cassa</InputLabel>
+                            <InputLabel id="payment-label">Metodo</InputLabel>
                             <Select
-                                labelId="account-label"
-                                name="account"
+                                labelId="payment-label"
+                                name="payment"
                                 multiple
-                                value={filters.account}
+                                value={filters.payment}
                                 onChange={handleFilterChange}
-                                input={<OutlinedInput label="Cassa"/>}
+                                input={<OutlinedInput label="Metodo"/>}
                                 variant="outlined"
                                 renderValue={(selected) =>
-                                    accounts.filter(acc => selected.includes(acc.id)).map(acc => acc.name).join(', ')
+                                    paymentTypes.filter(t => selected.includes(t.value) && t.value).map(t => t.label).join(', ')
                                 }>
-                                {accounts.map(acc => (
-                                    <MenuItem key={acc.id} value={acc.id}>{acc.name}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Grid>
-                    <Grid size={{xs: 12, sm: 2}}>
-                        <FormControl fullWidth>
-                            <InputLabel id="type-label">Tipo</InputLabel>
-                            <Select
-                                labelId="type-label"
-                                name="type"
-                                multiple
-                                value={filters.type}
-                                onChange={handleFilterChange}
-                                input={<OutlinedInput label="Tipo"/>}
-                                variant="outlined"
-                                renderValue={(selected) =>
-                                    transactionTypes.filter(t => selected.includes(t.value) && t.value).map(t => t.label).join(', ')
-                                }>
-                                {transactionTypes.filter(t => t.value).map(t => (
+                                {paymentTypes.filter(t => t.value).map(t => (
                                     <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
                                 ))}
                             </Select>
@@ -393,9 +346,13 @@ export default function TransactionsList() {
                     </Grid>
                 </Grid>
                 {isLoading ? <Loader/> : <MaterialReactTable sx={{mt: 2}} table={table}/>}
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                <ReimburseModal
+                    open={reimburseModalOpen}
+                    onClose={handleCloseReimburseModal}
+                    requestData={selectedRequest}
+                    onReimbursed={handleReimbursed}
+                />
             </Box>
         </Box>
     );
 }
-

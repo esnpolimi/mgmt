@@ -18,11 +18,21 @@ export default function ErasmusProfiles() {
             accessorKey: 'name',
             header: names.name,
             size: 150,
+            Cell: ({cell}) => (
+                <Box component="span" fontWeight="bold">
+                    {cell.getValue()}
+                </Box>
+            ),
         },
         {
             accessorKey: 'surname',
             header: names.surname,
             size: 150,
+            Cell: ({cell}) => (
+                <Box component="span" fontWeight="bold">
+                    {cell.getValue()}
+                </Box>
+            ),
         },
         {
             accessorKey: 'email',
@@ -125,7 +135,7 @@ export default function ErasmusProfiles() {
     ], []);
 
     const columnVisibility = {
-        id: true,
+        id: false,
         name: true,
         surname: true,
         email: true,

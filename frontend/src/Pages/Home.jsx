@@ -13,92 +13,8 @@ import {extractErrorMessage} from "../utils/errorHandling";
 import TransactionAdd from "../Components/treasury/TransactionAdd";
 import * as Sentry from "@sentry/react";
 import RefreshIcon from '@mui/icons-material/Refresh';
+import ReimbursementRequestModal from "../Components/treasury/ReimbursementRequestModal";
 
-// --- Static content for useful links and office responsibles ---
-const staticLinks = [
-    {
-        topic: "LINK IMPORTANTI",
-        links: [
-            {
-                name: "FOGLIO TURNI UFFICIO",
-                description: "",
-                url: "https://docs.google.com/spreadsheets/d/1Bi_jw4_MgAPV3R_Cu-eCRlexbL23xJL63uey1rmY-P0/edit?gid=2036311463#gid=2036311463",
-                color: "#388e3c"
-            },
-            {
-                name: "FOGLIO CONTASOLDI",
-                description: "",
-                url: "https://docs.google.com/spreadsheets/d/1Ewt9DggEyDy8lT2Kh6YiN2k5SvGZnVkvPwpufZ0w5sU/edit",
-                color: "#f57c00"
-            },
-            {
-                name: "FORM REPORT UFFICI",
-                description: "",
-                url: "https://goo.gl/forms/xAusvfJZdKppn2D13",
-                color: "#d32f2f"
-            },
-            {
-                name: "FOGLI FIRME BANDI",
-                description: "",
-                url: "https://drive.google.com/drive/folders/1MBFMmga6IFPqPD_ER9HCdiHoI092y3Zs?usp=sharing",
-                color: "#7b1fa2"
-            },
-            {
-                name: "DATABASE HOUSING",
-                description: "",
-                url: "https://docs.google.com/spreadsheets/d/1vnjVct9Xqro2f9s_5t9Ap_jhagvitXOIyt45XnpahcY/edit#gid=0",
-                color: "#1976d2"
-            },
-        ]
-    },
-    {
-        topic: "WIKI E TUTORIAL",
-        links: [
-            {
-                name: "WIKI ESN POLIMI",
-                description: "",
-                url: "https://wiki.esnpolimi.it/",
-                color: "#512da8"
-            },
-            {
-                name: "TUTORIAL viaggi e attività",
-                description: "",
-                url: "https://drive.google.com/drive/folders/13DZUKo7D74VmbX2S3uKTOPrO5h1VFTGh",
-                color: "#0288d1"
-            },
-            {
-                name: "Importazione Contatti DI MASSA",
-                description: "",
-                url: "https://docs.google.com/document/d/1OnwtNsKL9R5ph30IQcFMtPoMxq8-HyDs/edit?usp=sharing&ouid=112656928168770237958&rtpof=true&sd=true",
-                color: "#0097a7"
-            },
-        ]
-    },
-    {
-        topic: "ISTRUZIONI RESPONSABILI UFFICIO",
-        descriptor: "PER APRIRE E CHIUDERE UFFICIO",
-        links: [
-            {
-                name: "1. Contare i soldi in cassa con il foglio contasoldi dell'ufficio giusto",
-                description: "",
-                url: "",
-                color: "#607d8b"
-            },
-            {
-                name: "2. Verificare che coincidano con quelli in cassa a gestionale (se non coincidono comunicarlo al tesoriere)",
-                description: "",
-                url: "",
-                color: "#607d8b"
-            },
-            {
-                name: "3. Aprire/chiudere cassa a gestionale",
-                description: "",
-                url: "",
-                color: "#607d8b"
-            }
-        ]
-    }
-];
 
 const style = {
     display: "flex",
@@ -109,7 +25,7 @@ const style = {
 };
 
 export default function Home() {
-    const {user} = useAuth(); // Access logged-in user info
+    const {user} = useAuth();
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -120,6 +36,93 @@ export default function Home() {
     const [casseLoading, setCasseLoading] = useState(false);
     const accountsDetails = user?.permissions.includes("change_account");
     const casseRef = useRef(null);
+    const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
+
+    const staticLinks = [
+        {
+            topic: "LINK UTILI",
+            links: [
+                {
+                    name: "FOGLIO TURNI UFFICIO",
+                    description: "",
+                    url: "https://docs.google.com/spreadsheets/d/1Bi_jw4_MgAPV3R_Cu-eCRlexbL23xJL63uey1rmY-P0/edit?gid=2036311463#gid=2036311463",
+                    color: "#388e3c"
+                },
+                {
+                    name: "FOGLIO CONTASOLDI",
+                    description: "",
+                    url: "https://docs.google.com/spreadsheets/d/1Ewt9DggEyDy8lT2Kh6YiN2k5SvGZnVkvPwpufZ0w5sU/edit",
+                    color: "#f57c00"
+                },
+                {
+                    name: "FORM REPORT UFFICI",
+                    description: "",
+                    url: "https://goo.gl/forms/xAusvfJZdKppn2D13",
+                    color: "#d32f2f"
+                },
+                {
+                    name: "FOGLI FIRME BANDI",
+                    description: "",
+                    url: "https://drive.google.com/drive/folders/1MBFMmga6IFPqPD_ER9HCdiHoI092y3Zs?usp=sharing",
+                    color: "#7b1fa2"
+                },
+                {
+                    name: "RICHIESTA RIMBORSO",
+                    description: "",
+                    url: "",
+                    color: "#1976d2",
+                    onClick: () => setRimborsoModalOpen(true)
+                },
+            ]
+        },
+        {
+            topic: "WIKI E TUTORIAL",
+            links: [
+                {
+                    name: "WIKI ESN POLIMI",
+                    description: "",
+                    url: "https://wiki.esnpolimi.it/",
+                    color: "#512da8"
+                },
+                {
+                    name: "TUTORIAL viaggi e attività",
+                    description: "",
+                    url: "https://drive.google.com/drive/folders/13DZUKo7D74VmbX2S3uKTOPrO5h1VFTGh",
+                    color: "#0288d1"
+                },
+                {
+                    name: "Importazione Contatti DI MASSA",
+                    description: "",
+                    url: "https://docs.google.com/document/d/1OnwtNsKL9R5ph30IQcFMtPoMxq8-HyDs/edit?usp=sharing&ouid=112656928168770237958&rtpof=true&sd=true",
+                    color: "#0097a7"
+                },
+            ]
+        },
+        {
+            topic: "ISTRUZIONI RESPONSABILI UFFICIO",
+            descriptor: "PER APRIRE E CHIUDERE UFFICIO",
+            links: [
+                {
+                    name: "1. Contare i soldi in cassa con il foglio contasoldi dell'ufficio giusto",
+                    description: "",
+                    url: "",
+                    color: "#607d8b"
+                },
+                {
+                    name: "2. Verificare che coincidano con quelli in cassa a gestionale (se non coincidono comunicarlo al tesoriere)",
+                    description: "",
+                    url: "",
+                    color: "#607d8b"
+                },
+                {
+                    name: "3. Aprire/chiudere cassa a gestionale",
+                    description: "",
+                    url: "",
+                    color: "#607d8b"
+                }
+            ]
+        }
+    ];
 
     useEffect(() => {
         fetchAccounts().then();
@@ -257,29 +260,24 @@ export default function Home() {
                                     <Box key={link.name}
                                          sx={{
                                              mb: 0.5,
-                                             pl: link.url ? 2 : 0,
-                                             borderLeft: link.url ? `5px solid ${link.color}` : "none",
-                                             background: link.url ? "#f7fafd" : "none",
+                                             pl: 2,
+                                             borderLeft: `5px solid ${link.color}`,
+                                             background: "#f7fafd",
                                              borderRadius: 1,
                                              py: 0.5,
                                          }}>
-                                        {link.url ? (
-                                            <a href={link.url}
-                                               style={{
-                                                   textDecoration: "none",
-                                                   color: link.color,
-                                                   fontWeight: 600,
-                                                   fontSize: "1rem",
-                                               }}
-                                               target="_blank"
-                                               rel="noopener noreferrer">
-                                                {link.name}
-                                            </a>
-                                        ) : (
-                                            <Typography variant="body2" sx={{color: link.color, fontWeight: 600}}>
-                                                {link.name}
-                                            </Typography>
-                                        )}
+                                        <a href={link.url ? link.url : "#"}
+                                           style={{
+                                               textDecoration: "none",
+                                               color: link.color,
+                                               fontWeight: 600,
+                                               fontSize: "1rem",
+                                           }}
+                                           target={link.url ? "_blank" : "_self"}
+                                           rel="noopener noreferrer"
+                                           onClick={link.onClick}>
+                                            {link.name}
+                                        </a>
                                         {link.description && (
                                             <Typography variant="body2" sx={{color: "#607d8b"}}>
                                                 {link.description}
@@ -322,11 +320,11 @@ export default function Home() {
                     <Collapse in={casseOpen} timeout="auto" unmountOnExit>
                         <Box sx={{display: "flex", alignItems: "center", justifyContent: "flex-end", mt: 1, mb: 1}}>
                             <IconButton variant="outlined"
-                                    color="primary"
-                                    size="small"
-                                    onClick={fetchAccounts}
-                                    disabled={casseLoading}
-                                    sx={{mr: 2}}>
+                                        color="primary"
+                                        size="small"
+                                        onClick={fetchAccounts}
+                                        disabled={casseLoading}
+                                        sx={{mr: 2}}>
                                 <RefreshIcon/>
                             </IconButton>
                         </Box>
@@ -424,7 +422,12 @@ export default function Home() {
                 open={transactionModalOpen}
                 onClose={() => setTransactionModalOpen(false)}
                 account={selectedAccount}
-                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || 'success'})}
+                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || "success"})}
+            />
+            <ReimbursementRequestModal
+                open={rimborsoModalOpen}
+                onClose={() => setRimborsoModalOpen(false)}
+                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || "success"})}
             />
             {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             <button type="button" onClick={() => {

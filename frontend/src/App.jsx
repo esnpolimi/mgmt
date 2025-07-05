@@ -16,6 +16,7 @@ import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 import EmailVerification from './Pages/EmailVerification.jsx';
 import ResetPassword from "./Pages/ResetPassword.jsx";
 import TransactionsList from "./Pages/treasury/TransactionsList.jsx";
+import ReimbursementRequestsList from "./Pages/treasury/ReimbursementRequestsList.jsx";
 import Profile from "./Pages/profiles/Profile.jsx";
 
 function App() {
@@ -33,16 +34,16 @@ function App() {
                         <Route path='/profile/:id' element={<ProtectedRoute><Profile/></ProtectedRoute>}/>
                         <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                         <Route path='/esner_form' element={<ESNerForm/>}/>
+                        <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
+                        <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
                         <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>
                         <Route path='/treasury/accounts_list' element={<ProtectedRoute requiredPermission="change_account"><AccountsList/></ProtectedRoute>}/>
                         <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
-                        <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
-                        <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
+                        <Route path='/treasury/reimbursement_requests_list' element={<ProtectedRoute><ReimbursementRequestsList/></ProtectedRoute>}/>
                     </Routes>
                 </Router>
             </SidebarProvider>
         </AuthProvider>
     )
 }
-
 export default App;

@@ -100,19 +100,27 @@ Previews the production build locally.\
 This is useful for ensuring the build works before deployment.
 
 
-## Update backend and frontend dependencies
+## Install and Update backend and frontend dependencies
 
-To update the backend dependencies, follow these steps:
+For backend dependencies, follow these steps:
 
 ```bash
 cd backend
+pip install *package* # the package will be installed in the local virtual environment
+pip freeze > requirements.txt # this will update the requirements.txt file with the installed packages
+# BEWARE this will overwrite the file and add all packages installed in the virtual environment, so make sure to have only the packages you need installed, or to manually remove the ones you don't need
+
+# To update all packages, you can use pip-upgrader:
 pip install pip-upgrader
 pip-upgrade
 ```
 
-For the frontend, you can use the following commands:
+For the frontend:
 ```bash
 cd frontend
+npm install *package* # the package will be installed globally AND update the package.json file!
+
+# To update all packages, you can use npm-check-updates:
 npm install -g npm-check-updates
 npx npm-check-updates -u
 npm install

@@ -24,7 +24,7 @@ export const eventDisplayNames = {
     name: 'Nome Evento',
     date: 'Data Evento',
     description: 'Descrizione',
-    cost: 'Costo (€)',
+    cost: 'Costo',
     subscription_start_date: 'Data Apertura Iscrizioni',
     subscription_end_date: 'Data Chiusura Iscrizioni',
     status: 'Stato Iscrizioni',

@@ -1,20 +1,18 @@
 import {useEffect, useState, useMemo} from 'react';
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
-import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip} from "@mui/material";
 import * as Sentry from "@sentry/react";
 
-const TRANSACTION_CONFIGS = {
-    subscription: {label: names.tran_type["subscription"], color: 'primary'},
-    esncard: {label: names.tran_type["esncard"], color: 'secondary'},
-    deposit: {label: names.tran_type["deposit"], color: 'success'},
-    withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
+const PAYMENT_CONFIGS = {
+    cash: {label: "Contanti", color: 'success'},
+    paypal: {label: "PayPal", color: 'info'},
+    bonifico: {label: "Bonifico Bancario", color: 'warning'}
 };
 
-export default function TransactionsDash({limit = 3}) {
+export default function ReimbursementRequestsDash({limit = 3}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
@@ -22,11 +20,10 @@ export default function TransactionsDash({limit = 3}) {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await fetchCustom("GET", `/transactions/?limit=${limit}`);
+                const response = await fetchCustom("GET", `/reimbursement_requests/?limit=${limit}`);
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.results);
-                    console.log("Transactions data:", json.results);
                 }
             } catch (e) {
                 Sentry.captureException(e);
@@ -39,7 +36,7 @@ export default function TransactionsDash({limit = 3}) {
 
     const columns = useMemo(() => [
         {
-            accessorKey: 'created_at', header: names.date, size: 100,
+            accessorKey: 'created_at', header: "Data", size: 100,
             Cell: ({cell}) => {
                 const date = new Date(cell.getValue());
                 return (
@@ -53,10 +50,24 @@ export default function TransactionsDash({limit = 3}) {
             },
         },
         {
-            accessorKey: 'type', header: names.type, size: 100,
+            accessorKey: 'user.name', header: "Richiedente", size: 150,
+            Cell: ({cell, row}) => cell.getValue() || row.original.user?.email || "-"
+        },
+        {
+            accessorKey: 'amount', header: "Importo", size: 100,
+            Cell: ({cell}) => (
+                <Box>
+                    {cell.getValue() !== null ? (
+                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                        <Chip label="N/A" color="warning"/>)}
+                </Box>
+            ),
+        },
+        {
+            accessorKey: 'payment', header: "Metodo", size: 120,
             Cell: ({cell}) => {
-                const type = cell.getValue();
-                const config = TRANSACTION_CONFIGS[type] || {label: 'Sconosciuto', color: 'default'};
+                const payment = cell.getValue();
+                const config = PAYMENT_CONFIGS[payment] || {label: payment, color: 'default'};
                 return (
                     <Chip
                         label={config.label}
@@ -66,27 +77,13 @@ export default function TransactionsDash({limit = 3}) {
                 );
             }
         },
-        {accessorKey: 'executor.name', header: names.executor, size: 150},
         {
-            accessorKey: 'account.name',
-            header: names.account,
+            accessorKey: 'receipt_link',
+            header: "Ricevuta",
             size: 100,
-            Cell: ({cell}) => (
-                <Box component="span" fontWeight="bold">
-                    {cell.getValue()}
-                </Box>
-            ),
-        },
-        {
-            accessorKey: 'amount', header: names.amount, size: 100,
-            Cell: ({cell}) => (
-                <Box>
-                    {cell.getValue() !== null ? (
-                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
-                        <Chip label="N/A" color="warning"/>)}
-                </Box>
-            ),
-        },
+            Cell: ({cell}) => cell.getValue() ?
+                <a href={cell.getValue()} target="_blank" rel="noopener noreferrer">Apri</a> : "-"
+        }
     ], []);
 
     const table = useMaterialReactTable({

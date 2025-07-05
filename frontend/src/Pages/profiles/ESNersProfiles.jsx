@@ -113,7 +113,7 @@ export default function ESNersProfiles() {
     ], []);
 
     const columnVisibility = {
-        id: true,
+        id: false,
         name: true,
         surname: true,
         groups: true,

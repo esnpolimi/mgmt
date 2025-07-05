@@ -15,6 +15,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import TransactionAdd from "../../Components/treasury/TransactionAdd";
 import EditIcon from '@mui/icons-material/Edit';
 import * as Sentry from "@sentry/react";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 
 export default function AccountsList() {
     const [data, setData] = useState([]);
@@ -51,8 +53,28 @@ export default function AccountsList() {
 
     const columns = useMemo(() => [
         {accessorKey: 'id', header: names.id, size: 50},
-        {accessorKey: 'name', header: names.name, size: 150},
-        {accessorKey: 'changed_by.name', header: names.changed_by, size: 150},
+        {
+            accessorKey: 'name', header: names.name, size: 150,
+            Cell: ({cell}) => (
+                <Box component="span" fontWeight="bold">
+                    {cell.getValue()}
+                </Box>
+            ),
+        },
+        {
+            accessorKey: 'changed_by.name', header: names.changed_by, size: 150,
+            Cell: ({row}) => (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(`/profile/${row.original.changed_by.id}`, '_blank', 'noopener,noreferrer')}>
+                        {row.original.changed_by.name}
+                    </Button>
+                </span>
+            )
+        },
         {
             accessorKey: 'balance', header: names.balance, size: 100,
             Cell: ({cell}) => (
@@ -104,15 +126,15 @@ export default function AccountsList() {
                         }}>
                         <EditIcon/>
                     </IconButton>
-                    <Button
-                        variant="contained"
+                    <IconButton
                         color="primary"
+                        title="Deposita/Preleva"
                         onClick={() => {
                             setSelectedAccount(row.original);
                             setTransactionModalOpen(true);
                         }}>
-                        Deposita/Preleva
-                    </Button>
+                        <CurrencyExchangeIcon/>
+                    </IconButton>
                 </Box>
             ),
         },

@@ -60,7 +60,7 @@ const Popup = ({message, state, duration = 2000}) => {
                 popup.removeEventListener('mouseleave', handleMouseLeave);
                 copyButton.removeEventListener('click', copyToClipboard);
                 if (document.body.contains(popup)) document.body.removeChild(popup);
-            }, duration / 4);
+            }, duration);
         };
 
         const handleMouseEnter = () => {

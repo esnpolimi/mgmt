@@ -8,7 +8,6 @@ if (import.meta.env.MODE === 'production') {
     });
 }
 
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
@@ -38,14 +37,12 @@ const theme = createTheme({
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
-    <React.StrictMode>
-        <Sentry.ErrorBoundary fallback={<p>An unexpected error occurred.</p>}>
-            <ThemeProvider theme={createTheme(theme, itIT)}>
-                <CssBaseline/>
-                <App/>
-            </ThemeProvider>
-        </Sentry.ErrorBoundary>
-    </React.StrictMode>
+    <Sentry.ErrorBoundary fallback={<p>An unexpected error occurred.</p>}>
+        <ThemeProvider theme={createTheme(theme, itIT)}>
+            <CssBaseline/>
+            <App/>
+        </ThemeProvider>
+    </Sentry.ErrorBoundary>
 );
 
 reportWebVitals();

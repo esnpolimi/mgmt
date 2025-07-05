@@ -19,7 +19,7 @@ import Sidebar from "../../Components/Sidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import * as Sentry from "@sentry/react";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
-import EventSelectorModal from "../../Components/events/EventSelectorModal";
+import EventSelectorModal from "../../Components/profiles/EventSelectorModal";
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -590,7 +590,10 @@ export default function Profile() {
             {loading ? <Loader/> : (<>
                     <Box sx={{mx: '5%'}}>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                            <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
+                            <IconButton
+                                onClick={() => navigate(`/profiles/${profileType === 'ESNer' ? 'esners/' : 'erasmus/'}`)}
+                                sx={{mr: 2}}>
+                                <ArrowBackIcon/></IconButton>
                             <Typography variant="h4">Profilo {profileType}</Typography>
                         </Box>
                         <Card sx={{p: '20px'}}>
