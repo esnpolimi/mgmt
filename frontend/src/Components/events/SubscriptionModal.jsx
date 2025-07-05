@@ -1,21 +1,22 @@
 import {useEffect, useMemo, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText} from "@mui/material";
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, CircularProgress} from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import Popup from "../Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
 import * as Sentry from "@sentry/react";
+import Popup from "../Popup";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit, profileId, profileName}) {
     const [isLoading, setLoading] = useState(true);
-    const [successPopup, setSuccessPopup] = useState(null);
+    const [, setSuccessPopup] = useState(null);
     const [accounts, setAccounts] = useState([]);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
+    const [errorPopup, setErrorPopup] = useState(null);
     const title = isEdit ? 'Modifica Iscrizione' : 'Iscrizione Evento';
     const originalAccountId = isEdit ? subscription.account_id || null : null; // 'paid' to 'pending' status needs the original account_id
 
@@ -48,6 +49,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
     ], [data]);
 
     const [originalStatus, setOriginalStatus] = useState(isEdit ? subscription.status : 'pending');
+    const [submitLoading, setSubmitLoading] = useState(false);
 
     useEffect(() => {
         if (isEdit) {
@@ -140,6 +142,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
     const doSubmit = async () => {
         setConfirmDialog({open: false, action: null, message: ''});
+        setSubmitLoading(true);
         try {
             const response = await fetchCustom(isEdit ? "PATCH" : "POST", `/subscription/${isEdit ? data.id + '/' : ''}`, {
                 profile: data.profile_id,
@@ -152,11 +155,17 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
+                setErrorPopup({message: `Errore: ${errorMessage}`, state: "error"});
+                onClose(false);
+            } else {
+                onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
+            }
         } catch (error) {
             Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setErrorPopup({message: `Errore generale: ${error}`, state: "error"});
+            onClose(false);
+        } finally {
+            setSubmitLoading(false);
         }
     };
 
@@ -289,11 +298,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                         error={errors.account_id && errors.account_id[0]}
                                         onChange={handleChange}>
                                         {accounts.map((account) => (
-                                            <MenuItem
-                                                key={account.id}
-                                                value={account.id}
-                                                disabled={account.status === 'closed'}
-                                                style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
+                                            <MenuItem key={account.id}
+                                                      value={account.id}
+                                                      disabled={account.status === 'closed'}
+                                                      style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
                                                 {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
                                             </MenuItem>
                                         ))}
@@ -316,32 +324,31 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                         </Grid>
                     </Grid>
 
-                    <Button
-                        variant="contained"
-                        fullWidth
-                        sx={{
-                            mt: 2,
-                            bgcolor: data.profile_id ? '#1976d2' : '#9e9e9e',
-                            '&:hover': {bgcolor: data.profile_id ? '#1565c0' : '#757575'}
-                        }}
-                        onClick={handleSubmit}>
+                    <Button variant="contained"
+                            fullWidth
+                            sx={{
+                                mt: 2,
+                                bgcolor: data.profile_id ? '#1976d2' : '#9e9e9e',
+                                '&:hover': {bgcolor: data.profile_id ? '#1565c0' : '#757575'}
+                            }}
+                            onClick={handleSubmit}
+                            disabled={submitLoading}
+                            startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
                         {isEdit ? 'Salva Modifiche' : 'Conferma'}
                     </Button>
                     {isEdit && (
-                        <Button
-                            variant="contained"
-                            fullWidth
-                            sx={{
-                                mt: 1,
-                                bgcolor: '#d32f2f',
-                                '&:hover': {bgcolor: '#b71c1c'}
-                            }}
-                            onClick={handleDelete}
-                        >
+                        <Button variant="contained"
+                                fullWidth
+                                sx={{
+                                    mt: 1,
+                                    bgcolor: '#d32f2f',
+                                    '&:hover': {bgcolor: '#b71c1c'}
+                                }}
+                                onClick={handleDelete}>
                             Elimina Iscrizione
                         </Button>
                     )}
-                    {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
+                    {errorPopup && <Popup message={errorPopup.message} state={errorPopup.state}/>}
                 </>)}
                 <ConfirmDialog
                     open={confirmDialog.open}

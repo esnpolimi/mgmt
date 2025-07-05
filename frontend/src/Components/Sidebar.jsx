@@ -11,8 +11,7 @@ import {
     BabyChangingStation as BabyChangingStationIcon,
     ExpandLess,
     ExpandMore,
-    HomeRepairService as HomeRepairServiceIcon,
-    ReceiptLong as ReceiptLongIcon
+    HomeRepairService as HomeRepairServiceIcon
 } from "@mui/icons-material";
 import LogoutButton from './LogoutButton';
 import {useAuth} from "../Context/AuthContext";

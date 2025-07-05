@@ -9,7 +9,7 @@ import * as Sentry from "@sentry/react";
 const PAYMENT_CONFIGS = {
     cash: {label: "Contanti", color: 'success'},
     paypal: {label: "PayPal", color: 'info'},
-    bonifico: {label: "Bonifico Bancario", color: 'warning'}
+    bonifico: {label: "Bonifico", color: 'warning'}
 };
 
 export default function ReimbursementRequestsDash({limit = 3}) {
@@ -50,8 +50,10 @@ export default function ReimbursementRequestsDash({limit = 3}) {
             },
         },
         {
-            accessorKey: 'user.name', header: "Richiedente", size: 150,
-            Cell: ({cell, row}) => cell.getValue() || row.original.user?.email || "-"
+            accessorKey: 'user.name',
+            header: "Richiedente",
+            size: 150,
+            Cell: ({cell}) => cell.getValue() || "-"
         },
         {
             accessorKey: 'amount', header: "Importo", size: 100,
@@ -78,11 +80,16 @@ export default function ReimbursementRequestsDash({limit = 3}) {
             }
         },
         {
-            accessorKey: 'receipt_link',
-            header: "Ricevuta",
-            size: 100,
-            Cell: ({cell}) => cell.getValue() ?
-                <a href={cell.getValue()} target="_blank" rel="noopener noreferrer">Apri</a> : "-"
+            accessorKey: 'is_reimbursed',
+            header: "Rimborsato",
+            size: 50,
+            Cell: ({cell}) => (
+                <Chip
+                    label={cell.getValue() ? "Sì" : "No"}
+                    color={cell.getValue() ? "success" : "error"}
+                    variant="outlined"
+                />
+            )
         }
     ], []);
 

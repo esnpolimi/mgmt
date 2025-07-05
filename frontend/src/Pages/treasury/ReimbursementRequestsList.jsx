@@ -15,11 +15,12 @@ import ClearIcon from '@mui/icons-material/Clear';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ReimburseModal from '../../Components/treasury/ReimburseModal';
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import Popup from "../../Components/Popup";
 
 const PAYMENT_CONFIGS = {
     cash: {label: "Contanti", color: 'success'},
     paypal: {label: "PayPal", color: 'info'},
-    bonifico: {label: "Bonifico Bancario", color: 'warning'}
+    bonifico: {label: "Bonifico", color: 'warning'}
 };
 
 const paymentTypes = [
@@ -45,6 +46,7 @@ export default function ReimbursementRequestsList() {
     const [appliedSearch, setAppliedSearch] = useState('');
     const [reimburseModalOpen, setReimburseModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
+    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
     const searchInputRef = useRef(null);
     const navigate = useNavigate();
 
@@ -65,7 +67,6 @@ export default function ReimbursementRequestsList() {
                 params.append('dateFrom', filters.dateFrom.toISOString());
             if (filters.dateTo)
                 params.append('dateTo', filters.dateTo.toISOString());
-            // TODO: Replace with actual endpoint when available
             const res = await fetchCustom('GET', `/reimbursement_requests/?${params.toString()}`);
             const json = res.ok ? await res.json() : {results: []};
             setRowCount(json.count || 0);
@@ -91,7 +92,7 @@ export default function ReimbursementRequestsList() {
 
     const columns = useMemo(() => [
         {
-            accessorKey: 'created_at', header: "Data richiesta", size: 120,
+            accessorKey: 'created_at', header: "Data", size: 100,
             Cell: ({cell}) => {
                 const date = new Date(cell.getValue());
                 return new Intl.DateTimeFormat('it-IT', {
@@ -125,7 +126,9 @@ export default function ReimbursementRequestsList() {
             ),
         },
         {
-            accessorKey: 'payment', header: "Metodo", size: 120,
+            accessorKey: 'payment',
+            header: "Metodo",
+            size: 100,
             Cell: ({cell}) => {
                 const payment = cell.getValue();
                 const config = PAYMENT_CONFIGS[payment] || {label: payment, color: 'default'};
@@ -141,7 +144,7 @@ export default function ReimbursementRequestsList() {
         {
             accessorKey: 'description',
             header: "Descrizione",
-            size: 200,
+            size: 100,
             Cell: ({cell}) => (
                 <Box component="span" fontStyle="italic">
                     {cell.getValue()}
@@ -156,12 +159,31 @@ export default function ReimbursementRequestsList() {
                 <a href={cell.getValue()} target="_blank" rel="noopener noreferrer">Apri</a> : "-"
         },
         {
+            accessorKey: 'is_reimbursed',
+            header: "Rimborsato",
+            size: 50,
+            Cell: ({row, cell}) => {
+                const isReimbursed = cell.getValue();
+                const account = row.original.account;
+                return (
+                    <Chip
+                        label={
+                            isReimbursed
+                                ? `Sì${account && account.name ? ` (${account.name})` : ""}`
+                                : "No"
+                        }
+                        color={isReimbursed ? "success" : "error"}
+                        variant="outlined"/>
+                );
+            }
+        },
+        {
             header: "Azioni",
             id: "actions",
-            size: 80,
+            size: 50,
             Cell: ({row}) => (
                 <IconButton color="success"
-                            title="Rimborsa"
+                            title="Modifica / Rimborsa"
                             onClick={() => handleOpenReimburseModal(row)}>
                     <PointOfSaleIcon/>
                 </IconButton>
@@ -351,7 +373,9 @@ export default function ReimbursementRequestsList() {
                     onClose={handleCloseReimburseModal}
                     requestData={selectedRequest}
                     onReimbursed={handleReimbursed}
+                    onSuccess={(message, state) => setShowSuccessPopup({message, state: state || "success"})}
                 />
+                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
             </Box>
         </Box>
     );

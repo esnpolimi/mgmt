@@ -6,11 +6,13 @@ import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {useAuth} from "../../Context/AuthContext";
 import {fetchCustom} from "../../api/api";
 import * as Sentry from "@sentry/react";
+import Popup from "../Popup";
+import {extractErrorMessage} from "../../utils/errorHandling";
 
 const paymentOptions = [
     {value: "cash", label: "Contanti"},
     {value: "paypal", label: "PayPal"},
-    {value: "bonifico", label: "Bonifico Bancario"}
+    {value: "bonifico", label: "Bonifico"}
 ];
 
 export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
@@ -22,6 +24,7 @@ export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
     });
     const [receiptFile, setReceiptFile] = useState(null);
     const [errors, setErrors] = useState({});
+    const [errorPopup, setErrorPopup] = useState(null);
 
     const resetErrors = () => setErrors({});
 
@@ -70,12 +73,13 @@ export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
                 onSuccess('Richiesta inviata!');
                 onClose();
             } else {
-                const error = await response.json();
-                onSuccess('Errore durante la richiesta: ' + JSON.stringify(error), 'error');
+                const json = await response.json();
+                const error = await extractErrorMessage(json, response.status);
+                setErrorPopup({message: `Errore: ${error}`, state: "error"});
             }
         } catch (error) {
             Sentry.captureException(error);
-            onSuccess('Errore generale: ' + error.message, 'error');
+            setErrorPopup({message: 'Errore generale: ' + error.message, state: "error"});
         }
     };
 
@@ -162,6 +166,7 @@ export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
                         onClick={handleSubmit}>
                     Invia Richiesta
                 </Button>
+                {errorPopup && <Popup message={errorPopup.message} state={errorPopup.state}/>}
             </Box>
         </Modal>
     );

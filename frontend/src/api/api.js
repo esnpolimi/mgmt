@@ -32,7 +32,7 @@ export const fetchCustom = async (method, path, body = null, options = {}, auth 
     const response = await fetch(url, fetchOptions);
 
     if (response.status === 401) {
-        throw new Error("Unauthorized: Access token may have expired");
+        throw new Error("Non autorizzato.");
     }
 
     return response;

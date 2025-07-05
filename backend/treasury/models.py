@@ -128,7 +128,7 @@ class ReimbursementRequest(models.Model):
     PAYMENT_CHOICES = [
         ("cash", "Contanti"),
         ("paypal", "PayPal"),
-        ("bonifico", "Bonifico Bancario"),
+        ("bonifico", "Bonifico"),
     ]
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -137,6 +137,8 @@ class ReimbursementRequest(models.Model):
     description = models.CharField(max_length=512)
     receipt_link = models.URLField(max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_reimbursed = models.BooleanField(default=False)
+    account = models.ForeignKey('Account', null=True, blank=True, on_delete=models.SET_NULL)
 
     def __str__(self):
         return f"Reimbursement {self.id} by {self.user} - {self.amount} EUR"
