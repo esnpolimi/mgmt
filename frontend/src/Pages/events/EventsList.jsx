@@ -31,7 +31,7 @@ export default function EventsList() {
     const [data, setData] = useState([]);
     const [eventModalOpen, setEventModalOpen] = useState(false);
     const navigate = useNavigate();
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
     const [search, setSearch] = useState('');
@@ -49,43 +49,38 @@ export default function EventsList() {
         return dayjs(date).format('YYYY-MM-DD');
     };
 
-    useEffect(() => {
-        let ignore = false;
-        const fetchData = async () => {
-            setLocalLoading(true);
-            try {
-                const params = new URLSearchParams();
-                params.append('page', pagination.pageIndex + 1);
-                params.append('page_size', pagination.pageSize);
-                if (appliedSearch) params.append('search', appliedSearch);
-                if (filters.subscriptionStatus.length)
-                    params.append('status', filters.subscriptionStatus.join(','));
-                if (filters.dateFrom)
-                    params.append('dateFrom', formatDateString(filters.dateFrom));
-                if (filters.dateTo)
-                    params.append('dateTo', formatDateString(filters.dateTo));
-                const response = await fetchCustom("GET", `/events/?${params.toString()}`);
-                const json = await response.json();
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(json, response.status);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                } else {
-                    if (!ignore) {
-                        setRowCount(json.count || 0);
-                        setData(json.results);
-                    }
-                }
-            } catch (error) {
-                Sentry.captureException(error);
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setLocalLoading(false);
+    const refreshData = async () => {
+        setLocalLoading(true);
+        try {
+            const params = new URLSearchParams();
+            params.append('page', pagination.pageIndex + 1);
+            params.append('page_size', pagination.pageSize);
+            if (appliedSearch) params.append('search', appliedSearch);
+            if (filters.subscriptionStatus.length)
+                params.append('status', filters.subscriptionStatus.join(','));
+            if (filters.dateFrom)
+                params.append('dateFrom', formatDateString(filters.dateFrom));
+            if (filters.dateTo)
+                params.append('dateTo', formatDateString(filters.dateTo));
+            const response = await fetchCustom("GET", `/events/?${params.toString()}`);
+            const json = await response.json();
+            if (!response.ok) {
+                const errorMessage = await extractErrorMessage(json, response.status);
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
+                setRowCount(json.count || 0);
+                setData(json.results);
             }
-        };
-        fetchData().then();
-        return () => {
-            ignore = true;
-        };
+        } catch (error) {
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
+            setLocalLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        refreshData().then();
     }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
     const columns = useMemo(() => [
@@ -254,10 +249,11 @@ export default function EventsList() {
     };
 
     const handleCloseEventModal = async (success) => {
-        if (success) {
-            setShowSuccessPopup({message: "Evento creato con successo!", state: "success"});
-        }
         setEventModalOpen(false);
+        if (success) {
+            setPopup({message: "Evento creato con successo!", state: "success"});
+            await refreshData();
+        }
     };
 
     return (
@@ -363,9 +359,8 @@ export default function EventsList() {
                 {localLoading
                     ? <Loader/>
                     : <MaterialReactTable table={table}/>}
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );
 }
-

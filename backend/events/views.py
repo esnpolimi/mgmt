@@ -1,15 +1,17 @@
 import logging
-import sentry_sdk
+from datetime import timedelta
 
+import sentry_sdk
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+
 from events.models import Event, Subscription, EventList
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
@@ -17,8 +19,6 @@ from events.serializers import (
     EventWithSubscriptionsSerializer, SubscriptionSerializer
 )
 from treasury.models import Transaction
-from django.utils.dateparse import parse_datetime
-from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ def subscription_create(request):
                 if not hasattr(serializer, 'account') or not serializer.account:
                     raise ValidationError("Richiesta una cassa per iscrizioni a pagamento")
 
-                # Create transaction
+                # Create subscription transaction
                 t = Transaction(
                     type=Transaction.TransactionType.SUBSCRIPTION,
                     account_id=serializer.account,
@@ -209,6 +209,17 @@ def subscription_create(request):
                 )
                 t.save()
 
+                # Create cauzione transaction if requested and event has deposit > 0
+                if getattr(serializer, 'pay_deposit', True) and subscription.event.deposit and float(subscription.event.deposit) > 0:
+                    t_cauzione = Transaction(
+                        type=Transaction.TransactionType.CAUZIONE,
+                        account_id=serializer.account,
+                        subscription=subscription,
+                        executor=request.user,
+                        amount=float(subscription.event.deposit),
+                        description=f"Cauzione per {subscription.event.name}"
+                    )
+                    t_cauzione.save()
             return Response(serializer.data, status=200)
 
     except ValidationError as e:
@@ -312,8 +323,11 @@ def subscription_detail(request, pk):
 
         elif request.method == "DELETE":
             if request.user.has_perm('events.delete_subscription'):
-                # Delete related transactions
-                related_transactions = Transaction.objects.filter(subscription=sub)
+                # Delete related transactions: both SUBSCRIPTION and CAUZIONE
+                related_transactions = Transaction.objects.filter(
+                    subscription=sub,
+                    type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
+                )
                 for t in related_transactions:
                     t.delete()
                 sub.delete()

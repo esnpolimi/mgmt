@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Modal, Box, TextField, Button, IconButton, Typography, Tooltip, Grid} from '@mui/material';
+import {Modal, Box, TextField, Button, IconButton, Typography, Tooltip, Grid, CircularProgress} from '@mui/material';
 import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -9,16 +9,20 @@ import {style} from '../../utils/sharedStyles'
 import {eventDisplayNames as eventNames} from '../../utils/displayAttributes';
 import CustomEditor from '../CustomEditor';
 import Loader from "../Loader";
-import StatusBanner from "../StatusBanner";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import CloseIcon from '@mui/icons-material/Close';
 import * as Sentry from "@sentry/react";
+import Popup from "../Popup";
+import ConfirmDialog from "../ConfirmDialog";
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
     const title = isEdit ? 'Modifica Evento - ' + event.name : 'Crea Evento';
-    const [statusMessage, setStatusMessage] = useState(null);
     const [hasSubscriptions, setHasSubscriptions] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [popup, setPopup] = useState(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     const [data, setData] = useState({
         id: '',
@@ -29,6 +33,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             '    <blockquote>Citazione elegante.</blockquote>' +
             '    <p style="text-align: center;">Adios.</p>',
         cost: '',
+        deposit: '',
         subscription_start_date: dayjs().hour(12).minute(0),
         subscription_end_date: dayjs().hour(24).minute(0),
         lists: [{id: '', name: 'Main List', capacity: ''}]
@@ -39,6 +44,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         date: [false, ''],
         description: [false, ''],
         cost: [false, ''],
+        deposit: [false, ''],
         subscription_start_date: [false, ''],
         subscription_end_date: [false, ''],
         lists: [false, ''],
@@ -64,8 +70,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
     };
 
     const handleEventDateChange = (date) => {
-        // Only allow dates from today onward
-        if (date && dayjs(date).isBefore(dayjs(), 'day')) return;
         setData({...data, date: date});
     };
 
@@ -107,6 +111,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             subscription_start_date: formatDateTimeString(data.subscription_start_date),
             subscription_end_date: formatDateTimeString(data.subscription_end_date),
             cost: Number(data.cost).toFixed(2),
+            deposit: Number(data.deposit).toFixed(2),
             lists: data.lists.map(t => ({
                 id: t.id,
                 name: t.name,
@@ -201,11 +206,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
         const hasListErrors = listErrors.some(error => error.name || error.capacity);
         setErrors({...errors, listItems: listErrors, lists: [hasListErrors]});
         if (hasListErrors) {
-            setStatusMessage({message: 'Errore campi Liste', state: 'error'});
+            setPopup({message: 'Errore campi Liste', state: 'error'});
             scrollUp();
             return;
         }
 
+        setSubmitting(true);
         try {
             const response = isEdit
                 ? await fetchCustom("PATCH", `/event/${data.id}/`, convert(data))
@@ -213,15 +219,41 @@ export default function EventModal({open, event, isEdit, onClose}) {
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setStatusMessage({message: `Errore ${isEdit ? 'modifica' : 'creazione'} evento: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} evento: ${errorMessage}`, state: 'error'});
                 scrollUp();
-            } else onClose(true);
+            } else {
+                onClose(true);
+            }
         } catch (error) {
             Sentry.captureException(error);
-            setStatusMessage({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
             scrollUp();
+        } finally {
+            setSubmitting(false);
         }
     }
+
+    const handleDelete = async () => {
+        setDeleting(true);
+        try {
+            const response = await fetchCustom("DELETE", `/event/${data.id}/`);
+            if (!response.ok) {
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
+                setPopup({message: `Errore eliminazione evento: ${errorMessage}`, state: 'error'});
+                scrollUp();
+            } else {
+                onClose(true, 'deleted');
+            }
+        } catch (error) {
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
+            scrollUp();
+        } finally {
+            setDeleting(false);
+            setConfirmOpen(false);
+        }
+    };
 
     const handleClose = () => {
         onClose(false);
@@ -304,7 +336,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                     </Box>
                     <Typography variant="h5" gutterBottom sx={{mb: 2}} align="center">{title}</Typography>
-                    {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
                     {isEdit && hasSubscriptions && (
                         <Box sx={{mb: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1}}>
@@ -333,7 +364,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     label={eventNames.date}
                                     value={data.date}
                                     onChange={handleEventDateChange}
-                                    minDate={isEdit ? null : dayjs()}
                                     slotProps={{textField: {variant: 'outlined'}}}
                                     required
                                     error={errors.date[0]}/>
@@ -341,7 +371,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
                         <Grid size={{xs: 12, md: 3}}>
                             <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <div> {/* Wrapper div needed for Tooltip to work with disabled elements */}
+                                <div>
                                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                         <DateTimePicker
                                             label={eventNames.subscription_start_date}
@@ -377,18 +407,35 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
                         <Grid size={{xs: 12, md: 3}}>
                             <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <div> {/* Wrapper div needed for Tooltip to work with disabled elements */}
+                                <div>
                                     <TextField
                                         fullWidth
                                         label={eventNames.cost + " (decimali con punto)"}
                                         name="cost"
                                         type="number"
                                         slotProps={{htmlInput: {min: "0", step: "0.01"}}}
-                                        value={data.cost}
+                                        value={data.cost ?? ""}
                                         onChange={handleInputChange}
                                         placeholder="Inserisci 0 se gratuito"
                                         required
                                         error={errors.cost[0]}
+                                        disabled={isEdit && hasSubscriptions}
+                                    />
+                                </div>
+                            </Tooltip>
+                        </Grid>
+                        <Grid size={{xs: 12, md: 3}}>
+                            <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                                <div>
+                                    <TextField
+                                        fullWidth
+                                        label={eventNames.deposit + " (decimali con punto)"}
+                                        name="deposit"
+                                        type="number"
+                                        slotProps={{htmlInput: {min: "0", step: "0.01"}}}
+                                        value={data.deposit ?? ""}
+                                        onChange={handleInputChange}
+                                        error={errors.deposit && errors.deposit[0]}
                                         disabled={isEdit && hasSubscriptions}
                                     />
                                 </div>
@@ -400,7 +447,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <CustomEditor
                             value={data.description}
                             onChange={(value) => {
-                                setData({...data, description: value});
+                                setData(prev => ({...prev, description: value}));
                             }}
                         />
                     </Grid>
@@ -446,9 +493,27 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {/* Insert *2 */}
                     {/* Insert *3 */}
 
-                    <Box mt={2}>
-                        <Button variant="contained" color="primary" type="submit">{isEdit ? 'Salva Modifiche' : 'Crea'}</Button>
+                    <Box mt={2} sx={{display: 'flex', gap: 2}}>
+                        <Button variant="contained" color="primary" type="submit" disabled={submitting}>
+                            {submitting ? (<CircularProgress size={24} color="inherit"/>) : (isEdit ? 'Salva Modifiche' : 'Crea')}
+                        </Button>
+                        {isEdit && !hasSubscriptions && (
+                            <Button variant="outlined"
+                                    color="error"
+                                    startIcon={<DeleteIcon/>}
+                                    onClick={() => setConfirmOpen(true)}
+                                    disabled={deleting}>
+                                {deleting ? <CircularProgress size={20} color="inherit"/> : "Elimina"}
+                            </Button>
+                        )}
                     </Box>
+                    {popup && <Popup message={popup.message} state={popup.state}/>}
+                    <ConfirmDialog
+                        open={confirmOpen}
+                        message="Sei sicuro di voler eliminare questo evento? L'operazione è irreversibile."
+                        onConfirm={handleDelete}
+                        onClose={() => setConfirmOpen(false)}
+                    />
                 </>)}
             </Box>
         </Modal>
@@ -625,4 +690,3 @@ export default function EventModal({open, event, isEdit, onClose}) {
         </Box>
     ))
 }*/
-

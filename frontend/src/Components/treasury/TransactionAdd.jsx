@@ -5,9 +5,15 @@ import CloseIcon from "@mui/icons-material/Close";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {useAuth} from "../../Context/AuthContext";
 import * as Sentry from "@sentry/react";
+import {extractErrorMessage} from "../../utils/errorHandling";
+import Popup from "../Popup";
+import CircularProgress from "@mui/material/CircularProgress";
 
-export default function TransactionAdd({open, onClose, account, onSuccess}) {
+export default function TransactionAdd({open, onClose, account}) {
     const {user} = useAuth();
+    const [popup, setPopup] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+
     const [formData, setFormData] = useState({
         amount: '',
         type: 'deposit',
@@ -16,6 +22,7 @@ export default function TransactionAdd({open, onClose, account, onSuccess}) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
         try {
             const response = await fetchCustom('POST', '/transaction/', {
                 account: account.id,
@@ -25,25 +32,25 @@ export default function TransactionAdd({open, onClose, account, onSuccess}) {
                 executor: user.profile.email
             });
             if (response.ok) {
-                onSuccess('Transazione registrata con successo');
-                onClose();
+                onClose(true);
             } else {
-                const error = await response.json();
-                onSuccess('Errore durante la registrazione: ' + JSON.stringify(error), 'error');
+                const json = await response.json();
+                const error = extractErrorMessage(json, response.status)
+                setPopup({message: `Errore: ${error}`, state: 'error'});
             }
         } catch (error) {
             Sentry.captureException(error);
-            onSuccess('Errore durante la registrazione: ' + error.message, 'error');
+            setPopup({message: 'Errore generale: ' + error.message, state: "error"});
+        } finally {
+            setSubmitting(false);
         }
     };
 
-    const handleClose = () => onClose(false);
-
     return (
-        <Modal open={open} onClose={handleClose}>
+        <Modal open={open} onClose={() => onClose(false)}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate>
                 <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                    <IconButton onClick={handleClose} sx={{minWidth: 0}}> <CloseIcon/> </IconButton>
+                    <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}> <CloseIcon/> </IconButton>
                 </Box>
                 <Typography variant="h5" gutterBottom align="center" sx={{mt: 2}}>
                     Transazione Manuale - Cassa {account?.name}
@@ -79,16 +86,16 @@ export default function TransactionAdd({open, onClose, account, onSuccess}) {
                         onChange={(e) => setFormData({...formData, description: e.target.value})}/>
                 </Grid>
                 <Box mt={2}>
-                    <Button fullWidth onClick={onClose}>Annulla</Button>
                     <Button
                         fullWidth
                         variant="contained"
                         color="primary"
                         type="submit"
-                        disabled={!formData.amount || formData.amount <= 0}>
-                        Conferma
+                        disabled={submitting || !formData.amount || formData.amount <= 0}>
+                        {submitting ? <CircularProgress size={24} color="inherit"/> : "Conferma"}
                     </Button>
                 </Box>
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

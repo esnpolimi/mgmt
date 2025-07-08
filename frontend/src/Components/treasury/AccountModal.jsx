@@ -12,7 +12,7 @@ import * as Sentry from "@sentry/react";
 export default function AccountModal({open, onClose, account = null}) {
     const isEdit = account !== null;
     const [isLoading, setLoading] = useState(true);
-    const [successPopup, setSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [data, setData] = useState({name: '', visible_to_groups: []});
     const [errors, setErrors] = useState({name: [false, ''], visible_to_groups: [false, '']});
     const [groups, setGroups] = useState([]);
@@ -26,11 +26,11 @@ export default function AccountModal({open, onClose, account = null}) {
                     setGroups(json);
                 } else {
                     const errorMessage = await extractErrorMessage(json, response.status);
-                    setSuccessPopup({message: `Errore nel recupero dei gruppi: ${errorMessage}`, state: 'error'});
+                    setPopup({message: `Errore nel recupero dei gruppi: ${errorMessage}`, state: 'error'});
                 }
             } catch (e) {
                 Sentry.captureException(e);
-                setSuccessPopup({message: `Errore nel recupero dei gruppi: ${e}`, state: 'error'});
+                setPopup({message: `Errore nel recupero dei gruppi: ${e}`, state: 'error'});
             }
         };
         fetchGroups().then();
@@ -77,13 +77,13 @@ export default function AccountModal({open, onClose, account = null}) {
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} cassa: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} cassa: ${errorMessage}`, state: 'error'});
             } else {
                 onClose(true);
             }
         } catch (error) {
             Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: 'error'});
+            setPopup({message: `Errore generale: ${error}`, state: 'error'});
         } finally {
             setLoading(false);
         }
@@ -103,7 +103,7 @@ export default function AccountModal({open, onClose, account = null}) {
                     <Typography variant="h5" gutterBottom align="center" sx={{mb: 2}}>
                         {isEdit ? `Modifica Cassa - ${account?.name}` : 'Crea Cassa'}
                     </Typography>
-                    {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
+                    {popup && <Popup message={popup.message} state={popup.state}/>}
 
                     <Grid container spacing={2}>
                         <Grid size={{xs: 12}}>

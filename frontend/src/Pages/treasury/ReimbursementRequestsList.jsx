@@ -13,7 +13,7 @@ import itLocale from 'date-fns/locale/it';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
-import ReimburseModal from '../../Components/treasury/ReimburseModal';
+import ReimburseRequestModal from '../../Components/treasury/ReimburseRequestModal';
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import Popup from "../../Components/Popup";
 
@@ -46,7 +46,7 @@ export default function ReimbursementRequestsList() {
     const [appliedSearch, setAppliedSearch] = useState('');
     const [reimburseModalOpen, setReimburseModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const searchInputRef = useRef(null);
     const navigate = useNavigate();
 
@@ -81,8 +81,12 @@ export default function ReimbursementRequestsList() {
         setReimburseModalOpen(true);
     };
 
-    const handleCloseReimburseModal = () => {
+    const handleCloseReimburseModal = async (success) => {
         setReimburseModalOpen(false);
+        if (success) {
+            setPopup({message: "Rimborso effettuato con successo!", state: "success"});
+            await refreshRequestsData();
+        }
         setSelectedRequest(null);
     };
 
@@ -368,14 +372,13 @@ export default function ReimbursementRequestsList() {
                     </Grid>
                 </Grid>
                 {isLoading ? <Loader/> : <MaterialReactTable sx={{mt: 2}} table={table}/>}
-                <ReimburseModal
+                <ReimburseRequestModal
                     open={reimburseModalOpen}
                     onClose={handleCloseReimburseModal}
                     requestData={selectedRequest}
                     onReimbursed={handleReimbursed}
-                    onSuccess={(message, state) => setShowSuccessPopup({message, state: state || "success"})}
                 />
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );

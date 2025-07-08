@@ -23,7 +23,7 @@ export default function AccountsList() {
     const [isLoading, setLoading] = useState(true);
     const [accountModalOpen, setAccountModalOpen] = useState(false);
     const navigate = useNavigate();
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
 
@@ -38,14 +38,14 @@ export default function AccountsList() {
             const json = await response.json();
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
                 setData(json.results);
                 console.log("Account List Data: ", json.results);
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setLoading(false);
         }
@@ -186,13 +186,22 @@ export default function AccountsList() {
     });
 
     const handleCloseAccountModal = async (success) => {
+        setAccountModalOpen(false);
         if (success) {
-            setShowSuccessPopup({message: "Cassa creata con successo!", state: "success"});
+            setPopup({message: "Cassa creata con successo!", state: "success"});
             await refreshAccountsData();
         }
         setSelectedAccount(null);
-        setAccountModalOpen(false);
     };
+
+    const handleCloseTransactionModal = async (success) => {
+        setTransactionModalOpen(false);
+        if (success) {
+            setPopup({message: "Transazione registrata con successo!", state: "success"});
+            await refreshAccountsData();
+        }
+        setSelectedAccount(null);
+    }
 
     return (
         <Box>
@@ -204,9 +213,8 @@ export default function AccountsList() {
             />}
             <TransactionAdd
                 open={transactionModalOpen}
-                onClose={() => setTransactionModalOpen(false)}
+                onClose={handleCloseTransactionModal}
                 account={selectedAccount}
-                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || 'success'})}
             />
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
@@ -221,7 +229,7 @@ export default function AccountsList() {
                     </>
                 )}
             </Box>
-            {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+            {popup && <Popup message={popup.message} state={popup.state}/>}
         </Box>
     );
 }

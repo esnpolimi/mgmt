@@ -35,7 +35,7 @@ export default function Profile() {
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState(null);
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [ESNcardModalOpen, setESNcardModalOpen] = useState(false);
     const [esncardErrors, setESNcardErrors] = useState({})
     const [documentErrors, setDocumentErrors] = useState({})
@@ -129,7 +129,7 @@ export default function Profile() {
                 const json = await response.json();
                 if (!response.ok) {
                     const errorMessage = await extractErrorMessage(json, response.status);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                    setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 } else {
                     const update = {};
                     Object.keys(data).map((key) => {
@@ -142,7 +142,7 @@ export default function Profile() {
                 }
             } catch (error) {
                 Sentry.captureException(error);
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+                setPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setLoading(false);
             }
@@ -172,10 +172,10 @@ export default function Profile() {
                 const response = await fetchCustom("GET", "/groups/");
                 const json = await response.json();
                 if (response.ok) setGroups(json);
-                else setShowSuccessPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
+                else setPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
             } catch (error) {
                 Sentry.captureException(error);
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+                setPopup({message: `Errore generale: ${error}`, state: "error"});
             }
         };
         fetchGroups().then();
@@ -193,7 +193,7 @@ export default function Profile() {
             const json = await response.json();
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
                 setData(json);
                 setUpdatedData(json);
@@ -201,7 +201,7 @@ export default function Profile() {
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -210,11 +210,11 @@ export default function Profile() {
     };
 
     const handleCloseESNcardModal = async (success) => {
+        setESNcardModalOpen(false);
         if (success) {
-            setShowSuccessPopup({message: "ESNcard emessa con successo!", state: "success"});
+            setPopup({message: "ESNcard emessa con successo!", state: "success"});
             await refreshProfileData();
         }
-        setESNcardModalOpen(false);
     };
 
     /* columns for esncard table */
@@ -263,17 +263,17 @@ export default function Profile() {
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
             } else {
                 setESNcardErrors({});
-                setShowSuccessPopup({message: "ESNcard aggiornata con successo!", state: "success"});
+                setPopup({message: "ESNcard aggiornata con successo!", state: "success"});
                 await refreshProfileData();
                 return true;
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -333,16 +333,16 @@ export default function Profile() {
                 response.json().then((errors) => setDocumentErrors(errors))
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else {
                 setDocumentErrors({});
-                setShowSuccessPopup({message: "Documento eliminato con successo!", state: "success"});
+                setPopup({message: "Documento eliminato con successo!", state: "success"});
                 await refreshProfileData();
                 return true;
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -355,17 +355,17 @@ export default function Profile() {
                 response.json().then((errors) => setDocumentErrors(errors))
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
             } else {
                 setDocumentErrors({});
-                setShowSuccessPopup({message: "Documento aggiunto con successo!", state: "success"});
+                setPopup({message: "Documento aggiunto con successo!", state: "success"});
                 await refreshProfileData();
                 return true;
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
             return false;
         }
     };
@@ -378,17 +378,17 @@ export default function Profile() {
                 response.json().then((errors) => setDocumentErrors(errors))
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 return false;
             } else {
                 setDocumentErrors({});
-                setShowSuccessPopup({message: "Documento aggiornato con successo!", state: "success"});
+                setPopup({message: "Documento aggiornato con successo!", state: "success"});
                 await refreshProfileData();
                 return true;
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
             return false;
         }
     }
@@ -459,14 +459,14 @@ export default function Profile() {
                 await refreshProfileData();
                 if (data) {
                     resetErrors();
-                    setShowSuccessPopup({message: "Profilo aggiornato con successo!", state: "success"});
+                    setPopup({message: "Profilo aggiornato con successo!", state: "success"});
                     toggleEdit(false);
                 }
             }
         } catch (error) {
             Sentry.captureException(error);
             setUpdatedData(data);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
             toggleEdit(false);
         } finally {
             setSaving(false);
@@ -486,7 +486,7 @@ export default function Profile() {
     const handleSubscriptionModalClose = (success, msg) => {
         setSubscriptionModalOpen(false);
         setSubscriptionEvent(null);
-        if (success && msg) setShowSuccessPopup({message: msg, state: "success"});
+        if (success && msg) setPopup({message: msg, state: "success"});
     };
 
     const subscriptionsColumns = useMemo(() => [
@@ -941,7 +941,7 @@ export default function Profile() {
                                 </Card>
                             </Grid>
                         </Grid>
-                        {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                        {popup && <Popup message={popup.message} state={popup.state}/>}
                     </Box>
                 </>
             )}

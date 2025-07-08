@@ -8,7 +8,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import * as Sentry from "@sentry/react";
 
 export default function MoveToListModal({open, onClose, selectedRows, event, listId}) {
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [lists, setLists] = useState([]);
     const [selectedListId, setSelectedListId] = useState('');
     const listName = event.lists.find(list => list.id === listId)?.name || 'Lista non trovata';
@@ -31,11 +31,11 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -88,7 +88,7 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
                 >
                     Conferma
                 </Button>
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

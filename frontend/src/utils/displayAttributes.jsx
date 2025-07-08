@@ -25,6 +25,7 @@ export const eventDisplayNames = {
     date: 'Data Evento',
     description: 'Descrizione',
     cost: 'Costo',
+    deposit: 'Cauzione',
     subscription_start_date: 'Data Apertura Iscrizioni',
     subscription_end_date: 'Data Chiusura Iscrizioni',
     status: 'Stato Iscrizioni',
@@ -54,6 +55,9 @@ export const transactionDisplayNames = {
         esncard: 'ESNcard',
         deposit: 'Deposito',
         withdrawal: 'Prelievo',
-        subscription: 'Iscrizione'
+        subscription: 'Iscrizione',
+        cauzione: 'Cauzione',
+        reimbursement: 'Rimborso Richiesta',
+        rimborso_cauzione: 'Rimborso Cauzione',
     },
 }

@@ -17,14 +17,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
 import Popup from "../../Components/Popup";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
 
-
-const TRANSACTION_CONFIGS = {
-    subscription: {label: names.tran_type["subscription"], color: 'primary'},
-    esncard: {label: names.tran_type["esncard"], color: 'secondary'},
-    deposit: {label: names.tran_type["deposit"], color: 'success'},
-    withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
-};
 
 // For the filter dropdown
 const transactionTypes = [
@@ -41,7 +35,7 @@ export default function TransactionsList() {
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const navigate = useNavigate();
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
@@ -230,12 +224,12 @@ export default function TransactionsList() {
     };
 
     const handleCloseTransactionModal = async (success) => {
+        setTransactionModalOpen(false);
         if (success) {
-            setShowSuccessPopup({message: "Transazione modificata con successo!", state: "success"});
+            setPopup({message: "Transazione modificata con successo!", state: "success"});
             await refreshTransactionsData();
         }
         setSelectedTransaction(null);
-        setTransactionModalOpen(false);
     };
 
     const handleDateChange = (name, value) => {
@@ -393,7 +387,7 @@ export default function TransactionsList() {
                     </Grid>
                 </Grid>
                 {isLoading ? <Loader/> : <MaterialReactTable sx={{mt: 2}} table={table}/>}
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );
