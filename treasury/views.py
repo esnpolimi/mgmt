@@ -1,22 +1,27 @@
 import logging
-import sentry_sdk
+from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
+import sentry_sdk
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
+from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.utils.dateparse import parse_datetime
-from datetime import timedelta
 
+from djmoney.money import Money
+from events.models import DepositReimbursement
+from events.models import Subscription, Event
 from profiles.models import Profile
-from users.models import User
-from treasury.models import Transaction, Account, ESNcard, Settings, ReimbursementRequest
+from treasury.models import Account, ESNcard, Settings, ReimbursementRequest
+from treasury.models import Transaction
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
-    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer
+    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer, DepositReimbursementSerializer
+from users.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +199,7 @@ def transactions_list(request):
 
 
 # Endpoint to retrive transaction details based on id
-@api_view(['GET', 'PATCH'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def transaction_detail(request, pk):
     try:
@@ -241,6 +246,32 @@ def transaction_detail(request, pk):
                     transaction_obj.save()
 
                 return Response(status=200)
+        elif request.method == 'DELETE':
+            # Allow deletion only for RIMBORSO_CAUZIONE and REIMBURSEMENT transactions
+            list_deleteable = [
+                Transaction.TransactionType.RIMBORSO_CAUZIONE,
+                Transaction.TransactionType.REIMBURSEMENT
+            ]
+            if transaction_obj.type in list_deleteable:
+                if not request.user.has_perm('treasury.delete_transaction'):
+                    return Response({'error': 'Non autorizzato.'}, status=401)
+                if transaction_obj.type == Transaction.TransactionType.RIMBORSO_CAUZIONE and transaction_obj.subscription and transaction_obj.subscription.event:
+                    # Remove the related DepositReimbursement if it exists
+                    DepositReimbursement.objects.filter(
+                        event=transaction_obj.subscription.event,
+                        subscription=transaction_obj.subscription
+                    ).delete()
+                # Unmark reimbursement request if this is a reimbursement transaction
+                '''if transaction_obj.type == Transaction.TransactionType.REIMBURSEMENT:
+                    from treasury.models import ReimbursementRequest
+                    req = ReimbursementRequest.objects.filter(reimbursement_transaction=transaction_obj).first()
+                    if req:
+                        req.reimbursement_transaction = None
+                        req.save()'''
+                transaction_obj.delete()
+                return Response(status=204)
+            else:
+                return Response({'error': 'Solo i Rimborsi possono essere eliminati manualmente.'}, status=400)
         else:
             return Response("Metodo non consentito", status=405)
 
@@ -438,3 +469,125 @@ def reimbursement_requests_list(request):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reimburse_deposits(request):
+    """
+    Reimburse deposits for a list of subscriptions.
+    Expects: { "event": <event_id>, "subscription_ids": [<id1>, <id2>, ...], "account": <account_id>, "notes": <optional> }
+    """
+    try:
+        if not request.user.has_perm('events.add_depositreimbursement'):
+            return Response({'error': 'Non autorizzato.'}, status=401)
+
+        event_id = request.data.get('event')
+        subscription_ids = request.data.get('subscription_ids', [])
+        account_id = request.data.get('account')
+        notes = request.data.get('notes', '')
+
+        if not event_id or not subscription_ids or not account_id:
+            return Response({'error': 'Dati mancanti.'}, status=400)
+
+        from events.models import Event, Subscription
+        event = Event.objects.get(id=event_id)
+        account = Account.objects.get(id=account_id)
+        subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
+
+        if not subscriptions.exists():
+            return Response({'error': 'Nessuna iscrizione valida trovata.'}, status=400)
+
+        # Fix: Ensure deposit_amount is always a Decimal, default to 0 if not set or invalid
+        deposit_decimal = event.deposit
+        if deposit_decimal is None:
+            deposit_decimal = Decimal('0.00')
+        else:
+            try:
+                deposit_decimal = Decimal(deposit_decimal)
+            except (InvalidOperation, TypeError):
+                deposit_decimal = Decimal('0.00')
+
+        # Convert Decimal to Money for comparison and arithmetic with account balance
+        deposit_amount = Money(deposit_decimal, account.balance.currency)
+
+        with transaction.atomic():
+            # Lock the account row to prevent race conditions
+            account_locked = Account.objects.select_for_update().get(pk=account.pk)
+            created = []
+            for sub in subscriptions:
+                # Prevent double reimbursement
+                if DepositReimbursement.objects.filter(event=event, subscription=sub).exists():
+                    continue
+                # Only reimburse if CAUZIONE transaction exists and is paid
+                cauzione_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
+                if not cauzione_tx:
+                    return Response({'error': 'Nessuna cauzione rimborsabile trovata per ' + str(sub.profile)}, status=400)
+                if account_locked.status == "closed":
+                    return Response({'error': 'La cassa è chiusa.'}, status=400)
+                if account_locked.balance < deposit_amount:
+                    return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
+                reimb = DepositReimbursement.objects.create(
+                    event=event,
+                    subscription=sub,
+                    account=account_locked,
+                    amount=deposit_decimal,
+                    notes=notes
+                )
+                # Create a transaction for the reimbursement
+                Transaction.objects.create(
+                    type=Transaction.TransactionType.RIMBORSO_CAUZIONE,
+                    subscription=sub,
+                    executor=request.user,
+                    account=account_locked,
+                    amount=-deposit_amount,  # Negative for outflow
+                    description=f"Rimborso cauzione per {sub.profile.name} {sub.profile.surname} ({event.name})"
+                )
+                created.append(reimb)
+            serializer = DepositReimbursementSerializer(created, many=True)
+            return Response(serializer.data, status=201)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def reimbursable_deposits(request):
+    """
+    Returns a list of subscriptions for a given event and list that are eligible for deposit reimbursement.
+    Query params: event=<event_id>&list=<list_id>
+    """
+    try:
+        event_id = request.GET.get('event')
+        list_id = request.GET.get('list')
+        if not event_id or not list_id:
+            return Response({'error': 'Evento e Lista richiesti.'}, status=400)
+
+        event = Event.objects.get(id=event_id)
+
+        # Subscriptions in this list, paid, deposit transaction present, not yet reimbursed
+        subs = Subscription.objects.filter(
+            event=event,
+            list__id=list_id,
+            status='paid',
+            deposit_reimbursements__isnull=True  # Exclude already reimbursed
+        )
+        result = []
+        for sub in subs:
+            deposit_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
+            if deposit_tx:
+                result.append({
+                    "id": sub.id,
+                    "profile_id": sub.profile.id,
+                    "profile_name": f"{sub.profile.name} {sub.profile.surname}",
+                    "deposit_transaction_paid": True,
+                    "deposit_reimbursed": False,
+                    "account_name": deposit_tx.account.name if deposit_tx.account else None
+                })
+        return Response(result, status=200)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': str(e)}, status=500)

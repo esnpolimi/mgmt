@@ -14,4 +14,6 @@ urlpatterns = [
     path('reimbursement_request/', views.reimbursement_request_creation),
     path('reimbursement_request/<str:pk>/', views.reimbursement_request_detail),
     path('reimbursement_requests/', views.reimbursement_requests_list),
+    path('reimburse_deposits/', views.reimburse_deposits),
+    path('reimbursable_deposits/', views.reimbursable_deposits),
 ]

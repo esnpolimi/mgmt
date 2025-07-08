@@ -8,7 +8,9 @@ from rest_framework import serializers
 from django.conf import settings
 from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
+from events.models import DepositReimbursement
 from djmoney.money import Money
+from django.db import transaction
 
 
 # Serializer for ESNcard emission/renewal
@@ -133,7 +135,7 @@ class AccountEditSerializer(serializers.ModelSerializer):
 
 class ReimbursementRequestSerializer(serializers.ModelSerializer):
     receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
-    is_reimbursed = serializers.BooleanField(required=False)
+    is_reimbursed = serializers.SerializerMethodField()
     account = serializers.PrimaryKeyRelatedField(queryset=Account.objects.all(), required=False, allow_null=True)
 
     class Meta:
@@ -164,87 +166,106 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         # Explicitly remove receiptFile from validated_data if it's None
         receipt_file = validated_data.pop('receiptFile', None)
+        # Remove user from validated_data if present
+        validated_data.pop('user', None)
 
-        receipt_link = ""
-        if receipt_file:
-            GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-            SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+        with transaction.atomic():
+            instance = ReimbursementRequest.objects.create(
+                user=user,
+                **validated_data
+            )
+            receipt_link = ""
+            if receipt_file:
+                GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+                SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
 
-            def upload_to_drive(file, filename):
-                credentials = service_account.Credentials.from_service_account_file(
-                    SERVICE_ACCOUNT_FILE,
-                    scopes=['https://www.googleapis.com/auth/drive']
-                )
-                service = build('drive', 'v3', credentials=credentials)
+                def upload_to_drive(file, filename):
+                    credentials = service_account.Credentials.from_service_account_file(
+                        SERVICE_ACCOUNT_FILE,
+                        scopes=['https://www.googleapis.com/auth/drive']
+                    )
+                    service = build('drive', 'v3', credentials=credentials)
 
-                # Wrap Django file object to BytesIO for upload
-                file.seek(0)
-                media = MediaIoBaseUpload(file, mimetype=file.content_type)
-                file_metadata = {
-                    'name': filename,
-                    'parents': [GOOGLE_DRIVE_FOLDER_ID]
-                }
-                uploaded = service.files().create(
-                    body=file_metadata,
-                    media_body=media,
-                    fields='id'
-                ).execute()
+                    # Wrap Django file object to BytesIO for upload
+                    file.seek(0)
+                    media = MediaIoBaseUpload(file, mimetype=file.content_type)
+                    file_metadata = {
+                        'name': filename,
+                        'parents': [GOOGLE_DRIVE_FOLDER_ID]
+                    }
+                    uploaded = service.files().create(
+                        body=file_metadata,
+                        media_body=media,
+                        fields='id'
+                    ).execute()
 
-                # Make the file publicly accessible
-                service.permissions().create(
-                    fileId=uploaded['id'],
-                    body={'role': 'reader', 'type': 'anyone'}
-                ).execute()
+                    # Make the file publicly accessible
+                    service.permissions().create(
+                        fileId=uploaded['id'],
+                        body={'role': 'reader', 'type': 'anyone'}
+                    ).execute()
 
-                return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
+                    return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
 
-            ext = os.path.splitext(receipt_file.name)[1].lower()
-            receipt_filename = f"ricevuta_{user.profile.name}_{user.profile.surname}_{validated_data['created_at'].strftime('%Y%m%d_%H%M%S')}{ext}"
-            receipt_link = upload_to_drive(receipt_file, receipt_filename)
-
-        instance = ReimbursementRequest.objects.create(
-            user=user,
-            receipt_link=receipt_link,
-            **validated_data
-        )
+                ext = os.path.splitext(receipt_file.name)[1].lower()
+                # Use instance.created_at for filename (now available)
+                receipt_filename = f"ricevuta_{user.profile.name}_{user.profile.surname}_{instance.created_at.strftime('%Y%m%d_%H%M%S')}{ext}"
+                receipt_link = upload_to_drive(receipt_file, receipt_filename)
+                instance.receipt_link = receipt_link
+                instance.save(update_fields=['receipt_link'])
         return instance
 
     def update(self, instance, validated_data):
-        # Do NOT allow updating the file/image
         validated_data.pop('receiptFile', None)
-        # Only allow updating description, receipt_link, account, and is_reimbursed
         description = validated_data.get('description')
         receipt_link = validated_data.get('receipt_link')
         account = validated_data.get('account', None)
-        is_reimbursed = validated_data.get('is_reimbursed', None)
 
-        if description is not None:
-            instance.description = description
-        if receipt_link is not None:
-            instance.receipt_link = receipt_link
-        if account is not None:
-            instance.account = account
+        with transaction.atomic():
+            if description is not None:
+                instance.description = description
+            if receipt_link is not None:
+                instance.receipt_link = receipt_link
+            if account is not None:
+                instance.account = account
 
-        # Only allow is_reimbursed change to True and only if account is set
-        if is_reimbursed is True and not instance.is_reimbursed and instance.account:
-            account_obj = instance.account
-            if account_obj.status == "closed":
-                raise serializers.ValidationError("La cassa selezionata è chiusa.")
-            if account_obj.balance - instance.amount < Money(0, account_obj.balance.currency):
-                raise serializers.ValidationError("Il saldo della cassa non può andare in negativo.")
-            account_obj.balance -= instance.amount
-            account_obj.save()
-            instance.is_reimbursed = True
-        elif is_reimbursed is False and instance.is_reimbursed:
-            instance.is_reimbursed = False
+            # Prevent double reimbursement with select_for_update
+            if not instance.is_reimbursed and instance.account:
+                account_obj = Account.objects.select_for_update().get(pk=instance.account.pk)
+                if account_obj.status == "closed":
+                    raise serializers.ValidationError("La cassa selezionata è chiusa.")
+                if account_obj.balance - instance.amount < Money(0, account_obj.balance.currency):
+                    raise serializers.ValidationError("Il saldo della cassa non può andare in negativo.")
+                # Double-check not already reimbursed
+                if instance.reimbursement_transaction:
+                    raise serializers.ValidationError("Questa richiesta è già stata rimborsata.")
+                tx = Transaction.objects.create(
+                    type=Transaction.TransactionType.REIMBURSEMENT,
+                    executor=instance.user,
+                    account=account_obj,
+                    amount=-instance.amount,
+                    description=f"Rimborso richiesta #{instance.id}: {instance.description}"
+                )
+                instance.reimbursement_transaction = tx
+            elif instance.is_reimbursed:
+                # Restrict unmarking to superusers (optional)
+                if not self.context['request'].user.is_superuser:
+                    raise serializers.ValidationError("Solo un superuser può annullare un rimborso.")
+                if instance.reimbursement_transaction:
+                    instance.reimbursement_transaction.delete()
+                    instance.reimbursement_transaction = None
 
-        instance.save()
+            instance.save()
         return instance
+
+    @staticmethod
+    def get_is_reimbursed(obj):
+        return obj.is_reimbursed
 
 
 class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
-    is_reimbursed = serializers.BooleanField()
+    is_reimbursed = serializers.SerializerMethodField()
     account = serializers.SerializerMethodField()
 
     class Meta:
@@ -274,3 +295,16 @@ class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
         if obj.account:
             return {"id": obj.account.id, "name": obj.account.name}
         return None
+
+    @staticmethod
+    def get_is_reimbursed(obj):
+        return obj.is_reimbursed
+
+
+class DepositReimbursementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepositReimbursement
+        fields = [
+            'id', 'event', 'subscription', 'account', 'amount', 'notes'
+        ]
+        read_only_fields = ['id']
