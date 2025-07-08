@@ -11,7 +11,7 @@ import * as Sentry from "@sentry/react";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
     const [amount, setAmount] = useState(0);
-    const [successPopup, setSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const [isLoading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState([]);
@@ -43,7 +43,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             const json = await response.json();
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore fees ESNcard: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore fees ESNcard: ${errorMessage}`, state: 'error'});
             } else {
                 console.log("ESNcard fees:", json);
                 if (profile.latest_esncard && profile.latest_esncard?.is_valid)
@@ -52,8 +52,8 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                     setAmount(parseFloat(json.esncard_release_fee.replace('€', '')));
             }
         } catch (error) {
-    Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setLoading(false);
         }
@@ -66,11 +66,11 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             if (response.ok) setAccounts(json.results);
             else {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
+                setPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
-    Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -114,11 +114,11 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore durante l'emissione della ESNcard: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore durante l'emissione della ESNcard: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
-    Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -132,9 +132,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
     return (
         <Modal
             open={open}
-            onClose={() => {
-                onClose(false);
-            }}
+            onClose={() => onClose(false)}
             aria-labelledby="modal-modal-title"
             aria-describedby="modal-modal-description">
             <Box sx={style}>
@@ -187,7 +185,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                         </Grid>
 
                         <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>Conferma</Button>
-                        {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
+                        {popup && <Popup message={popup.message} state={popup.state}/>}
                         <ConfirmDialog
                             open={confirmDialog.open}
                             message={confirmDialog.message}

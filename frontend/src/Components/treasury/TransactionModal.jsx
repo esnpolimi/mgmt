@@ -12,11 +12,19 @@ import {extractErrorMessage} from '../../utils/errorHandling';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import ProfileSearch from '../ProfileSearch';
 import * as Sentry from "@sentry/react";
+import CircularProgress from '@mui/material/CircularProgress';
+import ConfirmDialog from '../ConfirmDialog';
+
+// List of transaction types that can be deleted
+const deletableTranTypes = ['rimborso_cauzione', 'reimbursement'];
 
 export default function TransactionModal({open, onClose, transaction}) {
     const [isLoading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState([]);
-    const [successPopup, setSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
 
     const [data, setData] = useState({
         executor: null,
@@ -79,41 +87,91 @@ export default function TransactionModal({open, onClose, transaction}) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!validate()) return;
+        // Confirm dialog for account amount change
+        const payload = {
+            executor: data.executor.id || data.executor.email,
+            account: data.account,
+            amount: parseFloat(data.amount),
+            description: data.description,
+        };
+        if (transaction && (parseFloat(data.amount) !== parseFloat(transaction.amount) || data.account !== (transaction.account?.id || transaction.account))) {
+            const accName = accounts.find(acc => acc.id === data.account)?.name || '';
+            setConfirmDialog({
+                open: true,
+                action: () => doSubmit(payload),
+                message: `Stai modificando l'importo o la cassa (${accName}). Confermi di voler salvare le modifiche?`
+            });
+        } else {
+            await doSubmit(payload);
+        }
+    };
+
+    const doSubmit = async (payload) => {
+        setConfirmDialog({open: false, action: null, message: ''});
+        setSubmitting(true);
         setLoading(true);
         try {
-            const payload = {
-                executor: data.executor.id || data.executor.email,
-                account: data.account,
-                amount: parseFloat(data.amount),
-                description: data.description,
-            };
             const response = await fetchCustom('PATCH', `/transaction/${transaction.id}/`, payload);
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
             } else onClose(true);
         } catch (error) {
             Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: 'error'});
+            setPopup({message: `Errore generale: ${error}`, state: 'error'});
         } finally {
             setLoading(false);
+            setSubmitting(false);
         }
     };
 
-    const handleClose = () => onClose(false);
+    const handleDelete = async () => {
+        if (!transaction || !deletableTranTypes.includes(transaction.type)) {
+            setPopup({message: 'Transazione non eliminabile', state: 'error'});
+            return;
+        }
+        // Confirm dialog for delete
+        setConfirmDialog({
+            open: true,
+            action: () => doDelete(),
+            message: "Sei sicuro di voler eliminare questa transazione? L'importo verrà rimosso dalla cassa."
+        });
+    };
+
+    const doDelete = async () => {
+        setConfirmDialog({open: false, action: null, message: ''});
+        setDeleting(true);
+        setLoading(true);
+        try {
+            const response = await fetchCustom('DELETE', `/transaction/${transaction.id}/`);
+            if (!response.ok) {
+                const json = await response.json();
+                const errorMessage = await extractErrorMessage(json, response.status);
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+            } else {
+                onClose(true);
+            }
+        } catch (error) {
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: 'error'});
+        } finally {
+            setLoading(false);
+            setDeleting(false);
+        }
+    };
 
     return (
-        <Modal open={open} onClose={handleClose}>
+        <Modal open={open} onClose={() => onClose(false)}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate>
                 {isLoading ? <Loader/> : (<>
                     <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                        <IconButton onClick={handleClose} sx={{minWidth: 0}}><CloseIcon/></IconButton>
+                        <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                     </Box>
                     <Typography variant="h5" gutterBottom align="center" sx={{mb: 2}}>
                         Modifica Transazione
                     </Typography>
-                    {successPopup && <Popup message={successPopup.message} state={successPopup.state}/>}
+                    {popup && <Popup message={popup.message} state={popup.state}/>}
                     <Grid container spacing={2} sx={{mt: 2}}>
                         <Typography variant="subtitle1" gutterBottom>
                             <b>Tipo:</b> {names.tran_type[data.type] || 'Non specificato'}
@@ -150,7 +208,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                         </Grid>
                         <Grid size={{xs: 12}}>
                             <TextField
-                                label={names.amount}
+                                label={names.amount + " in € (decimali con punto)"}
                                 name="amount"
                                 value={data.amount}
                                 onChange={handleInputChange}
@@ -158,7 +216,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 fullWidth
                                 error={errors.amount[0]}
                                 type="number"
-                                slotProps={{htmlInput: {min: "0.01", step: "0.01"}}}
+                                slotProps={{htmlInput: {step: "0.01"}}}
                             />
                         </Grid>
                         <Grid size={{xs: 12}}>
@@ -174,10 +232,30 @@ export default function TransactionModal({open, onClose, transaction}) {
                         </Grid>
                     </Grid>
                     <Box mt={2}>
-                        <Button fullWidth variant="contained" color="primary" type="submit">
-                            Salva Modifiche
+                        <Button fullWidth
+                                variant="contained"
+                                color="primary"
+                                type="submit"
+                                disabled={submitting || deleting}>
+                            {submitting ? <CircularProgress size={24} color="inherit"/> : "Salva Modifiche"}
                         </Button>
+                        {transaction && deletableTranTypes.includes(transaction.type) && (
+                            <Button fullWidth
+                                    variant="outlined"
+                                    color="error"
+                                    onClick={handleDelete}
+                                    disabled={deleting || submitting || isLoading}
+                                    sx={{mt: 1}}>
+                                {deleting ? <CircularProgress size={24} color="inherit"/> : "Elimina Transazione"}
+                            </Button>
+                        )}
                     </Box>
+                    <ConfirmDialog
+                        open={confirmDialog.open}
+                        message={confirmDialog.message}
+                        onConfirm={confirmDialog.action}
+                        onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
+                    />
                 </>)}
             </Box>
         </Modal>

@@ -6,16 +6,18 @@ import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {fetchCustom} from '../../api/api';
 import {extractErrorMessage} from "../../utils/errorHandling";
 import Popup from "../Popup";
+import ConfirmDialog from "../ConfirmDialog";
 import * as Sentry from "@sentry/react";
 
 
-export default function ReimburseModal({open, onClose, requestData, onReimbursed, onSuccess}) {
+export default function ReimburseRequestModal({open, onClose, requestData, onReimbursed}) {
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
     const [description, setDescription] = useState('');
     const [receiptLink, setReceiptLink] = useState('');
     const [loading, setLoading] = useState(false);
-    const [errorPopup, setErrorPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
+    const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
 
     useEffect(() => {
         if (open) {
@@ -32,6 +34,17 @@ export default function ReimburseModal({open, onClose, requestData, onReimbursed
     }, [open, requestData]);
 
     const handleSubmit = async () => {
+        // Show confirm dialog with amount and cassa
+        const accName = accounts.find(acc => acc.id === selectedAccount)?.name || '';
+        setConfirmDialog({
+            open: true,
+            action: () => doSubmit(),
+            message: `Confermi di voler effettuare un pagamento di €${requestData?.amount} dalla cassa ${accName}?`
+        });
+    };
+
+    const doSubmit = async () => {
+        setConfirmDialog({open: false, action: null, message: ''});
         setLoading(true);
         try {
             const response = await fetchCustom('PATCH', `/reimbursement_request/${requestData.id}/`, {
@@ -42,27 +55,26 @@ export default function ReimburseModal({open, onClose, requestData, onReimbursed
             });
 
             if (response.ok) {
-                onReimbursed && onReimbursed();
-                onSuccess && onSuccess("Rimborso aggiornato con successo!", "success");
-                onClose && onClose();
+                onReimbursed();
+                onClose(true);
             } else {
                 const json = await response.json();
                 const error = await extractErrorMessage(json, response.status);
-                setErrorPopup({message: `Errore: ${error}`, state: "error"});
+                setPopup({message: `Errore: ${error}`, state: "error"});
             }
         } catch (error) {
             Sentry.captureException(error);
-            setErrorPopup({message: `Errore generale: ${error.message}`, state: "error"});
+            setPopup({message: `Errore generale: ${error.message}`, state: "error"});
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Modal open={open} onClose={onClose} aria-labelledby="reimburse-modal-title" fullWidth>
+        <Modal open={open} onClose={() => onClose(false)} aria-labelledby="reimburse-modal-title" fullWidth>
             <Box sx={style}>
                 <Box sx={{display: "flex", justifyContent: "flex-end", mb: 0}}>
-                    <IconButton onClick={onClose}><CloseIcon/></IconButton>
+                    <IconButton onClick={() => onClose(false)}><CloseIcon/></IconButton>
                 </Box>
                 <Typography variant="h4" gutterBottom align="center">
                     Modifica / Rimborsa Richiesta
@@ -118,7 +130,13 @@ export default function ReimburseModal({open, onClose, requestData, onReimbursed
                         "Modifica / Rimborsa"
                     )}
                 </Button>
-                {errorPopup && <Popup message={errorPopup.message} state={errorPopup.state}/>}
+                <ConfirmDialog
+                    open={confirmDialog.open}
+                    message={confirmDialog.message}
+                    onConfirm={confirmDialog.action}
+                    onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
+                />
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

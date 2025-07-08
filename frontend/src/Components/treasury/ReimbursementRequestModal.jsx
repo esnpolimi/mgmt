@@ -8,6 +8,8 @@ import {fetchCustom} from "../../api/api";
 import * as Sentry from "@sentry/react";
 import Popup from "../Popup";
 import {extractErrorMessage} from "../../utils/errorHandling";
+import CircularProgress from "@mui/material/CircularProgress";
+import ConfirmDialog from "../ConfirmDialog";
 
 const paymentOptions = [
     {value: "cash", label: "Contanti"},
@@ -15,7 +17,7 @@ const paymentOptions = [
     {value: "bonifico", label: "Bonifico"}
 ];
 
-export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
+export default function ReimbursementRequestModal({open, onClose}) {
     const {user} = useAuth();
     const [data, setData] = useState({
         amount: "",
@@ -24,7 +26,9 @@ export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
     });
     const [receiptFile, setReceiptFile] = useState(null);
     const [errors, setErrors] = useState({});
-    const [errorPopup, setErrorPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
 
     const resetErrors = () => setErrors({});
 
@@ -61,33 +65,44 @@ export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
         resetErrors();
         if (!validate()) return;
 
+        // Confirm dialog for amount or payment method change
+        setConfirmDialog({
+            open: true,
+            action: () => doSubmit(),
+            message: `Confermi di voler inviare la richiesta di rimborso di €${data.amount} tramite ${paymentOptions.find(opt => opt.value === data.payment)?.label || data.payment}?`
+        });
+    };
+
+    const doSubmit = async () => {
+        setConfirmDialog({open: false, action: null, message: ''});
+        setSubmitting(true);
         try {
             const response = await fetchCustom('POST', '/reimbursement_request/', {
                 amount: parseFloat(data.amount),
                 payment: data.payment,
                 description: data.description,
-                receiptFile: receiptFile ? receiptFile : null,
-                user: user.profile.email
+                receiptFile: receiptFile ? receiptFile : null
             });
             if (response.ok) {
-                onSuccess('Richiesta inviata!');
-                onClose();
+                onClose(true);
             } else {
                 const json = await response.json();
                 const error = await extractErrorMessage(json, response.status);
-                setErrorPopup({message: `Errore: ${error}`, state: "error"});
+                setPopup({message: `Errore: ${error}`, state: "error"});
             }
         } catch (error) {
             Sentry.captureException(error);
-            setErrorPopup({message: 'Errore generale: ' + error.message, state: "error"});
+            setPopup({message: 'Errore generale: ' + error.message, state: "error"});
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
-        <Modal open={open} onClose={onClose} aria-labelledby="reimbursement-modal-title">
+        <Modal open={open} onClose={() => onClose(false)} aria-labelledby="reimbursement-modal-title">
             <Box sx={style}>
                 <Box sx={{display: "flex", justifyContent: "flex-end", mb: 0}}>
-                    <IconButton onClick={onClose}><CloseIcon/></IconButton>
+                    <IconButton onClick={() => onClose(false)}><CloseIcon/></IconButton>
                 </Box>
                 <Typography variant="h4" gutterBottom align="center">
                     Richiesta Rimborso
@@ -163,10 +178,17 @@ export default function ReimbursementRequestModal({open, onClose, onSuccess}) {
                 <Button variant="contained"
                         fullWidth
                         sx={{mt: 2, bgcolor: "#1976d2", "&:hover": {bgcolor: "#1565c0"}}}
-                        onClick={handleSubmit}>
-                    Invia Richiesta
+                        onClick={handleSubmit}
+                        disabled={submitting}>
+                    {submitting ? <CircularProgress size={24} color="inherit"/> : "Invia Richiesta"}
                 </Button>
-                {errorPopup && <Popup message={errorPopup.message} state={errorPopup.state}/>}
+                <ConfirmDialog
+                    open={confirmDialog.open}
+                    message={confirmDialog.message}
+                    onConfirm={confirmDialog.action}
+                    onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
+                />
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

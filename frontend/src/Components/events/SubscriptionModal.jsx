@@ -13,10 +13,9 @@ import Popup from "../Popup";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit, profileId, profileName}) {
     const [isLoading, setLoading] = useState(true);
-    const [, setSuccessPopup] = useState(null);
     const [accounts, setAccounts] = useState([]);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
-    const [errorPopup, setErrorPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const title = isEdit ? 'Modifica Iscrizione' : 'Iscrizione Evento';
     const originalAccountId = isEdit ? subscription.account_id || null : null; // 'paid' to 'pending' status needs the original account_id
 
@@ -50,6 +49,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
     const [originalStatus, setOriginalStatus] = useState(isEdit ? subscription.status : 'pending');
     const [submitLoading, setSubmitLoading] = useState(false);
+    const [payDeposit, setPayDeposit] = useState(event.deposit > 0);
 
     useEffect(() => {
         if (isEdit) {
@@ -73,6 +73,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             }
         }
         setLoading(false);
+        setPayDeposit(event.deposit > 0);
         fetchAccounts().then();
     }, [isEdit, profileId, profileName, event])
 
@@ -83,11 +84,11 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             if (response.ok) setAccounts(json.results);
             else {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
+                setPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
             Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     }
 
@@ -116,13 +117,16 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         }
 
         // Confirmation if payment is involved (new paid or status changed to paid)
+        let totalAmount = Number(event.cost || 0);
+        if (payDeposit && Number(event.deposit) > 0) totalAmount += Number(event.deposit);
+
         if ((data.status === 'paid' && (!isEdit || originalStatus !== 'paid'))
             || (isEdit && originalStatus === 'paid' && data.status !== 'paid')) {
             let msg = '';
             if (data.status === 'paid' && (!isEdit || originalStatus !== 'paid')) {
-                msg = 'Confermi di registrare un pagamento di €' + event.cost + ' per questa iscrizione?';
+                msg = 'Confermi di registrare un pagamento di €' + totalAmount.toFixed(2) + ' per questa iscrizione?';
             } else if (isEdit && originalStatus === 'paid' && data.status !== 'paid') {
-                msg = 'Confermi di annullare un pagamento di €' + event.cost + ' per questa iscrizione?';
+                msg = 'Confermi di annullare un pagamento di €' + totalAmount.toFixed(2) + ' per questa iscrizione?';
             }
             setConfirmDialog({open: true, action: () => doSubmit(), message: msg});
             return;
@@ -150,20 +154,19 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 list: data.list_id,
                 account_id: data.account_id || originalAccountId,
                 notes: data.notes,
-                status: data.status
+                status: data.status,
+                pay_deposit: payDeposit
             });
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setErrorPopup({message: `Errore: ${errorMessage}`, state: "error"});
-                onClose(false);
+                setPopup({message: `Errore: ${errorMessage}`, state: "error"});
             } else {
                 onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
             }
         } catch (error) {
             Sentry.captureException(error);
-            setErrorPopup({message: `Errore generale: ${error}`, state: "error"});
-            onClose(false);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setSubmitLoading(false);
         }
@@ -172,10 +175,13 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
     const handleDelete = async () => {
         // Only confirm if paid
         if (data.status === 'paid') {
+            // Compute total paid (cost + cauzione if paid)
+            let totalAmount = Number(event.cost || 0);
+            if (payDeposit && Number(event.deposit) > 0) totalAmount += Number(event.deposit);
             setConfirmDialog({
                 open: true,
                 action: () => doDelete(),
-                message: 'Confermi di voler eliminare un pagamento di €' + event.cost + ' per questa iscrizione?'
+                message: 'Confermi di voler eliminare un pagamento di €' + totalAmount.toFixed(2) + ' per questa iscrizione?'
             });
             return;
         }
@@ -190,11 +196,11 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             if (!response.ok) {
                 const json = await response.json();
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setSuccessPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
             } else onClose(true, "Eliminazione avvenuta con successo");
         } catch (error) {
             Sentry.captureException(error);
-            setSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         }
     };
 
@@ -216,9 +222,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
     return (
         <Modal open={open}
-               onClose={() => {
-                   onClose(false);
-               }}
+               onClose={() => onClose(false)}
                aria-labelledby="modal-modal-title"
                aria-describedby="modal-modal-description">
             <Box sx={style}>
@@ -233,9 +237,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                     </Typography>
                     <Typography variant="subtitle1" gutterBottom>
                         <b>Lista:</b> {data.list_name}
-                    </Typography>
-                    <Typography variant="subtitle1" gutterBottom>
-                        <b>Importo:</b> {event.cost}€
                     </Typography>
                     <Grid container spacing={2} direction="column">
                         <Grid size={{xs: 12}} sx={{mt: 2}}>
@@ -284,6 +285,21 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                 />
                             </Paper>
                         </Grid>
+                        {data.status === 'paid' && (
+                            <Typography variant="subtitle1" gutterBottom>
+                                <b>Importo:</b> {event.cost}€
+                                {event.deposit > 0 && (
+                                    <>
+                                        {payDeposit ? ` + Cauzione: ${event.deposit}€` : ""}
+                                        <Switch checked={payDeposit}
+                                                onChange={() => setPayDeposit(v => !v)}
+                                                color="primary"
+                                                sx={{ml: 1}}
+                                                disabled={data.status !== 'paid'}/>
+                                    </>
+                                )}
+                            </Typography>
+                        )}
                         {data.status === 'paid' && (
                             <Grid size={{xs: 12}}>
                                 <FormControl fullWidth required error={errors.account_id && errors.account_id[0]}>
@@ -348,7 +364,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             Elimina Iscrizione
                         </Button>
                     )}
-                    {errorPopup && <Popup message={errorPopup.message} state={errorPopup.state}/>}
+                    {popup && <Popup message={popup.message} state={popup.state}/>}
                 </>)}
                 <ConfirmDialog
                     open={confirmDialog.open}

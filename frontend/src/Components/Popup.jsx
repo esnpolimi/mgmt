@@ -2,11 +2,26 @@ import {useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
-const Popup = ({message, state, duration = 2000}) => {
+// Maintain a global array of active popups for stacking
+const activePopups = [];
 
+const Popup = ({message, state, duration = 2000}) => {
     useEffect(() => {
         const popup = document.createElement('div');
         const copyButton = document.createElement('button');
+        let root = null;
+
+        // Prevent duplicate popups for the same message/state
+        const duplicate = activePopups.find(p => p.message === message && p.state === state);
+        if (duplicate) return;
+
+        // Add to activePopups for stacking
+        const popupObj = {popup, message, state};
+        activePopups.push(popupObj);
+
+        // Calculate vertical offset for stacking
+        const index = activePopups.indexOf(popupObj);
+        const verticalOffset = 20 + index * 60; // 60px per popup
 
         // Render the icon inside the button if we're in "error" state
         if (state === 'error') {
@@ -15,20 +30,20 @@ const Popup = ({message, state, duration = 2000}) => {
             copyButton.style.border = 'none';
             copyButton.style.color = 'white';
             copyButton.style.backgroundColor = 'transparent';
-            const root = ReactDOM.createRoot(copyButton);
+            root = ReactDOM.createRoot(copyButton);
             root.render(<ContentCopyIcon/>);
             const textSpan = document.createElement('span');
             textSpan.innerText = message;
             popup.appendChild(copyButton);
             popup.appendChild(textSpan);
+        } else {
+            popup.innerText = message;
         }
-        else popup.innerText = message;
-
 
         popup.style.display = 'flex';
         popup.style.alignItems = 'center';
         popup.style.position = 'fixed';
-        popup.style.top = '-100px'; // Start off-screen
+        popup.style.top = `-${verticalOffset + 100}px`; // Start off-screen
         popup.style.left = '50%';
         popup.style.transform = 'translateX(-50%)';
         popup.style.backgroundColor = state === 'success' ? 'green' : 'red';
@@ -38,6 +53,7 @@ const Popup = ({message, state, duration = 2000}) => {
         popup.style.cursor = 'pointer';
         popup.style.zIndex = '9999'; // Ensure the popup is in front of any layer/modal
         popup.style.transition = 'opacity 0.5s ease-in-out, top 0.5s ease-in-out';
+        popup.setAttribute('role', 'alert');
         document.body.appendChild(popup);
 
         const copyToClipboard = () => {
@@ -50,17 +66,30 @@ const Popup = ({message, state, duration = 2000}) => {
 
         let timer;
         requestAnimationFrame(() => {
-            popup.style.top = '20px';
+            popup.style.top = `${verticalOffset}px`;
         });
 
-        const animateOut = () => {
-            popup.style.top = '-100px';
-            setTimeout(() => {
-                popup.removeEventListener('mouseenter', handleMouseEnter);
-                popup.removeEventListener('mouseleave', handleMouseLeave);
+        // --- CLEANUP FUNCTION ---
+        const cleanup = () => {
+            clearTimeout(timer);
+            popup.removeEventListener('mouseenter', handleMouseEnter);
+            popup.removeEventListener('mouseleave', handleMouseLeave);
+            if (state === 'error') {
                 copyButton.removeEventListener('click', copyToClipboard);
-                if (document.body.contains(popup)) document.body.removeChild(popup);
-            }, duration);
+                if (root) root.unmount();
+            }
+            if (document.body.contains(popup)) document.body.removeChild(popup);
+            const idx = activePopups.indexOf(popupObj);
+            if (idx !== -1) activePopups.splice(idx, 1);
+            // Update positions of remaining popups
+            activePopups.forEach((p, i) => {
+                p.popup.style.top = `${20 + i * 60}px`;
+            });
+        };
+
+        const animateOut = () => {
+            popup.style.top = `-${verticalOffset + 100}px`;
+            setTimeout(cleanup, 500);
         };
 
         const handleMouseEnter = () => {
@@ -75,6 +104,9 @@ const Popup = ({message, state, duration = 2000}) => {
         popup.addEventListener('mouseleave', handleMouseLeave);
 
         handleMouseLeave();
+
+        // Cleanup on unmount
+        return cleanup;
     }, [message, state, duration]);
     return null;
 };

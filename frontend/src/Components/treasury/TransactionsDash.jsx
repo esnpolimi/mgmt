@@ -6,13 +6,7 @@ import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip} from "@mui/material";
 import * as Sentry from "@sentry/react";
-
-const TRANSACTION_CONFIGS = {
-    subscription: {label: names.tran_type["subscription"], color: 'primary'},
-    esncard: {label: names.tran_type["esncard"], color: 'secondary'},
-    deposit: {label: names.tran_type["deposit"], color: 'success'},
-    withdrawal: {label: names.tran_type["withdrawal"], color: 'error'}
-};
+import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
 
 export default function TransactionsDash({limit = 3}) {
     const [data, setData] = useState([]);

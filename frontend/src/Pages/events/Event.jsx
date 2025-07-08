@@ -21,8 +21,11 @@ import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
+import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsModal";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import * as Sentry from "@sentry/react";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PriceCheckIcon from '@mui/icons-material/PriceCheck';
 
 export default function Event() {
     const {id} = useParams(); // Get the ID from URL
@@ -31,9 +34,10 @@ export default function Event() {
     const [eventModalOpen, setEventModalOpen] = useState(false);
     const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
     const [moveToListModalOpen, setMoveToListModalOpen] = useState(false);
+    const [reimburseDepositsModalOpen, setReimburseDepositsModalOpen] = useState(false);
     const [selectedRows, setSelectedRows] = useState([]);
     const [isLoading, setLoading] = useState(true);
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [data, setData] = useState(null);
     // Try to get event from location state, if not available we'll fetch it using ID
     const eventFromState = location.state?.event;
@@ -41,6 +45,8 @@ export default function Event() {
     const [selectedList, setSelectedList] = useState(null);
     const [subscription, setSubscription] = useState(null);
     const [subscriptionIsEdit, setSubscriptionIsEdit] = useState(null);
+    const [reimburseDepositsListId, setReimburseDepositsListId] = useState(null);
+    const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
 
     useEffect(() => {
         setLoading(true);
@@ -52,14 +58,14 @@ export default function Event() {
                 const json = await response.json();
                 if (!response.ok) {
                     const errorMessage = await extractErrorMessage(json, response.status);
-                    setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                    setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
                 } else {
                     setData(json);
                     console.log("Event Data: ", json);
                 }
             } catch (error) {
                 Sentry.captureException(error);
-                setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+                setPopup({message: `Errore generale: ${error}`, state: "error"});
             } finally {
                 setLoading(false);
             }
@@ -74,14 +80,15 @@ export default function Event() {
             const json = await response.json();
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+                navigate('/events/');
             } else {
                 setData(json);
                 setLoading(false);
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setLoading(false);
         }
@@ -91,26 +98,24 @@ export default function Event() {
         setEventModalOpen(true);
     };
 
-    const handleCloseEventModal = async (success) => {
+    const handleCloseEventModal = async (success, message) => {
+        setEventModalOpen(false);
+        if (success && message === 'deleted') {
+            navigate('/events/');
+            return;
+        }
         if (success) {
-            setShowSuccessPopup({message: "Evento modificato con successo!", state: "success"});
+            setPopup({message: "Evento modificato con successo!", state: "success"});
             await refreshEventData();
         }
-        setEventModalOpen(false);
-    };
-
-    const handleOpenSubscriptionModal = (listId) => {
-        setSelectedList(listId);
-        setSubscriptionIsEdit(false);
-        setSubscriptionModalOpen(true);
     };
 
     const handleCloseSubscriptionModal = async (success, message) => {
+        setSubscriptionModalOpen(false);
         if (success) {
-            setShowSuccessPopup({message: message, state: "success"});
+            setPopup({message: message, state: "success"});
             await refreshEventData();
         }
-        setSubscriptionModalOpen(false);
         setSelectedList(null);
     };
 
@@ -158,9 +163,17 @@ export default function Event() {
         setSubscriptionModalOpen(true);
     };
 
+    const handleOpenSubscriptionModal = (listId) => {
+        setSelectedList(listId);
+        setSubscription(null);
+        setSubscriptionIsEdit(false);
+        setSubscriptionModalOpen(true);
+    };
+
     // Columns and data for lists
     const listConfigs = React.useMemo(() => {
         if (!data?.lists) return [];
+        const hasDeposit = data && data.deposit && Number(data.deposit) > 0;
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
             const listSubscriptionsColumns = [
@@ -173,6 +186,17 @@ export default function Event() {
                     accessorKey: 'profile_name',
                     header: 'Profilo',
                     size: 150,
+                    Cell: ({row}) => (
+                        <span>
+                            <Button variant="text"
+                                    color="primary"
+                                    sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                    endIcon={<OpenInNewIcon fontSize="small"/>}
+                                    onClick={() => window.open(`/profile/${row.original.profile_id}`, '_blank', 'noopener,noreferrer')}>
+                                {row.original.profile_name}
+                            </Button>
+                        </span>
+                    )
                 },
                 {
                     accessorKey: 'status',
@@ -199,15 +223,56 @@ export default function Event() {
                                 color = 'default';
                                 label = status;
                         }
-                        return <Chip label={label} color={color} size="small"/>;
+                        return <Chip label={label} color={color}/>;
                     }
+                },
+                {
+                    accessorKey: 'deposit_reimbursed',
+                    header: 'Cauzione Rimborsata',
+                    size: 150,
+                    Cell: ({cell}) => {
+                        const isReimbursed = cell.getValue();
+                        return (
+                            <Chip
+                                label={isReimbursed ? 'Sì' : 'No'}
+                                color={isReimbursed ? 'success' : 'default'}
+                            />
+                        );
+                    },
                 },
                 {
                     accessorKey: 'notes',
                     header: 'Note',
                     size: 200,
-                }
+                },
             ];
+
+            if (hasDeposit) {
+                listSubscriptionsColumns.push({
+                    accessorKey: 'actions',
+                    header: 'Azioni',
+                    size: 80,
+                    enableSorting: false,
+                    enableColumnActions: false,
+                    Cell: ({row}) => {
+                        const sub = row.original;
+                        const isEnabled = sub.status === 'paid' && !sub.deposit_reimbursed;
+                        return (
+                            <IconButton
+                                title="Rimborsa Cauzione"
+                                color="primary"
+                                disabled={!isEnabled}
+                                onClick={() => {
+                                    setSingleSubToReimburse(sub);
+                                    setReimburseDepositsModalOpen(true);
+                                }}>
+                                <PriceCheckIcon/>
+                            </IconButton>
+                        );
+                    },
+                });
+            }
+
             return {
                 listId: list.id,
                 listName: list.name,
@@ -220,6 +285,7 @@ export default function Event() {
     }, [data]);
 
     const lists = React.useMemo(() => {
+        const hasDeposit = data && data.deposit && Number(data.deposit) > 0;
         return listConfigs.map(config => ({
             ...config,
             tableOptions: {
@@ -228,12 +294,14 @@ export default function Event() {
                 enableStickyHeader: true,
                 enablePagination: true,
                 enableRowSelection: true,
+                enableRowActions: false,
                 display: false,
                 initialState: {
                     pagination: {
                         pageSize: 10,
                         pageIndex: 0,
                     },
+                    columnVisibility: {id: false}
                 },
                 paginationDisplayMode: 'pages',
                 localization: MRT_Localization_IT,
@@ -274,13 +342,26 @@ export default function Event() {
                                     </Button>
                                 </>
                             )}
+                            {/* Show Rimborsa Cauzioni button only if deposit is set and > 0 and TODO: is treasurer */}
+                            {hasDeposit && (
+                                <Button variant="contained"
+                                        color="success"
+                                        onClick={() => {
+                                            setSingleSubToReimburse(null);
+                                            setReimburseDepositsListId(config.listId);
+                                            setReimburseDepositsModalOpen(true);
+                                        }}
+                                        sx={{ml: 1}}>
+                                    Rimborsa Cauzioni
+                                </Button>
+                            )}
                         </Box>
                     );
                 },
             }
         }));
-    }, [listConfigs]);
-    
+    }, [listConfigs, data]);
+
     const ListAccordions = React.memo(() => {
         if (!lists || lists.length === 0) {
             return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
@@ -338,7 +419,7 @@ export default function Event() {
         });
     });
     ListAccordions.displayName = "ListAccordions";
-    
+
     // Handlers for actions
     const handleMoveToList = (selectedRows, listId) => {
         console.log("Moving selected rows to another list:", selectedRows);
@@ -347,12 +428,22 @@ export default function Event() {
         setMoveToListModalOpen(true);
     };
 
-    const handleCloseMoveToListModal = (success) => {
-        if (success) {
-            setShowSuccessPopup({message: "Spostamento effettuato con successo!", state: "success"});
-            refreshEventData().then();
-        }
+    const handleCloseMoveToListModal = async (success) => {
         setMoveToListModalOpen(false);
+        if (success) {
+            setPopup({message: "Spostamento effettuato con successo!", state: "success"});
+            await refreshEventData();
+        }
+    }
+
+    const handleCloseRemburseDepositsModal = async (success, message) => {
+        setReimburseDepositsModalOpen(false);
+        setReimburseDepositsListId(null);
+        setSingleSubToReimburse(null);
+        if (success) {
+            setPopup({message: message, state: "success"});
+            await refreshEventData();
+        }
     }
 
     const handleExportSelected = (selectedRows) => {
@@ -389,6 +480,16 @@ export default function Event() {
                 event={data}
                 listId={selectedList}
             />}
+            {reimburseDepositsModalOpen && (
+                <ReimburseDepositsModal
+                    open={reimburseDepositsModalOpen}
+                    onClose={handleCloseRemburseDepositsModal}
+                    event={data}
+                    listId={reimburseDepositsListId}
+                    subscription={singleSubToReimburse}
+                    refreshEventData={refreshEventData}
+                />
+            )}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
@@ -401,7 +502,7 @@ export default function Event() {
                         <Card elevation={3} sx={{mt: 5, mb: 4, borderRadius: 2, overflow: 'hidden'}}>
                             <CardContent>
                                 <Grid container spacing={3}>
-                                    <Grid size={{xs: 12, md: 4}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
                                             <CalendarTodayIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Data</Typography>
@@ -410,7 +511,7 @@ export default function Event() {
                                             {data.date ? dayjs(data.date).format('DD/MM/YYYY') : 'Data non specificata'}
                                         </Typography>
                                     </Grid>
-                                    <Grid size={{xs: 12, md: 4}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
                                             <EuroIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Costo</Typography>
@@ -419,7 +520,18 @@ export default function Event() {
                                             {data.cost !== 0 ? `€ ${data.cost}` : 'Gratuito'}
                                         </Typography>
                                     </Grid>
-                                    <Grid size={{xs: 12, md: 4}}>
+                                    <Grid size={{xs: 12, md: 3}}>
+                                        <Box sx={{display: 'flex', alignItems: 'center'}}>
+                                            <EuroIcon sx={{color: 'primary.main', mr: 1}}/>
+                                            <Typography variant="h6" component="div">Cauzione</Typography>
+                                        </Box>
+                                        <Typography variant="body1" color="text.secondary" sx={{mt: 2}}>
+                                            {data.deposit && data.deposit !== "0.00" && data.deposit !== 0
+                                                ? `€ ${data.deposit}`
+                                                : 'Nessuna cauzione'}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
                                             <AdjustIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Periodo Iscrizioni</Typography>
@@ -463,7 +575,7 @@ export default function Event() {
                         </Card>
                     </>
                 )}
-                {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );

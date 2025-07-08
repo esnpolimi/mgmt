@@ -31,7 +31,7 @@ export default function Home() {
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [actionType, setActionType] = useState(""); // "open" or "close"
     const [casseOpen, setCasseOpen] = useState(false);
-    const [showSuccessPopup, setShowSuccessPopup] = useState(null);
+    const [popup, setPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [casseLoading, setCasseLoading] = useState(false);
     const accountsDetails = user?.permissions.includes("change_account");
@@ -136,11 +136,11 @@ export default function Home() {
             if (response.ok) setAccounts(json.results);
             else {
                 const errorMessage = await extractErrorMessage(json, response.status);
-                setShowSuccessPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
+                setPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setCasseLoading(false);
         }
@@ -160,14 +160,14 @@ export default function Home() {
             if (response.ok) {
                 console.log(`Account ${actionType}ed successfully.`);
                 fetchAccounts().then();
-                setShowSuccessPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success"});
+                setPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success"});
             } else {
                 console.error(`Failed to ${actionType} account.`);
-                setShowSuccessPopup({message: `Errore account: ${response.statusText}`, state: "error"});
+                setPopup({message: `Errore account: ${response.statusText}`, state: "error"});
             }
         } catch (error) {
             Sentry.captureException(error);
-            setShowSuccessPopup({message: `Errore generale: ${error}`, state: "error"});
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
         } finally {
             setConfirmDialogOpen(false);
         }
@@ -184,6 +184,19 @@ export default function Home() {
             return next;
         });
     };
+
+    const handleTransactionModalOpen = async (success) => {
+        setTransactionModalOpen(false);
+        if (success) {
+            setPopup({message: "Transazione registrata con successo!", state: "success"});
+            await fetchAccounts();
+        }
+    }
+
+    const handleReimbursementRequestModalClose = (success) => {
+        setRimborsoModalOpen(false);
+        if (success) setPopup({message: "Richiesta di rimborso inviata con successo!", state: "success"});
+    }
 
     return (
         <Box sx={{
@@ -420,16 +433,14 @@ export default function Home() {
             />
             <TransactionAdd
                 open={transactionModalOpen}
-                onClose={() => setTransactionModalOpen(false)}
+                onClose={handleTransactionModalOpen}
                 account={selectedAccount}
-                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || "success"})}
             />
             <ReimbursementRequestModal
                 open={rimborsoModalOpen}
-                onClose={() => setRimborsoModalOpen(false)}
-                onSuccess={(message, state) => setShowSuccessPopup({message, state: state || "success"})}
+                onClose={handleReimbursementRequestModalClose}
             />
-            {showSuccessPopup && <Popup message={showSuccessPopup.message} state={showSuccessPopup.state}/>}
+            {popup && <Popup message={popup.message} state={popup.state}/>}
             <button type="button" onClick={() => {
                 throw new Error("Sentry Test Error v3");
             }}>
