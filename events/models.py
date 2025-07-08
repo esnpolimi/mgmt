@@ -3,7 +3,9 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+
 from profiles.models import Profile, BaseEntity
+from djmoney.models.fields import MoneyField
 
 
 class Event(BaseEntity):
@@ -12,6 +14,7 @@ class Event(BaseEntity):
     date = models.DateField(null=True)
     description = models.TextField(max_length=2048, null=True)
     cost = models.DecimalField(decimal_places=2, max_digits=20, null=True)
+    deposit = models.DecimalField(decimal_places=2, max_digits=20, null=True, default=0)
     subscription_start_date = models.DateTimeField(null=True)
     subscription_end_date = models.DateTimeField(null=True)
 
@@ -105,7 +108,6 @@ class SubscriptionStatus(models.TextChoices):
     PAID = 'paid', 'Paid'
     REIMBURSED = 'reimbursed', 'Reimbursed'
     CANCELLED = 'cancelled', 'Cancelled'
-    # TODO: Add more statuses as needed
 
 
 class Subscription(BaseEntity):
@@ -148,6 +150,24 @@ class Subscription(BaseEntity):
 
     def __str__(self):
         return f"{self.profile} - {self.event} ({self.list.name})"
+
+
+class DepositReimbursement(models.Model):
+    """
+    Tracks which event deposits have been reimbursed by the treasurer.
+    """
+    id = models.AutoField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='deposit_reimbursements')
+    subscription = models.ForeignKey('Subscription', on_delete=models.CASCADE, related_name='deposit_reimbursements')
+    account = models.ForeignKey('treasury.Account', on_delete=models.CASCADE)
+    amount = models.DecimalField(decimal_places=2, max_digits=20)
+    notes = models.CharField(max_length=256, blank=True, null=True)
+
+    class Meta:
+        unique_together = ('event', 'subscription')
+
+    def __str__(self):
+        return f"Deposit reimbursement for {self.subscription} ({self.event})"
 
 
 # For future implementation

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from events.models import Event, EventList, Subscription, EventOrganizer
+from events.models import Event, EventList, Subscription, EventOrganizer, DepositReimbursement
 from profiles.models import Profile
 from treasury.models import Transaction
 
@@ -46,7 +46,7 @@ class EventCreationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['name', 'date', 'description', 'cost', 'lists', 'organizers', 'lead_organizer',
+        fields = ['name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
                   'subscription_start_date', 'subscription_end_date']
 
     def create(self, validated_data):
@@ -143,7 +143,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'lists', 'organizers',
+        fields = ['id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
                   'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status']
 
 
@@ -155,12 +155,19 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     list_name = serializers.CharField(source='list.name', read_only=True)
     account_id = serializers.SerializerMethodField()
     account_name = serializers.SerializerMethodField()
+    deposit_reimbursed = serializers.SerializerMethodField()
+    deposit_transaction_id = serializers.SerializerMethodField()
+    deposit_transaction_paid = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
-        fields = ['id', 'profile_id', 'profile_name', 'event', 'list_id', 'list_name',
-                  'status', 'enable_refund', 'notes', 'created_by_form',
-                  'account_id', 'account_name']
+        fields = [
+            'id', 'profile_id', 'profile_name', 'event', 'list_id', 'list_name',
+            'status', 'enable_refund', 'notes', 'created_by_form',
+            'account_id', 'account_name',
+            'deposit_reimbursed',
+            'deposit_transaction_id', 'deposit_transaction_paid'
+        ]
 
     @staticmethod
     def get_profile_name(obj):
@@ -176,14 +183,29 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         transaction = Transaction.objects.filter(subscription=obj.id).order_by('-id').first()
         return transaction.account.name if transaction else None
 
+    @staticmethod
+    def get_deposit_reimbursed(obj):
+        return DepositReimbursement.objects.filter(event=obj.event, subscription=obj).exists()
+
+    @staticmethod
+    def get_deposit_transaction_id(obj):
+        tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).order_by('-id').first()
+        return tx.id if tx else None
+
+    @staticmethod
+    def get_deposit_transaction_paid(obj):
+        tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).order_by('-id').first()
+        return bool(tx)
+
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
     account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     status = serializers.CharField(default='pending')
+    pay_deposit = serializers.BooleanField(write_only=True, required=False, default=True)
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'list', 'notes', 'status', 'account_id']
+        fields = ['profile', 'event', 'list', 'notes', 'status', 'account_id', 'pay_deposit']
 
     def validate(self, attrs):
         # Check if profile is already registered for this event
@@ -195,6 +217,7 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
 
         # Remove account id from validated_data as it's not a field in Subscription model
         self.account = attrs.pop('account_id', None)
+        self.pay_deposit = attrs.pop('pay_deposit', True)
 
         return attrs
 
@@ -219,5 +242,5 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'lists', 'organizers', 'subscriptions',
+        fields = ['id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
                   'subscription_start_date', 'subscription_end_date']
