@@ -1,16 +1,17 @@
 import os
 
+from django.conf import settings
 from django.contrib.auth.models import Group
+from django.db import transaction
+from djmoney.money import Money
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from rest_framework import serializers
-from django.conf import settings
+
+from events.models import DepositReimbursement
 from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
-from events.models import DepositReimbursement
-from djmoney.money import Money
-from django.db import transaction
 
 
 # Serializer for ESNcard emission/renewal
@@ -137,6 +138,7 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
     receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
     is_reimbursed = serializers.SerializerMethodField()
     account = serializers.PrimaryKeyRelatedField(queryset=Account.objects.all(), required=False, allow_null=True)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
 
     class Meta:
         model = ReimbursementRequest
@@ -162,6 +164,43 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
 
         return file
 
+    @staticmethod
+    def _upload_receipt_to_drive(receipt_file, user, instance_creation_time):
+        GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+        SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+
+        def upload_to_drive(file, filename):
+            credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=['https://www.googleapis.com/auth/drive']
+            )
+            service = build('drive', 'v3', credentials=credentials)
+
+            # Wrap Django file object to BytesIO for upload
+            file.seek(0)
+            media = MediaIoBaseUpload(file, mimetype=file.content_type)
+            file_metadata = {
+                'name': filename,
+                'parents': [GOOGLE_DRIVE_FOLDER_ID]
+            }
+            uploaded = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+
+            # Make the file publicly accessible
+            service.permissions().create(
+                fileId=uploaded['id'],
+                body={'role': 'reader', 'type': 'anyone'}
+            ).execute()
+
+            return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
+
+        ext = os.path.splitext(receipt_file.name)[1].lower()
+        receipt_filename = f"ricevuta_{user.profile.name}_{user.profile.surname}_{instance_creation_time.strftime('%Y%m%d_%H%M%S')}{ext}"
+        return upload_to_drive(receipt_file, receipt_filename)
+
     def create(self, validated_data):
         user = self.context['request'].user
         # Explicitly remove receiptFile from validated_data if it's None
@@ -174,58 +213,33 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
                 user=user,
                 **validated_data
             )
-            receipt_link = ""
             if receipt_file:
-                GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-                SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
-
-                def upload_to_drive(file, filename):
-                    credentials = service_account.Credentials.from_service_account_file(
-                        SERVICE_ACCOUNT_FILE,
-                        scopes=['https://www.googleapis.com/auth/drive']
-                    )
-                    service = build('drive', 'v3', credentials=credentials)
-
-                    # Wrap Django file object to BytesIO for upload
-                    file.seek(0)
-                    media = MediaIoBaseUpload(file, mimetype=file.content_type)
-                    file_metadata = {
-                        'name': filename,
-                        'parents': [GOOGLE_DRIVE_FOLDER_ID]
-                    }
-                    uploaded = service.files().create(
-                        body=file_metadata,
-                        media_body=media,
-                        fields='id'
-                    ).execute()
-
-                    # Make the file publicly accessible
-                    service.permissions().create(
-                        fileId=uploaded['id'],
-                        body={'role': 'reader', 'type': 'anyone'}
-                    ).execute()
-
-                    return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
-
-                ext = os.path.splitext(receipt_file.name)[1].lower()
                 # Use instance.created_at for filename (now available)
-                receipt_filename = f"ricevuta_{user.profile.name}_{user.profile.surname}_{instance.created_at.strftime('%Y%m%d_%H%M%S')}{ext}"
-                receipt_link = upload_to_drive(receipt_file, receipt_filename)
+                receipt_link = self._upload_receipt_to_drive(receipt_file, user, instance.created_at)
                 instance.receipt_link = receipt_link
                 instance.save(update_fields=['receipt_link'])
         return instance
 
     def update(self, instance, validated_data):
-        validated_data.pop('receiptFile', None)
+        receipt_file = validated_data.pop('receiptFile', None)
         description = validated_data.get('description')
         receipt_link = validated_data.get('receipt_link')
         account = validated_data.get('account', None)
+        amount = validated_data.get('amount', None)
 
         with transaction.atomic():
             if description is not None:
                 instance.description = description
-            if receipt_link is not None:
+
+            if amount is not None:
+                instance.amount = amount
+
+            if receipt_file:
+                new_receipt_link = self._upload_receipt_to_drive(receipt_file, instance.user, instance.created_at)
+                instance.receipt_link = new_receipt_link
+            elif receipt_link is not None:
                 instance.receipt_link = receipt_link
+
             if account is not None:
                 instance.account = account
 
@@ -234,16 +248,18 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
                 account_obj = Account.objects.select_for_update().get(pk=instance.account.pk)
                 if account_obj.status == "closed":
                     raise serializers.ValidationError("La cassa selezionata è chiusa.")
-                if account_obj.balance - instance.amount < Money(0, account_obj.balance.currency):
+
+                reimbursement_amount = instance.amount if amount is None else amount
+
+                if account_obj.balance - reimbursement_amount < Money(0, account_obj.balance.currency):
                     raise serializers.ValidationError("Il saldo della cassa non può andare in negativo.")
-                # Double-check not already reimbursed
                 if instance.reimbursement_transaction:
                     raise serializers.ValidationError("Questa richiesta è già stata rimborsata.")
                 tx = Transaction.objects.create(
                     type=Transaction.TransactionType.REIMBURSEMENT,
                     executor=instance.user,
                     account=account_obj,
-                    amount=-instance.amount,
+                    amount=-reimbursement_amount,
                     description=f"Rimborso richiesta #{instance.id}: {instance.description}"
                 )
                 instance.reimbursement_transaction = tx
