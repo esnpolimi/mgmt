@@ -439,7 +439,7 @@ export default function ESNerForm() {
                             {passwordRequirements.map((req, idx) => {
                                 const passed = req.test(formData.password);
                                 return (
-                                    <li key={idx} style={{color: passed ? 'green' : 'grey', display: 'flex', alignItems: 'center', marginBottom: 2}}>
+                                    <li key={idx} style={{color: passed ? 'green' : 'grey', display: 'flex', alignItems: 'center', mb: 2}}>
                                         {passed ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/> : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>}
                                         <span>{req.label}</span>
                                     </li>

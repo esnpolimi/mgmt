@@ -14,6 +14,7 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
     const [description, setDescription] = useState('');
+    const [amount, setAmount] = useState('');
     const [receiptLink, setReceiptLink] = useState('');
     const [loading, setLoading] = useState(false);
     const [popup, setPopup] = useState(null);
@@ -29,6 +30,7 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
             });
             setSelectedAccount(requestData?.account?.id || '');
             setDescription(requestData?.description || '');
+            setAmount(requestData?.amount || '');
             setReceiptLink(requestData?.receipt_link || '');
         }
     }, [open, requestData]);
@@ -39,7 +41,7 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
         setConfirmDialog({
             open: true,
             action: () => doSubmit(),
-            message: `Confermi di voler effettuare un pagamento di €${requestData?.amount} dalla cassa ${accName}?`
+            message: `Confermi di voler effettuare un pagamento di €${amount} dalla cassa ${accName}?`
         });
     };
 
@@ -47,12 +49,17 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
         setConfirmDialog({open: false, action: null, message: ''});
         setLoading(true);
         try {
-            const response = await fetchCustom('PATCH', `/reimbursement_request/${requestData.id}/`, {
+            const payload = {
                 account: selectedAccount,
                 description: description,
                 receipt_link: receiptLink,
-                is_reimbursed: true
-            });
+            };
+
+            if (amount && !isNaN(parseFloat(amount))) {
+                payload.amount = parseFloat(amount);
+            }
+
+            const response = await fetchCustom('PATCH', `/reimbursement_request/${requestData.id}/`, payload);
 
             if (response.ok) {
                 onReimbursed();
@@ -79,19 +86,25 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
                 <Typography variant="h4" gutterBottom align="center">
                     Modifica / Rimborsa Richiesta
                 </Typography>
-                <Typography variant="subtitle1" gutterBottom align="center" sx={{mt: 1}}>
+                <Typography variant="subtitle1" gutterBottom align="center" sx={{mt: 1, mb: 2}}>
                     Stato: <b>
-                        {requestData?.is_reimbursed
-                            ? <>Rimborsata{requestData?.account?.name ? ` (${requestData.account.name})` : ""}</>
-                            : "Non Rimborsata"}
-                    </b>
+                    {requestData?.is_reimbursed
+                        ? <>Rimborsata{requestData?.account?.name ? ` (${requestData.account.name})` : ""}</>
+                        : "Non Rimborsata"}
+                </b>
                 </Typography>
-                <Typography variant="subtitle1" gutterBottom align="center" sx={{mb: 2}}>
-                    Importo: <b>€{requestData?.amount}</b>
-                </Typography>
-                <Grid container spacing={2} direction="column" sx={{mt: 0}}>
+                <Grid container spacing={2} direction="column" sx={{mt: 2}}>
                     <Grid size={{xs: 12}}>
-                        <FormControl fullWidth sx={{mt: 2}}>
+                        <TextField label="Importo in € (decimali con punto)"
+                                   type="number"
+                                   value={amount}
+                                   onChange={e => setAmount(e.target.value)}
+                                   required
+                                   fullWidth
+                                   slotProps={{htmlInput: {min: "0.01", step: "0.01"}}}/>
+                    </Grid>
+                    <Grid size={{xs: 12}}>
+                        <FormControl fullWidth sx={{mt: 0}}>
                             <InputLabel id="account-label">Cassa</InputLabel>
                             <Select labelId="account-label"
                                     variant="outlined"
@@ -110,17 +123,18 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
                         </FormControl>
                     </Grid>
                     <Grid size={{xs: 12}}>
-                        <TextField label="Descrizione"
-                                   fullWidth
-                                   value={description}
-                                   onChange={e => setDescription(e.target.value)}/>
-                    </Grid>
-                    <Grid size={{xs: 12}}>
                         <TextField label="Link ricevuta"
                                    fullWidth
                                    value={receiptLink}
                                    onChange={e => setReceiptLink(e.target.value)}/>
                     </Grid>
+                    <Grid size={{xs: 12}}>
+                        <TextField label="Descrizione"
+                                   fullWidth
+                                   value={description}
+                                   onChange={e => setDescription(e.target.value)}/>
+                    </Grid>
+
                 </Grid>
                 <Button onClick={handleSubmit}
                         variant="contained"

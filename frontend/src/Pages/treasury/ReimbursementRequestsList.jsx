@@ -16,6 +16,8 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ReimburseRequestModal from '../../Components/treasury/ReimburseRequestModal';
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import Popup from "../../Components/Popup";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 const PAYMENT_CONFIGS = {
     cash: {label: "Contanti", color: 'success'},
@@ -159,8 +161,17 @@ export default function ReimbursementRequestsList() {
             accessorKey: 'receipt_link',
             header: "Ricevuta",
             size: 100,
-            Cell: ({cell}) => cell.getValue() ?
-                <a href={cell.getValue()} target="_blank" rel="noopener noreferrer">Apri</a> : "-"
+            Cell: ({cell}) => cell.getValue() ? (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(cell.getValue(), '_blank', 'noopener,noreferrer')}>
+                        Link Drive
+                    </Button>
+                </span>
+            ) : ("-")
         },
         {
             accessorKey: 'is_reimbursed',
@@ -278,9 +289,18 @@ export default function ReimbursementRequestsList() {
         <Box>
             <Sidebar/>
             <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                     <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
-                    <Typography variant="h4">Richieste di Rimborso</Typography>
+                    <Typography variant="h4">
+                        <ReceiptLongIcon sx={{mr: 2}}/>
+                        Richieste di Rimborso
+                    </Typography>
+                    <Box sx={{flexGrow: 1}}/>
+                    <IconButton onClick={refreshRequestsData}
+                                title="Aggiorna"
+                                disabled={isLoading}>
+                        <RefreshIcon/>
+                    </IconButton>
                 </Box>
                 <Grid container spacing={2} sx={{mb: 2, mt: 4}} alignItems="center">
                     <Grid size={{xs: 12, sm: 2}}>

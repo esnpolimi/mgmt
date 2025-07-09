@@ -4,30 +4,32 @@ import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
-import {Box, Chip} from "@mui/material";
+import {Box, Chip, IconButton, Typography} from "@mui/material";
+import RefreshIcon from '@mui/icons-material/Refresh';
 import * as Sentry from "@sentry/react";
 import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
+import ReceiptIcon from "@mui/icons-material/Receipt";
 
 export default function TransactionsDash({limit = 3}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const response = await fetchCustom("GET", `/transactions/?limit=${limit}`);
-                if (response.ok) {
-                    const json = await response.json();
-                    setData(json.results);
-                    console.log("Transactions data:", json.results);
-                }
-            } catch (e) {
-                Sentry.captureException(e);
-            } finally {
-                setLoading(false);
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const response = await fetchCustom("GET", `/transactions/?limit=${limit}`);
+            if (response.ok) {
+                const json = await response.json();
+                setData(json.results);
             }
-        };
+        } catch (e) {
+            Sentry.captureException(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchData().then();
     }, [limit]);
 
@@ -101,5 +103,17 @@ export default function TransactionsDash({limit = 3}) {
         localization: MRT_Localization_IT,
     });
 
-    return isLoading ? <Loader/> : <MRT_Table table={table}/>;
+    return (
+        <Box>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
+                <ReceiptIcon sx={{mr: 2}}/>
+                <Typography variant="h6">Ultime Transazioni</Typography>
+                <Box sx={{flexGrow: 1}} />
+                <IconButton size="small" onClick={fetchData} disabled={isLoading} title="Aggiorna">
+                    <RefreshIcon/>
+                </IconButton>
+            </Box>
+            {isLoading ? <Loader/> : <MRT_Table table={table}/>}
+        </Box>
+    );
 }

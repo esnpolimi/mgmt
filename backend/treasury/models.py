@@ -141,7 +141,7 @@ class ReimbursementRequest(models.Model):
     ]
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    amount = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR')
+    amount = models.DecimalField(max_digits=9, decimal_places=2)
     payment = models.CharField(max_length=16, choices=PAYMENT_CHOICES)
     description = models.CharField(max_length=512)
     receipt_link = models.URLField(max_length=512, blank=True)

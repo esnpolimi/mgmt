@@ -218,11 +218,11 @@ export default function AccountsList() {
             />
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
-                        <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                             <IconButton onClick={() => {
                                 navigate(-1);
                             }} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
-                            <StoreIcon sx={{marginRight: '10px'}}/>
+                            <StoreIcon sx={{mr: 2}}/>
                             <Typography variant="h4">Lista Casse</Typography>
                         </Box>
                         <MaterialReactTable table={table}/>

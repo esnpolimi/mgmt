@@ -395,15 +395,8 @@ def reimbursement_request_detail(request, pk):
 
         elif request.method == 'PATCH':
             if request.user.has_perm('treasury.change_reimbursementrequest'):
-                allowed_fields = {'description', 'receipt_link', 'account', 'is_reimbursed'}
+                allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
                 data = {k: v for k, v in request.data.items() if k in allowed_fields}
-                # Ensure is_reimbursed is a boolean if present
-                if 'is_reimbursed' in data:
-                    val = data['is_reimbursed']
-                    if isinstance(val, str):
-                        data['is_reimbursed'] = val.lower() == "true"
-                    else:
-                        data['is_reimbursed'] = bool(val)
                 serializer = ReimbursementRequestSerializer(instance, data=data, partial=True, context={'request': request})
                 if serializer.is_valid():
                     try:

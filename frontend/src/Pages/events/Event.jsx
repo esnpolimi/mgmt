@@ -2,7 +2,6 @@ import React, {useEffect, useState} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import Sidebar from "../../Components/Sidebar";
 import {Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography, Grid} from "@mui/material";
-import EventIcon from "@mui/icons-material/Event";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -25,9 +24,15 @@ import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsMod
 import {extractErrorMessage} from "../../utils/errorHandling";
 import * as Sentry from "@sentry/react";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import PriceCheckIcon from '@mui/icons-material/PriceCheck';
+import FestivalIcon from "@mui/icons-material/Festival";
+import AddCardIcon from '@mui/icons-material/AddCard';
+import RefreshIcon from "@mui/icons-material/Refresh";
+import {useAuth} from "../../Context/AuthContext";
+
 
 export default function Event() {
+    const {user} = useAuth();
+    const canChangeTransactions = user?.permissions.includes("change_transaction");
     const {id} = useParams(); // Get the ID from URL
     const location = useLocation();
     const navigate = useNavigate();
@@ -47,6 +52,7 @@ export default function Event() {
     const [subscriptionIsEdit, setSubscriptionIsEdit] = useState(null);
     const [reimburseDepositsListId, setReimburseDepositsListId] = useState(null);
     const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
+    const [expandedAccordion, setExpandedAccordion] = useState([]);
 
     useEffect(() => {
         setLoading(true);
@@ -247,7 +253,7 @@ export default function Event() {
                 },
             ];
 
-            if (hasDeposit) {
+            if (hasDeposit && canChangeTransactions) {
                 listSubscriptionsColumns.push({
                     accessorKey: 'actions',
                     header: 'Azioni',
@@ -266,7 +272,7 @@ export default function Event() {
                                     setSingleSubToReimburse(sub);
                                     setReimburseDepositsModalOpen(true);
                                 }}>
-                                <PriceCheckIcon/>
+                                <AddCardIcon/>
                             </IconButton>
                         );
                     },
@@ -316,13 +322,32 @@ export default function Event() {
                 renderTopToolbarCustomActions: ({table}) => {
                     const selectedRows = table.getSelectedRowModel().rows;
                     const selectedCount = selectedRows.length;
+                    // Find the config for this table
+                    const listId = config.listId;
+                    const capacity = config.capacity;
+                    const subscription_count = config.subscription_count;
+                    const {isActive} = handleSubscriptionStatus();
                     return (
                         <Box sx={{display: 'flex', gap: 1}}>
+                            {selectedCount === 0 && (<>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        startIcon={<PersonAddIcon/>}
+                                        disabled={!((capacity === 0 || subscription_count < capacity) && isActive)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();  // Stop event propagation
+                                            handleOpenSubscriptionModal(listId);
+                                        }}>
+                                        ISCRIVI
+                                    </Button>
+                                </>
+                            )}
                             {selectedCount >= 1 && (<>
                                     <Button
                                         variant="outlined"
                                         color="primary"
-                                        onClick={() => handleMoveToList(selectedRows, config.listId)}>
+                                        onClick={() => handleMoveToList(selectedRows, listId)}>
                                         Sposta in Altra Lista
                                     </Button>
                                     <Button
@@ -342,13 +367,13 @@ export default function Event() {
                                     </Button>
                                 </>
                             )}
-                            {/* Show Rimborsa Cauzioni button only if deposit is set and > 0 and TODO: is treasurer */}
-                            {hasDeposit && (
+                            {hasDeposit && canChangeTransactions && selectedCount === 0 && (
                                 <Button variant="contained"
                                         color="success"
-                                        onClick={() => {
+                                        onClick={e => {
+                                            e.stopPropagation();
                                             setSingleSubToReimburse(null);
-                                            setReimburseDepositsListId(config.listId);
+                                            setReimburseDepositsListId(listId);
                                             setReimburseDepositsModalOpen(true);
                                         }}
                                         sx={{ml: 1}}>
@@ -367,8 +392,6 @@ export default function Event() {
             return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
         }
 
-        const {isActive} = handleSubscriptionStatus();
-
         return lists.map(listConfig => {
             const {listId, listName, capacity, subscription_count, tableOptions} = listConfig;
             const occupancyPercentage = capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
@@ -377,38 +400,26 @@ export default function Event() {
             const list = useMaterialReactTable(fixedTableOptions);
 
             return (
-                <Accordion key={listId} sx={{mt: 2}}>
-                    <AccordionSummary>
-                        <Box sx={{display: 'flex', alignItems: 'center', width: '100%'}}>
-                            <BallotIcon sx={{color: 'primary.main', mr: 1}}/>
-                            <Typography variant="h6" component="div" sx={{flexGrow: 1}}>{listName}</Typography>
-                            <Box
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    cursor: (capacity === 0 || subscription_count < capacity) && isActive ? 'pointer' : 'not-allowed',
-                                    opacity: (capacity === 0 || subscription_count < capacity) && isActive ? 1 : 0.5,
-                                    px: 2,
-                                    py: 1,
-                                    borderRadius: 1,
-                                    bgcolor: 'primary.main',
-                                    color: 'white',
-                                    ml: 2,
-                                }}
-                                onClick={(capacity === 0 || subscription_count < capacity) && isActive ? () => handleOpenSubscriptionModal(listId) : undefined}>
-                                <PersonAddIcon sx={{mr: 1}}/> ISCRIVI
+                <Accordion
+                    key={listId}
+                    sx={{mt: 2}}>
+                    <AccordionSummary aria-controls={`panel-${listId}-content`}
+                                      id={`panel-${listId}-header`}
+                                      sx={{cursor: 'pointer'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', flexGrow: 1}}>
+                            <BallotIcon sx={{color: 'primary.main', mr: 2}}/>
+                            <Typography variant="h6" component="div">{listName}</Typography>
+                        </Box>
+                        <Box sx={{width: '200px', mr: 2}}>
+                            <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
+                                <Typography variant="body2">{subscription_count}/{capacity}</Typography>
                             </Box>
-                            <Box sx={{width: '200px', ml: 2}}>
-                                <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
-                                    <Typography variant="body2">{subscription_count}/{capacity}</Typography>
-                                </Box>
-                                <LinearProgress
-                                    variant="determinate"
-                                    value={occupancyPercentage}
-                                    color={occupancyColor}
-                                    sx={{height: 8, borderRadius: 5}}
-                                />
-                            </Box>
+                            <LinearProgress
+                                variant="determinate"
+                                value={occupancyPercentage}
+                                color={occupancyColor}
+                                sx={{height: 8, borderRadius: 5}}
+                            />
                         </Box>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -492,12 +503,18 @@ export default function Event() {
             )}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
-                        <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                             <IconButton onClick={() => {
                                 navigate('/events/');
                             }} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
-                            <EventIcon sx={{marginRight: '10px'}}/>
+                            <FestivalIcon sx={{mr: 2}}/>
                             <Typography variant="h4">Evento - {data.name}</Typography>
+                            <Box sx={{flexGrow: 1}}/>
+                            <IconButton onClick={refreshEventData}
+                                        title="Aggiorna"
+                                        disabled={isLoading}>
+                                <RefreshIcon/>
+                            </IconButton>
                         </Box>
                         <Card elevation={3} sx={{mt: 5, mb: 4, borderRadius: 2, overflow: 'hidden'}}>
                             <CardContent>
@@ -522,7 +539,7 @@ export default function Event() {
                                     </Grid>
                                     <Grid size={{xs: 12, md: 3}}>
                                         <Box sx={{display: 'flex', alignItems: 'center'}}>
-                                            <EuroIcon sx={{color: 'primary.main', mr: 1}}/>
+                                            <AddCardIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Cauzione</Typography>
                                         </Box>
                                         <Typography variant="body1" color="text.secondary" sx={{mt: 2}}>
@@ -567,7 +584,7 @@ export default function Event() {
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{mt: 2}}>
                                             <Typography variant="h6" component="div" sx={{mb: 2}}>Liste</Typography>
-                                            <ListAccordions/>
+                                            <ListAccordions expanded={expandedAccordion} setExpanded={setExpandedAccordion}/>
                                         </Box>
                                     </Grid>
                                 </Grid>

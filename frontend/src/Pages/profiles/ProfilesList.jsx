@@ -1,4 +1,4 @@
-import {useEffect, useState, useRef} from 'react';
+import {useEffect, useState, useRef, forwardRef, useImperativeHandle} from 'react';
 import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
@@ -16,7 +16,7 @@ const ESNCARD_VALIDITY_OPTIONS = [
     {value: 'absent', label: 'Assente'}
 ];
 
-export default function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}) {
+const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, columnVisibility, profileType}, ref) {
     const [data, setData] = useState([]);
     const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
@@ -28,30 +28,37 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
     const searchInputRef = useRef(null);
     const navigate = useNavigate();
 
+    const fetchData = async () => {
+        try {
+            const params = new URLSearchParams();
+            params.append('page', pagination.pageIndex + 1);
+            params.append('page_size', pagination.pageSize);
+            if (appliedSearch) params.append('search', appliedSearch);
+            if (filters.esncardValidity.length)
+                params.append('esncardValidity', filters.esncardValidity.join(','));
+            if (filters.group.length)
+                params.append('group', filters.group.join(','));
+            const response = await fetchCustom('GET', `${apiEndpoint}?${params.toString()}`);
+            const json = await response.json();
+            setRowCount(json.count || 0);
+            setData(json.results);
+        } catch (error) {
+            Sentry.captureException(error);
+        } finally {
+            setInternalLoading(false);
+        }
+    };
+
+    useImperativeHandle(ref, () => ({
+        refreshData: () => {
+            setInternalLoading(true);
+            fetchData();
+        }
+    }));
+
     useEffect(() => {
-        // Only fetch data when appliedSearch changes (icon click), or filters/pagination change
         setInternalLoading(true);
-        const fetchData = async () => {
-            try {
-                const params = new URLSearchParams();
-                params.append('page', pagination.pageIndex + 1);
-                params.append('page_size', pagination.pageSize);
-                if (appliedSearch) params.append('search', appliedSearch);
-                if (filters.esncardValidity.length)
-                    params.append('esncardValidity', filters.esncardValidity.join(','));
-                if (filters.group.length)
-                    params.append('group', filters.group.join(','));
-                const response = await fetchCustom('GET', `${apiEndpoint}?${params.toString()}`);
-                const json = await response.json();
-                setRowCount(json.count || 0);
-                setData(json.results);
-            } catch (error) {
-                Sentry.captureException(error);
-            } finally {
-                setInternalLoading(false);
-            }
-        };
-        fetchData().then();
+        fetchData();
 
         if (profileType === 'ESNer') {
             fetchCustom("GET", "/groups/").then(response => {
@@ -74,8 +81,30 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         if (searchInputRef.current) searchInputRef.current.focus();
     };
 
+    const columnsWithActions = [
+        ...columns,
+        {
+            accessorKey: 'actions',
+            header: 'Azioni',
+            size: 80,
+            Cell: ({row}) => (
+                <IconButton
+                    title="Gestisci profilo"
+                    color="primary"
+                    onClick={e => {
+                        e.stopPropagation();
+                        navigate(`/profile/${row.original.id.toString()}`);
+                    }}>
+                    <ManageAccountsIcon/>
+                </IconButton>
+            ),
+            enableSorting: false,
+            enableColumnActions: false,
+        }
+    ];
+
     const table = useMaterialReactTable({
-        columns,
+        columns: columnsWithActions,
         data,
         enableStickyHeader: true,
         enableStickyFooter: true,
@@ -84,7 +113,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         enableGrouping: true,
         enableColumnPinning: true,
         enableFacetedValues: true,
-        enableRowActions: true,
+        enableRowActions: false,
         enableRowSelection: false,
         enableRowPinning: false,
         enableExpandAll: false,
@@ -111,17 +140,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
-        renderRowActions: ({row}) => (
-            <IconButton
-                title="Gestisci profilo"
-                color="primary"
-                onClick={e => {
-                    e.stopPropagation();
-                    navigate(`/profile/${row.original.id.toString()}`);
-                }}>
-                <ManageAccountsIcon/>
-            </IconButton>
-        ),
     });
 
     const handleFilterChange = (e) => {
@@ -134,8 +152,14 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
 
     return (
         <Box sx={{mx: '5%'}}>
-            <Grid container spacing={2} sx={{mb: 2, mt: 2}} alignItems="center" justifyContent="flex-end">
-                <Grid size={{xs: 12, sm: 2}}>
+            <Grid
+                container
+                spacing={2}
+                sx={{mb: 2, mt: 2}}
+                alignItems="center"
+                justifyContent="space-between"
+            >
+                <Grid size={{xs: 12, md: 2}}>
                     <FormControl fullWidth>
                         <InputLabel id="esncard-validity-label">Validità ESNcard</InputLabel>
                         <Select
@@ -156,7 +180,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                     </FormControl>
                 </Grid>
                 {profileType === 'ESNer' && groups.length > 0 && (
-                    <Grid size={{xs: 12, sm: 2}}>
+                    <Grid size={{xs: 12, md: 2}}>
                         <FormControl fullWidth>
                             <InputLabel id="group-label">Gruppo</InputLabel>
                             <Select
@@ -177,7 +201,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                         </FormControl>
                     </Grid>
                 )}
-                <Grid size={{xs: 12, sm: "auto"}}>
+                <Grid size={{xs: 12, md: 3}} sx={{ml: {sm: 'auto'}}}>
                     <OutlinedInput
                         inputRef={searchInputRef}
                         size="small"
@@ -187,6 +211,7 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
                         onKeyDown={e => {
                             if (e.key === 'Enter') handleSearchApply();
                         }}
+                        fullWidth
                         endAdornment={
                             search && appliedSearch === search ? (
                                 <IconButton
@@ -212,4 +237,6 @@ export default function ProfilesList({apiEndpoint, columns, columnVisibility, pr
             }
         </Box>
     );
-}
+});
+
+export default ProfilesList;

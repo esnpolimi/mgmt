@@ -23,6 +23,7 @@ import EventSelectorModal from "../../Components/profiles/EventSelectorModal";
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -150,46 +151,39 @@ export default function Profile() {
         fetchData().then();
     }, []);
 
-    // Fetch subscriptions for MRT_Table
-    useEffect(() => {
-        const fetchSubscriptions = async () => {
-            try {
-                const response = await fetchCustom("GET", `/profile_subscriptions/${id}/`);
-                const json = await response.json();
-                if (response.ok) setSubscriptions(json);
-                else setSubscriptions([]);
-            } catch (error) {
-                Sentry.captureException(error);
-                setSubscriptions([]);
-            }
-        };
-        fetchSubscriptions().then();
-    }, [id]);
-
-    useEffect(() => {
-        const fetchGroups = async () => {
-            try {
-                const response = await fetchCustom("GET", "/groups/");
-                const json = await response.json();
-                if (response.ok) setGroups(json);
-                else setPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
-            } catch (error) {
-                Sentry.captureException(error);
-                setPopup({message: `Errore generale: ${error}`, state: "error"});
-            }
-        };
-        fetchGroups().then();
-    }, []);
-
-
     const rules = profileFieldRules[profileType] || {hideFields: []};
     const shouldHideField = (fieldName) => {
         return rules.hideFields.includes(fieldName);
     };
 
-    const refreshProfileData = async () => {
+       const fetchSubscriptions = async () => {
         try {
-            const response = await fetchCustom("GET", `/profile/${profile.id.toString()}/`);
+            const response = await fetchCustom("GET", `/profile_subscriptions/${id}/`);
+            const json = await response.json();
+            if (response.ok) setSubscriptions(json);
+            else setSubscriptions([]);
+        } catch (error) {
+            Sentry.captureException(error);
+            setSubscriptions([]);
+        }
+    };
+
+    const fetchGroups = async () => {
+        try {
+            const response = await fetchCustom("GET", "/groups/");
+            const json = await response.json();
+            if (response.ok) setGroups(json);
+            else setPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
+        } catch (error) {
+            Sentry.captureException(error);
+            setPopup({message: `Errore generale: ${error}`, state: "error"});
+        }
+    };
+
+    const refreshProfileData = async () => {
+        setLoading(true);
+        try {
+            const response = await fetchCustom("GET", `/profile/${id}/`);
             const json = await response.json();
             if (!response.ok) {
                 const errorMessage = await extractErrorMessage(json, response.status);
@@ -198,10 +192,15 @@ export default function Profile() {
                 setData(json);
                 setUpdatedData(json);
                 setProfile(json);
+                setProfileType(json.is_esner ? "ESNer" : "Erasmus");
             }
+            fetchSubscriptions().then()
+            fetchGroups().then();
         } catch (error) {
             Sentry.captureException(error);
             setPopup({message: `Errore generale: ${error}`, state: "error"});
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -589,12 +588,19 @@ export default function Profile() {
             <Sidebar/>
             {loading ? <Loader/> : (<>
                     <Box sx={{mx: '5%'}}>
-                        <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                             <IconButton
                                 onClick={() => navigate(`/profiles/${profileType === 'ESNer' ? 'esners/' : 'erasmus/'}`)}
                                 sx={{mr: 2}}>
-                                <ArrowBackIcon/></IconButton>
+                                <ArrowBackIcon/>
+                            </IconButton>
                             <Typography variant="h4">Profilo {profileType}</Typography>
+                            <Box sx={{flexGrow: 1}}/>
+                            <IconButton onClick={refreshProfileData}
+                                        title="Aggiorna"
+                                        disabled={saving}>
+                                <RefreshIcon/>
+                            </IconButton>
                         </Box>
                         <Card sx={{p: '20px'}}>
                             <Grid container spacing={2}>

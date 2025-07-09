@@ -76,13 +76,27 @@ export default function ReimbursementRequestModal({open, onClose}) {
     const doSubmit = async () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
-        try {
-            const response = await fetchCustom('POST', '/reimbursement_request/', {
+
+        let body;
+        let isFormData = false;
+
+        if (receiptFile) {
+            isFormData = true;
+            body = new FormData();
+            body.append('amount', data.amount);
+            body.append('payment', data.payment);
+            body.append('description', data.description);
+            body.append('receiptFile', receiptFile);
+        } else {
+            body = {
                 amount: parseFloat(data.amount),
                 payment: data.payment,
                 description: data.description,
-                receiptFile: receiptFile ? receiptFile : null
-            });
+            };
+        }
+
+        try {
+            const response = await fetchCustom('POST', '/reimbursement_request/', body, isFormData);
             if (response.ok) {
                 onClose(true);
             } else {
@@ -150,6 +164,15 @@ export default function ReimbursementRequestModal({open, onClose}) {
                                    hidden
                                    onChange={handleFileChange}/>
                         </Button>
+                        {receiptFile && (
+                            <Button variant="text"
+                                    color="error"
+                                    fullWidth
+                                    sx={{mb: 1}}
+                                    onClick={() => setReceiptFile(null)}>
+                                Rimuovi file
+                            </Button>
+                        )}
                         {/* Optionally show error if receipt is required */}
                         {/* <FormHelperText error={!!errors.receiptFile}>{errors.receiptFile}</FormHelperText> */}
                     </Grid>
