@@ -19,6 +19,7 @@ import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
 import * as Sentry from "@sentry/react";
 import FestivalIcon from '@mui/icons-material/Festival';
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
@@ -265,9 +266,15 @@ export default function EventsList() {
                 isEdit={false}
             />}
             <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
-                    <EventIcon sx={{marginRight: '10px'}}/>
+                <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
+                    <EventIcon sx={{mr: 2}}/>
                     <Typography variant="h4">Lista Eventi</Typography>
+                    <Box sx={{flexGrow: 1}}/>
+                    <IconButton onClick={refreshData}
+                                title="Aggiorna"
+                                disabled={localLoading}>
+                        <RefreshIcon/>
+                    </IconButton>
                 </Box>
                 <Grid container spacing={2} sx={{mb: 2}} alignItems="center" justifyContent="flex-end">
                     <Grid size={{xs: 12, sm: 2}}>

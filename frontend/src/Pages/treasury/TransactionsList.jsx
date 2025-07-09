@@ -18,7 +18,8 @@ import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
 import Popup from "../../Components/Popup";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
-
+import RefreshIcon from "@mui/icons-material/Refresh";
+import ReceiptIcon from '@mui/icons-material/Receipt';
 
 // For the filter dropdown
 const transactionTypes = [
@@ -273,9 +274,18 @@ export default function TransactionsList() {
                 transaction={selectedTransaction}
             />}
             <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                     <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
-                    <Typography variant="h4">Lista Transazioni</Typography>
+                    <Typography variant="h4" sx={{mr: 2}}>
+                        <ReceiptIcon sx={{mr: 2}}/>
+                        Lista Transazioni
+                    </Typography>
+                    <Box sx={{flexGrow: 1}} />
+                    <IconButton onClick={refreshTransactionsData}
+                                title="Aggiorna"
+                                disabled={isLoading}>
+                        <RefreshIcon/>
+                    </IconButton>
                 </Box>
                 <Grid container spacing={2} sx={{mb: 2, mt: 4}} alignItems="center">
                     <Grid size={{xs: 12, sm: 2}}>
@@ -392,4 +402,3 @@ export default function TransactionsList() {
         </Box>
     );
 }
-

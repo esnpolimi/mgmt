@@ -1,12 +1,14 @@
-import {useMemo} from 'react';
+import {useMemo, useRef} from 'react';
 import ProfilesList from './ProfilesList.jsx';
-import {Box, Chip, Typography} from "@mui/material";
+import {Box, Chip, IconButton, Typography} from "@mui/material";
 import BabyChangingStationIcon from '@mui/icons-material/BabyChangingStation';
 import Sidebar from "../../Components/Sidebar";
 import {profileDisplayNames as names} from '../../utils/displayAttributes';
 import countryCodes from "../../data/countryCodes.json";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 export default function ESNersProfiles() {
+    const profilesListRef = useRef();
 
     const columns = useMemo(() => [
         {
@@ -133,12 +135,19 @@ export default function ESNersProfiles() {
         <Box>
             <Sidebar/>
             <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                     <BabyChangingStationIcon sx={{marginRight: '10px'}}/>
                     <Typography variant="h4">Profili ESNers</Typography>
+                    <Box sx={{flexGrow: 1}}/>
+                    <IconButton
+                        onClick={() => profilesListRef.current?.refreshData()}
+                        title="Aggiorna">
+                        <RefreshIcon/>
+                    </IconButton>
                 </Box>
             </Box>
             <ProfilesList
+                ref={profilesListRef}
                 apiEndpoint="/esner_profiles/"
                 columns={columns}
                 columnVisibility={columnVisibility}

@@ -9,11 +9,16 @@ export const fetchCustom = async (method, path, body = null, options = {}, auth 
     }
 
     // Set default headers
-    const headers = {
-        "Content-Type": "application/json", // Default content type for JSON requests
-        ...(auth && {Authorization: `Bearer ${accessToken}`}), // Include Authorization header only when auth is true
-        ...options.headers, // Merge with additional headers if provided
+    let headers = {
+        ...(auth && {Authorization: `Bearer ${accessToken}`}),
+        ...options.headers,
     };
+
+    // If body is FormData, do not set Content-Type (browser will set it)
+    const isFormData = body instanceof FormData;
+    if (!isFormData) {
+        headers["Content-Type"] = "application/json";
+    }
 
     // Configure fetch options
     const fetchOptions = {
@@ -25,7 +30,7 @@ export const fetchCustom = async (method, path, body = null, options = {}, auth 
 
     // Add body for POST, PUT, or PATCH methods
     if (body) {
-        fetchOptions.body = typeof body === "string" ? body : JSON.stringify(body);
+        fetchOptions.body = isFormData ? body : (typeof body === "string" ? body : JSON.stringify(body));
     }
 
     // Execute the request

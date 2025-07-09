@@ -4,6 +4,7 @@ import AccountsDash from '../../Components/treasury/AccountsDash';
 import ReceiptsDash from '../../Components/treasury/TransactionsDash';
 import ReimbursementRequestsDash from '../../Components/treasury/ReimbursementRequestsDash';
 import {useNavigate} from 'react-router-dom';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 
 export default function TreasuryDashboard() {
     const navigate = useNavigate();
@@ -12,11 +13,13 @@ export default function TreasuryDashboard() {
         <Box>
             <Sidebar/>
             <Box sx={{mx: '5%', mt: 0}}>
-                <Typography variant="h4" sx={{mb: 3}}>Dashboard Tesoreria</Typography>
+                <Typography variant="h4" sx={{mb: 3}}>
+                    <AccountBalanceIcon sx={{mr: 2}}/>
+                    Dashboard Tesoreria
+                </Typography>
                 <Grid container spacing={3}>
                     <Grid size={{xs: 12, md: 4}}>
                         <Paper elevation={3} sx={{p: 2}}>
-                            <Typography variant="h6" sx={{mb: 2}}>Casse</Typography>
                             <AccountsDash limit={5}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
                                 <Button
@@ -30,7 +33,6 @@ export default function TreasuryDashboard() {
                     </Grid>
                     <Grid size={{xs: 12, md: 8}}>
                         <Paper elevation={3} sx={{p: 2, mb: 3}}>
-                            <Typography variant="h6" sx={{mb: 2}}>Ultime Transazioni</Typography>
                             <ReceiptsDash limit={3}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
                                 <Button
@@ -42,7 +44,6 @@ export default function TreasuryDashboard() {
                             </Box>
                         </Paper>
                         <Paper elevation={3} sx={{p: 2}}>
-                            <Typography variant="h6" sx={{mb: 2}}>Ultime Richieste Rimborso</Typography>
                             <ReimbursementRequestsDash limit={3}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
                                 <Button

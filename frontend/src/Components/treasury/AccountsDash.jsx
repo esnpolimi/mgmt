@@ -4,28 +4,31 @@ import {accountDisplayNames as names} from '../../utils/displayAttributes';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
-import {Box, Chip} from "@mui/material";
+import {Box, Chip, IconButton, Typography} from "@mui/material";
+import RefreshIcon from '@mui/icons-material/Refresh';
 import * as Sentry from "@sentry/react";
+import StoreIcon from "@mui/icons-material/Store";
 
 export default function AccountsDash({limit = 5}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const response = await fetchCustom("GET", '/accounts/');
-                if (response.ok) {
-                    const json = await response.json();
-                    setData(json.results);
-                }
-            } catch (e) {
-                Sentry.captureException(e);
-            } finally {
-                setLoading(false);
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const response = await fetchCustom("GET", '/accounts/');
+            if (response.ok) {
+                const json = await response.json();
+                setData(json.results);
             }
-        };
+        } catch (e) {
+            Sentry.captureException(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchData().then();
     }, []);
 
@@ -71,5 +74,17 @@ export default function AccountsDash({limit = 5}) {
         localization: MRT_Localization_IT,
     });
 
-    return isLoading ? <Loader/> : <MRT_Table table={table}/>;
+    return (
+        <Box>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
+                <StoreIcon sx={{mr: 2}}/>
+                <Typography variant="h6">Casse</Typography>
+                <Box sx={{flexGrow: 1}} />
+                <IconButton size="small" onClick={fetchData} disabled={isLoading} title="Aggiorna">
+                    <RefreshIcon/>
+                </IconButton>
+            </Box>
+            {isLoading ? <Loader/> : <MRT_Table table={table}/>}
+        </Box>
+    );
 }

@@ -1,12 +1,14 @@
-import {useMemo} from 'react';
+import {useMemo, useRef} from 'react';
 import ProfilesList from './ProfilesList.jsx';
-import {Box, Chip, Typography} from "@mui/material";
+import {Box, Chip, Typography, IconButton} from "@mui/material";
 import SnowboardingIcon from '@mui/icons-material/Snowboarding';
 import Sidebar from "../../Components/Sidebar";
 import {profileDisplayNames as names} from "../../utils/displayAttributes";
 import countryCodes from "../../data/countryCodes.json";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 export default function ErasmusProfiles() {
+    const profilesListRef = useRef();
 
     const columns = useMemo(() => [
         {
@@ -159,12 +161,19 @@ export default function ErasmusProfiles() {
         <Box>
             <Sidebar/>
             <Box sx={{mx: '5%'}}>
-                <Box sx={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
+                <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                     <SnowboardingIcon sx={{marginRight: '10px'}}/>
                     <Typography variant="h4">Profili Erasmus</Typography>
+                    <Box sx={{flexGrow: 1}}/>
+                    <IconButton
+                        onClick={() => profilesListRef.current?.refreshData()}
+                        title="Aggiorna">
+                        <RefreshIcon/>
+                    </IconButton>
                 </Box>
             </Box>
             <ProfilesList
+                ref={profilesListRef}
                 apiEndpoint="/erasmus_profiles/"
                 columns={columns}
                 columnVisibility={columnVisibility}
