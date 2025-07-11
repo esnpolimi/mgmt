@@ -1,6 +1,6 @@
 import logging
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 import sentry_sdk
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
@@ -13,14 +13,12 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from djmoney.money import Money
-from events.models import DepositReimbursement
 from events.models import Subscription, Event
 from profiles.models import Profile
 from treasury.models import Account, ESNcard, Settings, ReimbursementRequest
 from treasury.models import Transaction
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
-    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer, DepositReimbursementSerializer
+    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer
 from users.models import User
 
 logger = logging.getLogger(__name__)
@@ -138,7 +136,14 @@ def transaction_add(request):
             if not request.user.has_perm('treasury.add_transaction'):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
-        transaction_serializer.save()
+        try:
+            transaction_serializer.save()
+        except ValueError as ve:
+            # Catch negative balance error from model clean
+            return Response({'error': str(ve)}, status=400)
+        except PermissionDenied as pe:
+            return Response({'error': str(pe)}, status=403)
+
         return Response(status=200)
 
     except Exception as e:
@@ -213,7 +218,6 @@ def transaction_detail(request, pk):
             if not request.user.has_perm('treasury.change_transaction'):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
-            # Retrieve the User regardless of whether an id or email is passed
             executor = request.data.get('executor')
             try:
                 executor_user = User.objects.get(profile__id=int(executor))
@@ -225,49 +229,40 @@ def transaction_detail(request, pk):
             request.data['executor'] = executor_user.pk
 
             with transaction.atomic():
-                if int(request.data.get('account', transaction_obj.account.id)) != transaction_obj.account.id:
-                    # Only if the account has changed, delete old transaction and create a new one
-                    transaction_obj.delete()
-                    t = Transaction(
-                        type=transaction_obj.type,
-                        account_id=request.data['account'],
-                        executor_id=request.data['executor'],
-                        amount=float(request.data['amount']),
-                        description=request.data.get('description', ''),
-                        esncard=transaction_obj.esncard,
-                        subscription=transaction_obj.subscription
-                    )
-                    t.save()
-                else:
-                    # Just update the non-critical fields
-                    transaction_obj.amount = float(request.data['amount'])
-                    transaction_obj.executor_id = request.data['executor']
-                    transaction_obj.description = request.data.get('description', '')
-                    transaction_obj.save()
+                try:
+                    if int(request.data.get('account', transaction_obj.account.id)) != transaction_obj.account.id:
+                        transaction_obj.delete()
+                        t = Transaction(
+                            type=transaction_obj.type,
+                            account_id=request.data['account'],
+                            executor_id=request.data['executor'],
+                            amount=float(request.data['amount']),
+                            description=request.data.get('description', ''),
+                            esncard=transaction_obj.esncard,
+                            subscription=transaction_obj.subscription
+                        )
+                        t.save()
+                    else:
+                        transaction_obj.amount = float(request.data['amount'])
+                        transaction_obj.executor_id = request.data['executor']
+                        transaction_obj.description = request.data.get('description', '')
+                        transaction_obj.save()
+                except ValueError as ve:
+                    return Response({'error': str(ve)}, status=400)
+                except PermissionDenied as pe:
+                    return Response({'error': str(pe)}, status=403)
 
                 return Response(status=200)
         elif request.method == 'DELETE':
-            # Allow deletion only for RIMBORSO_CAUZIONE and REIMBURSEMENT transactions
+            # Allow deletion only for specific transaction types
             list_deleteable = [
                 Transaction.TransactionType.RIMBORSO_CAUZIONE,
-                Transaction.TransactionType.REIMBURSEMENT
+                Transaction.TransactionType.REIMBURSEMENT,
+                Transaction.TransactionType.RIMBORSO_QUOTA
             ]
             if transaction_obj.type in list_deleteable:
                 if not request.user.has_perm('treasury.delete_transaction'):
                     return Response({'error': 'Non autorizzato.'}, status=401)
-                if transaction_obj.type == Transaction.TransactionType.RIMBORSO_CAUZIONE and transaction_obj.subscription and transaction_obj.subscription.event:
-                    # Remove the related DepositReimbursement if it exists
-                    DepositReimbursement.objects.filter(
-                        event=transaction_obj.subscription.event,
-                        subscription=transaction_obj.subscription
-                    ).delete()
-                # Unmark reimbursement request if this is a reimbursement transaction
-                '''if transaction_obj.type == Transaction.TransactionType.REIMBURSEMENT:
-                    from treasury.models import ReimbursementRequest
-                    req = ReimbursementRequest.objects.filter(reimbursement_transaction=transaction_obj).first()
-                    if req:
-                        req.reimbursement_transaction = None
-                        req.save()'''
                 transaction_obj.delete()
                 return Response(status=204)
             else:
@@ -491,28 +486,14 @@ def reimburse_deposits(request):
         if not subscriptions.exists():
             return Response({'error': 'Nessuna iscrizione valida trovata.'}, status=400)
 
-        # Fix: Ensure deposit_amount is always a Decimal, default to 0 if not set or invalid
-        deposit_decimal = event.deposit
-        if deposit_decimal is None:
-            deposit_decimal = Decimal('0.00')
-        else:
-            try:
-                deposit_decimal = Decimal(deposit_decimal)
-            except (InvalidOperation, TypeError):
-                deposit_decimal = Decimal('0.00')
-
-        # Convert Decimal to Money for comparison and arithmetic with account balance
-        deposit_amount = Money(deposit_decimal, account.balance.currency)
+        deposit_amount = event.deposit or Decimal('0.00')
 
         with transaction.atomic():
-            # Lock the account row to prevent race conditions
             account_locked = Account.objects.select_for_update().get(pk=account.pk)
             created = []
             for sub in subscriptions:
-                # Prevent double reimbursement
-                if DepositReimbursement.objects.filter(event=event, subscription=sub).exists():
+                if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists():
                     continue
-                # Only reimburse if CAUZIONE transaction exists and is paid
                 cauzione_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
                 if not cauzione_tx:
                     return Response({'error': 'Nessuna cauzione rimborsabile trovata per ' + str(sub.profile)}, status=400)
@@ -520,24 +501,17 @@ def reimburse_deposits(request):
                     return Response({'error': 'La cassa è chiusa.'}, status=400)
                 if account_locked.balance < deposit_amount:
                     return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
-                reimb = DepositReimbursement.objects.create(
-                    event=event,
-                    subscription=sub,
-                    account=account_locked,
-                    amount=deposit_decimal,
-                    notes=notes
-                )
-                # Create a transaction for the reimbursement
-                Transaction.objects.create(
+                tx = Transaction.objects.create(
                     type=Transaction.TransactionType.RIMBORSO_CAUZIONE,
                     subscription=sub,
                     executor=request.user,
                     account=account_locked,
-                    amount=-deposit_amount,  # Negative for outflow
-                    description=f"Rimborso cauzione per {sub.profile.name} {sub.profile.surname} ({event.name})"
+                    amount=-deposit_amount,
+                    description=f"Rimborso cauzione per {sub.profile.name} {sub.profile.surname} ({event.name})" + (f" - {notes}" if notes else "")
                 )
-                created.append(reimb)
-            serializer = DepositReimbursementSerializer(created, many=True)
+                created.append(tx)
+            # Return the created transactions
+            serializer = TransactionViewSerializer(created, many=True)
             return Response(serializer.data, status=201)
     except Exception as e:
         logger.error(str(e))
@@ -560,26 +534,96 @@ def reimbursable_deposits(request):
 
         event = Event.objects.get(id=event_id)
 
-        # Subscriptions in this list, paid, deposit transaction present, not yet reimbursed
+        # Subscriptions in this list, with a paid cauzione transaction, not yet reimbursed
         subs = Subscription.objects.filter(
             event=event,
-            list__id=list_id,
-            status='paid',
-            deposit_reimbursements__isnull=True  # Exclude already reimbursed
+            list__id=list_id
         )
         result = []
         for sub in subs:
             deposit_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
-            if deposit_tx:
+            reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+            if deposit_tx and not reimbursed:
                 result.append({
                     "id": sub.id,
                     "profile_id": sub.profile.id,
                     "profile_name": f"{sub.profile.name} {sub.profile.surname}",
-                    "deposit_transaction_paid": True,
-                    "deposit_reimbursed": False,
                     "account_name": deposit_tx.account.name if deposit_tx.account else None
                 })
         return Response(result, status=200)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reimburse_quota(request):
+    """
+    Reimburse the main event cost ("Quota") for a subscription.
+    Expects: { "event": <event_id>, "subscription_id": <id>, "account": <account_id>, "notes": <optional> }
+    """
+    try:
+        if not request.user.has_perm('events.add_depositreimbursement'):
+            return Response({'error': 'Non autorizzato.'}, status=401)
+
+        event_id = request.data.get('event')
+        subscription_id = request.data.get('subscription_id')
+        account_id = request.data.get('account')
+        notes = request.data.get('notes', '')
+
+        if not event_id or not subscription_id or not account_id:
+            return Response({'error': 'Dati mancanti.'}, status=400)
+
+        from events.models import Event, Subscription
+        event = Event.objects.get(id=event_id)
+        account = Account.objects.get(id=account_id)
+        sub = Subscription.objects.get(id=subscription_id, event=event)
+
+        # Only allow if event is not free and subscription has a paid transaction
+        if not event.cost or float(event.cost) <= 0:
+            return Response({'error': 'L\'evento è gratuito, nessuna quota da rimborsare.'}, status=400)
+        if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).exists():
+            return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'}, status=400)
+
+        # Check if already reimbursed
+        if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
+            return Response({'error': 'Quota già rimborsata.'}, status=400)
+
+        quota_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).first()
+        if not quota_tx:
+            return Response({'error': 'Nessun pagamento quota trovato per questa iscrizione.'}, status=400)
+
+        if account.status == "closed":
+            return Response({'error': 'La cassa è chiusa.'}, status=400)
+
+        from decimal import Decimal, InvalidOperation
+        quota_decimal = event.cost
+        if quota_decimal is None:
+            quota_decimal = Decimal('0.00')
+        else:
+            try:
+                quota_decimal = Decimal(quota_decimal)
+            except (InvalidOperation, TypeError):
+                quota_decimal = Decimal('0.00')
+        quota_amount = quota_decimal
+
+        if account.balance < quota_amount:
+            return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
+
+        with transaction.atomic():
+            tx = Transaction.objects.create(
+                type=Transaction.TransactionType.RIMBORSO_QUOTA,
+                subscription=sub,
+                executor=request.user,
+                account=account,
+                amount=-quota_amount,
+                description=f"Rimborso quota per {sub.profile.name} {sub.profile.surname} ({event.name})" + (f" - {notes}" if notes else "")
+            )
+            from treasury.serializers import TransactionViewSerializer
+            serializer = TransactionViewSerializer(tx)
+            return Response(serializer.data, status=201)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)

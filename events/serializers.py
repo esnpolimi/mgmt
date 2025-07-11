@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from events.models import Event, EventList, Subscription, EventOrganizer, DepositReimbursement
+from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 from treasury.models import Transaction
 
@@ -155,18 +155,20 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     list_name = serializers.CharField(source='list.name', read_only=True)
     account_id = serializers.SerializerMethodField()
     account_name = serializers.SerializerMethodField()
-    deposit_reimbursed = serializers.SerializerMethodField()
-    deposit_transaction_id = serializers.SerializerMethodField()
-    deposit_transaction_paid = serializers.SerializerMethodField()
+    deposit_reimbursement_transaction_id = serializers.SerializerMethodField()
+    quota_reimbursement_transaction_id = serializers.SerializerMethodField()
+    status_quota = serializers.SerializerMethodField()
+    status_cauzione = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
         fields = [
             'id', 'profile_id', 'profile_name', 'event', 'list_id', 'list_name',
-            'status', 'enable_refund', 'notes', 'created_by_form',
+            'enable_refund', 'notes', 'created_by_form',
             'account_id', 'account_name',
-            'deposit_reimbursed',
-            'deposit_transaction_id', 'deposit_transaction_paid'
+            'deposit_reimbursement_transaction_id',
+            'quota_reimbursement_transaction_id',
+            'status_quota', 'status_cauzione'
         ]
 
     @staticmethod
@@ -184,28 +186,46 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         return transaction.account.name if transaction else None
 
     @staticmethod
-    def get_deposit_reimbursed(obj):
-        return DepositReimbursement.objects.filter(event=obj.event, subscription=obj).exists()
-
-    @staticmethod
-    def get_deposit_transaction_id(obj):
+    def get_deposit_reimbursement_transaction_id(obj):
         tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).order_by('-id').first()
         return tx.id if tx else None
 
     @staticmethod
-    def get_deposit_transaction_paid(obj):
-        tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).order_by('-id').first()
-        return bool(tx)
+    def get_quota_reimbursement_transaction_id(obj):
+        tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_QUOTA).order_by('-id').first()
+        return tx.id if tx else None
+
+    @staticmethod
+    def get_status_quota(obj):
+        # Quota: reimbursed only if rimborso quota transaction exists
+        if Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
+            return 'reimbursed'
+        elif Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.SUBSCRIPTION).exists():
+            return 'paid'
+        else:
+            return 'pending'
+
+    @staticmethod
+    def get_status_cauzione(obj):
+        cauzione_tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).first()
+        reimbursed = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+        if reimbursed:
+            return 'reimbursed'
+        elif cauzione_tx:
+            return 'paid'
+        else:
+            return 'pending'
 
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
     account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    status = serializers.CharField(default='pending')
     pay_deposit = serializers.BooleanField(write_only=True, required=False, default=True)
+    status_quota = serializers.CharField(write_only=True, required=False, default='pending')
+    status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'list', 'notes', 'status', 'account_id', 'pay_deposit']
+        fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione']
 
     def validate(self, attrs):
         # Check if profile is already registered for this event
@@ -218,20 +238,25 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
         # Remove account id from validated_data as it's not a field in Subscription model
         self.account = attrs.pop('account_id', None)
         self.pay_deposit = attrs.pop('pay_deposit', True)
-
+        self.status_quota = attrs.pop('status_quota', 'pending')
+        self.status_cauzione = attrs.pop('status_cauzione', 'pending')
         return attrs
 
 
 class SubscriptionUpdateSerializer(serializers.ModelSerializer):
     account_id = serializers.IntegerField(write_only=True, required=False)
+    status_quota = serializers.CharField(write_only=True, required=False, default='pending')
+    status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
 
     class Meta:
         model = Subscription
-        fields = ['list', 'status', 'enable_refund', 'notes', 'account_id']
+        fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione']
 
     def validate(self, attrs):
-        # Remove account_id from validated_data as it's not a field in Subscription model
-        self.account_id = attrs.pop('account_id', None) if 'account_id' in attrs else None
+        self.account_id = attrs.get('account_id', self.instance and getattr(self.instance, 'account_id', None))
+        self.status_quota = attrs.pop('status_quota', 'pending')
+        self.status_cauzione = attrs.pop('status_cauzione', 'pending')
+        attrs.pop('account_id', None)
         return attrs
 
 

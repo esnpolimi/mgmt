@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from decimal import Decimal
 
 import sentry_sdk
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
@@ -184,42 +185,39 @@ def subscription_create(request):
             return Response(serializer.errors, status=400)
 
         with transaction.atomic():
-            # Run clean method to validate capacity
             subscription_data = {key: value for key, value in serializer.validated_data.items()}
             subscription = Subscription(**subscription_data)
             subscription.clean()
-
-            # Save if validation passes
             subscription = serializer.save()
 
-            # Create transaction if status is paid
-            if subscription.status == 'paid':
-                # Check if we have an account ID
-                if not hasattr(serializer, 'account') or not serializer.account:
-                    raise ValidationError("Richiesta una cassa per iscrizioni a pagamento")
+            # Only create transactions if status_quota/cauzione are 'paid'
+            status_quota = request.data.get('status_quota', 'pending')
+            status_cauzione = request.data.get('status_cauzione', 'pending')
+            account_id = serializer.account
 
-                # Create subscription transaction
+            # Quota transaction
+            if status_quota == 'paid' and account_id:
                 t = Transaction(
                     type=Transaction.TransactionType.SUBSCRIPTION,
-                    account_id=serializer.account,
+                    account_id=account_id,
                     subscription=subscription,
                     executor=request.user,
-                    amount=float(subscription.event.cost),
+                    amount=Decimal(subscription.event.cost),
                     description=f"Pagamento per {subscription.event.name}"
                 )
                 t.save()
 
-                # Create cauzione transaction if requested and event has deposit > 0
-                if getattr(serializer, 'pay_deposit', True) and subscription.event.deposit and float(subscription.event.deposit) > 0:
-                    t_cauzione = Transaction(
-                        type=Transaction.TransactionType.CAUZIONE,
-                        account_id=serializer.account,
-                        subscription=subscription,
-                        executor=request.user,
-                        amount=float(subscription.event.deposit),
-                        description=f"Cauzione per {subscription.event.name}"
-                    )
-                    t_cauzione.save()
+            # Cauzione transaction
+            if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
+                t_cauzione = Transaction(
+                    type=Transaction.TransactionType.CAUZIONE,
+                    account_id=account_id,
+                    subscription=subscription,
+                    executor=request.user,
+                    amount=Decimal(subscription.event.deposit),
+                    description=f"Cauzione per {subscription.event.name}"
+                )
+                t_cauzione.save()
             return Response(serializer.data, status=200)
 
     except ValidationError as e:
@@ -242,88 +240,102 @@ def subscription_create(request):
 def subscription_detail(request, pk):
     try:
         sub = Subscription.objects.get(pk=pk)
-        old_status = sub.status
+
+        # Check if quota or cauzione is reimbursed
+        quota_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
+        cauzione_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
 
         if request.method == 'GET':
             serializer = SubscriptionSerializer(sub)
             return Response(serializer.data, status=200)
 
         if request.method == "PATCH":
+            if quota_reimbursed or cauzione_reimbursed:
+                return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'}, status=400)
             if request.user.has_perm('events.change_subscription'):
                 serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
                 if not serializer.is_valid():
                     return Response(serializer.errors, status=400)
 
                 with transaction.atomic():
-                    # Run clean method to validate capacity
                     for attr, value in serializer.validated_data.items():
                         setattr(sub, attr, value)
                     sub.clean()
-
-                    # Save if validation passes
                     subscription = serializer.save()
 
-                    # Create a transaction if status changed to paid
-                    if old_status != 'paid' and subscription.status == 'paid':
-                        # Check if we have an account ID
-                        if not hasattr(serializer, 'account_id') or not serializer.account_id:
-                            raise ValidationError("Richiesta una cassa per iscrizioni a pagamento")
+                    account_id = serializer.account_id
+                    status_quota = request.data.get('status_quota', 'pending')
+                    status_cauzione = request.data.get('status_cauzione', 'pending')
 
-                        # Create transaction
-                        t = Transaction(
-                            type=Transaction.TransactionType.SUBSCRIPTION,
-                            account_id=serializer.account_id,
-                            subscription=subscription,
-                            executor=request.user,
-                            amount=float(subscription.event.cost),
-                            description=f"Pagamento per {subscription.event.name}"
-                        )
-                        t.save()
+                    # Quota transaction
+                    quota_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.SUBSCRIPTION).first()
+                    cauzione_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.CAUZIONE).first()
 
-                    elif old_status == 'paid' and subscription.status != 'paid':
-                        if not hasattr(serializer, 'account_id') or not serializer.account_id:
-                            raise ValidationError("Richiesta una cassa per l'eliminazione della transazione")
-                        '''
-                        # Handle refunds if enabled and status changed from paid to something else
-                        if subscription.enable_refund:
-                            # Create refund transaction
+                    # --- QUOTA ---
+                    if status_quota == 'paid' and account_id:
+                        if not quota_tx:
+                            # Create transaction if not exists
                             t = Transaction(
                                 type=Transaction.TransactionType.SUBSCRIPTION,
-                                account_id=serializer.account_id,
+                                account_id=account_id,
                                 subscription=subscription,
                                 executor=request.user,
-                                amount=-float(subscription.event.cost),  # Negative amount for refund
-                                description=f"Refund for {subscription.event.name}"
-                            )
-                            t.save()
-                        '''
-                        # Delete the transaction
-                        transaction_del = Transaction.objects.filter(subscription=subscription).order_by('-id').first()
-                        if transaction_del:
-                            transaction_del.delete()
-
-                    elif old_status == 'paid' and subscription.status == 'paid':
-                        # Handle account change for paid subscriptions: delete old transaction and create a new one
-                        transaction_del = Transaction.objects.filter(subscription=subscription).order_by('-id').first()
-                        if transaction_del and serializer.account_id != transaction_del.account.id:
-                            transaction_del.delete()
-                            t = Transaction(
-                                type=Transaction.TransactionType.SUBSCRIPTION,
-                                account_id=serializer.account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=float(subscription.event.cost),
+                                amount=Decimal(subscription.event.cost),
                                 description=f"Pagamento per {subscription.event.name}"
                             )
                             t.save()
+                        elif quota_tx.account_id != account_id:
+                            # Move transaction to new account
+                            quota_amount = Decimal(subscription.event.cost)
+                            quota_tx.delete()
+                            t = Transaction(
+                                type=Transaction.TransactionType.SUBSCRIPTION,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=quota_amount,
+                                description=f"Pagamento per {subscription.event.name} (spostato da altra cassa)"
+                            )
+                            t.save()
+                    elif status_quota != 'paid' and quota_tx:
+                        quota_tx.delete()
+
+                    # --- CAUZIONE ---
+                    if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
+                        if not cauzione_tx:
+                            t_cauzione = Transaction(
+                                type=Transaction.TransactionType.CAUZIONE,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=Decimal(subscription.event.deposit),
+                                description=f"Cauzione per {subscription.event.name}"
+                            )
+                            t_cauzione.save()
+                        elif cauzione_tx.account_id != account_id:
+                            # Move transaction to new account
+                            cauzione_amount = Decimal(subscription.event.deposit)
+                            cauzione_tx.delete()
+                            t_cauzione = Transaction(
+                                type=Transaction.TransactionType.CAUZIONE,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=cauzione_amount,
+                                description=f"Cauzione per {subscription.event.name} (spostata da altra cassa)"
+                            )
+                            t_cauzione.save()
+                    elif status_cauzione != 'paid' and cauzione_tx:
+                        cauzione_tx.delete()
 
                 return Response(serializer.data, status=200)
             else:
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
 
         elif request.method == "DELETE":
+            if quota_reimbursed or cauzione_reimbursed:
+                return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'}, status=400)
             if request.user.has_perm('events.delete_subscription'):
-                # Delete related transactions: both SUBSCRIPTION and CAUZIONE
                 related_transactions = Transaction.objects.filter(
                     subscription=sub,
                     type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
