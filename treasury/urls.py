@@ -16,4 +16,5 @@ urlpatterns = [
     path('reimbursement_requests/', views.reimbursement_requests_list),
     path('reimburse_deposits/', views.reimburse_deposits),
     path('reimbursable_deposits/', views.reimbursable_deposits),
+    path('reimburse_quota/', views.reimburse_quota),
 ]
