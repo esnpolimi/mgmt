@@ -1,20 +1,21 @@
+import logging
 from datetime import date
+from decimal import Decimal
+
+from django.conf import settings
 from django.contrib.auth.models import Group
+from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
-from django.core.exceptions import PermissionDenied
+
 from profiles.models import Profile, BaseEntity
-from djmoney.models.fields import MoneyField
-from djmoney.money import Money
-import logging
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 
 class Settings(models.Model):
-    esncard_release_fee = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=10.0)
-    esncard_lost_fee = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=4.0)
+    esncard_release_fee = models.DecimalField(max_digits=9, decimal_places=2, default=10.0)
+    esncard_lost_fee = models.DecimalField(max_digits=9, decimal_places=2, default=4.0)
 
     class Meta:
         verbose_name = 'Settings'
@@ -57,7 +58,7 @@ class Account(BaseEntity):
         closed = "closed", _("closed")
 
     status = models.CharField(choices=Status.choices, max_length=8, default="closed")
-    balance = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR', default=0.0)
+    balance = models.DecimalField(max_digits=9, decimal_places=2, default=0.0)
     visible_to_groups = models.ManyToManyField(Group)
 
     def is_visible_to_user(self, user):
@@ -76,6 +77,7 @@ class Transaction(BaseEntity):
         REIMBURSEMENT = "reimbursement", _("Reimbursement"),
         CAUZIONE = "cauzione", _("Cauzione")  # Subscription deposit (cauzione)
         RIMBORSO_CAUZIONE = "rimborso_cauzione", _("Rimborso Cauzione"),
+        RIMBORSO_QUOTA = "rimborso_quota", _("Rimborso Quota")
 
     id = models.AutoField(primary_key=True)
     type = models.CharField(max_length=30, choices=TransactionType.choices, default=TransactionType.DEPOSIT)
@@ -83,7 +85,7 @@ class Transaction(BaseEntity):
     esncard = models.ForeignKey(ESNcard, null=True, blank=True, on_delete=models.SET_NULL)
     executor = models.ForeignKey('users.User', on_delete=models.CASCADE)
     account = models.ForeignKey('Account', on_delete=models.CASCADE)
-    amount = MoneyField(max_digits=9, decimal_places=2, default_currency='EUR')
+    amount = models.DecimalField(max_digits=9, decimal_places=2)
     description = models.CharField(max_length=256)
 
     def clean(self):
@@ -105,30 +107,34 @@ class Transaction(BaseEntity):
                 raise ValueError("Le transazioni di Prelievo non devono avere un'Iscrizione o una ESNcard.")
         if self.account.status == "closed":
             raise PermissionDenied("La cassa è chiusa.")
-        if self.amount + self.account.balance < Money(0.0, 'EUR'):
-            raise ValueError("Il saldo non può essere negativo.")
+        # Ensure both are Decimal for arithmetic
+        amount = Decimal(str(self.amount))
+        balance = Decimal(str(self.account.balance))
+        # Prevent negative balance
+        if amount < 0 and abs(amount) > balance:
+            raise ValueError("Il saldo non può andare in negativo.")
+        if amount + balance < 0:
+            raise ValueError("Il saldo non può andare in negativo.")
         super(Transaction, self).clean()
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
             self.clean()
-
             # If this is an update (existing transaction)
             if self.pk:
                 original_transaction = Transaction.objects.get(pk=self.pk)
                 # Only update balance with the difference between new and old amount
-                amount_difference = self.amount - original_transaction.amount
-                self.account.balance += amount_difference
+                amount_difference = Decimal(str(self.amount)) - Decimal(str(original_transaction.amount))
+                self.account.balance = Decimal(str(self.account.balance)) + amount_difference
             else:
                 # For new transactions, add the full amount
-                self.account.balance += self.amount
-
+                self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
             self.account.save()
             super(Transaction, self).save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         with transaction.atomic():
-            self.account.balance -= self.amount
+            self.account.balance = Decimal(str(self.account.balance)) - Decimal(str(self.amount))
             self.account.save()
             super(Transaction, self).delete(*args, **kwargs)
 

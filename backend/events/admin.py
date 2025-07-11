@@ -51,8 +51,8 @@ class EventOrganizerAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'event', 'list', 'status', 'created_at')
-    list_filter = ('event', 'list', 'status', 'created_at', 'enable_refund')
+    list_display = ('profile', 'event', 'list', 'created_at')
+    list_filter = ('event', 'list', 'created_at', 'enable_refund')
     search_fields = ('profile__name', 'profile__surname', 'profile__email', 'event__name', 'list__name')
     date_hierarchy = 'created_at'
     readonly_fields = ('created_at', 'updated_at')

@@ -16,7 +16,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import ConfirmDialog from '../ConfirmDialog';
 
 // List of transaction types that can be deleted
-const deletableTranTypes = ['rimborso_cauzione', 'reimbursement'];
+const deletableTranTypes = ['rimborso_cauzione', 'rimborso_quota', 'reimbursement'];
 
 export default function TransactionModal({open, onClose, transaction}) {
     const [isLoading, setLoading] = useState(true);

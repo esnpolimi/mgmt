@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import Sidebar from "../../Components/Sidebar";
-import {Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography, Grid} from "@mui/material";
+import {Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography, Grid, Collapse} from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -21,6 +21,7 @@ import {MRT_Localization_IT} from "material-react-table/locales/it";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsModal";
+import ReimburseQuotaModal from "../../Components/events/ReimburseQuotaModal";
 import {extractErrorMessage} from "../../utils/errorHandling";
 import * as Sentry from "@sentry/react";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -28,6 +29,8 @@ import FestivalIcon from "@mui/icons-material/Festival";
 import AddCardIcon from '@mui/icons-material/AddCard';
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {useAuth} from "../../Context/AuthContext";
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 
 export default function Event() {
@@ -40,6 +43,7 @@ export default function Event() {
     const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
     const [moveToListModalOpen, setMoveToListModalOpen] = useState(false);
     const [reimburseDepositsModalOpen, setReimburseDepositsModalOpen] = useState(false);
+    const [reimburseQuotaModalOpen, setReimburseQuotaModalOpen] = useState(false);
     const [selectedRows, setSelectedRows] = useState([]);
     const [isLoading, setLoading] = useState(true);
     const [popup, setPopup] = useState(null);
@@ -52,7 +56,10 @@ export default function Event() {
     const [subscriptionIsEdit, setSubscriptionIsEdit] = useState(null);
     const [reimburseDepositsListId, setReimburseDepositsListId] = useState(null);
     const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
+    const [singleSubToReimburseQuota, setSingleSubToReimburseQuota] = useState(null);
     const [expandedAccordion, setExpandedAccordion] = useState([]);
+    const hasDeposit = data?.deposit > 0;
+    const hasQuota = data?.cost > 0;
 
     useEffect(() => {
         setLoading(true);
@@ -176,10 +183,16 @@ export default function Event() {
         setSubscriptionModalOpen(true);
     };
 
+    // Replace handleAccordionChange with a simple toggle function:
+    const toggleCollapse = (panel) => {
+        setExpandedAccordion(prev =>
+            prev.includes(panel) ? prev.filter(p => p !== panel) : [...prev, panel]
+        );
+    };
+
     // Columns and data for lists
     const listConfigs = React.useMemo(() => {
         if (!data?.lists) return [];
-        const hasDeposit = data && data.deposit && Number(data.deposit) > 0;
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
             const listSubscriptionsColumns = [
@@ -204,56 +217,62 @@ export default function Event() {
                         </span>
                     )
                 },
-                {
-                    accessorKey: 'status',
-                    header: 'Stato',
-                    size: 100,
+                // Stato Quota column only if hasQuota
+                hasQuota && {
+                    accessorKey: 'status_quota',
+                    header: 'Stato Quota',
+                    size: 120,
                     Cell: ({cell}) => {
                         const status = cell.getValue();
-                        let color;
-                        let label;
-                        switch (status) {
-                            case 'paid':
-                                color = 'success';
-                                label = 'PAGATO';
-                                break;
-                            case 'pending':
-                                color = 'warning';
-                                label = 'IN ATTESA';
-                                break;
-                            case 'cancelled':
-                                color = 'error';
-                                label = 'CANCELLATO';
-                                break;
-                            default:
-                                color = 'default';
-                                label = status;
+                        let color, label;
+                        if (status === 'pending') {
+                            color = 'error';
+                            label = 'In attesa';
+                        } else if (status === 'paid') {
+                            color = 'success';
+                            label = 'Pagata';
+                        } else if (status === 'reimbursed') {
+                            color = 'warning';
+                            label = 'Rimborsata';
+                        } else {
+                            color = 'default';
+                            label = status;
                         }
                         return <Chip label={label} color={color}/>;
                     }
                 },
-                {
-                    accessorKey: 'deposit_reimbursed',
-                    header: 'Cauzione Rimborsata',
-                    size: 150,
+                // Stato Cauzione column (if deposit enabled)
+                hasDeposit && {
+                    accessorKey: 'status_cauzione',
+                    header: 'Stato Cauzione',
+                    size: 120,
                     Cell: ({cell}) => {
-                        const isReimbursed = cell.getValue();
-                        return (
-                            <Chip
-                                label={isReimbursed ? 'Sì' : 'No'}
-                                color={isReimbursed ? 'success' : 'default'}
-                            />
-                        );
-                    },
+                        const status = cell.getValue();
+                        let label, color;
+                        if (status === 'pending') {
+                            label = 'In attesa';
+                            color = 'error';
+                        } else if (status === 'paid') {
+                            label = 'Pagata';
+                            color = 'success';
+                        } else if (status === 'reimbursed') {
+                            label = 'Rimborsata';
+                            color = 'warning';
+                        } else {
+                            label = status;
+                            color = 'default';
+                        }
+                        return <Chip label={label} color={color}/>;
+                    }
                 },
                 {
                     accessorKey: 'notes',
                     header: 'Note',
                     size: 200,
                 },
-            ];
+            ].filter(Boolean);
 
-            if (hasDeposit && canChangeTransactions) {
+            if (hasDeposit || hasQuota) {
                 listSubscriptionsColumns.push({
                     accessorKey: 'actions',
                     header: 'Azioni',
@@ -262,19 +281,38 @@ export default function Event() {
                     enableColumnActions: false,
                     Cell: ({row}) => {
                         const sub = row.original;
-                        const isEnabled = sub.status === 'paid' && !sub.deposit_reimbursed;
-                        return (
-                            <IconButton
-                                title="Rimborsa Cauzione"
-                                color="primary"
-                                disabled={!isEnabled}
-                                onClick={() => {
-                                    setSingleSubToReimburse(sub);
-                                    setReimburseDepositsModalOpen(true);
-                                }}>
-                                <AddCardIcon/>
-                            </IconButton>
-                        );
+                        // Quota button logic
+                        const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
+                        // Cauzione button logic
+                        const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
+                        return (<>
+                            {hasQuota && (
+                                <IconButton
+                                    title="Rimborsa Quota"
+                                    color="secondary"
+                                    disabled={!canReimburseQuota}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        setSingleSubToReimburseQuota(sub);
+                                        setReimburseQuotaModalOpen(true);
+                                    }}>
+                                    <EuroIcon/>
+                                </IconButton>
+                            )}
+                            {hasDeposit && (
+                                <IconButton
+                                    title="Rimborsa Cauzione"
+                                    color="primary"
+                                    disabled={!canReimburseDeposit}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        setSingleSubToReimburse(sub);
+                                        setReimburseDepositsModalOpen(true);
+                                    }}>
+                                    <AddCardIcon/>
+                                </IconButton>
+                            )}
+                        </>);
                     },
                 });
             }
@@ -288,10 +326,9 @@ export default function Event() {
                 columns: listSubscriptionsColumns
             };
         });
-    }, [data]);
+    }, [data, hasDeposit, hasQuota]);
 
     const lists = React.useMemo(() => {
-        const hasDeposit = data && data.deposit && Number(data.deposit) > 0;
         return listConfigs.map(config => ({
             ...config,
             tableOptions: {
@@ -319,7 +356,7 @@ export default function Event() {
                 muiTablePaginationProps: {
                     labelRowsPerPage: 'Righe per pagina:'
                 },
-                renderTopToolbarCustomActions: ({table}) => {
+                renderTopToolbar: ({table}) => {
                     const selectedRows = table.getSelectedRowModel().rows;
                     const selectedCount = selectedRows.length;
                     // Find the config for this table
@@ -328,7 +365,7 @@ export default function Event() {
                     const subscription_count = config.subscription_count;
                     const {isActive} = handleSubscriptionStatus();
                     return (
-                        <Box sx={{display: 'flex', gap: 1}}>
+                        <Box sx={{display: 'flex', gap: 1, p: 2}}>
                             {selectedCount === 0 && (<>
                                     <Button
                                         variant="contained"
@@ -400,32 +437,37 @@ export default function Event() {
             const list = useMaterialReactTable(fixedTableOptions);
 
             return (
-                <Accordion
-                    key={listId}
-                    sx={{mt: 2}}>
-                    <AccordionSummary aria-controls={`panel-${listId}-content`}
-                                      id={`panel-${listId}-header`}
-                                      sx={{cursor: 'pointer'}}>
-                        <Box sx={{display: 'flex', alignItems: 'center', flexGrow: 1}}>
-                            <BallotIcon sx={{color: 'primary.main', mr: 2}}/>
-                            <Typography variant="h6" component="div">{listName}</Typography>
-                        </Box>
+                <Box key={listId} sx={{mt: 2, border: '1px solid #ccc', borderRadius: 2, overflow: 'hidden'}}>
+                    <Box onClick={() => toggleCollapse(listId)}
+                         sx={{
+                             display: 'flex',
+                             alignItems: 'center',
+                             cursor: 'pointer',
+                             padding: 1,
+                             backgroundColor: '#f5f5f5'
+                         }}>
+                        <BallotIcon sx={{color: 'primary.main', mr: 2}}/>
+                        <Typography variant="h6" component="div" sx={{flexGrow: 1}}>{listName}</Typography>
                         <Box sx={{width: '200px', mr: 2}}>
                             <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
                                 <Typography variant="body2">{subscription_count}/{capacity}</Typography>
                             </Box>
-                            <LinearProgress
-                                variant="determinate"
-                                value={occupancyPercentage}
-                                color={occupancyColor}
-                                sx={{height: 8, borderRadius: 5}}
-                            />
+                            <LinearProgress variant="determinate"
+                                            value={occupancyPercentage}
+                                            color={occupancyColor}
+                                            sx={{height: 8, borderRadius: 5}}/>
                         </Box>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                        <MaterialReactTable table={list}/>
-                    </AccordionDetails>
-                </Accordion>
+                        <IconButton onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCollapse(listId);
+                        }}>
+                            {expandedAccordion.includes(listId) ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
+                        </IconButton>
+                    </Box>
+                    <Collapse in={expandedAccordion.includes(listId)} timeout="auto" unmountOnExit>
+                        <Box sx={{p: 2}}> <MaterialReactTable table={list}/> </Box>
+                    </Collapse>
+                </Box>
             );
         });
     });
@@ -457,9 +499,18 @@ export default function Event() {
         }
     }
 
+    const handleCloseReimburseQuotaModal = async (success, message) => {
+        setReimburseQuotaModalOpen(false);
+        setSingleSubToReimburseQuota(null);
+        if (success) {
+            setPopup({message: message, state: "success"});
+            await refreshEventData();
+        }
+    }
+
     const handleExportSelected = (selectedRows) => {
         console.log("Exporting selected rows:", selectedRows);
-        // Implement export logic here
+        // TODO: Implement export logic here
     };
 
     return (
@@ -501,6 +552,14 @@ export default function Event() {
                     refreshEventData={refreshEventData}
                 />
             )}
+            {reimburseQuotaModalOpen && (
+                <ReimburseQuotaModal
+                    open={reimburseQuotaModalOpen}
+                    onClose={handleCloseReimburseQuotaModal}
+                    event={data}
+                    subscription={singleSubToReimburseQuota}
+                />
+            )}
             <Box sx={{mx: '5%'}}>
                 {isLoading ? <Loader/> : (<>
                         <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
@@ -534,7 +593,7 @@ export default function Event() {
                                             <Typography variant="h6" component="div">Costo</Typography>
                                         </Box>
                                         <Typography variant="body1" color="text.secondary" sx={{mt: 2}}>
-                                            {data.cost !== 0 ? `€ ${data.cost}` : 'Gratuito'}
+                                            {hasQuota ? `€ ${data.cost}` : 'Evento gratuito'}
                                         </Typography>
                                     </Grid>
                                     <Grid size={{xs: 12, md: 3}}>
@@ -543,9 +602,7 @@ export default function Event() {
                                             <Typography variant="h6" component="div">Cauzione</Typography>
                                         </Box>
                                         <Typography variant="body1" color="text.secondary" sx={{mt: 2}}>
-                                            {data.deposit && data.deposit !== "0.00" && data.deposit !== 0
-                                                ? `€ ${data.deposit}`
-                                                : 'Nessuna cauzione'}
+                                            {hasDeposit ? `€ ${data.deposit}` : 'Nessuna cauzione'}
                                         </Typography>
                                     </Grid>
                                     <Grid size={{xs: 12, md: 3}}>
@@ -584,7 +641,7 @@ export default function Event() {
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{mt: 2}}>
                                             <Typography variant="h6" component="div" sx={{mb: 2}}>Liste</Typography>
-                                            <ListAccordions expanded={expandedAccordion} setExpanded={setExpandedAccordion}/>
+                                            <ListAccordions/>
                                         </Box>
                                     </Grid>
                                 </Grid>

@@ -1,15 +1,15 @@
 import React, {useEffect, useState} from 'react';
 import {
-    Modal, Box, Typography, Button, IconButton, Grid, Checkbox, FormControlLabel, TextField, MenuItem, Paper, CircularProgress
+    Modal, Box, Typography, Button, IconButton, Grid, Checkbox, TextField, MenuItem, Paper, CircularProgress
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import Loader from "../Loader";
-import StatusBanner from "../StatusBanner";
 import ConfirmDialog from "../ConfirmDialog";
 import Popup from "../Popup";
 import {fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import * as Sentry from "@sentry/react";
+import {extractErrorMessage} from "../../utils/errorHandling";
 
 
 export default function ReimburseDepositsModal({open, onClose, event, listId, subscription}) {
@@ -19,7 +19,6 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
     const [notes, setNotes] = useState('');
-    const [statusMessage, setStatusMessage] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const [popup, setPopup] = useState(null);
@@ -27,7 +26,7 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
     useEffect(() => {
         if (!open) return;
         setLoading(true);
-        setStatusMessage(null);
+        setPopup(null);
         setSelectedSubs([]);
         setSelectedAccount('');
         setNotes('');
@@ -40,7 +39,7 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
                 setAccounts(accJson.results || []);
             } catch (e) {
                 Sentry.captureException(e);
-                setStatusMessage({message: "Errore nel caricamento casse: " + e, state: "error"});
+                setPopup({message: "Errore nel caricamento casse: " + e, state: "error"});
             }
         };
 
@@ -56,19 +55,24 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
         const fetchData = async () => {
             try {
                 // Fetch reimbursable deposits for this event/list
-                const resp = await fetchCustom("GET", `/reimbursable_deposits/?event=${event.id}&list=${listId}`);
-                const subs = resp.ok ? await resp.json() : [];
-                setSubscriptions(subs);
-                setSelectedSubs(subs.map(s => s.id));
-                await fetchAccounts();
+                const response = await fetchCustom("GET", `/reimbursable_deposits/?event=${event.id}&list=${listId}`);
+                const json = await response.json();
+                if (response.ok) {
+                    setSubscriptions(json);
+                    setSelectedSubs(json.map(s => s.id));
+                } else {
+                    const errorText = await extractErrorMessage(json, response.status);
+                    setPopup({message: errorText, state: "error"});
+                }
             } catch (e) {
                 Sentry.captureException(e);
-                setStatusMessage({message: "Errore nel caricamento dati: " + e, state: "error"});
+                setPopup({message: "Errore nel caricamento dati: " + e, state: "error"});
             } finally {
                 setLoading(false);
             }
         };
         fetchData().then();
+        fetchAccounts().then();
     }, [open, event.id, listId, subscription]);
 
     const handleSelectAll = (e) => {
@@ -82,13 +86,13 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
     };
 
     const handleSubmit = async () => {
-        setStatusMessage(null);
+        setPopup(null);
         if (!selectedAccount) {
-            setStatusMessage({message: "Seleziona una cassa.", state: "error"});
+            setPopup({message: "Seleziona una cassa.", state: "error"});
             return;
         }
         if (selectedSubs.length === 0) {
-            setStatusMessage({message: "Seleziona almeno una iscrizione.", state: "error"});
+            setPopup({message: "Seleziona almeno una iscrizione.", state: "error"});
             return;
         }
         const depositAmount = Number(event.deposit || 0);
@@ -115,13 +119,13 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
             });
             const json = await resp.json();
             if (!resp.ok) {
-                setStatusMessage({message: json.error || "Errore nel rimborso", state: "error"});
+                setPopup({message: json.error || "Errore nel rimborso", state: "error"});
             } else {
-                onClose(true, `Rimbors${subscription ? 'o' : 'i'} effettuati con successo!`);
+                onClose(true, `${subscription ? 'Rimborso effettuato con successo' : 'Rimborsi effettuati con successo!'}`);
             }
         } catch (e) {
             Sentry.captureException(e);
-            setStatusMessage({message: "Errore nel rimborso: " + e, state: "error"});
+            setPopup({message: "Errore nel rimborso: " + e, state: "error"});
         } finally {
             setSubmitting(false);
         }
@@ -138,55 +142,71 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
                         <Typography variant="h4" component="h2" gutterBottom align="center">
                             Rimborsa Cauzion{subscription ? 'e' : 'i'}
                         </Typography>
-                        {statusMessage && <StatusBanner message={statusMessage.message} state={statusMessage.state}/>}
                         <Grid container spacing={2} sx={{mt: 1}}>
+                            <Typography>
+                                <b>Importo Cauzione:</b> €{Number(event.deposit || 0).toFixed(2)}
+                            </Typography>
                             {subscription ? (
-                                <Grid size={{xs: 12}}>
+                                <>
                                     <Typography>
                                         <b>Ricevente:</b> {subscription.profile_name}
                                     </Typography>
-                                </Grid>
+                                    <Typography>
+                                        <b>Cassa di pagamento:</b> {subscription.account_name ? subscription.account_name : "-"}
+                                    </Typography>
+                                </>
                             ) : (
                                 <>
                                     <Grid size={{xs: 12}}>
                                         <Typography variant="subtitle1" sx={{mb: 1}}>
                                             Iscrizioni con pagamento cauzione trovate: {subscriptions.length}
                                         </Typography>
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={selectedSubs.length === subscriptions.length && subscriptions.length > 0}
-                                                    onChange={handleSelectAll}
-                                                    disabled={subscriptions.length === 0}
-                                                />
-                                            }
-                                            label="Seleziona tutte"
-                                        />
-                                    </Grid>
-                                    <Grid size={{xs: 12}}>
-                                        <Box sx={{maxHeight: 200, overflowY: 'auto', mb: 2}}>
+                                        <Paper elevation={1}
+                                               sx={{
+                                                   maxHeight: 260,
+                                                   overflowY: 'auto',
+                                                   p: 1,
+                                                   mb: 0,
+                                                   background: "#fafbfc"
+                                               }}>
+                                            <Box sx={{display: 'flex', alignItems: 'center', mb: 1, pl: 0.5}}>
+                                                <Checkbox size="small"
+                                                          checked={selectedSubs.length === subscriptions.length && subscriptions.length > 0}
+                                                          onChange={handleSelectAll}
+                                                          disabled={subscriptions.length === 0}/>
+                                                <Typography variant="body2" sx={{fontWeight: 500}}>
+                                                    Seleziona tutte
+                                                </Typography>
+                                            </Box>
                                             {subscriptions.map(sub => (
-                                                <Paper key={sub.id} sx={{
-                                                    display: 'flex', alignItems: 'center', borderBottom: '1px solid #eee', py: 1, px: 1, mb: 1
-                                                }}>
+                                                <Box key={sub.id}
+                                                     sx={{
+                                                         display: 'flex',
+                                                         alignItems: 'center',
+                                                         borderBottom: '1px solid #eee',
+                                                         py: 0.5,
+                                                         px: 0.5,
+                                                         mb: 0.5
+                                                     }}>
                                                     <Checkbox
+                                                        size="small"
                                                         checked={selectedSubs.includes(sub.id)}
                                                         onChange={() => handleSelectSub(sub.id)}
                                                     />
-                                                    <Typography sx={{flex: 1}}>
+                                                    <Typography sx={{flex: 1, fontSize: 15}}>
                                                         {sub.profile_name}
                                                     </Typography>
-                                                    <Typography variant="body2" color="text.secondary" sx={{ml: 2}}>
+                                                    <Typography variant="caption" color="text.secondary" sx={{ml: 2}}>
                                                         {sub.account_name ? `Cassa: ${sub.account_name}` : "Cassa: -"}
                                                     </Typography>
-                                                </Paper>
+                                                </Box>
                                             ))}
                                             {subscriptions.length === 0 && (
                                                 <Typography color="text.secondary" sx={{mt: 2}}>
-                                                    Nessuna iscrizione da rimborsare in questa lista.
+                                                    Nessuna iscrizione da rimborsare.
                                                 </Typography>
                                             )}
-                                        </Box>
+                                        </Paper>
                                     </Grid>
                                 </>
                             )}
@@ -196,7 +216,7 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
                                            label="Cassa"
                                            value={selectedAccount}
                                            onChange={e => setSelectedAccount(e.target.value)}
-                                           sx={{mb: 2}}>
+                                           sx={{mt: 1}}>
                                     {accounts.map(acc => (
                                         <MenuItem key={acc.id}
                                                   value={acc.id}

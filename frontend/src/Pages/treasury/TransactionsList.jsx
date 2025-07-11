@@ -140,8 +140,13 @@ export default function TransactionsList() {
             Cell: ({cell}) => (
                 <Box>
                     {cell.getValue() !== null ? (
-                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
-                        <Chip label="N/A" color="warning"/>)}
+                        <Chip
+                            label={`€${cell.getValue()}`}
+                            color={cell.getValue() < 0 ? "error" : "primary"}
+                        />
+                    ) : (
+                        <Chip label="N/A" color="warning"/>
+                    )}
                 </Box>
             ),
         },

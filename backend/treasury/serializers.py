@@ -3,13 +3,11 @@ import os
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import transaction
-from djmoney.money import Money
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from rest_framework import serializers
 
-from events.models import DepositReimbursement
 from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
 
@@ -251,7 +249,7 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
 
                 reimbursement_amount = instance.amount if amount is None else amount
 
-                if account_obj.balance - reimbursement_amount < Money(0, account_obj.balance.currency):
+                if account_obj.balance - reimbursement_amount < 0:
                     raise serializers.ValidationError("Il saldo della cassa non può andare in negativo.")
                 if instance.reimbursement_transaction:
                     raise serializers.ValidationError("Questa richiesta è già stata rimborsata.")
@@ -315,12 +313,3 @@ class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_is_reimbursed(obj):
         return obj.is_reimbursed
-
-
-class DepositReimbursementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DepositReimbursement
-        fields = [
-            'id', 'event', 'subscription', 'account', 'amount', 'notes'
-        ]
-        read_only_fields = ['id']

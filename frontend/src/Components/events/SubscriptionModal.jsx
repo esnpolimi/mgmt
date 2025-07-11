@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, CircularProgress} from "@mui/material";
+import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, CircularProgress, Alert} from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {fetchCustom} from "../../api/api";
@@ -25,10 +25,11 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         account_name: '',
         profile_id: '',
         profile_name: '',
-        status: 'pending',
         list_id: listId || '',
         list_name: (event.selectedList ? event.selectedList.name : (event.lists && listId ? (event.lists.find(list => list.id === listId)?.name || 'Lista non trovata') : 'Lista non trovata')),
         notes: '',
+        status_quota: subscription?.status_quota || 'pending',
+        status_cauzione: subscription?.status_cauzione || 'pending'
     });
 
     const [errors, setErrors] = useState({
@@ -47,15 +48,11 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         ...(data?.status === 'paid' ? [{field: 'account_id', value: data?.account_id, message: "Selezionare una Cassa"}] : [])
     ], [data]);
 
-    const [originalStatus, setOriginalStatus] = useState(isEdit ? subscription.status : 'pending');
     const [submitLoading, setSubmitLoading] = useState(false);
-    const [payDeposit, setPayDeposit] = useState(event.deposit > 0);
 
     useEffect(() => {
         if (isEdit) {
-            console.log('Setting Subscription:', subscription);
             setData(subscription)
-            setOriginalStatus(subscription.status);
         } else {
             if (profileId) {
                 setData(d => ({
@@ -73,7 +70,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             }
         }
         setLoading(false);
-        setPayDeposit(event.deposit > 0);
         fetchAccounts().then();
     }, [isEdit, profileId, profileName, event])
 
@@ -101,6 +97,55 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         return resetObj;
     };
 
+    const getQuotaImport = () => Number(event.cost || 0);
+    const getCauzioneImport = () => Number(event.deposit || 0);
+
+    // Helper to compute total import
+    const getTotalImport = () => {
+        let total = 0;
+        if (data.status_quota === 'paid') total += getQuotaImport();
+        if (event.deposit > 0 && data.status_cauzione === 'paid') total += getCauzioneImport();
+        return total;
+    };
+
+    // Helper to show confirm dialog message for payment changes
+    const getConfirmMessage = () => {
+        // Detect status changes for quota/cauzione
+        const quotaChangedToPaid = data.status_quota === 'paid' && (!isEdit || subscription?.status_quota !== 'paid');
+        const quotaChangedToPending = isEdit && subscription?.status_quota === 'paid' && data.status_quota === 'pending';
+        const cauzioneChangedToPaid = event.deposit > 0 && data.status_cauzione === 'paid' && (!isEdit || subscription?.status_cauzione !== 'paid');
+        const cauzioneChangedToPending = isEdit && subscription?.status_cauzione === 'paid' && data.status_cauzione === 'pending';
+
+        const accountObj = accounts.find(acc => acc.id === data.account_id);
+        const accountName = accountObj ? accountObj.name : 'N/A';
+
+        if (quotaChangedToPaid) {
+            return `Confermi il pagamento della quota di €${getQuotaImport().toFixed(2)} in cassa ${accountName}?`;
+        }
+        if (cauzioneChangedToPaid) {
+            return `Confermi il pagamento della cauzione di €${getCauzioneImport().toFixed(2)} in cassa ${accountName}?`;
+        }
+        if (quotaChangedToPending) {
+            return `Confermi la rimozione del pagamento della quota di €${getQuotaImport().toFixed(2)}? Verrà stornato dalla cassa.`;
+        }
+        if (cauzioneChangedToPending) {
+            return `Confermi la rimozione del pagamento della cauzione di €${getCauzioneImport().toFixed(2)}? Verrà stornato dalla cassa.`;
+        }
+        // If both are newly paid
+        if (quotaChangedToPaid && cauzioneChangedToPaid) {
+            return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
+        }
+        // If both are being removed
+        if (quotaChangedToPending && cauzioneChangedToPending) {
+            return `Confermi la rimozione di entrambi i pagamenti (quota + cauzione) per un totale di €${getTotalImport().toFixed(2)}? Verranno stornati dalla cassa.`;
+        }
+        // Default: if either is paid
+        if (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) {
+            return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
+        }
+        return '';
+    };
+
     const handleSubmit = async () => {
         let hasErrors = false;
         const newErrors = resetErrors();
@@ -110,37 +155,34 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 hasErrors = true;
             }
         });
-
         if (hasErrors) {
             setErrors(newErrors);
             return;
         }
 
-        // Confirmation if payment is involved (new paid or status changed to paid)
-        let totalAmount = Number(event.cost || 0);
-        if (payDeposit && Number(event.deposit) > 0) totalAmount += Number(event.deposit);
+        // Show confirm dialog if status changes from paid to pending or pending to paid
+        const quotaChangedToPaid = data.status_quota === 'paid' && (!isEdit || subscription?.status_quota !== 'paid');
+        const quotaChangedToPending = isEdit && subscription?.status_quota === 'paid' && data.status_quota === 'pending';
+        const cauzioneChangedToPaid = event.deposit > 0 && data.status_cauzione === 'paid' && (!isEdit || subscription?.status_cauzione !== 'paid');
+        const cauzioneChangedToPending = isEdit && subscription?.status_cauzione === 'paid' && data.status_cauzione === 'pending';
 
-        if ((data.status === 'paid' && (!isEdit || originalStatus !== 'paid'))
-            || (isEdit && originalStatus === 'paid' && data.status !== 'paid')) {
-            let msg = '';
-            if (data.status === 'paid' && (!isEdit || originalStatus !== 'paid')) {
-                msg = 'Confermi di registrare un pagamento di €' + totalAmount.toFixed(2) + ' per questa iscrizione?';
-            } else if (isEdit && originalStatus === 'paid' && data.status !== 'paid') {
-                msg = 'Confermi di annullare un pagamento di €' + totalAmount.toFixed(2) + ' per questa iscrizione?';
-            }
-            setConfirmDialog({open: true, action: () => doSubmit(), message: msg});
-            return;
-        }
-
-        if (data.status === 'paid' && isEdit && originalStatus === 'paid' && data.account_id !== originalAccountId) {
+        if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending) {
             setConfirmDialog({
                 open: true,
                 action: () => doSubmit(),
-                message: 'Confermi di voler cambiare la cassa associata a questo pagamento? Verranno spostati €' + event.cost + ' da ' + data.account_name + ' a ' + accounts.find(account => account.id === data.account_id)?.name + '.'
-            })
+                message: getConfirmMessage()
+            });
             return;
         }
-
+        // Also show confirm if either is paid (for new subscriptions)
+        if (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) {
+            setConfirmDialog({
+                open: true,
+                action: () => doSubmit(),
+                message: getConfirmMessage()
+            });
+            return;
+        }
         await doSubmit();
     };
 
@@ -154,8 +196,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 list: data.list_id,
                 account_id: data.account_id || originalAccountId,
                 notes: data.notes,
-                status: data.status,
-                pay_deposit: payDeposit
+                status_quota: data.status_quota,
+                status_cauzione: data.status_cauzione
             });
             if (!response.ok) {
                 const json = await response.json();
@@ -174,14 +216,19 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
     const handleDelete = async () => {
         // Only confirm if paid
-        if (data.status === 'paid') {
-            // Compute total paid (cost + cauzione if paid)
-            let totalAmount = Number(event.cost || 0);
-            if (payDeposit && Number(event.deposit) > 0) totalAmount += Number(event.deposit);
+        if (data.status_quota === 'paid' || data.status_cauzione === 'paid') {
+            let message = '';
+            if (data.status_quota === 'paid' && data.status_cauzione !== 'paid') {
+                message = `Confermi di voler eliminare un pagamento quota di €${getQuotaImport().toFixed(2)}?`;
+            } else if (data.status_cauzione === 'paid' && data.status_quota !== 'paid') {
+                message = `Confermi di voler eliminare un pagamento cauzione di €${getCauzioneImport().toFixed(2)}?`;
+            } else {
+                message = `Confermi di voler eliminare un pagamento totale di €${getTotalImport().toFixed(2)}?`;
+            }
             setConfirmDialog({
                 open: true,
                 action: () => doDelete(),
-                message: 'Confermi di voler eliminare un pagamento di €' + totalAmount.toFixed(2) + ' per questa iscrizione?'
+                message
             });
             return;
         }
@@ -211,14 +258,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         });
     };
 
-    const handleStatusToggle = () => {
-        setData({
-            ...data,
-            status: data.status === 'paid' ? 'pending' : 'paid',
-            // Reset account_id if switching to pending
-            ...(data.status === 'paid' ? {account_id: ''} : {})
-        });
-    };
+    // Helper to check if either quota or cauzione is reimbursed
+    const isReimbursed = data.status_quota === 'reimbursed' || data.status_cauzione === 'reimbursed';
 
     return (
         <Modal open={open}
@@ -230,8 +271,14 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                     <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
                         <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                     </Box>
-                    <Typography variant="h4" component="h2" gutterBottom>{title}</Typography>
+                    <Typography variant="h4" component="h2" gutterBottom align="center">{title}</Typography>
                     <Divider sx={{mb: 2}}/>
+                    {/* Show warning if reimbursed */}
+                    {isReimbursed && (
+                        <Alert severity="warning" sx={{mb: 2}}>
+                            Attenzione: la quota o la cauzione sono state rimborsate. Non è possibile efettuare modifiche.
+                        </Alert>
+                    )}
                     <Typography variant="subtitle1" gutterBottom>
                         <b>Nome Evento:</b> {event.name}
                     </Typography>
@@ -256,90 +303,128 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                 helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
                                 label={isEdit ? data.profile_name : "Cerca profilo"}
                                 required
-                                disabled={isEdit || !!profileId}
+                                disabled={isEdit || !!profileId || isReimbursed}
                             />
                         </Grid>
-                        <Grid size={{xs: 12}}>
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    p: 2,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    bgcolor: data.status === 'paid' ? '#e3f2fd' : 'inherit',
-                                    transition: 'background-color 0.3s'
-                                }}
-                            >
-                                <Typography variant="subtitle1">Stato Pagamento</Typography>
-                                <FormControlLabel
-                                    control={
-                                        <Switch
-                                            checked={data.status === 'paid'}
-                                            onChange={handleStatusToggle}
-                                            color="primary"
-                                        />
-                                    }
-                                    label={data.status === 'paid' ? "Pagato" : "In attesa"}
-                                    labelPlacement="start"
-                                />
-                            </Paper>
-                        </Grid>
-                        {data.status === 'paid' && (
-                            <Typography variant="subtitle1" gutterBottom>
-                                <b>Importo:</b> {event.cost}€
-                                {event.deposit > 0 && (
-                                    <>
-                                        {payDeposit ? ` + Cauzione: ${event.deposit}€` : ""}
-                                        <Switch checked={payDeposit}
-                                                onChange={() => setPayDeposit(v => !v)}
-                                                color="primary"
-                                                sx={{ml: 1}}
-                                                disabled={data.status !== 'paid'}/>
-                                    </>
-                                )}
-                            </Typography>
-                        )}
-                        {data.status === 'paid' && (
+                        {/* Quota status toggle */}
+                        {event.quota > 0 && (
                             <Grid size={{xs: 12}}>
-                                <FormControl fullWidth required error={errors.account_id && errors.account_id[0]}>
-                                    <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
-                                    <Select
-                                        variant="outlined"
-                                        label="Seleziona Cassa"
-                                        labelId="account-selector-label"
-                                        id="account-selector"
-                                        name="account_id"
-                                        value={data.account_id || ''}
-                                        error={errors.account_id && errors.account_id[0]}
-                                        onChange={handleChange}>
-                                        {accounts.map((account) => (
-                                            <MenuItem key={account.id}
-                                                      value={account.id}
-                                                      disabled={account.status === 'closed'}
-                                                      style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
-                                                {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                    {errors.account_id && errors.account_id[0] && <FormHelperText>{errors.account_id[1]}</FormHelperText>}
-                                </FormControl>
+                                <Paper
+                                    elevation={1}
+                                    sx={{
+                                        p: 1.5,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        bgcolor: data.status_quota === 'paid' ? '#e3f2fd' : 'inherit',
+                                        transition: 'background-color 0.8s',
+                                        mb: 0
+                                    }}
+                                >
+                                    <Typography variant="subtitle2" sx={{ml: 1}}>Stato Quota</Typography>
+                                    <FormControlLabel
+                                        control={
+                                            <Switch
+                                                checked={data.status_quota === 'paid'}
+                                                onChange={() => setData(d => ({
+                                                    ...d,
+                                                    status_quota: d.status_quota === 'paid' ? 'pending' : 'paid'
+                                                }))}
+                                                color="primary"
+                                                disabled={isReimbursed}
+                                                size="small"
+                                            />
+                                        }
+                                        label={data.status_quota === 'paid' ? "Pagata" : data.status_quota === 'reimbursed' ? "Rimborsata" : "In attesa"}
+                                        labelPlacement="start"
+                                        sx={{mr: 1}}
+                                    />
+                                </Paper>
                             </Grid>
                         )}
-
+                        {/* Cauzione status toggle */}
+                        {event.deposit > 0 && (
+                            <Grid size={{xs: 12}}>
+                                <Paper
+                                    elevation={1}
+                                    sx={{
+                                        p: 1.5,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        bgcolor: data.status_cauzione === 'paid' ? '#e3f2fd' : 'inherit',
+                                        transition: 'background-color 0.8s',
+                                        mb: 0
+                                    }}
+                                >
+                                    <Typography variant="subtitle2" sx={{ml: 1}}>Stato Cauzione</Typography>
+                                    <FormControlLabel
+                                        control={
+                                            <Switch
+                                                checked={data.status_cauzione === 'paid'}
+                                                onChange={() => setData(d => ({
+                                                    ...d,
+                                                    status_cauzione: d.status_cauzione === 'paid' ? 'pending' : 'paid'
+                                                }))}
+                                                color="primary"
+                                                disabled={isReimbursed}
+                                                size="small"
+                                            />
+                                        }
+                                        label={data.status_cauzione === 'paid' ? "Pagata" : data.status_cauzione === 'reimbursed' ? "Rimborsata" : "In attesa"}
+                                        labelPlacement="start"
+                                        sx={{mr: 1}}
+                                    />
+                                </Paper>
+                            </Grid>
+                        )}
+                        {/* Show total import and cassa select if either is paid */}
+                        {(data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) && (
+                            <>
+                                <Grid size={{xs: 12}} sx={{mt: 0}}>
+                                    <Typography variant="subtitle1" gutterBottom>
+                                        <b>Importo totale:</b> €{getTotalImport().toFixed(2)}
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12}}>
+                                    <FormControl fullWidth required error={errors.account_id && errors.account_id[0]}>
+                                        <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
+                                        <Select
+                                            variant="outlined"
+                                            label="Seleziona Cassa"
+                                            labelId="account-selector-label"
+                                            id="account-selector"
+                                            name="account_id"
+                                            value={data.account_id || ''}
+                                            error={errors.account_id && errors.account_id[0]}
+                                            onChange={handleChange}
+                                            disabled={isReimbursed}
+                                        >
+                                            {accounts.map((account) => (
+                                                <MenuItem key={account.id}
+                                                          value={account.id}
+                                                          disabled={account.status === 'closed'}
+                                                          style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
+                                                    {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                        {errors.account_id && errors.account_id[0] && <FormHelperText>{errors.account_id[1]}</FormHelperText>}
+                                    </FormControl>
+                                </Grid>
+                            </>
+                        )}
                         <Grid size={{xs: 12}}>
                             <TextField
                                 label="Note"
                                 name="notes"
                                 value={data.notes}
                                 onChange={handleChange}
-                                multiline
-                                rows={2}
                                 fullWidth
+                                disabled={isReimbursed}
                             />
                         </Grid>
                     </Grid>
-
                     <Button variant="contained"
                             fullWidth
                             sx={{
@@ -348,7 +433,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                 '&:hover': {bgcolor: data.profile_id ? '#1565c0' : '#757575'}
                             }}
                             onClick={handleSubmit}
-                            disabled={submitLoading}
+                            disabled={submitLoading || isReimbursed}
                             startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
                         {isEdit ? 'Salva Modifiche' : 'Conferma'}
                     </Button>
@@ -360,7 +445,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                     bgcolor: '#d32f2f',
                                     '&:hover': {bgcolor: '#b71c1c'}
                                 }}
-                                onClick={handleDelete}>
+                                onClick={handleDelete}
+                                disabled={isReimbursed}>
                             Elimina Iscrizione
                         </Button>
                     )}
