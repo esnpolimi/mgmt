@@ -23,9 +23,9 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
-    {value: 'open', label: 'Iscrizioni aperte'},
+    {value: 'open', label: 'Aperte'},
     {value: 'not_yet', label: 'Non ancora aperte'},
-    {value: 'closed', label: 'Iscrizioni chiuse'}
+    {value: 'closed', label: 'Chiuse'}
 ];
 
 export default function EventsList() {
@@ -118,15 +118,15 @@ export default function EventsList() {
                 let color;
                 switch (status) {
                     case 'open':
-                        status = "Iscrizioni aperte";
+                        status = SUBSCRIPTION_STATUS_OPTIONS.find(opt => opt.value === 'open').label;
                         color = "success";
                         break;
                     case 'not_yet':
-                        status = "Non ancora aperte";
+                        status = SUBSCRIPTION_STATUS_OPTIONS.find(opt => opt.value === 'not_yet').label;
                         color = "warning";
                         break;
                     case 'closed':
-                        status = "Iscrizioni chiuse";
+                        status = SUBSCRIPTION_STATUS_OPTIONS.find(opt => opt.value === 'closed').label;
                         color = "error";
                         break;
                     default:
@@ -279,14 +279,14 @@ export default function EventsList() {
                 <Grid container spacing={2} sx={{mb: 2}} alignItems="center" justifyContent="flex-end">
                     <Grid size={{xs: 12, sm: 2}}>
                         <FormControl fullWidth>
-                            <InputLabel id="subscription-status-label">Stato iscrizione</InputLabel>
+                            <InputLabel id="subscription-status-label">{names.status}</InputLabel>
                             <Select
                                 labelId="subscription-status-label"
                                 name="subscriptionStatus"
                                 multiple
                                 value={filters.subscriptionStatus}
                                 onChange={handleFilterChange}
-                                input={<OutlinedInput label="Stato iscrizione"/>}
+                                input={<OutlinedInput label={names.status}/>}
                                 variant="outlined"
                                 renderValue={(selected) =>
                                     SUBSCRIPTION_STATUS_OPTIONS.filter(opt => selected.includes(opt.value)).map(opt => opt.label).join(', ')

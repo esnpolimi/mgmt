@@ -72,6 +72,7 @@ export default function TransactionAdd({open, onClose, account}) {
                         label="Importo in € (decimali con punto)"
                         type="number"
                         fullWidth
+                        required
                         value={formData.amount}
                         slotProps={{htmlInput: {min: "0.01", step: "0.01"}}}
                         onChange={(e) => setFormData({...formData, amount: e.target.value})}/>
@@ -80,8 +81,7 @@ export default function TransactionAdd({open, onClose, account}) {
                         label="Descrizione"
                         type="text"
                         fullWidth
-                        multiline
-                        rows={2}
+                        required
                         value={formData.description}
                         onChange={(e) => setFormData({...formData, description: e.target.value})}/>
                 </Grid>
