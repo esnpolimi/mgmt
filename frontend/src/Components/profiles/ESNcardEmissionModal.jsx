@@ -1,13 +1,11 @@
 import {useEffect, useState} from "react";
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
-import * as Sentry from "@sentry/react";
 
 export default function ESNcardEmissionModal({open, profile, onClose}) {
     const [amount, setAmount] = useState(0);
@@ -33,46 +31,24 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
 
     useEffect(() => {
         setLoading(true);
-        fetchAccounts().then();
-        retrieveFees().then();
+        fetchCustom("GET", "/accounts/", {
+            parseJson: true,
+            onSuccess: (results) => setAccounts(results || []),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+        }).then(() => {
+            fetchCustom("GET", '/esncard_fees/', {
+                parseJson: true,
+                onSuccess: (json) => {
+                    if (profile.latest_esncard && profile.latest_esncard?.is_valid)
+                        setAmount(parseFloat(json.esncard_lost_fee.replace('€', '')));
+                    else
+                        setAmount(parseFloat(json.esncard_release_fee.replace('€', '')));
+                },
+                onError: (err) => defaultErrorHandler(err, setPopup),
+                onFinally: () => setLoading(false)
+            });
+        });
     }, []);
-
-    const retrieveFees = async () => {
-        try {
-            const response = await fetchCustom("GET", '/esncard_fees/');
-            const json = await response.json();
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore fees ESNcard: ${errorMessage}`, state: 'error'});
-            } else {
-                console.log("ESNcard fees:", json);
-                if (profile.latest_esncard && profile.latest_esncard?.is_valid)
-                    setAmount(parseFloat(json.esncard_lost_fee.replace('€', '')));
-                else
-                    setAmount(parseFloat(json.esncard_release_fee.replace('€', '')));
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchAccounts = async () => {
-        try {
-            const response = await fetchCustom("GET", "/accounts/");
-            const json = await response.json();
-            if (response.ok) setAccounts(json.results);
-            else {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
-    }
 
     const resetErrors = () => {
         const resetObj = {};
@@ -83,7 +59,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
         return resetObj;
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         let hasErrors = false;
         const newErrors = resetErrors();
         fieldsToValidate.forEach(item => {
@@ -102,24 +78,18 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
         setConfirmDialog({open: true, action: () => doSubmit(), message: msg});
     }
 
-    const doSubmit = async () => {
+    const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
-        try {
-            const response = await fetchCustom("POST", '/esncard_emission/', {
+        fetchCustom("POST", '/esncard_emission/', {
+            body: {
                 profile_id: profile.id,
                 account_id: data.account_id,
                 esncard_number: data.esncard_number,
                 amount: amount
-            });
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore durante l'emissione della ESNcard: ${errorMessage}`, state: 'error'});
-            } else onClose(true);
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+            },
+            onSuccess: () => onClose(true),
+            onError: (err) => defaultErrorHandler(err, setPopup)
+        });
     }
 
     const handleChange = (e) => {

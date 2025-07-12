@@ -5,19 +5,17 @@ import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import EditButton from "../../Components/EditButton";
 import CrudTable from "../../Components/CrudTable";
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {useAuth} from "../../Context/AuthContext";
 import Popup from '../../Components/Popup'
 import {profileDisplayNames as names} from '../../utils/displayAttributes';
 import ESNcardEmissionModal from "../../Components/profiles/ESNcardEmissionModal";
 import Loader from "../../Components/Loader";
 import countryCodes from "../../data/countryCodes.json";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import {Person, School, Group} from '@mui/icons-material';
 import {useNavigate, useParams} from "react-router-dom";
 import Sidebar from "../../Components/Sidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import * as Sentry from "@sentry/react";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import EventSelectorModal from "../../Components/profiles/EventSelectorModal";
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
@@ -124,31 +122,20 @@ export default function Profile() {
 
     useEffect(() => {
         setLoading(true);
-        const fetchData = async () => {
-            try {
-                const response = await fetchCustom("GET", `/profile/${id}/`);
-                const json = await response.json();
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(json, response.status);
-                    setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                } else {
-                    const update = {};
-                    Object.keys(data).map((key) => {
-                        update[key] = json[key];
-                    });
-                    setData(update)
-                    setUpdatedData(update)
-                    setProfile(json);
-                    setProfileType(json.is_esner ? "ESNer" : "Erasmus");
-                }
-            } catch (error) {
-                Sentry.captureException(error);
-                setPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData().then();
+        fetchCustom("GET", `/profile/${id}/`, {
+            onSuccess: (data) => {
+                const update = {};
+                Object.keys(data).map((key) => {
+                    update[key] = data[key];
+                });
+                setData(update)
+                setUpdatedData(update)
+                setProfile(data);
+                setProfileType(data.is_esner ? "ESNer" : "Erasmus");
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setLoading(false)
+        });
     }, []);
 
     const rules = profileFieldRules[profileType] || {hideFields: []};
@@ -156,52 +143,34 @@ export default function Profile() {
         return rules.hideFields.includes(fieldName);
     };
 
-       const fetchSubscriptions = async () => {
-        try {
-            const response = await fetchCustom("GET", `/profile_subscriptions/${id}/`);
-            const json = await response.json();
-            if (response.ok) setSubscriptions(json);
-            else setSubscriptions([]);
-        } catch (error) {
-            Sentry.captureException(error);
-            setSubscriptions([]);
-        }
+    const fetchSubscriptions = () => {
+        fetchCustom("GET", `/profile_subscriptions/${id}/`, {
+            onSuccess: (data) => setSubscriptions(data),
+            onError: () => setSubscriptions([]),
+        });
     };
 
-    const fetchGroups = async () => {
-        try {
-            const response = await fetchCustom("GET", "/groups/");
-            const json = await response.json();
-            if (response.ok) setGroups(json);
-            else setPopup({message: `Errore nel recupero dei gruppi: ${await extractErrorMessage(json, response.status)}`, state: "error"});
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+    const fetchGroups = () => {
+        fetchCustom("GET", "/groups/", {
+            onSuccess: (data) => setGroups(data),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+        });
     };
 
-    const refreshProfileData = async () => {
+    const refreshProfileData = () => {
         setLoading(true);
-        try {
-            const response = await fetchCustom("GET", `/profile/${id}/`);
-            const json = await response.json();
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
-                setData(json);
-                setUpdatedData(json);
-                setProfile(json);
-                setProfileType(json.is_esner ? "ESNer" : "Erasmus");
-            }
-            fetchSubscriptions().then()
-            fetchGroups().then();
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
+        fetchCustom("GET", `/profile/${id}/`, {
+            onSuccess: (data) => {
+                setData(data);
+                setUpdatedData(data);
+                setProfile(data);
+                setProfileType(data.is_esner ? "ESNer" : "Erasmus");
+                fetchSubscriptions();
+                fetchGroups();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setLoading(false)
+        });
     };
 
     const handleOpenESNcardModal = () => {
@@ -256,24 +225,18 @@ export default function Profile() {
         },
     ], []);
 
-    const saveESNcard = async (row, values) => {
-        try {
-            const response = await fetchCustom("PATCH", `/esncard/${row.id}/`, values);
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                return false;
-            } else {
+    const saveESNcard = (row, values) => {
+        setSaving(true);
+        fetchCustom("PATCH", `/esncard/${row.id}/`, {
+            body: values,
+            onSuccess: () => {
                 setESNcardErrors({});
                 setPopup({message: "ESNcard aggiornata con successo!", state: "success"});
-                await refreshProfileData();
-                return true;
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+                refreshProfileData();
+            },
+            onError: (responseOrError) => setPopup({message: "Errore nell'aggiornamento ESNcard: " + responseOrError.message, state: "error"}),
+            onFinally: () => setSaving(false)
+        });
     }
 
     /* columns for documents table */
@@ -325,71 +288,48 @@ export default function Profile() {
 
     ], []);
 
-    const deleteDocument = async (row) => {
-        try {
-            const response = await fetchCustom("DELETE", `/document/${row.id}/`);
-            if (!response.ok) {
-                response.json().then((errors) => setDocumentErrors(errors))
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
+    const deleteDocument = (row) => {
+        setSaving(true);
+        fetchCustom("DELETE", `/document/${row.id}/`, {
+            onSuccess: () => {
                 setDocumentErrors({});
                 setPopup({message: "Documento eliminato con successo!", state: "success"});
-                await refreshProfileData();
-                return true;
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+                refreshProfileData();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSaving(false)
+        });
     };
 
     /* document creation */
-    const createDocument = async (values) => {
+    const createDocument = (values) => {
+        setSaving(true);
         let val = {...values, profile: profile.id};
-        try {
-            const response = await fetchCustom("POST", '/document/', val);
-            if (!response.ok) {
-                response.json().then((errors) => setDocumentErrors(errors))
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                return false;
-            } else {
+        fetchCustom("POST", '/document/', {
+            body: val,
+            onSuccess: () => {
                 setDocumentErrors({});
                 setPopup({message: "Documento aggiunto con successo!", state: "success"});
-                await refreshProfileData();
-                return true;
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-            return false;
-        }
+                refreshProfileData();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSaving(false)
+        });
     };
 
     /* save edited document */
-    const saveDocument = async (row, values) => {
-        try {
-            const response = await fetchCustom("PATCH", `/document/${row.id}/`, values);
-            if (!response.ok) {
-                response.json().then((errors) => setDocumentErrors(errors))
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                return false;
-            } else {
+    const saveDocument = (row, values) => {
+        setSaving(true);
+        fetchCustom("PATCH", `/document/${row.id}/`, {
+            body: values,
+            onSuccess: () => {
                 setDocumentErrors({});
                 setPopup({message: "Documento aggiornato con successo!", state: "success"});
-                await refreshProfileData();
-                return true;
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-            return false;
-        }
+                refreshProfileData();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSaving(false)
+        });
     }
 
     const formatDateString = (date) => {
@@ -426,10 +366,8 @@ export default function Profile() {
         resetErrors();
     };
 
-    const handleSave = async () => {
+    const handleSave = () => {
         setSaving(true);
-
-        // Check if matricola_number is provided and verify it's exactly 6 digits
         if (updatedData.matricola_number && !/^\d{6}$/.test(updatedData.matricola_number)) {
             setErrors((prevErrors) => ({
                 ...prevErrors,
@@ -438,38 +376,26 @@ export default function Profile() {
             setSaving(false);
             return false;
         }
-        try {
-            const body = {
-                ...updatedData,
-                birthdate: formatDateString(updatedData.birthdate),
-                matricola_expiration: formatDateString(updatedData.matricola_expiration)
-            }
-            const response = await fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, body);
-            if (!response.ok) {
-                const json = await response.json();
-                const updatedErrors = Object.fromEntries(Object.keys(errors).map(
-                    (e) => {
-                        if (e in json) return [e, [true, json[e]]];
-                        else return [e, [false, '']];
-                    }
-                ));
-                setErrors(updatedErrors);
-            } else {
-                await refreshProfileData();
-                if (data) {
-                    resetErrors();
-                    setPopup({message: "Profilo aggiornato con successo!", state: "success"});
-                    toggleEdit(false);
-                }
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setUpdatedData(data);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-            toggleEdit(false);
-        } finally {
-            setSaving(false);
-        }
+        const body = {
+            ...updatedData,
+            birthdate: formatDateString(updatedData.birthdate),
+            matricola_expiration: formatDateString(updatedData.matricola_expiration)
+        };
+        fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, {
+            body,
+            onSuccess: () => {
+                refreshProfileData();
+                resetErrors();
+                setPopup({message: "Profilo aggiornato con successo!", state: "success"});
+                toggleEdit(false);
+            },
+            onError: (responseOrError) => {
+                setUpdatedData(data);
+                defaultErrorHandler(responseOrError, setPopup);
+                toggleEdit(false);
+            },
+            onFinally: () => setSaving(false)
+        });
     };
 
     const handleIscriviAdEvento = () => {

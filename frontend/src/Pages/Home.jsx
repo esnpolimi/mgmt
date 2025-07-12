@@ -4,14 +4,12 @@ import {Box, Typography, Card, CardContent, CardActions, Button, Collapse, IconB
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ConfirmDialog from "../Components/ConfirmDialog";
-import {fetchCustom} from "../api/api";
+import {defaultErrorHandler, fetchCustom} from "../api/api";
 import {useAuth} from "../Context/AuthContext";
 import logo from '../assets/esnpolimi-logo.png';
 import Popup from "../Components/Popup";
 import {accountDisplayNames as names} from "../utils/displayAttributes";
-import {extractErrorMessage} from "../utils/errorHandling";
 import TransactionAdd from "../Components/treasury/TransactionAdd";
-import * as Sentry from "@sentry/react";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReimbursementRequestModal from "../Components/treasury/ReimbursementRequestModal";
 
@@ -37,6 +35,7 @@ export default function Home() {
     const accountsDetails = user?.permissions.includes("change_account");
     const casseRef = useRef(null);
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
+    const [testErrorCount, setTestErrorCount] = useState(1); // TEST
 
     const staticLinks = [
         {
@@ -125,25 +124,17 @@ export default function Home() {
     ];
 
     useEffect(() => {
-        fetchAccounts().then();
+        fetchAccounts();
     }, [user]);
 
-    const fetchAccounts = async () => {
+    const fetchAccounts = () => {
         setCasseLoading(true);
-        try {
-            const response = await fetchCustom("GET", "/accounts/");
-            const json = await response.json();
-            if (response.ok) setAccounts(json.results);
-            else {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setCasseLoading(false);
-        }
+        fetchCustom("GET", "/accounts/", {
+            parseJson: true,
+            onSuccess: (results) => setAccounts(results),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setCasseLoading(false)
+        });
     };
 
     const handleAction = (account, type) => {
@@ -152,25 +143,16 @@ export default function Home() {
         setConfirmDialogOpen(true);
     };
 
-    const confirmAction = async () => {
-        try {
-            const response = await fetchCustom("PATCH", `/account/${selectedAccount.id}/`, {
-                status: actionType === "open" ? "open" : "closed",
-            });
-            if (response.ok) {
-                console.log(`Account ${actionType}ed successfully.`);
-                fetchAccounts().then();
+    const confirmAction = () => {
+        fetchCustom("PATCH", `/account/${selectedAccount.id}/`, {
+            body: {status: actionType === "open" ? "open" : "closed"},
+            onSuccess: () => {
+                fetchAccounts();
                 setPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success"});
-            } else {
-                console.error(`Failed to ${actionType} account.`);
-                setPopup({message: `Errore account: ${response.statusText}`, state: "error"});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setConfirmDialogOpen(false);
-        }
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setConfirmDialogOpen(false)
+        });
     };
 
     const handleCasseToggle = () => {
@@ -185,18 +167,24 @@ export default function Home() {
         });
     };
 
-    const handleTransactionModalOpen = async (success) => {
+    const handleTransactionModalOpen = (success) => {
         setTransactionModalOpen(false);
         if (success) {
             setPopup({message: "Transazione registrata con successo!", state: "success"});
-            await fetchAccounts();
+            fetchAccounts();
         }
-    }
+    };
+
+    const openTransactionModal = (account) => {
+        setSelectedAccount(account);
+        setPopup(null); // Clear any existing popup when opening the modal
+        setTransactionModalOpen(true);
+    };
 
     const handleReimbursementRequestModalClose = (success) => {
         setRimborsoModalOpen(false);
         if (success) setPopup({message: "Richiesta di rimborso inviata con successo!", state: "success"});
-    }
+    };
 
     return (
         <Box sx={{
@@ -399,10 +387,7 @@ export default function Home() {
                                                     <Button
                                                         variant="contained"
                                                         color="primary"
-                                                        onClick={() => {
-                                                            setSelectedAccount(account);
-                                                            setTransactionModalOpen(true);
-                                                        }}
+                                                        onClick={() => openTransactionModal(account)}
                                                         sx={{minWidth: 120, fontWeight: 600}}>
                                                         Deposita/Preleva
                                                     </Button>
@@ -445,6 +430,16 @@ export default function Home() {
                 throw new Error("Sentry Test Error v3");
             }}>
                 Sentry Test Error
+            </button>
+            <button
+                type="button"
+                style={{marginLeft: 8}}
+                onClick={() => {
+                    setPopup({message: `Test Error Popup #${testErrorCount}`, state: "error"});
+                    setTestErrorCount(c => c + 1);
+                }}
+            >
+                Test Error Popup
             </button>
         </Box>
     );

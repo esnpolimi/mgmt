@@ -4,14 +4,12 @@ import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pick
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon} from '@mui/icons-material';
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {style} from '../../utils/sharedStyles'
 import {eventDisplayNames as eventNames} from '../../utils/displayAttributes';
 import CustomEditor from '../CustomEditor';
 import Loader from "../Loader";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import CloseIcon from '@mui/icons-material/Close';
-import * as Sentry from "@sentry/react";
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 
@@ -195,7 +193,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         });
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
 
         // Validate lists - check if any list has empty name or capacity
@@ -212,47 +210,37 @@ export default function EventModal({open, event, isEdit, onClose}) {
         }
 
         setSubmitting(true);
-        try {
-            const response = isEdit
-                ? await fetchCustom("PATCH", `/event/${data.id}/`, convert(data))
-                : await fetchCustom("POST", '/event/', convert(data));
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} evento: ${errorMessage}`, state: 'error'});
-                scrollUp();
-            } else {
-                onClose(true);
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-            scrollUp();
-        } finally {
-            setSubmitting(false);
-        }
+
+        const payload = convert(data);
+        const method = isEdit ? "PATCH" : "POST";
+        const url = isEdit ? `/event/${data.id}/` : '/event/';
+
+        fetchCustom(method, url, {
+            body: payload,
+            onSuccess: () => onClose(true),
+            onError: (err) => {
+                defaultErrorHandler(err, setPopup).then(() => {
+                    scrollUp();
+                });
+            },
+            onFinally: () => setSubmitting(false)
+        });
     }
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         setDeleting(true);
-        try {
-            const response = await fetchCustom("DELETE", `/event/${data.id}/`);
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore eliminazione evento: ${errorMessage}`, state: 'error'});
-                scrollUp();
-            } else {
-                onClose(true, 'deleted');
+        fetchCustom("DELETE", `/event/${data.id}/`, {
+            onSuccess: () => onClose(true, 'deleted'),
+            onError: (err) => {
+                defaultErrorHandler(err, setPopup).then(() => {
+                    scrollUp();
+                });
+            },
+            onFinally: () => {
+                setDeleting(false);
+                setConfirmOpen(false);
             }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-            scrollUp();
-        } finally {
-            setDeleting(false);
-            setConfirmOpen(false);
-        }
+        });
     };
 
     const handleClose = () => {

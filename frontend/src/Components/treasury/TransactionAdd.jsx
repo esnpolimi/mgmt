@@ -1,11 +1,9 @@
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 import {Button, TextField, FormControl, InputLabel, Select, MenuItem, Typography, IconButton, Box, Modal, Grid} from '@mui/material';
-import {fetchCustom} from '../../api/api';
+import {defaultErrorHandler, fetchCustom} from '../../api/api';
 import CloseIcon from "@mui/icons-material/Close";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {useAuth} from "../../Context/AuthContext";
-import * as Sentry from "@sentry/react";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import Popup from "../Popup";
 import CircularProgress from "@mui/material/CircularProgress";
 
@@ -20,30 +18,32 @@ export default function TransactionAdd({open, onClose, account}) {
         description: ''
     });
 
-    const handleSubmit = async (e) => {
+    useEffect(() => {
+        if (open) {
+            setFormData({
+                amount: '',
+                type: 'deposit',
+                description: ''
+            });
+        }
+    }, [open]);
+
+
+    const handleSubmit = (e) => {
         e.preventDefault();
         setSubmitting(true);
-        try {
-            const response = await fetchCustom('POST', '/transaction/', {
+        fetchCustom('POST', '/transaction/', {
+            body: {
                 account: account.id,
                 amount: formData.type === 'deposit' ? Math.abs(formData.amount) : -Math.abs(formData.amount),
                 description: formData.description,
                 type: formData.type,
                 executor: user.profile.email
-            });
-            if (response.ok) {
-                onClose(true);
-            } else {
-                const json = await response.json();
-                const error = extractErrorMessage(json, response.status)
-                setPopup({message: `Errore: ${error}`, state: 'error'});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: 'Errore generale: ' + error.message, state: "error"});
-        } finally {
-            setSubmitting(false);
-        }
+            },
+            onSuccess: () => onClose(true),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSubmitting(false)
+        });
     };
 
     return (
@@ -95,7 +95,7 @@ export default function TransactionAdd({open, onClose, account}) {
                         {submitting ? <CircularProgress size={24} color="inherit"/> : "Conferma"}
                     </Button>
                 </Box>
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup message={popup.message} state={popup.state} />}
             </Box>
         </Modal>
     );

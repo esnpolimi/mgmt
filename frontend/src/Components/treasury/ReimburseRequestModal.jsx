@@ -3,11 +3,9 @@ import {Modal, Box, Grid, Button, FormControl, InputLabel, Select, MenuItem, Tex
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import {fetchCustom} from '../../api/api';
-import {extractErrorMessage} from "../../utils/errorHandling";
+import {fetchCustom, defaultErrorHandler} from '../../api/api';
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
-import * as Sentry from "@sentry/react";
 
 
 export default function ReimburseRequestModal({open, onClose, requestData, onReimbursed}) {
@@ -22,11 +20,9 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
 
     useEffect(() => {
         if (open) {
-            fetchCustom('GET', '/accounts/').then(async res => {
-                if (res.ok) {
-                    const json = await res.json();
-                    setAccounts(json.results || []);
-                }
+            fetchCustom('GET', '/accounts/', {
+                onSuccess: (data) => setAccounts(data.results || []),
+                onError: () => setAccounts([]),
             });
             setSelectedAccount(requestData?.account?.id || '');
             setDescription(requestData?.description || '');
@@ -45,36 +41,26 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
         });
     };
 
-    const doSubmit = async () => {
+    const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setLoading(true);
-        try {
-            const payload = {
-                account: selectedAccount,
-                description: description,
-                receipt_link: receiptLink,
-            };
-
-            if (amount && !isNaN(parseFloat(amount))) {
-                payload.amount = parseFloat(amount);
-            }
-
-            const response = await fetchCustom('PATCH', `/reimbursement_request/${requestData.id}/`, payload);
-
-            if (response.ok) {
+        const payload = {
+            account: selectedAccount,
+            description: description,
+            receipt_link: receiptLink,
+        };
+        if (amount && !isNaN(parseFloat(amount))) {
+            payload.amount = parseFloat(amount);
+        }
+        fetchCustom('PATCH', `/reimbursement_request/${requestData.id}/`, {
+            body: payload,
+            onSuccess: () => {
                 onReimbursed();
                 onClose(true);
-            } else {
-                const json = await response.json();
-                const error = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${error}`, state: "error"});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error.message}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setLoading(false)
+        });
     };
 
     return (

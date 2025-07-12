@@ -6,10 +6,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import Popup from "../Popup";
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import * as Sentry from "@sentry/react";
-import {extractErrorMessage} from "../../utils/errorHandling";
 
 
 export default function ReimburseDepositsModal({open, onClose, event, listId, subscription}) {
@@ -32,47 +30,31 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
         setNotes('');
         setPopup(null);
 
-        const fetchAccounts = async () => {
-            try {
-                const accResp = await fetchCustom("GET", "/accounts/");
-                const accJson = await accResp.json();
-                setAccounts(accJson.results || []);
-            } catch (e) {
-                Sentry.captureException(e);
-                setPopup({message: "Errore nel caricamento casse: " + e, state: "error"});
-            }
+        const fetchAccounts = () => {
+            fetchCustom("GET", "/accounts/", {
+                onSuccess: (data) => setAccounts(data.results || []),
+                onError: (err) => defaultErrorHandler(err, setPopup),
+            });
         };
 
         if (subscription) {
-            // Single-subscription mode: no need to fetch reimbursable subscriptions
             setSubscriptions([subscription]);
             setSelectedSubs([subscription.id]);
             setLoading(false);
-            fetchAccounts().then();
+            fetchAccounts();
             return;
         }
 
-        const fetchData = async () => {
-            try {
-                // Fetch reimbursable deposits for this event/list
-                const response = await fetchCustom("GET", `/reimbursable_deposits/?event=${event.id}&list=${listId}`);
-                const json = await response.json();
-                if (response.ok) {
-                    setSubscriptions(json);
-                    setSelectedSubs(json.map(s => s.id));
-                } else {
-                    const errorText = await extractErrorMessage(json, response.status);
-                    setPopup({message: errorText, state: "error"});
-                }
-            } catch (e) {
-                Sentry.captureException(e);
-                setPopup({message: "Errore nel caricamento dati: " + e, state: "error"});
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData().then();
-        fetchAccounts().then();
+        fetchCustom("GET", `/reimbursable_deposits/?event=${event.id}&list=${listId}`, {
+            onSuccess: (json) => {
+                setSubscriptions(json);
+                setSelectedSubs(json.map(s => s.id));
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setLoading(false)
+        });
+
+        fetchAccounts();
     }, [open, event.id, listId, subscription]);
 
     const handleSelectAll = (e) => {
@@ -85,7 +67,7 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
             : [...selectedSubs, id]);
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         setPopup(null);
         if (!selectedAccount) {
             setPopup({message: "Seleziona una cassa.", state: "error"});
@@ -107,28 +89,20 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
         });
     };
 
-    const doSubmit = async () => {
+    const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
-        try {
-            const resp = await fetchCustom("POST", "/reimburse_deposits/", {
+        fetchCustom("POST", "/reimburse_deposits/", {
+            body: {
                 event: event.id,
                 subscription_ids: selectedSubs,
                 account: selectedAccount,
                 notes
-            });
-            const json = await resp.json();
-            if (!resp.ok) {
-                setPopup({message: json.error || "Errore nel rimborso", state: "error"});
-            } else {
-                onClose(true, `${subscription ? 'Rimborso effettuato con successo' : 'Rimborsi effettuati con successo!'}`);
-            }
-        } catch (e) {
-            Sentry.captureException(e);
-            setPopup({message: "Errore nel rimborso: " + e, state: "error"});
-        } finally {
-            setSubmitting(false);
-        }
+            },
+            onSuccess: () => onClose(true, `${subscription ? 'Rimborso effettuato con successo' : 'Rimborsi effettuati con successo!'}`),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setSubmitting(false)
+        });
     };
 
     return (

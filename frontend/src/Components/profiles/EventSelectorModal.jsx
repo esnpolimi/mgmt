@@ -1,6 +1,6 @@
 import {Modal, Box, Typography, FormControl, InputLabel, Select, MenuItem, Button} from "@mui/material";
 import {useState, useEffect} from "react";
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import Popup from "../Popup";
 import Loader from "../Loader";
 
@@ -20,14 +20,12 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
             setSelectedListId("");
             setEventDetails(null);
             setError(null);
-            fetchCustom("GET", "/events/?status=open")
-                .then(async response => {
-                    const json = await response.json();
-                    if (response.ok) setEvents(json.results || []);
-                    else setError("Errore nel recupero eventi: " + (json.detail || "Impossibile caricare gli eventi."));
-                })
-                .catch(() => setError("Errore di rete nel recupero eventi."))
-                .finally(() => setLoading(false));
+            fetchCustom("GET", "/events/?status=open", {
+                parseJson: true,
+                onSuccess: (results) => setEvents(results || []),
+                onError: (err) => defaultErrorHandler(err, setError),
+                onFinally: () => setLoading(false)
+            });
         }
     }, [open]);
 
@@ -37,14 +35,12 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
             setEventLoading(true);
             setEventDetails(null);
             setSelectedListId("");
-            fetchCustom("GET", `/event/${selectedEventId}/`)
-                .then(async response => {
-                    const json = await response.json();
-                    if (response.ok) setEventDetails(json);
-                    else setError("Errore nel recupero dettagli evento: " + (json.detail || "Impossibile caricare i dettagli dell'evento."));
-                })
-                .catch(() => setError("Errore di rete nel recupero dettagli evento."))
-                .finally(() => setEventLoading(false));
+            fetchCustom("GET", `/event/${selectedEventId}/`, {
+                parseJson: true,
+                onSuccess: (json) => setEventDetails(json),
+                onError: (err) => defaultErrorHandler(err, setError),
+                onFinally: () => setEventLoading(false)
+            });
         }
     }, [selectedEventId]);
 

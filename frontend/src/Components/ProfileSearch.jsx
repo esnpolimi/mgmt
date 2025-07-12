@@ -23,16 +23,12 @@ export default function ProfileSearch({
             return;
         }
         setSearchLoading(true);
-        const timer = setTimeout(async () => {
-            try {
-                const resp = await fetchCustom('GET', `/profiles/search/?q=${encodeURIComponent(searchQuery)}&valid_only=${valid_only}&esner_only=${esner_only}`);
-                if (resp.ok) {
-                    const json = await resp.json();
-                    setProfiles(json.results || []);
-                }
-            } finally {
-                setSearchLoading(false);
-            }
+        const timer = setTimeout(() => {
+            fetchCustom('GET', `/profiles/search/?q=${encodeURIComponent(searchQuery)}&valid_only=${valid_only}&esner_only=${esner_only}`, {
+                onSuccess: (data) => setProfiles(data.results || []),
+                onError: () => setProfiles([]),
+                onFinally: () => setSearchLoading(false)
+            });
         }, 300);
         return () => clearTimeout(timer);
     }, [searchQuery]);

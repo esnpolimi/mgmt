@@ -1,35 +1,28 @@
 import {useEffect, useState, useMemo} from 'react';
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {accountDisplayNames as names} from '../../utils/displayAttributes';
-import {fetchCustom} from '../../api/api';
+import {fetchCustom, defaultErrorHandler} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip, IconButton, Typography} from "@mui/material";
 import RefreshIcon from '@mui/icons-material/Refresh';
-import * as Sentry from "@sentry/react";
 import StoreIcon from "@mui/icons-material/Store";
 
 export default function AccountsDash({limit = 5}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
-    const fetchData = async () => {
+    const fetchData = () => {
         setLoading(true);
-        try {
-            const response = await fetchCustom("GET", '/accounts/');
-            if (response.ok) {
-                const json = await response.json();
-                setData(json.results);
-            }
-        } catch (e) {
-            Sentry.captureException(e);
-        } finally {
-            setLoading(false);
-        }
+        fetchCustom("GET", '/accounts/', {
+            onSuccess: (data) => setData(data.results || []),
+            onError: (err) => defaultErrorHandler(err, setLoading),
+            onFinally: () => setLoading(false)
+        });
     };
 
     useEffect(() => {
-        fetchData().then();
+        fetchData();
     }, []);
 
     const columns = useMemo(() => [

@@ -1,11 +1,9 @@
 import {useEffect, useState} from 'react';
 import {Modal, Box, Button, Typography, FormControl, InputLabel, Select, MenuItem, IconButton} from '@mui/material';
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import {fetchCustom} from "../../api/api";
-import {extractErrorMessage} from "../../utils/errorHandling";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import Popup from "../Popup";
 import CloseIcon from "@mui/icons-material/Close";
-import * as Sentry from "@sentry/react";
 
 export default function MoveToListModal({open, onClose, selectedRows, event, listId}) {
     const [popup, setPopup] = useState(null);
@@ -21,22 +19,16 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
         }
     }, [event, listId]);
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         if (!selectedListId) return;
-        try {
-            const response = await fetchCustom("POST", '/move-subscriptions/', {
+        fetchCustom("POST", '/move-subscriptions/', {
+            body: {
                 subscriptionIds: selectedRows.map(row => row.original.id),
                 targetListId: selectedListId,
-            });
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else onClose(true);
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+            },
+            onSuccess: () => onClose(true),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+        });
     };
 
     return (

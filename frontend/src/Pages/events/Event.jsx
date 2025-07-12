@@ -10,8 +10,7 @@ import AdjustIcon from '@mui/icons-material/Adjust';
 import BallotIcon from '@mui/icons-material/Ballot';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Loader from "../../Components/Loader";
-import {fetchCustom} from "../../api/api";
-import dayjs from "dayjs";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import EditIcon from "@mui/icons-material/Edit";
 import EventModal from "../../Components/events/EventModal";
 import CustomEditor from '../../Components/CustomEditor';
@@ -22,8 +21,7 @@ import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsModal";
 import ReimburseQuotaModal from "../../Components/events/ReimburseQuotaModal";
-import {extractErrorMessage} from "../../utils/errorHandling";
-import * as Sentry from "@sentry/react";
+import dayjs from "dayjs";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import FestivalIcon from "@mui/icons-material/Festival";
 import AddCardIcon from '@mui/icons-material/AddCard';
@@ -63,48 +61,29 @@ export default function Event() {
 
     useEffect(() => {
         setLoading(true);
-        const fetchData = async () => {
-            try {
-                // Use ID from URL params if available, otherwise from state
-                const eventId = id || eventFromState?.id;
-                const response = await fetchCustom("GET", `/event/${eventId}/`);
-                const json = await response.json();
-                if (!response.ok) {
-                    const errorMessage = await extractErrorMessage(json, response.status);
-                    setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-                } else {
-                    setData(json);
-                    console.log("Event Data: ", json);
-                }
-            } catch (error) {
-                Sentry.captureException(error);
-                setPopup({message: `Errore generale: ${error}`, state: "error"});
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData().then();
+        const eventId = id || eventFromState?.id;
+        fetchCustom("GET", `/event/${eventId}/`, {
+            onSuccess: (data) => {
+                setData(data);
+                console.log("Event Data: ", data);
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setLoading(false)
+        });
     }, [id, eventFromState]);
 
-    const refreshEventData = async () => {
+    const refreshEventData = () => {
         setLoading(true);
-        try {
-            const response = await fetchCustom("GET", `/event/${data.id}/`);
-            const json = await response.json();
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
+        fetchCustom("GET", `/event/${data.id}/`, {
+            onSuccess: (data) => {
+                setData(data);
+            },
+            onError: (responseOrError) => {
+                defaultErrorHandler(responseOrError, setPopup);
                 navigate('/events/');
-            } else {
-                setData(json);
-                setLoading(false);
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
+            },
+            onFinally: () => setLoading(false)
+        });
     };
 
     const handleOpenEventModal = () => {
