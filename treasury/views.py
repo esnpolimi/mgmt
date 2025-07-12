@@ -67,14 +67,12 @@ def esncard_emission(request):
 
     except PermissionDenied as e:
         return Response(str(e), status=403)
-
     except (ObjectDoesNotExist, ValueError) as e:
         return Response(str(e), status=400)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(str(e), status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['PATCH'])
@@ -94,14 +92,12 @@ def esncard_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per modificare questa ESNcard.'}, status=403)
         else:
             return Response("Metodo non consentito", status=405)
-
     except ESNcard.DoesNotExist:
         return Response('La ESNcard non esiste', status=400)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(str(e), status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrieve ensncard fees
@@ -139,13 +135,11 @@ def transaction_add(request):
         try:
             transaction_serializer.save()
         except ValueError as ve:
-            # Catch negative balance error from model clean
             return Response({'error': str(ve)}, status=400)
         except PermissionDenied as pe:
             return Response({'error': str(pe)}, status=403)
 
         return Response(status=200)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -196,7 +190,6 @@ def transactions_list(request):
         page = paginator.paginate_queryset(transactions, request=request)
         serializer = TransactionViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -269,10 +262,8 @@ def transaction_detail(request, pk):
                 return Response({'error': 'Solo i Rimborsi possono essere eliminati manualmente.'}, status=400)
         else:
             return Response("Metodo non consentito", status=405)
-
     except Transaction.DoesNotExist:
         return Response({'error': 'Transazione non trovata.'}, status=404)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -350,10 +341,8 @@ def account_detail(request, pk):
             return Response(serializer.data, status=200)
         else:
             return Response("Metodo non consentito", status=405)
-
     except Account.DoesNotExist:
         return Response({'error': 'Account non trovato.'}, status=404)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -410,7 +399,7 @@ def reimbursement_request_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to retrieve list of reimbursement requests
@@ -478,7 +467,6 @@ def reimburse_deposits(request):
         if not event_id or not subscription_ids or not account_id:
             return Response({'error': 'Dati mancanti.'}, status=400)
 
-        from events.models import Event, Subscription
         event = Event.objects.get(id=event_id)
         account = Account.objects.get(id=account_id)
         subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
@@ -516,7 +504,7 @@ def reimburse_deposits(request):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['GET'])
@@ -554,7 +542,7 @@ def reimbursable_deposits(request):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['POST'])
@@ -576,7 +564,6 @@ def reimburse_quota(request):
         if not event_id or not subscription_id or not account_id:
             return Response({'error': 'Dati mancanti.'}, status=400)
 
-        from events.models import Event, Subscription
         event = Event.objects.get(id=event_id)
         account = Account.objects.get(id=account_id)
         sub = Subscription.objects.get(id=subscription_id, event=event)
@@ -598,18 +585,7 @@ def reimburse_quota(request):
         if account.status == "closed":
             return Response({'error': 'La cassa è chiusa.'}, status=400)
 
-        from decimal import Decimal, InvalidOperation
-        quota_decimal = event.cost
-        if quota_decimal is None:
-            quota_decimal = Decimal('0.00')
-        else:
-            try:
-                quota_decimal = Decimal(quota_decimal)
-            except (InvalidOperation, TypeError):
-                quota_decimal = Decimal('0.00')
-        quota_amount = quota_decimal
-
-        if account.balance < quota_amount:
+        if account.balance < event.cost:
             return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
         with transaction.atomic():
@@ -618,13 +594,12 @@ def reimburse_quota(request):
                 subscription=sub,
                 executor=request.user,
                 account=account,
-                amount=-quota_amount,
+                amount=-event.cost,
                 description=f"Rimborso quota per {sub.profile.name} {sub.profile.surname} ({event.name})" + (f" - {notes}" if notes else "")
             )
-            from treasury.serializers import TransactionViewSerializer
             serializer = TransactionViewSerializer(tx)
             return Response(serializer.data, status=201)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)

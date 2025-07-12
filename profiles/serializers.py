@@ -113,4 +113,3 @@ class ProfileCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email_is_verified']
-
