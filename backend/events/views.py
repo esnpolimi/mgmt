@@ -51,11 +51,10 @@ def events_list(request):
         page = paginator.paginate_queryset(events, request=request)
         serializer = EventsListSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['POST'])
@@ -69,11 +68,10 @@ def event_creation(request):
             return Response(event_serializer.data, status=200)
         else:
             return Response(event_serializer.errors, status=400)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
@@ -152,14 +150,16 @@ def event_detail(request, pk):
             return Response(status=200)
         else:
             return Response("Metodo non consentito", status=405)
-
     except Event.DoesNotExist:
-        return Response('L\'evento non esiste', status=400)
-
+        return Response({'error': "L'evento non esiste"}, status=404)
+    except PermissionDenied as e:
+        return Response({'error': str(e)}, status=403)
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=400)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({"message": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['POST'])
@@ -170,15 +170,15 @@ def subscription_create(request):
         profile = request.data.get('profile')
         event_id = request.data.get('event')
         if Subscription.objects.filter(profile=profile, event=event_id).exists():
-            return Response("Il profilo è già iscritto all'evento", status=400)
+            return Response({'error': "Il profilo è già iscritto all'evento"}, status=400)
 
         # Fetch the event and validate subscription period
         event = Event.objects.get(id=event_id)
         now = timezone.now()
         if not (event.subscription_start_date and event.subscription_end_date):
-            return Response("Il periodo di iscrizione non è definito", status=400)
+            return Response({'error': "Il periodo di iscrizione non è definito"}, status=400)
         if not (event.subscription_start_date <= now <= event.subscription_end_date):
-            return Response("Il periodo di iscrizione non è attivo", status=400)
+            return Response({'error': "Il periodo di iscrizione non è attivo"}, status=400)
 
         serializer = SubscriptionCreateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -219,20 +219,16 @@ def subscription_create(request):
                 )
                 t_cauzione.save()
             return Response(serializer.data, status=200)
-
     except ValidationError as e:
-        return Response(str(e), status=400)
-
+        return Response({'error': str(e)}, status=400)
     except ObjectDoesNotExist as e:
-        return Response(str(e), status=400)
-
+        return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:
-        return Response(str(e), status=403)
-
+        return Response({'error': str(e)}, status=403)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(str(e), status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
@@ -348,23 +344,18 @@ def subscription_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
         else:
             return Response("Metodo non consentito", status=405)
-
     except Subscription.DoesNotExist:
-        return Response("L'iscrizione non esiste", status=400)
-
+        return Response({'error': "L'iscrizione non esiste"}, status=404)
     except ValidationError as e:
-        return Response(str(e), status=400)
-
+        return Response({'error': str(e)}, status=400)
     except ObjectDoesNotExist as e:
-        return Response(str(e), status=400)
-
+        return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:
-        return Response(str(e), status=403)
-
+        return Response({'error': str(e)}, status=403)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(str(e), status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['POST'])
@@ -376,18 +367,18 @@ def move_subscriptions(request):
         target_list_id = request.data.get('targetListId')
 
         if not subscription_ids or not target_list_id:
-            return Response("ID iscrizioni o ID lista di destinazione mancanti", status=400)
+            return Response({'error': "ID iscrizioni o ID lista di destinazione mancanti"}, status=400)
 
         # Fetch the target list and validate its existence
         try:
             target_list = EventList.objects.get(id=target_list_id)
         except EventList.DoesNotExist:
-            return Response("Lista di destinazione inesistente", status=400)
+            return Response({'error': "Lista di destinazione inesistente"}, status=400)
 
         # Check if moving the subscriptions would exceed the target list's capacity
         current_count = Subscription.objects.filter(list=target_list).count()
-        if current_count + len(subscription_ids) > target_list.capacity:
-            return Response("Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione", status=400)
+        if target_list.capacity > 0 and current_count + len(subscription_ids) > target_list.capacity:
+            return Response({'error': "Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione"}, status=400)
 
         # Fetch the subscriptions to be moved
         subscriptions = Subscription.objects.filter(id__in=subscription_ids)
@@ -398,15 +389,15 @@ def move_subscriptions(request):
                 subscription.list = target_list
                 subscription.save()
 
-        return Response("Iscrizioni spostate con successo", status=200)
-
+        return Response({'message': "Iscrizioni spostate con successo"}, status=200)
     except Exception as e:
         logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
-        return Response({"message": f"Errore: {str(e)}"}, status=500)
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Future implementations
-''' 
+'''
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def profile_lookup(request):

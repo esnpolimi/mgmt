@@ -4,9 +4,7 @@ import {useNavigate} from "react-router-dom";
 import {useAuth} from "../Context/AuthContext";
 import logo from '../assets/esnpolimi-logo.png';
 import StatusBanner from "../Components/StatusBanner";
-import {fetchCustom} from "../api/api";
-import {extractErrorMessage} from "../utils/errorHandling";
-import * as Sentry from "@sentry/react";
+import {defaultErrorHandler, fetchCustom} from "../api/api";
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -18,25 +16,18 @@ export default function Login() {
     const [isResetSubmitted, setResetSubmitted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleForgotPassword = async () => {
+    const handleForgotPassword = () => {
         setIsLoading(true);
-        try {
-            console.log("Sending forgot password request for:", email);
-            const response = await fetchCustom("POST", '/api/forgot-password/', {email: email}, {}, false);
-            if (response.ok) {
+        fetchCustom("POST", '/api/forgot-password/', {
+            body: {email: email},
+            auth: false,
+            onSuccess: () => {
                 setResetSubmitted(true);
                 setStatusMessage({message: 'Se il profilo è registrato, l\'email è stata inviata con successo a "' + email + '". Controlla la tua casella di posta.', state: 'success'});
-            } else {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setStatusMessage({message: `Errore durante l'invio dell'email: ${errorMessage}`, state: 'error'});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setStatusMessage({message: `Errore generale: ${error}`, state: 'error'});
-        } finally {
-            setIsLoading(false);
-        }
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj)),
+            onFinally: () => setIsLoading(false)
+        });
     };
 
     const handleLogin = async () => {

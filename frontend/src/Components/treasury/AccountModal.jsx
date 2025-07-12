@@ -2,12 +2,10 @@ import {useState, useEffect} from 'react';
 import {Modal, Box, TextField, Button, Typography, Grid, IconButton, Select, MenuItem, InputLabel, FormControl, Chip, OutlinedInput, FormHelperText} from '@mui/material';
 import {styleESNcardModal as style} from '../../utils/sharedStyles';
 import Loader from '../Loader';
-import {fetchCustom} from '../../api/api';
-import {extractErrorMessage} from '../../utils/errorHandling';
+import {fetchCustom, defaultErrorHandler} from '../../api/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Popup from "../Popup";
 import {accountDisplayNames as names} from "../../utils/displayAttributes";
-import * as Sentry from "@sentry/react";
 
 export default function AccountModal({open, onClose, account = null}) {
     const isEdit = account !== null;
@@ -18,22 +16,10 @@ export default function AccountModal({open, onClose, account = null}) {
     const [groups, setGroups] = useState([]);
 
     useEffect(() => {
-        const fetchGroups = async () => {
-            try {
-                const response = await fetchCustom('GET', '/groups/');
-                const json = await response.json();
-                if (response.ok) {
-                    setGroups(json);
-                } else {
-                    const errorMessage = await extractErrorMessage(json, response.status);
-                    setPopup({message: `Errore nel recupero dei gruppi: ${errorMessage}`, state: 'error'});
-                }
-            } catch (e) {
-                Sentry.captureException(e);
-                setPopup({message: `Errore nel recupero dei gruppi: ${e}`, state: 'error'});
-            }
-        };
-        fetchGroups().then();
+        fetchCustom('GET', '/groups/', {
+            onSuccess: (data) => setGroups(data),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+        });
     }, []);
 
     useEffect(() => {
@@ -53,7 +39,7 @@ export default function AccountModal({open, onClose, account = null}) {
         setData({...data, visible_to_groups: event.target.value});
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
 
         const newErrors = {...errors};
@@ -69,24 +55,15 @@ export default function AccountModal({open, onClose, account = null}) {
 
 
         setLoading(true);
-        try {
-            const payload = {name: data.name, visible_to_groups: data.visible_to_groups};
-            let response;
-            if (isEdit && account) response = await fetchCustom('PATCH', `/account/${account.id}/`, payload);
-            else response = await fetchCustom('POST', '/account/', payload);
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore ${isEdit ? 'modifica' : 'creazione'} cassa: ${errorMessage}`, state: 'error'});
-            } else {
-                onClose(true);
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: 'error'});
-        } finally {
-            setLoading(false);
-        }
+        const payload = {name: data.name, visible_to_groups: data.visible_to_groups};
+        const method = isEdit && account ? 'PATCH' : 'POST';
+        const url = isEdit && account ? `/account/${account.id}/` : '/account/';
+        fetchCustom(method, url, {
+            body: payload,
+            onSuccess: () => onClose(true),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setLoading(false)
+        });
     };
 
     const handleClose = () => {

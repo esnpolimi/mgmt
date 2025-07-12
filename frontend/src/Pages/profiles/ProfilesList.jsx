@@ -8,7 +8,6 @@ import ClearIcon from "@mui/icons-material/Clear";
 import SearchIcon from "@mui/icons-material/Search";
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import {useNavigate} from 'react-router-dom';
-import * as Sentry from "@sentry/react";
 
 const ESNCARD_VALIDITY_OPTIONS = [
     {value: 'valid', label: 'Valida'},
@@ -28,45 +27,37 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
     const searchInputRef = useRef(null);
     const navigate = useNavigate();
 
-    const fetchData = async () => {
-        try {
-            const params = new URLSearchParams();
-            params.append('page', pagination.pageIndex + 1);
-            params.append('page_size', pagination.pageSize);
-            if (appliedSearch) params.append('search', appliedSearch);
-            if (filters.esncardValidity.length)
-                params.append('esncardValidity', filters.esncardValidity.join(','));
-            if (filters.group.length)
-                params.append('group', filters.group.join(','));
-            const response = await fetchCustom('GET', `${apiEndpoint}?${params.toString()}`);
-            const json = await response.json();
-            setRowCount(json.count || 0);
-            setData(json.results);
-        } catch (error) {
-            Sentry.captureException(error);
-        } finally {
-            setInternalLoading(false);
-        }
+    const fetchData = () => {
+        setInternalLoading(true);
+        const params = new URLSearchParams();
+        params.append('page', pagination.pageIndex + 1);
+        params.append('page_size', pagination.pageSize);
+        if (appliedSearch) params.append('search', appliedSearch);
+        if (filters.esncardValidity.length)
+            params.append('esncardValidity', filters.esncardValidity.join(','));
+        if (filters.group.length)
+            params.append('group', filters.group.join(','));
+        fetchCustom('GET', `${apiEndpoint}?${params.toString()}`, {
+            onSuccess: (data) => {
+                setRowCount(data.count || 0);
+                setData(data.results);
+            },
+            onError: () => {},
+            onFinally: () => setInternalLoading(false)
+        });
     };
 
     useImperativeHandle(ref, () => ({
         refreshData: () => {
-            setInternalLoading(true);
             fetchData();
         }
     }));
 
     useEffect(() => {
-        setInternalLoading(true);
         fetchData();
 
-        if (profileType === 'ESNer') {
-            fetchCustom("GET", "/groups/").then(response => {
-                if (response.ok) {
-                    response.json().then(json => setGroups(json));
-                }
-            });
-        }
+        if (profileType === 'ESNer')
+            fetchCustom("GET", "/groups/", {onSuccess: (data) => setGroups(data)});
     }, [apiEndpoint, pagination.pageIndex, pagination.pageSize, profileType, filters, appliedSearch]);
 
     const handleSearchApply = () => {

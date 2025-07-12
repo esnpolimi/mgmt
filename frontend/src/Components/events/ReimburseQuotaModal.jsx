@@ -6,10 +6,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import Popup from "../Popup";
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import * as Sentry from "@sentry/react";
-import {extractErrorMessage} from "../../utils/errorHandling";
 
 export default function ReimburseQuotaModal({open, onClose, event, subscription}) {
     const [isLoading, setLoading] = useState(true);
@@ -26,19 +24,12 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
         setPopup(null);
         setSelectedAccount('');
         setNotes('');
-        const fetchAccounts = async () => {
-            try {
-                const accResp = await fetchCustom("GET", "/accounts/");
-                const accJson = await accResp.json();
-                setAccounts(accJson.results || []);
-            } catch (e) {
-                Sentry.captureException(e);
-                setPopup({message: "Errore nel caricamento casse: " + e, state: "error"});
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchAccounts().then();
+        fetchCustom("GET", "/accounts/", {
+            parseJson: true,
+            onSuccess: (results) => setAccounts(results || []),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setLoading(false)
+        });
     }, [open]);
 
     const handleSubmit = async () => {
@@ -60,29 +51,20 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
         });
     };
 
-    const doSubmit = async () => {
+    const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
-        try {
-            const response = await fetchCustom("POST", "/reimburse_quota/", {
+        fetchCustom("POST", "/reimburse_quota/", {
+            body: {
                 event: event.id,
                 subscription_id: subscription.id,
                 account: selectedAccount,
                 notes
-            });
-            const json = await response.json();
-            if (!response.ok) {
-                const errorMessage = extractErrorMessage(json, response.status);
-                setPopup({message: `Errore nel rimborso: ${errorMessage}`, state: "error"});
-            } else {
-                onClose(true, 'Rimborso quota effettuato con successo');
-            }
-        } catch (e) {
-            Sentry.captureException(e);
-            setPopup({message: "Errore nel rimborso: " + e, state: "error"});
-        } finally {
-            setSubmitting(false);
-        }
+            },
+            onSuccess: () => onClose(true, 'Rimborso quota effettuato con successo'),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setSubmitting(false)
+        });
     };
 
     return (

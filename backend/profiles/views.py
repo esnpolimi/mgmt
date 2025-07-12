@@ -77,11 +77,10 @@ def profile_list(request, is_esner):
         page = paginator.paginate_queryset(profiles, request=request)
         serializer = ProfileListViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['POST'])
@@ -176,7 +175,6 @@ def initiate_profile_creation(request):
                 logger.info(f"Email sent to {profile.email}")
             except Exception as e:
                 logger.info(f"Email error: {str(e)}")
-                # Don't delete profile on email error, just return the error
                 return Response({"error": f"{error_message}{str(e)}"}, status=500)
 
             return Response({
@@ -190,11 +188,10 @@ def initiate_profile_creation(request):
             if not document_valid:
                 errors.update({'document_' + k: v[0] for k, v in document_serializer.errors.items()})
             return Response(errors, status=400)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({"error": "Si è verificato un errore imprevisto: " + str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['GET'])
@@ -205,19 +202,19 @@ def verify_email_and_enable_profile(request, uid, token):
             uid = force_str(urlsafe_base64_decode(uid))
             profile = Profile.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, Profile.DoesNotExist):
-            return Response({"error": "Link di verifica non valido."}, status=400)
+            return Response({'error': 'Link di verifica non valido.'}, status=400)
 
         if not email_verification_token.check_token(profile, token):
             if profile.is_esner:
-                return Response({"error": "Link di verifica non valido o scaduto."}, status=400)
+                return Response({'error': 'Link di verifica non valido o scaduto.'}, status=400)
             else:
-                return Response({"error": "Invalid or expired verification link. Please contact us at informatica@esnpolimi.it"}, status=400)
+                return Response({'error': 'Invalid or expired verification link. Please contact us at informatica@esnpolimi.it'}, status=400)
 
         if profile.email_is_verified:
             if profile.is_esner:
-                return Response({"message": "Email già verificata."}, status=200)
+                return Response({'message': 'Email già verificata.'}, status=200)
             else:
-                return Response({"message": "Email already verified."}, status=200)
+                return Response({'message': 'Email already verified.'}, status=200)
 
         # Activate profile and related objects
         with transaction.atomic():
@@ -235,17 +232,16 @@ def verify_email_and_enable_profile(request, uid, token):
                     user.is_active = True
                     user.save()
                 except User.DoesNotExist:
-                    return Response({"error": "L'utente associato a questo profilo non esiste."}, status=500)
+                    return Response({'error': "L'utente associato a questo profilo non esiste."}, status=500)
 
         if profile.is_esner:
-            return Response({"message": "Email verificata e profilo attivato con successo!"})
+            return Response({'message': 'Email verificata e profilo attivato con successo!'})
         else:
-            return Response({"message": "Email verified and profile successfully activated!"})
-
+            return Response({'message': 'Email verified and profile successfully activated!'})
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({"error": "An unexpected error occurred. Please contact us at informatica@esnpolimi.it"}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
@@ -290,14 +286,12 @@ def profile_detail(request, pk):
             return Response({'error': 'Non hai i permessi per eliminare questo profilo.'}, status=401)
         else:
             return Response({'error': 'Metodo non supportato.'}, status=405)
-
     except Profile.DoesNotExist:
-        return Response('Il profilo non esiste.', status=404)
-
+        return Response({'error': 'Il profilo non esiste.'}, status=404)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Si è verificato un errore imprevisto.'}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to create document
@@ -313,11 +307,10 @@ def document_creation(request):
 
         else:
             return Response(document_serializer.errors, status=400)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response('Si è verificato un errore imprevisto.', status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['PATCH', 'DELETE'])
@@ -346,12 +339,11 @@ def document_detail(request, pk):
         else:
             return Response({'error': 'Metodo non supportato.'}, status=405)
     except Document.DoesNotExist:
-        return Response('Il documento non esiste.', status=400)
-
+        return Response({'error': 'Il documento non esiste.'}, status=404)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response(str(e), status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['GET'])
@@ -390,11 +382,10 @@ def search_profiles(request):
         page = paginator.paginate_queryset(profiles, request=request)
         serializer = ProfileListViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
-
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({"error": "Si è verificato un errore: " + str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 @api_view(['GET'])
@@ -413,7 +404,6 @@ def profile_subscriptions(request, pk):
                 "event_id": sub.event.id,
                 "event_name": sub.event.name,
                 "event_date": sub.event.date,
-                "status": sub.status,
                 "list_name": sub.list.name if sub.list else None,
                 "subscribed_at": sub.created_at,
             })
@@ -421,4 +411,4 @@ def profile_subscriptions(request, pk):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({"error": str(e)}, status=500)
+        return Response({'error': 'Errore interno del server.'}, status=500)

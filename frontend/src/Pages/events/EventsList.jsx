@@ -4,20 +4,18 @@ import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
 import EventIcon from '@mui/icons-material/Event';
 import EventModal from '../../Components/events/EventModal.jsx';
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
 import {eventDisplayNames as names} from "../../utils/displayAttributes";
 import Loader from "../../Components/Loader";
 import dayjs from "dayjs";
 import Popup from "../../Components/Popup";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
-import * as Sentry from "@sentry/react";
 import FestivalIcon from '@mui/icons-material/Festival';
 import RefreshIcon from "@mui/icons-material/Refresh";
 
@@ -50,38 +48,30 @@ export default function EventsList() {
         return dayjs(date).format('YYYY-MM-DD');
     };
 
-    const refreshData = async () => {
+    const refreshData = () => {
         setLocalLoading(true);
-        try {
-            const params = new URLSearchParams();
-            params.append('page', pagination.pageIndex + 1);
-            params.append('page_size', pagination.pageSize);
-            if (appliedSearch) params.append('search', appliedSearch);
-            if (filters.subscriptionStatus.length)
-                params.append('status', filters.subscriptionStatus.join(','));
-            if (filters.dateFrom)
-                params.append('dateFrom', formatDateString(filters.dateFrom));
-            if (filters.dateTo)
-                params.append('dateTo', formatDateString(filters.dateTo));
-            const response = await fetchCustom("GET", `/events/?${params.toString()}`);
-            const json = await response.json();
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
-                setRowCount(json.count || 0);
-                setData(json.results);
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLocalLoading(false);
-        }
+        const params = new URLSearchParams();
+        params.append('page', pagination.pageIndex + 1);
+        params.append('page_size', pagination.pageSize);
+        if (appliedSearch) params.append('search', appliedSearch);
+        if (filters.subscriptionStatus.length)
+            params.append('status', filters.subscriptionStatus.join(','));
+        if (filters.dateFrom)
+            params.append('dateFrom', formatDateString(filters.dateFrom));
+        if (filters.dateTo)
+            params.append('dateTo', formatDateString(filters.dateTo));
+        fetchCustom("GET", `/events/?${params.toString()}`, {
+            onSuccess: (data) => {
+                setRowCount(data.count || 0);
+                setData(data.results);
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setLocalLoading(false)
+        });
     };
 
     useEffect(() => {
-        refreshData().then();
+        refreshData();
     }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
     const columns = useMemo(() => [

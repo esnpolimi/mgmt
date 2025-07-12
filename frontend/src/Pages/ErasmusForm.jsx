@@ -7,7 +7,7 @@ import {Checkbox, FormControlLabel} from '@mui/material';
 import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import {fetchCustom} from "../api/api";
+import {defaultErrorHandler, fetchCustom} from "../api/api";
 import countryCodes from "../data/countryCodes.json";
 import StatusBanner from '../Components/StatusBanner';
 import Link from '@mui/material/Link';
@@ -15,7 +15,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import LoginIcon from '@mui/icons-material/Login';
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import * as Sentry from "@sentry/react";
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -241,31 +240,32 @@ export default function ErasmusForm() {
             birthdate: formatDateString(formData.birthdate),
             document_expiration: formatDateString(formData.document_expiration),
             matricola_expiration: formatDateString(formData.matricola_expiration),
-        }
-
-        const submit = async () => {
-            try {
-                const response = await fetchCustom("POST", '/profile/initiate-creation/', body, {}, false);
-                const data = await response.json();
-                setFormErrors(initialFormErrors);
-                if (!response.ok) {
-                    setStatusMessage({message: 'Failed to submit application: see errors below', state: 'error'});
-                    const newErrors = {...formErrors};
-                    Object.entries(data).forEach(([field, message]) => {
-                        if (newErrors[field]) newErrors[field] = [true, message];
-                    });
-                    setFormErrors(newErrors);
-                } else {
-                    setSubmitted(true);
-                }
-            } catch (error) {
-                Sentry.captureException(error);
-                setStatusMessage({message: 'Internal error (please contact us): ' + error.message, state: 'error'});
-            } finally {
-                setIsLoading(false);
-            }
         };
-        submit().then();
+
+        fetchCustom("POST", '/profile/initiate-creation/', {
+            body,
+            auth: false,
+            parseJson: true,
+            onSuccess: () => {
+                setFormErrors(initialFormErrors);
+                setSubmitted(true);
+            },
+            onError: (responseOrError) => {
+                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj));
+                setFormErrors(initialFormErrors);
+                // Try to extract field errors if available
+                if (responseOrError?.json) {
+                    responseOrError.json().then(data => {
+                        const newErrors = {...formErrors};
+                        Object.entries(data).forEach(([field, message]) => {
+                            if (newErrors[field]) newErrors[field] = [true, message];
+                        });
+                        setFormErrors(newErrors);
+                    });
+                }
+            },
+            onFinally: () => setIsLoading(false)
+        });
     }
 
     const handleSameNumberChange = (e) => {

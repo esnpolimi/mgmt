@@ -4,19 +4,17 @@ import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
 import StoreIcon from '@mui/icons-material/Store';
 import AccountModal from '../../Components/treasury/AccountModal.jsx';
-import {fetchCustom} from "../../api/api";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {MRT_Localization_IT} from "material-react-table/locales/it";
 import {useNavigate} from "react-router-dom";
 import {accountDisplayNames as names} from "../../utils/displayAttributes";
 import Loader from "../../Components/Loader";
 import Popup from "../../Components/Popup";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import TransactionAdd from "../../Components/treasury/TransactionAdd";
-import EditIcon from '@mui/icons-material/Edit';
-import * as Sentry from "@sentry/react";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
+import EditIcon from "@mui/icons-material/Edit";
 
 export default function AccountsList() {
     const [data, setData] = useState([]);
@@ -28,27 +26,19 @@ export default function AccountsList() {
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
 
     useEffect(() => {
-        refreshAccountsData().then();
+        refreshAccountsData();
     }, []);
 
-    const refreshAccountsData = async () => {
+    const refreshAccountsData = () => {
         setLoading(true);
-        try {
-            const response = await fetchCustom("GET", '/accounts/');
-            const json = await response.json();
-            if (!response.ok) {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
-                setData(json.results);
-                console.log("Account List Data: ", json.results);
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setLoading(false);
-        }
+        fetchCustom("GET", '/accounts/', {
+            onSuccess: (data) => setData(data),
+            onError: (responseOrError) => {
+                defaultErrorHandler(responseOrError, setPopup);
+                setData([]);
+            },
+            onFinally: () => setLoading(false)
+        });
     };
 
     const columns = useMemo(() => [

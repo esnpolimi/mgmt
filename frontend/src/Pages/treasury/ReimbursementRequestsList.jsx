@@ -2,7 +2,7 @@ import {useState, useEffect, useMemo, useRef} from 'react';
 import {Box, Typography, FormControl, InputLabel, Select, MenuItem, OutlinedInput, Grid, IconButton, Chip, Button} from '@mui/material';
 import Sidebar from '../../Components/Sidebar.jsx';
 import Loader from '../../Components/Loader';
-import {fetchCustom} from '../../api/api';
+import {fetchCustom, defaultErrorHandler} from '../../api/api';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -53,29 +53,33 @@ export default function ReimbursementRequestsList() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        refreshRequestsData().then();
+        refreshRequestsData();
     }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
-    const refreshRequestsData = async () => {
+    const refreshRequestsData = () => {
         setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            params.append('page', pagination.pageIndex + 1);
-            params.append('page_size', pagination.pageSize);
-            if (appliedSearch) params.append('search', appliedSearch);
-            if (filters.payment.length)
-                filters.payment.forEach(p => params.append('payment', p));
-            if (filters.dateFrom)
-                params.append('dateFrom', filters.dateFrom.toISOString());
-            if (filters.dateTo)
-                params.append('dateTo', filters.dateTo.toISOString());
-            const res = await fetchCustom('GET', `/reimbursement_requests/?${params.toString()}`);
-            const json = res.ok ? await res.json() : {results: []};
-            setRowCount(json.count || 0);
-            setRequests(json.results || []);
-        } finally {
-            setLoading(false);
-        }
+        const params = new URLSearchParams();
+        params.append('page', pagination.pageIndex + 1);
+        params.append('page_size', pagination.pageSize);
+        if (appliedSearch) params.append('search', appliedSearch);
+        if (filters.payment.length)
+            filters.payment.forEach(p => params.append('payment', p));
+        if (filters.dateFrom)
+            params.append('dateFrom', filters.dateFrom.toISOString());
+        if (filters.dateTo)
+            params.append('dateTo', filters.dateTo.toISOString());
+        fetchCustom('GET', `/reimbursement_requests/?${params.toString()}`, {
+            onSuccess: (data) => {
+                setRowCount(data.count || 0);
+                setRequests(data.results || []);
+            },
+            onError: (responseOrError) => {
+                defaultErrorHandler(responseOrError, setPopup);
+                setRequests([]);
+                setRowCount(0);
+            },
+            onFinally: () => setLoading(false)
+        });
     };
 
     const handleOpenReimburseModal = (row) => {
@@ -83,17 +87,17 @@ export default function ReimbursementRequestsList() {
         setReimburseModalOpen(true);
     };
 
-    const handleCloseReimburseModal = async (success) => {
+    const handleCloseReimburseModal = (success) => {
         setReimburseModalOpen(false);
         if (success) {
             setPopup({message: "Rimborso effettuato con successo!", state: "success"});
-            await refreshRequestsData();
+            refreshRequestsData();
         }
         setSelectedRequest(null);
     };
 
     const handleReimbursed = () => {
-        refreshRequestsData().then();
+        refreshRequestsData();
     };
 
     const columns = useMemo(() => [

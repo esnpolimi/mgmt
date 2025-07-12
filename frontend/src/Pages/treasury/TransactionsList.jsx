@@ -2,7 +2,7 @@ import {useState, useEffect, useMemo, useRef} from 'react';
 import {Box, Typography, FormControl, InputLabel, Select, MenuItem, OutlinedInput, Grid, IconButton, Chip, Button} from '@mui/material';
 import Sidebar from '../../Components/Sidebar.jsx';
 import Loader from '../../Components/Loader';
-import {fetchCustom} from '../../api/api';
+import {fetchCustom, defaultErrorHandler} from '../../api/api';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
@@ -53,37 +53,44 @@ export default function TransactionsList() {
     const searchInputRef = useRef(null);
 
     useEffect(() => {
-        refreshTransactionsData().then();
+        refreshTransactionsData();
     }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
 
-    const refreshTransactionsData = async () => {
+    const refreshTransactionsData = () => {
         setLoading(true);
-        try {
-            // Build query params for pagination, search, and filters
-            const params = new URLSearchParams();
-            params.append('page', pagination.pageIndex + 1);
-            params.append('page_size', pagination.pageSize);
-            if (appliedSearch) params.append('search', appliedSearch);
-            if (filters.account.length)
-                filters.account.forEach(acc => params.append('account', acc));
-            if (filters.type.length)
-                filters.type.forEach(t => params.append('type', t));
-            if (filters.dateFrom)
-                params.append('dateFrom', filters.dateFrom.toISOString());
-            if (filters.dateTo)
-                params.append('dateTo', filters.dateTo.toISOString());
-            const [txRes, accRes] = await Promise.all([
-                fetchCustom('GET', `/transactions/?${params.toString()}`),
-                fetchCustom('GET', '/accounts/')
-            ]);
-            const txJson = txRes.ok ? await txRes.json() : {results: []};
-            const accJson = accRes.ok ? await accRes.json() : {results: []};
-            setRowCount(txJson.count || 0);
-            setTransactions(txJson.results || []);
-            setAccounts(accJson.results || []);
-        } finally {
-            setLoading(false);
-        }
+        const params = new URLSearchParams();
+        params.append('page', pagination.pageIndex + 1);
+        params.append('page_size', pagination.pageSize);
+        if (appliedSearch) params.append('search', appliedSearch);
+        if (filters.account.length)
+            filters.account.forEach(acc => params.append('account', acc));
+        if (filters.type.length)
+            filters.type.forEach(t => params.append('type', t));
+        if (filters.dateFrom)
+            params.append('dateFrom', filters.dateFrom.toISOString());
+        if (filters.dateTo)
+            params.append('dateTo', filters.dateTo.toISOString());
+
+        // Transactions
+        fetchCustom('GET', `/transactions/?${params.toString()}`, {
+            onSuccess: (data) => {
+                setRowCount(data.count || 0);
+                setTransactions(data.results || []);
+            },
+            onError: (responseOrError) => {
+                defaultErrorHandler(responseOrError, setPopup);
+                setTransactions([]);
+                setRowCount(0);
+            },
+            onFinally: () => setLoading(false)
+        });
+
+        // Accounts
+        fetchCustom('GET', '/accounts/', {
+            onSuccess: (data) => setAccounts(data),
+            onError: () => setAccounts([]),
+            // No need to setLoading here, handled above
+        });
     };
 
     const columns = useMemo(() => [
@@ -229,11 +236,11 @@ export default function TransactionsList() {
         if (searchInputRef.current) searchInputRef.current.focus();
     };
 
-    const handleCloseTransactionModal = async (success) => {
+    const handleCloseTransactionModal = (success) => {
         setTransactionModalOpen(false);
         if (success) {
             setPopup({message: "Transazione modificata con successo!", state: "success"});
-            await refreshTransactionsData();
+            refreshTransactionsData();
         }
         setSelectedTransaction(null);
     };

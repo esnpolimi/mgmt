@@ -6,7 +6,6 @@ import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip, IconButton, Typography} from "@mui/material";
 import RefreshIcon from '@mui/icons-material/Refresh';
-import * as Sentry from "@sentry/react";
 import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
 import ReceiptIcon from "@mui/icons-material/Receipt";
 
@@ -14,23 +13,18 @@ export default function TransactionsDash({limit = 3}) {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
-    const fetchData = async () => {
+    const fetchData = () => {
         setLoading(true);
-        try {
-            const response = await fetchCustom("GET", `/transactions/?limit=${limit}`);
-            if (response.ok) {
-                const json = await response.json();
-                setData(json.results);
-            }
-        } catch (e) {
-            Sentry.captureException(e);
-        } finally {
-            setLoading(false);
-        }
+        fetchCustom("GET", `/transactions/?limit=${limit}`, {
+            parseJson: true,
+            onSuccess: (results) => setData(results || []),
+            onError: () => setData([]),
+            onFinally: () => setLoading(false)
+        });
     };
 
     useEffect(() => {
-        fetchData().then();
+        fetchData();
     }, [limit]);
 
     const columns = useMemo(() => [

@@ -7,11 +7,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import {styleESNcardModal as style} from '../../utils/sharedStyles';
 import Loader from '../Loader';
 import Popup from '../Popup';
-import {fetchCustom} from '../../api/api';
-import {extractErrorMessage} from '../../utils/errorHandling';
+import {defaultErrorHandler, fetchCustom} from '../../api/api';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import ProfileSearch from '../ProfileSearch';
-import * as Sentry from "@sentry/react";
 import CircularProgress from '@mui/material/CircularProgress';
 import ConfirmDialog from '../ConfirmDialog';
 
@@ -42,12 +40,10 @@ export default function TransactionModal({open, onClose, transaction}) {
     });
 
     useEffect(() => {
-        console.log('TransactionModal useEffect', transaction);
         setLoading(true);
-        Promise.all([fetchCustom('GET', '/accounts/')])
-            .then(async ([accRes]) => {
-                const accJson = accRes.ok ? await accRes.json() : {results: []};
-                setAccounts(accJson.results || []);
+        fetchCustom('GET', '/accounts/', {
+            onSuccess: (results) => {
+                setAccounts(results);
                 if (transaction) {
                     setData({
                         executor: transaction.executor || null,
@@ -57,7 +53,10 @@ export default function TransactionModal({open, onClose, transaction}) {
                         type: transaction.type || '',
                     });
                 }
-            }).finally(() => setLoading(false));
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setLoading(false)
+        });
     }, [open, transaction]);
 
     const handleInputChange = (e) => {
@@ -84,7 +83,7 @@ export default function TransactionModal({open, onClose, transaction}) {
         return !hasError;
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (!validate()) return;
         // Confirm dialog for account amount change
@@ -101,32 +100,25 @@ export default function TransactionModal({open, onClose, transaction}) {
                 action: () => doSubmit(payload),
                 message: `Stai modificando l'importo o la cassa (${accName}). Confermi di voler salvare le modifiche?`
             });
-        } else {
-            await doSubmit(payload);
-        }
+        } else doSubmit(payload);
     };
 
-    const doSubmit = async (payload) => {
+    const doSubmit = (payload) => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
         setLoading(true);
-        try {
-            const response = await fetchCustom('PATCH', `/transaction/${transaction.id}/`, payload);
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else onClose(true);
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: 'error'});
-        } finally {
-            setLoading(false);
-            setSubmitting(false);
-        }
+        fetchCustom('PATCH', `/transaction/${transaction.id}/`, {
+            body: payload,
+            onSuccess: () => onClose(true),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => {
+                setLoading(false);
+                setSubmitting(false);
+            }
+        });
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!transaction || !deletableTranTypes.includes(transaction.type)) {
             setPopup({message: 'Transazione non eliminabile', state: 'error'});
             return;
@@ -139,26 +131,18 @@ export default function TransactionModal({open, onClose, transaction}) {
         });
     };
 
-    const doDelete = async () => {
+    const doDelete = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setDeleting(true);
         setLoading(true);
-        try {
-            const response = await fetchCustom('DELETE', `/transaction/${transaction.id}/`);
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: 'error'});
-            } else {
-                onClose(true);
+        fetchCustom('DELETE', `/transaction/${transaction.id}/`, {
+            onSuccess: () => onClose(true),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => {
+                setLoading(false);
+                setDeleting(false);
             }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: 'error'});
-        } finally {
-            setLoading(false);
-            setDeleting(false);
-        }
+        });
     };
 
     return (

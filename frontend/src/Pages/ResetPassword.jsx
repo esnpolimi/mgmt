@@ -3,9 +3,7 @@ import {useParams, useNavigate} from 'react-router-dom';
 import {Container, TextField, Button, Box, Typography, Link} from '@mui/material';
 import StatusBanner from '../Components/StatusBanner';
 import logo from '../assets/esnpolimi-logo.png';
-import {extractErrorMessage} from "../utils/errorHandling";
-import {fetchCustom} from "../api/api";
-import * as Sentry from "@sentry/react";
+import {defaultErrorHandler, fetchCustom} from "../api/api";
 
 export default function ResetPassword() {
     const {uid, token} = useParams();
@@ -15,29 +13,24 @@ export default function ResetPassword() {
     const [statusMessage, setStatusMessage] = useState(null);
     const [isSubmitted, setSubmitted] = useState(false);
 
-    const handleResetPassword = async () => {
+    const handleResetPassword = () => {
         if (password !== confirmPassword) {
             setStatusMessage({message: 'Le password non coincidono.', state: 'error'});
             return;
         }
 
-        try {
-            const response = await fetchCustom("POST", `/api/reset-password/${uid}/${token}/`, {
+        fetchCustom("POST", `/api/reset-password/${uid}/${token}/`, {
+            body: {
                 password: password,
                 confirm_password: confirmPassword
-            }, {}, false);
-            if (response.ok) {
+            },
+            auth: false,
+            onSuccess: () => {
                 setSubmitted(true);
                 setStatusMessage({message: 'Password reimpostata con successo!', state: 'success'});
-            } else {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setStatusMessage({message: `Errore durante il reset della password: ${errorMessage}`, state: 'error'});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setStatusMessage({message: `Errore generale: ${error}`, state: 'error'});
-        }
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj))
+        });
     };
 
     return (

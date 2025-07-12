@@ -4,10 +4,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {useAuth} from "../../Context/AuthContext";
-import {fetchCustom} from "../../api/api";
-import * as Sentry from "@sentry/react";
+import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import Popup from "../Popup";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import CircularProgress from "@mui/material/CircularProgress";
 import ConfirmDialog from "../ConfirmDialog";
 
@@ -73,7 +71,7 @@ export default function ReimbursementRequestModal({open, onClose}) {
         });
     };
 
-    const doSubmit = async () => {
+    const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
 
@@ -95,21 +93,13 @@ export default function ReimbursementRequestModal({open, onClose}) {
             };
         }
 
-        try {
-            const response = await fetchCustom('POST', '/reimbursement_request/', body, isFormData);
-            if (response.ok) {
-                onClose(true);
-            } else {
-                const json = await response.json();
-                const error = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${error}`, state: "error"});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: 'Errore generale: ' + error.message, state: "error"});
-        } finally {
-            setSubmitting(false);
-        }
+        fetchCustom('POST', '/reimbursement_request/', {
+            body,
+            isFormData,
+            onSuccess: () => onClose(true),
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setSubmitting(false)
+        });
     };
 
     return (

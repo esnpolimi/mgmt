@@ -2,13 +2,11 @@ import {useEffect, useMemo, useState} from "react";
 import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, CircularProgress, Alert} from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import {fetchCustom} from "../../api/api";
+import {defaultErrorHandler, fetchCustom} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
-import {extractErrorMessage} from "../../utils/errorHandling";
 import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
-import * as Sentry from "@sentry/react";
 import Popup from "../Popup";
 
 export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit, profileId, profileName}) {
@@ -70,22 +68,15 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             }
         }
         setLoading(false);
-        fetchAccounts().then();
+        fetchAccounts();
     }, [isEdit, profileId, profileName, event])
 
-    const fetchAccounts = async () => {
-        try {
-            const response = await fetchCustom("GET", "/accounts/");
-            const json = await response.json();
-            if (response.ok) setAccounts(json.results);
-            else {
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore durante il recupero delle casse: ${errorMessage}`, state: "error"});
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+    const fetchAccounts = () => {
+        fetchCustom("GET", "/accounts/", {
+            parseJson: true,
+            onSuccess: (results) => setAccounts(results),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+        });
     }
 
     const resetErrors = () => {
@@ -146,7 +137,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         return '';
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         let hasErrors = false;
         const newErrors = resetErrors();
         fieldsToValidate.forEach(item => {
@@ -183,14 +174,14 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             });
             return;
         }
-        await doSubmit();
+        doSubmit();
     };
 
-    const doSubmit = async () => {
+    const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitLoading(true);
-        try {
-            const response = await fetchCustom(isEdit ? "PATCH" : "POST", `/subscription/${isEdit ? data.id + '/' : ''}`, {
+        fetchCustom(isEdit ? "PATCH" : "POST", `/subscription/${isEdit ? data.id + '/' : ''}`, {
+            body: {
                 profile: data.profile_id,
                 event: event.id,
                 list: data.list_id,
@@ -198,26 +189,19 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 notes: data.notes,
                 status_quota: data.status_quota,
                 status_cauzione: data.status_cauzione
-            });
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore: ${errorMessage}`, state: "error"});
-            } else {
+            },
+            onSuccess: () => {
                 onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
-            }
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        } finally {
-            setSubmitLoading(false);
-        }
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSubmitLoading(false)
+        });
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         // Only confirm if paid
         if (data.status_quota === 'paid' || data.status_cauzione === 'paid') {
-            let message = '';
+            let message;
             if (data.status_quota === 'paid' && data.status_cauzione !== 'paid') {
                 message = `Confermi di voler eliminare un pagamento quota di €${getQuotaImport().toFixed(2)}?`;
             } else if (data.status_cauzione === 'paid' && data.status_quota !== 'paid') {
@@ -232,23 +216,16 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             });
             return;
         }
-        await doDelete();
+        doDelete();
     };
 
-    const doDelete = async () => {
+    const doDelete = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         if (!isEdit || !data.id) return;
-        try {
-            const response = await fetchCustom("DELETE", `/subscription/${data.id}/`);
-            if (!response.ok) {
-                const json = await response.json();
-                const errorMessage = await extractErrorMessage(json, response.status);
-                setPopup({message: `Errore eliminazione: ${errorMessage}`, state: 'error'});
-            } else onClose(true, "Eliminazione avvenuta con successo");
-        } catch (error) {
-            Sentry.captureException(error);
-            setPopup({message: `Errore generale: ${error}`, state: "error"});
-        }
+        fetchCustom("DELETE", `/subscription/${data.id}/`, {
+            onSuccess: () => onClose(true, "Eliminazione avvenuta con successo"),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup)
+        });
     };
 
     const handleChange = (e) => {
