@@ -13,7 +13,6 @@ const popupStyle = {
     borderRadius: '6px',
     cursor: 'pointer',
     zIndex: 10000,
-    transition: 'opacity 2s ease-out',
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     minWidth: '250px',
     maxWidth: '350px',
@@ -63,6 +62,7 @@ const Popup = ({message, state, duration = 4000}) => {
                 ...popupStyle,
                 backgroundColor: state === 'success' ? successColor : popupStyle.backgroundColor,
                 opacity: visible ? 1 : 0,
+                transition: visible ? 'none' : 'opacity 2s ease-out',
             }}
             role="alert"
             onMouseEnter={handleMouseEnter}
