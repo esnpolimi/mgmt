@@ -3,7 +3,7 @@
 ## Backend Deployment
 
 ```bash
-# Commit and push to development
+# Commit and push to production
 git subtree push --prefix backend origin deploy-backend
 ```
 
@@ -14,7 +14,7 @@ cd frontend
 npm run build
 cd ..
 git add -f frontend/build
-# Commit and push to development
+# Commit and push to production
 git subtree push --prefix frontend/build origin deploy-frontend
 ```
 
