@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from events.models import Subscription
+from events.serializers import SubscriptionSerializer
 from profiles.models import Profile, Document
 from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
@@ -87,6 +88,12 @@ def profile_list(request, is_esner):
 def initiate_profile_creation(request):
     try:
         data = request.data
+
+        # Enforce esnpolimi.it domain for ESNer registration
+        is_esner = data.get('is_esner', False)
+        email = data.get('email', '')
+        if is_esner and (not isinstance(email, str) or not email.endswith('@esnpolimi.it')):
+            return Response({'email': 'Solo email @esnpolimi.it sono ammesse per la registrazione.'}, status=400)
 
         # Validate data but don't save yet
         profile_serializer = ProfileCreateSerializer(data=data)
@@ -395,19 +402,9 @@ def profile_subscriptions(request, pk):
     Returns all subscriptions for a given profile, with event and list info.
     """
     try:
-        subs = Subscription.objects.filter(profile_id=pk)
-        # Compose a list of dicts with event and list info
-        result = []
-        for sub in subs.select_related('event', 'list'):
-            result.append({
-                "id": sub.id,
-                "event_id": sub.event.id,
-                "event_name": sub.event.name,
-                "event_date": sub.event.date,
-                "list_name": sub.list.name if sub.list else None,
-                "subscribed_at": sub.created_at,
-            })
-        return Response(result, status=200)
+        subs = Subscription.objects.filter(profile_id=pk).select_related('event', 'list')
+        serializer = SubscriptionSerializer(subs, many=True)
+        return Response(serializer.data, status=200)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)

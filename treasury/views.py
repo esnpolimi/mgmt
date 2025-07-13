@@ -189,6 +189,7 @@ def transactions_list(request):
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(transactions, request=request)
         serializer = TransactionViewSerializer(page, many=True)
+        # Returns paginated response, use .results in frontend
         return paginator.get_paginated_response(serializer.data)
     except Exception as e:
         logger.error(str(e))
@@ -251,7 +252,9 @@ def transaction_detail(request, pk):
             list_deleteable = [
                 Transaction.TransactionType.RIMBORSO_CAUZIONE,
                 Transaction.TransactionType.REIMBURSEMENT,
-                Transaction.TransactionType.RIMBORSO_QUOTA
+                Transaction.TransactionType.RIMBORSO_QUOTA,
+                Transaction.TransactionType.DEPOSIT,
+                Transaction.TransactionType.WITHDRAWAL
             ]
             if transaction_obj.type in list_deleteable:
                 if not request.user.has_perm('treasury.delete_transaction'):
@@ -277,17 +280,12 @@ def accounts_list(request):
     try:
         accounts = Account.objects.all().order_by('id')
         visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(visible_accounts, request=request)
+        # Returns a plain list, not paginated
         if request.user.groups.filter(name="Aspiranti").exists():
-            serializer = AccountListViewSerializer(page, many=True)  # Do not return sensitive data, like balance
+            serializer = AccountListViewSerializer(visible_accounts, many=True)
         else:
-            serializer = AccountDetailedViewSerializer(page, many=True, context={'request': request})
-        # Get the paginated response
-        response_data = paginator.get_paginated_response(serializer.data).data
-
-        return Response(response_data)
+            serializer = AccountDetailedViewSerializer(visible_accounts, many=True, context={'request': request})
+        return Response(serializer.data, status=200)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
