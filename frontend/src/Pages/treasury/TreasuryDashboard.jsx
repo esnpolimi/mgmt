@@ -20,7 +20,7 @@ export default function TreasuryDashboard() {
                 <Grid container spacing={3}>
                     <Grid size={{xs: 12, md: 4}}>
                         <Paper elevation={3} sx={{p: 2}}>
-                            <AccountsDash limit={5}/>
+                            <AccountsDash/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
                                 <Button
                                     variant="outlined"

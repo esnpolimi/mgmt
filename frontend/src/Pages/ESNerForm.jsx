@@ -24,6 +24,7 @@ export default function ESNerForm() {
     const [isLoading, setIsLoading] = useState(false);
     const [capsLockActive, setCapsLockActive] = useState({password: false, password_confirm: false});
     const names = profileDisplayNames;
+    const enforcedDomain = '@esnpolimi.it';
 
     const [formData, setFormData] = React.useState({
         'email': '',
@@ -145,6 +146,15 @@ export default function ESNerForm() {
                 newErrors[field] = [false, ''];
             }
         });
+
+        // Enforce domain for ESNer registration
+        if (
+            !formData.email.endsWith(enforcedDomain) ||
+            !formData.email_confirm.endsWith(enforcedDomain)
+        ) {
+            newErrors.email = [true, `L'email deve essere parte di ${enforcedDomain}`];
+            valid = false;
+        }
 
         // Validate matricola (exactly 6 digits)
         const matricolaRegex = /^\d{6}$/;
@@ -278,13 +288,12 @@ export default function ESNerForm() {
 
         fetchCustom("POST", '/profile/initiate-creation/', {
             body,
-            parseJson: true,
             onSuccess: () => {
                 setFormErrors(initialFormErrors);
                 setSubmitted(true);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj));
+                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj)).then();
                 setFormErrors(initialFormErrors);
                 // Try to extract field errors if available
                 if (responseOrError?.json) {
@@ -372,7 +381,7 @@ export default function ESNerForm() {
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
-                        label={names.email}
+                        label={names.email + " " + enforcedDomain}
                         variant="outlined"
                         name="email"
                         type="email"
@@ -722,4 +731,3 @@ export default function ESNerForm() {
         </Box>
     );
 }
-

@@ -245,13 +245,12 @@ export default function ErasmusForm() {
         fetchCustom("POST", '/profile/initiate-creation/', {
             body,
             auth: false,
-            parseJson: true,
-            onSuccess: () => {
+                        onSuccess: () => {
                 setFormErrors(initialFormErrors);
                 setSubmitted(true);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj));
+                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj)).then();
                 setFormErrors(initialFormErrors);
                 // Try to extract field errors if available
                 if (responseOrError?.json) {

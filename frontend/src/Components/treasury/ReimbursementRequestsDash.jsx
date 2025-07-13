@@ -91,7 +91,7 @@ export default function ReimbursementRequestsDash({limit = 3}) {
 
     const table = useMaterialReactTable({
         columns,
-        data: data.slice(0, limit),
+        data: data,
         enableKeyboardShortcuts: false,
         enableColumnActions: false,
         enableColumnFilters: false,

@@ -14,7 +14,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import ConfirmDialog from '../ConfirmDialog';
 
 // List of transaction types that can be deleted
-const deletableTranTypes = ['rimborso_cauzione', 'rimborso_quota', 'reimbursement'];
+const deletableTranTypes = ['rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal'];
 
 export default function TransactionModal({open, onClose, transaction}) {
     const [isLoading, setLoading] = useState(true);
@@ -184,7 +184,14 @@ export default function TransactionModal({open, onClose, transaction}) {
                                     onChange={handleInputChange}
                                     input={<OutlinedInput label={names.account}/>}>
                                     {accounts.map(acc => (
-                                        <MenuItem key={acc.id} value={acc.id}>{acc.name}</MenuItem>
+                                        <MenuItem
+                                            key={acc.id}
+                                            value={acc.id}
+                                            disabled={acc.status === 'closed'}
+                                            style={{color: acc.status === 'closed' ? 'grey' : 'inherit'}}
+                                        >
+                                            {acc.name} {acc.status === 'closed' ? '(Chiusa)' : ''}
+                                        </MenuItem>
                                     ))}
                                 </Select>
                                 {errors.account[0] && <FormHelperText>{errors.account[1]}</FormHelperText>}
@@ -210,8 +217,6 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 value={data.description}
                                 onChange={handleInputChange}
                                 fullWidth
-                                multiline
-                                rows={3}
                             />
                         </Grid>
                     </Grid>

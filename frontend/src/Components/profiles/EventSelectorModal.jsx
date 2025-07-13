@@ -21,7 +21,6 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
             setEventDetails(null);
             setError(null);
             fetchCustom("GET", "/events/?status=open", {
-                parseJson: true,
                 onSuccess: (results) => setEvents(results || []),
                 onError: (err) => defaultErrorHandler(err, setError),
                 onFinally: () => setLoading(false)
@@ -36,7 +35,6 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
             setEventDetails(null);
             setSelectedListId("");
             fetchCustom("GET", `/event/${selectedEventId}/`, {
-                parseJson: true,
                 onSuccess: (json) => setEventDetails(json),
                 onError: (err) => defaultErrorHandler(err, setError),
                 onFinally: () => setEventLoading(false)

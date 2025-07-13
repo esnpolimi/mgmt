@@ -15,10 +15,7 @@ export default function EmailVerification() {
         if (uid && token) {
             fetchCustom('GET', `/api/profile/verify-email/${uid}/${token}/`, {
                 auth: false,
-                parseJson: true,
-                onSuccess: (results) => {
-                    setStatusMessage({message: results.message, state: 'success'});
-                },
+                onSuccess: (results) => setStatusMessage({message: results.message, state: 'success'}),
                 onError: (responseOrError) => defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj)),
             });
         } else {

@@ -27,8 +27,7 @@ export const AuthProvider = ({children}) => {
             fetchCustom("POST", "/login/", {
                 body: {email, password},
                 auth: false,
-                parseJson: true,
-                onSuccess: (results) => {
+                                onSuccess: (results) => {
                     const user = parseUserFromToken(results.access);
                     console.log("Login successful");
                     setAccessToken(results.access) // Fetch access token
@@ -72,8 +71,7 @@ export const AuthProvider = ({children}) => {
             fetchCustom("POST", "/api/token/refresh/", {
                 body: {email},
                 auth: false,
-                parseJson: true,
-                onSuccess: (results) => {
+                                onSuccess: (results) => {
                     const user = parseUserFromToken(results.access);
                     setAccessToken(results.access);
                     setUser(user);

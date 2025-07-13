@@ -120,42 +120,14 @@ export default function Profile() {
         group: true
     });
 
-    useEffect(() => {
-        setLoading(true);
-        fetchCustom("GET", `/profile/${id}/`, {
-            onSuccess: (data) => {
-                const update = {};
-                Object.keys(data).map((key) => {
-                    update[key] = data[key];
-                });
-                setData(update)
-                setUpdatedData(update)
-                setProfile(data);
-                setProfileType(data.is_esner ? "ESNer" : "Erasmus");
-            },
-            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
-            onFinally: () => setLoading(false)
-        });
-    }, []);
-
     const rules = profileFieldRules[profileType] || {hideFields: []};
     const shouldHideField = (fieldName) => {
         return rules.hideFields.includes(fieldName);
     };
 
-    const fetchSubscriptions = () => {
-        fetchCustom("GET", `/profile_subscriptions/${id}/`, {
-            onSuccess: (data) => setSubscriptions(data),
-            onError: () => setSubscriptions([]),
-        });
-    };
-
-    const fetchGroups = () => {
-        fetchCustom("GET", "/groups/", {
-            onSuccess: (data) => setGroups(data),
-            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
-        });
-    };
+    useEffect(() => {
+        refreshProfileData();
+    }, []);
 
     const refreshProfileData = () => {
         setLoading(true);
@@ -170,6 +142,20 @@ export default function Profile() {
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setLoading(false)
+        });
+    };
+
+    const fetchSubscriptions = () => {
+        fetchCustom("GET", `/profile_subscriptions/${id}/`, {
+            onSuccess: (data) => setSubscriptions(data),
+            onError: () => setSubscriptions([]),
+        });
+    };
+
+    const fetchGroups = () => {
+        fetchCustom("GET", "/groups/", {
+            onSuccess: (data) => setGroups(data),
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
         });
     };
 
@@ -460,7 +446,7 @@ export default function Profile() {
             }
         },
         {
-            accessorKey: 'status',
+            accessorKey: 'status_quota',
             header: 'Stato Pagamento',
             size: 100,
             Cell: ({cell}) => {
@@ -475,6 +461,10 @@ export default function Profile() {
                     case 'pending':
                         color = "warning";
                         label = "In attesa";
+                        break;
+                    case 'reimbursed':
+                        color = "success";
+                        label = "Rimborsato";
                         break;
                     default:
                         color = "error";

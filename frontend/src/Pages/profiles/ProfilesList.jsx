@@ -173,7 +173,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                 {profileType === 'ESNer' && groups.length > 0 && (
                     <Grid size={{xs: 12, md: 2}}>
                         <FormControl fullWidth>
-                            <InputLabel id="group-label">Gruppo</InputLabel>
+                            <InputLabel id="group-label">Gruppi</InputLabel>
                             <Select
                                 labelId="group-label"
                                 name="group"
@@ -181,7 +181,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                                 multiple
                                 value={filters.group}
                                 onChange={handleFilterChange}
-                                input={<OutlinedInput label="Gruppo"/>}
+                                input={<OutlinedInput label="Gruppi"/>}
                                 renderValue={(selected) =>
                                     groups.filter(opt => selected.includes(opt.name)).map(opt => opt.name).join(', ')
                                 }>

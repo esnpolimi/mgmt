@@ -32,12 +32,10 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
     useEffect(() => {
         setLoading(true);
         fetchCustom("GET", "/accounts/", {
-            parseJson: true,
-            onSuccess: (results) => setAccounts(results || []),
+            onSuccess: (data) => setAccounts(data),
             onError: (err) => defaultErrorHandler(err, setPopup),
         }).then(() => {
             fetchCustom("GET", '/esncard_fees/', {
-                parseJson: true,
                 onSuccess: (json) => {
                     if (profile.latest_esncard && profile.latest_esncard?.is_valid)
                         setAmount(parseFloat(json.esncard_lost_fee.replace('€', '')));

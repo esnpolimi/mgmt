@@ -32,7 +32,7 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
 
         const fetchAccounts = () => {
             fetchCustom("GET", "/accounts/", {
-                onSuccess: (data) => setAccounts(data.results || []),
+                onSuccess: (data) => setAccounts(data),
                 onError: (err) => defaultErrorHandler(err, setPopup),
             });
         };
@@ -46,9 +46,9 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
         }
 
         fetchCustom("GET", `/reimbursable_deposits/?event=${event.id}&list=${listId}`, {
-            onSuccess: (json) => {
-                setSubscriptions(json);
-                setSelectedSubs(json.map(s => s.id));
+            onSuccess: (data) => {
+                setSubscriptions(data);
+                setSelectedSubs(data.map(s => s.id));
             },
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)
