@@ -22,7 +22,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
     {value: 'open', label: 'Aperte'},
-    {value: 'not_yet', label: 'Non ancora aperte'},
+    {value: 'not_yet', label: 'In attesa'},
     {value: 'closed', label: 'Chiuse'}
 ];
 
@@ -36,7 +36,7 @@ export default function EventsList() {
     const [search, setSearch] = useState('');
     const [appliedSearch, setAppliedSearch] = useState('');
     const [filters, setFilters] = useState({
-        subscriptionStatus: [],
+        subscriptionStatus: ['open', 'not_yet'],
         dateFrom: null,
         dateTo: null,
     });

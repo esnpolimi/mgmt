@@ -35,7 +35,6 @@ export default function Home() {
     const accountsDetails = user?.permissions.includes("change_account");
     const casseRef = useRef(null);
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
-    const [testErrorCount, setTestErrorCount] = useState(1); // TEST
 
     const staticLinks = [
         {
@@ -130,8 +129,7 @@ export default function Home() {
     const fetchAccounts = () => {
         setCasseLoading(true);
         fetchCustom("GET", "/accounts/", {
-            parseJson: true,
-            onSuccess: (results) => setAccounts(results),
+            onSuccess: (data) => setAccounts(data),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setCasseLoading(false)
         });
@@ -430,16 +428,6 @@ export default function Home() {
                 throw new Error("Sentry Test Error v3");
             }}>
                 Sentry Test Error
-            </button>
-            <button
-                type="button"
-                style={{marginLeft: 8}}
-                onClick={() => {
-                    setPopup({message: `Test Error Popup #${testErrorCount}`, state: "error"});
-                    setTestErrorCount(c => c + 1);
-                }}
-            >
-                Test Error Popup
             </button>
         </Box>
     );

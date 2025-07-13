@@ -25,7 +25,6 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
         setSelectedAccount('');
         setNotes('');
         fetchCustom("GET", "/accounts/", {
-            parseJson: true,
             onSuccess: (results) => setAccounts(results || []),
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)

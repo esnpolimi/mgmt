@@ -33,6 +33,14 @@ export default function Login() {
     const handleLogin = async () => {
         setIsLoading(true);
         setStatusMessage(null);
+
+        // Enforce esnpolimi.it domain for login
+        if (!email.endsWith('@esnpolimi.it')) {
+            setStatusMessage({message: "Solo email @esnpolimi.it sono ammesse per il login ESNer.", state: 'error'});
+            setIsLoading(false);
+            return;
+        }
+
         const success = await login(email, password);
         setIsLoading(false);
         if (success === true) {

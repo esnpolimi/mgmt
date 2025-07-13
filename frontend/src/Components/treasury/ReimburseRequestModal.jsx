@@ -21,7 +21,7 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
     useEffect(() => {
         if (open) {
             fetchCustom('GET', '/accounts/', {
-                onSuccess: (data) => setAccounts(data.results || []),
+                onSuccess: (data) => setAccounts(data),
                 onError: () => setAccounts([]),
             });
             setSelectedAccount(requestData?.account?.id || '');

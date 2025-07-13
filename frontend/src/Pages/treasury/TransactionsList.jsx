@@ -78,7 +78,7 @@ export default function TransactionsList() {
                 setTransactions(data.results || []);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, setPopup);
+                defaultErrorHandler(responseOrError, setPopup).then();
                 setTransactions([]);
                 setRowCount(0);
             },

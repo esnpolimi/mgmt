@@ -73,8 +73,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
     const fetchAccounts = () => {
         fetchCustom("GET", "/accounts/", {
-            parseJson: true,
-            onSuccess: (results) => setAccounts(results),
+            onSuccess: (data) => setAccounts(data),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
         });
     }
@@ -190,9 +189,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                 status_quota: data.status_quota,
                 status_cauzione: data.status_cauzione
             },
-            onSuccess: () => {
-                onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!');
-            },
+            onSuccess: () => onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!'),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setSubmitLoading(false)
         });
@@ -284,7 +281,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             />
                         </Grid>
                         {/* Quota status toggle */}
-                        {event.quota > 0 && (
+                        {event.cost > 0 && (
                             <Grid size={{xs: 12}}>
                                 <Paper
                                     elevation={1}

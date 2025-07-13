@@ -8,14 +8,14 @@ import {Box, Chip, IconButton, Typography} from "@mui/material";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import StoreIcon from "@mui/icons-material/Store";
 
-export default function AccountsDash({limit = 5}) {
+export default function AccountsDash() {
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
     const fetchData = () => {
         setLoading(true);
         fetchCustom("GET", '/accounts/', {
-            onSuccess: (data) => setData(data.results || []),
+            onSuccess: (data) => setData(data),
             onError: (err) => defaultErrorHandler(err, setLoading),
             onFinally: () => setLoading(false)
         });
@@ -55,7 +55,7 @@ export default function AccountsDash({limit = 5}) {
 
     const table = useMaterialReactTable({
         columns,
-        data: data.slice(0, limit),
+        data: data,
         enableKeyboardShortcuts: false,
         enableColumnActions: false,
         enableColumnFilters: false,
@@ -72,7 +72,7 @@ export default function AccountsDash({limit = 5}) {
             <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
                 <StoreIcon sx={{mr: 2}}/>
                 <Typography variant="h6">Casse</Typography>
-                <Box sx={{flexGrow: 1}} />
+                <Box sx={{flexGrow: 1}}/>
                 <IconButton size="small" onClick={fetchData} disabled={isLoading} title="Aggiorna">
                     <RefreshIcon/>
                 </IconButton>

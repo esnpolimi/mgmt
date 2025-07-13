@@ -34,7 +34,7 @@ export default function AccountsList() {
         fetchCustom("GET", '/accounts/', {
             onSuccess: (data) => setData(data),
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, setPopup);
+                defaultErrorHandler(responseOrError, setPopup).then();
                 setData([]);
             },
             onFinally: () => setLoading(false)

@@ -40,8 +40,6 @@ export const fetchCustom = (method, path, options = {}) => {
         body = null,
         headers = {},
         auth = true,
-        parseJson = false,
-        isFormData = false,
         onSuccess,
         onError,
         onFinally
@@ -63,7 +61,8 @@ export const fetchCustom = (method, path, options = {}) => {
         ...headers,
     };
 
-    if (!isFormData && body && !(body instanceof FormData)) mergedHeaders["Content-Type"] = "application/json";
+    const isFormData = body instanceof FormData;
+    if (!isFormData && body) mergedHeaders["Content-Type"] = "application/json";
 
     const fetchOptions = {
         method,
@@ -71,7 +70,7 @@ export const fetchCustom = (method, path, options = {}) => {
         credentials: "include",
     };
 
-    if (body) fetchOptions.body = isFormData || body instanceof FormData ? body : (typeof body === "string" ? body : JSON.stringify(body));
+    if (body) fetchOptions.body = isFormData ? body : (typeof body === "string" ? body : JSON.stringify(body));
 
     return fetch(url, fetchOptions)
         .then(response => {
@@ -81,13 +80,13 @@ export const fetchCustom = (method, path, options = {}) => {
                 return;
             }
             if (response.ok) {
-                if (parseJson && response.headers.get('content-type')?.includes('application/json')) {
-                    return response.json().then(jsonData => {
-                        const data = (jsonData && jsonData.results !== undefined) ? jsonData.results : jsonData;
-                        if (onSuccess) onSuccess(data, response);
-                    });
-                } else if (onSuccess) {
-                    onSuccess(response);
+                const isJson = response.headers.get('content-type')?.includes('application/json');
+                if (onSuccess) {
+                    if (isJson && onSuccess.length >= 1) {
+                        return response.json().then(jsonData => {
+                            onSuccess(jsonData, response);
+                        });
+                    } else onSuccess(response);
                 }
             } else if (onError) onError(response);
         })

@@ -33,6 +33,11 @@ def log_in(request):
         if serializer.is_valid():
             email = serializer.validated_data['email']
             password = serializer.validated_data['password']
+
+            # Enforce esnpolimi.it domain for login
+            if not isinstance(email, str) or not email.endswith('@esnpolimi.it'):
+                return Response({'detail': 'Solo email @esnpolimi.it sono ammesse per il login.'}, status=403)
+
             user = authenticate(username=email, password=password)
 
             if user is not None:

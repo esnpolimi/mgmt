@@ -76,10 +76,8 @@ export default function ReimbursementRequestModal({open, onClose}) {
         setSubmitting(true);
 
         let body;
-        let isFormData = false;
 
         if (receiptFile) {
-            isFormData = true;
             body = new FormData();
             body.append('amount', data.amount);
             body.append('payment', data.payment);
@@ -95,7 +93,6 @@ export default function ReimbursementRequestModal({open, onClose}) {
 
         fetchCustom('POST', '/reimbursement_request/', {
             body,
-            isFormData,
             onSuccess: () => onClose(true),
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setSubmitting(false)

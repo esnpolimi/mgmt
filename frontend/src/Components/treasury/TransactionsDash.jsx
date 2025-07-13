@@ -16,8 +16,7 @@ export default function TransactionsDash({limit = 3}) {
     const fetchData = () => {
         setLoading(true);
         fetchCustom("GET", `/transactions/?limit=${limit}`, {
-            parseJson: true,
-            onSuccess: (results) => setData(results || []),
+            onSuccess: (data) => setData(data.results || []),
             onError: () => setData([]),
             onFinally: () => setLoading(false)
         });
@@ -86,7 +85,7 @@ export default function TransactionsDash({limit = 3}) {
 
     const table = useMaterialReactTable({
         columns,
-        data: data.slice(0, limit),
+        data: data,
         enableKeyboardShortcuts: false,
         enableColumnActions: false,
         enableColumnFilters: false,
@@ -107,7 +106,7 @@ export default function TransactionsDash({limit = 3}) {
             <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
                 <ReceiptIcon sx={{mr: 2}}/>
                 <Typography variant="h6">Ultime Transazioni</Typography>
-                <Box sx={{flexGrow: 1}} />
+                <Box sx={{flexGrow: 1}}/>
                 <IconButton size="small" onClick={fetchData} disabled={isLoading} title="Aggiorna">
                     <RefreshIcon/>
                 </IconButton>
