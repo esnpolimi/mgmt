@@ -74,7 +74,7 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
                 minWidth: 300,
                 borderRadius: 2
             }}>
-                <Typography variant="h6" sx={{mb: 2}}>Seleziona Evento</Typography>
+                <Typography variant="h6" align="center" sx={{mb: 2}}>Seleziona Evento</Typography>
                 {loading ? (
                     <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 80}}>
                         <Loader/>
@@ -87,9 +87,11 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
                                     value={selectedEventId}
                                     label="Evento"
                                     onChange={handleEventChange}>
-                                {events.map(ev => (
-                                    <MenuItem key={ev.id} value={ev.id}>{ev.name}</MenuItem>
-                                ))}
+                                {(events && typeof events.map === "function")
+                                    ? events.map(ev => (
+                                        <MenuItem key={ev.id} value={ev.id}>{ev.name}</MenuItem>
+                                    ))
+                                    : null}
                             </Select>
                         </FormControl>
                         {eventLoading && (

@@ -14,6 +14,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.exceptions import NotFound
+from django.core.paginator import InvalidPage
 
 from events.models import Subscription
 from events.serializers import SubscriptionSerializer
@@ -75,7 +77,10 @@ def profile_list(request, is_esner):
 
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(profiles, request=request)
+        try:
+            page = paginator.paginate_queryset(profiles, request=request)
+        except (NotFound, InvalidPage):
+            return Response({'error': 'Invalid page.'}, status=400)
         serializer = ProfileListViewSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
     except Exception as e:
@@ -120,14 +125,22 @@ def initiate_profile_creation(request):
 
                 # Create user if ESN member
                 is_esner = profile_data.get('is_esner', False)
-                if is_esner and 'password' in data:
-                    user = User.objects.create_user(
-                        profile=profile,
-                        password=data.get('password')
-                    )
-                    user.is_active = False  # Will be activated upon verification
-                    aspiranti_group, created = Group.objects.get_or_create(name="Aspiranti")
-                    user.groups.add(aspiranti_group)
+                password = data.get('password')
+                if is_esner and password:
+                    try:
+                        user = User.objects.create_user(profile=profile, password=password)
+                        user.is_active = False
+                        aspiranti_group, created = Group.objects.get_or_create(name="Aspiranti")
+                        user.save()  # Ensure user is saved before adding group
+                        user.groups.add(aspiranti_group)
+                        user.save()  # Explicit save after group assignment
+                        logger.info(f"User created for profile {profile.email}")
+                    except Exception as e:
+                        Document.objects.filter(profile=profile).delete()
+                        profile.delete()
+                        logger.error(f"User creation failed for profile {profile.email}: {str(e)}")
+                        sentry_sdk.capture_exception(e)
+                        return Response({"error": f"User creation failed: {str(e)}"}, status=500)
 
             # Generate verification token and send verification email
             uid = urlsafe_base64_encode(force_bytes(profile.pk))
@@ -184,9 +197,7 @@ def initiate_profile_creation(request):
                 logger.info(f"Email error: {str(e)}")
                 return Response({"error": f"{error_message}{str(e)}"}, status=500)
 
-            return Response({
-                "message": success_message
-            })
+            return Response({"message": success_message}, status=201)
         else:
             # Return validation errors
             errors = {}
@@ -269,20 +280,51 @@ def profile_detail(request, pk):
 
             if serializer.is_valid():
                 serializer.save()
-                # Check if user has permission to add/edit groups and update the user's group
-                if request.user.has_perm('auth.change_group'):
-                    try:
-                        user = User.objects.get(profile=profile)
-                        group_serializer = UserGroupEditSerializer(user, data=request.data, partial=True)
-                        if group_serializer.is_valid():
-                            group_serializer.save()
-                            response_data = serializer.data
-                            return Response(response_data)
+                group_name = request.data.get('group')
+                try:
+                    user = User.objects.get(profile=profile)
+                    current_group_obj = user.groups.first()
+                    current_group = current_group_obj.name if current_group_obj else None
+
+                    # Only allow change if requested group is different
+                    if current_group != group_name:
+                        # Permission logic
+                        allowed = False
+                        error_msg = None
+                        # Get requester's group
+                        try:
+                            requester_user = User.objects.get(profile=request.user.profile)
+                            requester_group_obj = requester_user.groups.first()
+                            requester_group = requester_group_obj.name if requester_group_obj else None
+                        except ExceptionGroup:
+                            requester_group = None
+
+                        if current_group == "Aspiranti" and group_name == "Attivi":
+                            if requester_group in ["Board"]:
+                                allowed = True
+                            else:
+                                error_msg = "Solo membri Board possono promuovere Aspiranti ad Attivi."
+                        elif current_group == "Attivi" and group_name == "Board":
+                            if requester_group == "Board":
+                                allowed = True
+                            else:
+                                error_msg = "Solo membri Board possono promuovere Attivi a Board."
                         else:
-                            return Response(group_serializer.errors, status=400)
-                    except User.DoesNotExist:
-                        pass
-                return Response(serializer.data)
+                            allowed = True  # Other transitions allowed
+
+                        if allowed:
+                            group_serializer = UserGroupEditSerializer(user, data={'group': group_name}, partial=True)
+                            if group_serializer.is_valid():
+                                group_serializer.save()
+                            else:
+                                return Response(group_serializer.errors, status=400)
+                        else:
+                            return Response({'error': error_msg}, status=403)
+                    # else: no change needed
+                except User.DoesNotExist:
+                    pass
+                response_serializer = ProfileDetailViewSerializer(profile)
+                return Response(response_serializer.data)
             return Response(serializer.errors, status=400)
 
         elif request.method == 'DELETE':

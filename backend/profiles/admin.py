@@ -49,32 +49,37 @@ class ProfileAdminForm(forms.ModelForm):
 class ProfileAdmin(admin.ModelAdmin):
     form = ProfileAdminForm
     list_display = [
-        'email', 'is_esner', 'get_groups', 'enabled', 'email_is_verified',
+        'email', 'is_esner', 'get_groups',
         'name', 'surname', 'birthdate',
         'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
         'country', 'domicile',
         'course', 'person_code', 'matricola_number', 'matricola_expiration',
-        'created_at', 'updated_at'
+        'created_at', 'updated_at',
+        'enabled', 'email_is_verified'
     ]
     search_fields = ('email', 'name', 'surname', 'person_code')
     list_filter = ('is_esner', 'enabled', 'email_is_verified')
     ordering = ('-created_at',)
 
     fields = [
-        'email', 'is_esner', 'enabled', 'email_is_verified',
+        'email', 'is_esner',
         'name', 'surname', 'birthdate',
         'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
         'country', 'domicile',
         'course', 'person_code', 'matricola_number', 'matricola_expiration',
-        'created_at', 'updated_at'
-    ]  # Ensure all fields are included here
+        'created_at', 'updated_at',
+        'enabled', 'email_is_verified'
+    ]
 
-    readonly_fields = ('created_at', 'updated_at')  # Make only certain fields read-only
+    readonly_fields = ('created_at', 'updated_at')
 
     def get_groups(self, obj):
         if obj.is_esner and hasattr(obj, 'user') and obj.user:
             groups = obj.user.groups.all()
             return ", ".join([group.name for group in groups])
         return "-"
-
     get_groups.short_description = "Groups"
+
+    def get_queryset(self, request):
+        # Prefetch related user for efficiency
+        return super().get_queryset(request).select_related('user')

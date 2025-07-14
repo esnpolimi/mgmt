@@ -13,9 +13,10 @@ class UserManager(BaseUserManager):
         if not profile:
             raise ValueError(_("The profile must be set"))
 
+        extra_fields.pop('is_active', None)
         user = self.model(profile=profile, **extra_fields)
         user.set_password(password)
-        user.save(using=self._db)
+        user.is_active = True
         return user
 
     def create_superuser(self, profile, password, **extra_fields):
