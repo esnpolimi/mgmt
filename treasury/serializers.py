@@ -184,13 +184,15 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
             uploaded = service.files().create(
                 body=file_metadata,
                 media_body=media,
-                fields='id'
+                fields='id',
+                supportsAllDrives=True
             ).execute()
 
             # Make the file publicly accessible
             service.permissions().create(
                 fileId=uploaded['id'],
-                body={'role': 'reader', 'type': 'anyone'}
+                body={'role': 'reader', 'type': 'anyone'},
+                supportsAllDrives=True
             ).execute()
 
             return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
