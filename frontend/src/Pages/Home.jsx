@@ -424,11 +424,6 @@ export default function Home() {
                 onClose={handleReimbursementRequestModalClose}
             />
             {popup && <Popup message={popup.message} state={popup.state}/>}
-            <button type="button" onClick={() => {
-                throw new Error("Sentry Test Error v3");
-            }}>
-                Sentry Test Error
-            </button>
         </Box>
     );
 }

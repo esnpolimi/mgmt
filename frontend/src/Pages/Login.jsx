@@ -59,7 +59,7 @@ export default function Login() {
                 setStatusMessage({message: "Impossibile aprire la pagina di errore in una nuova scheda.", state: 'error'});
             }
         } else {
-            setStatusMessage({message: `Errore durante il login: ${success}`, state: 'error'});
+            setStatusMessage({message: success, state: 'error'});
         }
     };
 

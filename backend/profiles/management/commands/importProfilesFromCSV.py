@@ -1,12 +1,26 @@
 """
-    Use me this way, after entering the main folder of the project/backend:
-    python manage.py importProfilesFromCSV "C:\\path\to\file.csv" --dry-run
-    (the csv is considered exported from the old gest's db)
-    (use the option --dry-run to NOT create the objects!)
-    (use the option --export to generate an Excel preview file)
+    Usage:
+      python manage.py importProfilesFromCSV "C:\\path\\to\\file.csv" [--dry-run] [--export [path]] [--max-count X]
+
+    Options:
+      --dry-run         Run without saving to database.
+      --export [path]   Generate an Excel preview file (default: ./profiles_export.xlsx).
+      --max-count X     Import only the first X profiles from the CSV.
+
+    CSV constraints:
+      - The file MUST BE IN CSV UTF-8 FORMAT and have the following columns:
+        nome, cognome, email, data_nascita, nazione, telefono, whatsapp, matricola,
+        codice_persona, data_iscrizione, periodo_permanenza, status, documento,
+        tipo_documento, data_documento, ESN_card, indirizzo_residenza
+      - Dates must be formatted as:
+        * %d/%m/%Y for birthdate and document expiration
+        * %Y-%m-%d %H:%M:%S for registration date
+      - Phone numbers should be in international format or local format with a valid country.
+      - Required fields: email, nome, cognome, status, nazione
 """
 import re
 import os
+import random
 
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
@@ -35,11 +49,14 @@ class Command(BaseCommand):
         parser.add_argument('--dry-run', action='store_true', help='Run without saving to database')
         parser.add_argument('--export', nargs='?', type=str, const='./profiles_export.xlsx',
                             help='Enable export. Optionally specify path (defaults to profiles_export.xlsx)')
+        parser.add_argument('--max-count', type=int, default=None,
+                            help='Maximum number of profiles to import (default: all)')
 
     def handle(self, *args, **options):
         dry_run = options.get('dry_run', False)
         file_path = options['file_path']
         export_path = options.get('export')
+        max_count = options.get('max_count')
 
         # Add debug output for export path
         if export_path:
@@ -51,7 +68,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("Failed to load country codes"))
             return
 
-        result = self.import_profiles_from_csv(file_path, export_path, dry_run)
+        result = self.import_profiles_from_csv(file_path, export_path, dry_run, max_count)
 
         self.stdout.write(self.style.SUCCESS(f"Successfully imported {result['success_count']} profiles"))
         if result['export_path']:
@@ -65,7 +82,7 @@ class Command(BaseCommand):
             for error in result['errors']:
                 self.stdout.write(self.style.ERROR(error))
 
-    def import_profiles_from_csv(self, file_path, export_path, dry_run=False):
+    def import_profiles_from_csv(self, file_path, export_path, dry_run=False, max_count=None):
         """
         Import profiles from a CSV file.
 
@@ -100,8 +117,19 @@ class Command(BaseCommand):
             csv_file.seek(0)
             csv_reader = csv.DictReader(csv_file, delimiter=',')
 
+            # Read all rows into a list
+            rows = list(csv_reader)
+            # Shuffle rows for random import order
+            random.shuffle(rows)
+
             # Process each row
-            for row in csv_reader:
+            for row in rows:
+                # Skip rows with missing/null/empty codice_persona or matricola
+                if (not row.get('codice_persona') or row['codice_persona'] in ('NULL', '', None) or
+                        not row.get('matricola') or row['matricola'] in ('NULL', '', None)):
+                    continue
+                if max_count is not None and success_count >= max_count:
+                    break
                 try:
                     # Process profile data - do this outside the transaction
                     profile, document, esncard = self._process_row(row, document_type_mapping)
@@ -185,7 +213,7 @@ class Command(BaseCommand):
         phone_prefix, phone_number = self.parse_phone_number(row.get('telefono', ''), country_name)
 
         # Parse WhatsApp numbers, matricola expiration only for Erasmus
-        if row['status'] == 'Erasmus':
+        if row['status'] == 'Erasmus' and 'whatsapp' in row:
             whatsapp_prefix, whatsapp_number = self.parse_phone_number(row.get('whatsapp', ''), country_name)
             # Use phone number as WhatsApp if WhatsApp not provided
             if not whatsapp_prefix and not whatsapp_number and (phone_prefix or phone_number):
@@ -207,7 +235,7 @@ class Command(BaseCommand):
         # Determine period end date for matricola expiration (only for Erasmus)
         if row['status'] == 'Erasmus':
             periodo = row.get('periodo_permanenza', '')
-            end_date = '2025-01-31' if periodo == '1' else '2025-07-31'  # Assumed Erasmus of AA 2024
+            end_date = '2025-01-31' if periodo == '1' else '2025-08-31'  # Assumed Erasmus of AA 2024-25
             matricola_expiration = datetime.strptime(end_date, '%Y-%m-%d').date()
         else:
             matricola_expiration = None
@@ -328,6 +356,7 @@ class Command(BaseCommand):
         """Create ESNcard object if data is available."""
         card_number = row.get('ESN_card', '')
         if not (card_number and card_number != 'NULL'):
+            print(f"WARNING: ESNcard not created for row with email '{row.get('email', '')}' - ESN_card value is missing or invalid.")
             return None
 
         return ESNcard(

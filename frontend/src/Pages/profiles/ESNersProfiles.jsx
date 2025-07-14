@@ -53,7 +53,7 @@ export default function ESNersProfiles() {
                     {cell.getValue() !== null ? (
                         <Chip label={cell.getValue().number} color={cell.getValue().is_valid ? "success" : "warning"}/>
                     ) : (
-                        <Chip label="Nessuna ESNcard" color="error"/>
+                        <Chip label="Assente" color="error"/>
                     )}
                 </Box>
             ),

@@ -284,10 +284,12 @@ export default function ESNerForm() {
             birthdate: formatDateString(formData.birthdate),
             document_expiration: formatDateString(formData.document_expiration),
             matricola_expiration: formatDateString(formData.matricola_expiration),
+            password: formData.password
         };
 
         fetchCustom("POST", '/profile/initiate-creation/', {
             body,
+            auth: false,
             onSuccess: () => {
                 setFormErrors(initialFormErrors);
                 setSubmitted(true);

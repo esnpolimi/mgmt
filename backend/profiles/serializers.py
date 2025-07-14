@@ -4,6 +4,7 @@ from rest_framework.fields import SerializerMethodField
 from profiles.models import Profile, Document
 from treasury.serializers import ESNcardSerializer
 from users.models import User
+from django.contrib.auth.models import Group
 
 
 # Serializers are classes that take an object from the database and
@@ -113,3 +114,19 @@ class ProfileCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email_is_verified']
+
+
+class UserGroupEditSerializer(serializers.ModelSerializer):
+    group = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ['group']
+
+    def update(self, instance, validated_data):
+        group_name = validated_data.get('group')
+        if group_name:
+            group_obj, _ = Group.objects.get_or_create(name=group_name)
+            instance.groups.clear()
+            instance.groups.add(group_obj)
+        return instance

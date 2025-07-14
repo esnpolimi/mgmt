@@ -26,7 +26,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         id: '',
         name: '',
         date: dayjs(),
-        description: '<h3>Descrizione</h3>' +
+        description: '<h3>Titolone</h3>' +
             '    <p>Ecco un <a href="https://www.italia.it" target="_blank">link all\'Italia</a>.</p>' +
             '    <blockquote>Citazione elegante.</blockquote>' +
             '    <p style="text-align: center;">Adios.</p>',
@@ -334,7 +334,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Box>
                     )}
 
-                    <Grid container spacing={2}>
+                    <Grid container spacing={2} sx={{mt: 4}}>
                         <Grid size={{xs: 12, md: 6}}>
                             <TextField
                                 fullWidth
@@ -430,8 +430,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Tooltip>
                         </Grid>
                     </Grid>
-                    <Grid size={{xs: 12}} data-color-mode="light">
-                        <Typography variant="h6" component="div">{eventNames.description}</Typography>
+                    <Grid size={{xs: 12}} data-color-mode="light" sx={{mt: 2}}>
+                        <Typography variant="h6" component="div" sx={{mb: 1}}>{eventNames.description}</Typography>
                         <CustomEditor
                             value={data.description}
                             onChange={(value) => {
@@ -441,9 +441,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Grid>
 
                     <Box my={2}>
-                        <Grid container spacing={2} alignItems="center">
-                            <Grid><Typography variant="h6" gutterBottom>Liste</Typography></Grid>
-                            <Grid><IconButton onClick={handleAddList}><AddIcon/></IconButton></Grid>
+                        <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mb: 1}}>
+                            <Typography variant="h6">Liste</Typography>
+                            <IconButton onClick={handleAddList} sx={{ml: -1}}><AddIcon/></IconButton>
                         </Grid>
                         {data.lists.map((list, index) => (
                             <Grid container spacing={2} alignItems="center" mb={2} key={index}>

@@ -245,7 +245,7 @@ export default function ErasmusForm() {
         fetchCustom("POST", '/profile/initiate-creation/', {
             body,
             auth: false,
-                        onSuccess: () => {
+            onSuccess: () => {
                 setFormErrors(initialFormErrors);
                 setSubmitted(true);
             },
