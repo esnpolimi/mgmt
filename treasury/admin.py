@@ -36,7 +36,7 @@ class AccountAdmin(admin.ModelAdmin):
     readonly_fields = ('balance', 'created_at', 'updated_at')
 
     def balance_display(self, obj):
-        if obj.balance.amount < 0:
+        if obj.balance < 0:
             return format_html('<span style="color: red;">{}</span>', obj.balance)
         return obj.balance
 
@@ -45,23 +45,107 @@ class AccountAdmin(admin.ModelAdmin):
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'account__name', 'type', 'amount_display', 'description', 'executor', 'subscription_display', 'esncard', 'created_at')
-    list_filter = ('account', 'created_at', 'executor')
-    search_fields = ('description', 'account__name', 'executor__account__name')
+    list_display = (
+        'id',
+        'account_link',
+        'type',
+        'amount_display',
+        'description',
+        'executor_link',
+        'subscription_link',
+        'esncard_link',
+        'created_at',
+        'updated_at',
+    )
+    list_filter = (
+        'type',
+        'account',
+        'esncard',
+        'subscription',
+        'executor',
+        'created_at',
+        'amount',
+    )
+    search_fields = (
+        'description',
+        'account__name',
+        'executor__account__name',
+        'esncard__number',
+        'subscription__event__name',
+        'subscription__profile__name',
+        'subscription__profile__surname',
+    )
     date_hierarchy = 'created_at'
     readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+    list_per_page = 50
+
+    def account_link(self, obj):
+        if obj.account:
+            return format_html('<a href="/admin/treasury/account/{}/change/">{}</a>', obj.account.id, obj.account.name)
+        return "-"
+    account_link.short_description = 'Account'
+    account_link.admin_order_field = 'account__name'
+
+    def executor_link(self, obj):
+        if obj.executor and hasattr(obj.executor, 'profile'):
+            profile = obj.executor.profile
+            return format_html('<a href="/admin/profiles/profile/{}/change/">{}</a>', profile.id, f"{profile.name} {profile.surname}")
+        return "-"
+    executor_link.short_description = 'Executor'
+    executor_link.admin_order_field = 'executor__profile__name'
+
+    def subscription_link(self, obj):
+        if obj.subscription:
+            event = obj.subscription.event
+            profile = obj.subscription.profile
+            return format_html(
+                '<a href="/admin/events/subscription/{}/change/">{}</a> ({})',
+                obj.subscription.id,
+                event.name,
+                f"{profile.name} {profile.surname}"
+            )
+        return "-"
+    subscription_link.short_description = 'Subscription'
+    subscription_link.admin_order_field = 'subscription__event__name'
+
+    def esncard_link(self, obj):
+        if obj.esncard:
+            return format_html('<a href="/admin/treasury/esncard/{}/change/">{}</a>', obj.esncard.id, obj.esncard.number)
+        return "-"
+    esncard_link.short_description = 'ESNcard'
+    esncard_link.admin_order_field = 'esncard__number'
 
     def amount_display(self, obj):
-        if obj.amount.amount < 0:
-            return format_html('<span style="color: red;">{}</span>', obj.amount)
-        return format_html('<span style="color: green;">{}</span>', obj.amount)
-
+        color = "red" if obj.amount < 0 else "green"
+        return format_html('<span style="color: {};">{}</span>', color, obj.amount)
     amount_display.short_description = 'Amount'
+    amount_display.admin_order_field = 'amount'
 
-    @staticmethod
-    def subscription_display(obj):
-        if obj.subscription:
-            return f"{obj.subscription.event.name} - {obj.subscription.profile.name} {obj.subscription.profile.surname}"
-        return "-"
+    # Optional: bulk export action
+    actions = ['export_selected']
 
-    subscription_display.short_description = 'Subscription'
+    def export_selected(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename=transactions.csv'
+        writer = csv.writer(response)
+        writer.writerow([
+            'ID', 'Account', 'Type', 'Amount', 'Description', 'Executor', 'Subscription', 'ESNcard', 'Created At', 'Updated At'
+        ])
+        for obj in queryset:
+            writer.writerow([
+                obj.id,
+                obj.account.name if obj.account else '',
+                obj.type,
+                obj.amount,
+                obj.description,
+                f"{obj.executor.profile.name} {obj.executor.profile.surname}" if hasattr(obj.executor, 'profile') else '',
+                f"{obj.subscription.event.name} ({obj.subscription.profile.name} {obj.subscription.profile.surname})" if obj.subscription else '',
+                obj.esncard.number if obj.esncard else '',
+                obj.created_at,
+                obj.updated_at,
+            ])
+        return response
+    export_selected.short_description = "Export selected transactions to CSV"
