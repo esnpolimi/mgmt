@@ -1,8 +1,10 @@
-import {Modal, Box, Typography, FormControl, InputLabel, Select, MenuItem, Button} from "@mui/material";
+import {Modal, Box, Typography, FormControl, InputLabel, Select, MenuItem, Button, IconButton} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import {useState, useEffect} from "react";
 import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import Popup from "../Popup";
 import Loader from "../Loader";
+import {styleESNcardModal as style} from "../../utils/sharedStyles";
 
 export default function EventSelectorModal({open, onSelect, onClose}) {
     const [events, setEvents] = useState([]);
@@ -21,7 +23,7 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
             setEventDetails(null);
             setError(null);
             fetchCustom("GET", "/events/?status=open", {
-                onSuccess: (results) => setEvents(results || []),
+                onSuccess: (data) => setEvents(data.results || []),
                 onError: (err) => defaultErrorHandler(err, setError),
                 onFinally: () => setLoading(false)
             });
@@ -63,17 +65,12 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
 
     return (
         <Modal open={open} onClose={onClose}>
-            <Box sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                bgcolor: 'background.paper',
-                boxShadow: 24,
-                p: 4,
-                minWidth: 300,
-                borderRadius: 2
-            }}>
+            <Box sx={style}>
+                <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: -2, mb: 0}}>
+                    <IconButton onClick={onClose} sx={{minWidth: 0}}>
+                        <CloseIcon/>
+                    </IconButton>
+                </Box>
                 <Typography variant="h6" align="center" sx={{mb: 2}}>Seleziona Evento</Typography>
                 {loading ? (
                     <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 80}}>
@@ -121,15 +118,12 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
                                 </Select>
                             </FormControl>
                         )}
-                        <Button sx={{mt: 2}}
+                        <Button sx={{mt: 1}}
                                 fullWidth
                                 variant="contained"
                                 disabled={!selectedEventId || !selectedListId}
                                 onClick={handleConfirm}>
                             Conferma
-                        </Button>
-                        <Button sx={{mt: 1}} fullWidth onClick={onClose}>
-                            Annulla
                         </Button>
                     </>
                 )}

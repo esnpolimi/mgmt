@@ -203,7 +203,7 @@ def subscription_create(request):
                     subscription=subscription,
                     executor=request.user,
                     amount=Decimal(subscription.event.cost),
-                    description=f"Pagamento per {subscription.event.name}"
+                    description=f"Quota {subscription.profile.name} {subscription.profile.surname} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
                 )
                 t.save()
 
@@ -215,7 +215,7 @@ def subscription_create(request):
                     subscription=subscription,
                     executor=request.user,
                     amount=Decimal(subscription.event.deposit),
-                    description=f"Cauzione per {subscription.event.name}"
+                    description=f"Cauzione {subscription.profile.name} {subscription.profile.surname} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
                 )
                 t_cauzione.save()
             return Response(serializer.data, status=200)

@@ -35,7 +35,15 @@ export default function Home() {
     const accountsDetails = user?.permissions.includes("change_account");
     const casseRef = useRef(null);
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
-
+    const groupname = user?.groups
+        ? user.groups[0] === "Aspiranti"
+            ? "Aspirante"
+            : user.groups[0] === "Attivi"
+                ? "Active Member"
+                : user.groups[0] === "Board"
+                    ? "Board Member"
+                    : user.groups[0]
+        : null;
     const staticLinks = [
         {
             topic: "LINK UTILI",
@@ -214,7 +222,7 @@ export default function Home() {
                     Sistema di Gestione
                 </Typography>
                 <Typography variant="h5" sx={{fontWeight: 500, color: "#2d3a4b", mt: 1, mb: 2}}>
-                    Ciao, {user ? user.profile.name : "Sir"}!
+                    {user ? user.profile.name  + ' ' + user.profile.surname + ' - ' + groupname : ''}
                 </Typography>
             </Box>
             {/* Main Content */}

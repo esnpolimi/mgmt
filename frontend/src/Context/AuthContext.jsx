@@ -8,6 +8,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({children}) => {
     const refreshTimer = useRef(null);
     const [accessToken, setAccessToken] = useState(localStorage.getItem("accessToken"));
+    const [refreshToken, setRefreshToken] = useState(localStorage.getItem("refreshToken")); // NEW
     const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
     const [loading, setLoading] = useState(true);
 
@@ -31,11 +32,13 @@ export const AuthProvider = ({children}) => {
                     const user = parseUserFromToken(results.access);
                     console.log("Login successful");
                     setAccessToken(results.access) // Fetch access token
+                    setRefreshToken(results.refresh); // NEW
                     // Fetch user data
-                    console.log("Decoded access token:", user);
+                    //console.log("Decoded access token:", user);
                     setUser(user);
                     // Store data in localStorage
                     localStorage.setItem("accessToken", results.access);
+                    localStorage.setItem("refreshToken", results.refresh); // NEW
                     localStorage.setItem("user", JSON.stringify(user));
                     resolve(true);
                 },
@@ -52,30 +55,34 @@ export const AuthProvider = ({children}) => {
             clearTimeout(refreshTimer.current);
             refreshTimer.current = null;
         }
-
-        if (!skipApiCall) {
-            fetchCustom("POST", "/logout/", {auth: false});
+        if (!skipApiCall && refreshToken) {
+            fetchCustom("POST", "/logout/", {
+                auth: false,
+                body: {refresh: refreshToken} // Send refresh token for blacklisting
+            });
         }
-
         localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken"); // NEW
         localStorage.removeItem("user");
         setAccessToken(null);
+        setRefreshToken(null); // NEW
         setUser(null);
         console.log("Logged out successfully");
-    }, []);
+    }, [refreshToken]);
 
 
     const refreshAccessToken = useCallback(() => {
-        if (accessToken) {
+        if (accessToken && refreshToken) {
             const email = user?.profile?.email;
             fetchCustom("POST", "/api/token/refresh/", {
-                body: {email},
+                body: {email, refresh: refreshToken}, // Send refresh token
                 auth: false,
                 onSuccess: (results) => {
                     const user = parseUserFromToken(results.access);
                     setAccessToken(results.access);
-                    setUser(user);
+                    setRefreshToken(results.refresh);
                     localStorage.setItem("accessToken", results.access);
+                    if (results.refresh) localStorage.setItem("refreshToken", results.refresh); // NEW
                     localStorage.setItem("user", JSON.stringify(user));
                 },
                 onError: () => {
@@ -83,7 +90,7 @@ export const AuthProvider = ({children}) => {
                 }
             });
         }
-    }, [user, accessToken, logout]);
+    }, [user, accessToken, refreshToken, logout]);
 
 
     useEffect(() => {
@@ -103,9 +110,9 @@ export const AuthProvider = ({children}) => {
         const now = Math.floor(Date.now() / 1000);
         const refreshTime = (exp - now - 30) * 1000; // Refresh 30s before expiration
 
-        const expDate = new Date(exp * 1000);
-        const nowDate = new Date(now * 1000);
-        console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
+        //const expDate = new Date(exp * 1000);
+        //const nowDate = new Date(now * 1000);
+        //console.log(`Token expires at: ${expDate.getHours()}:${expDate.getMinutes()}, current time: ${nowDate.getHours()}:${nowDate.getMinutes()}, refresh time in s: ${refreshTime / 1000}`);
 
         if (refreshTime <= 0) {
             console.log("Refresh time is not valid, no timer set");
@@ -116,12 +123,12 @@ export const AuthProvider = ({children}) => {
         clearRefreshTimer();
 
         refreshTimer.current = setTimeout(() => {
-            console.log("Refreshing access token...");
+            //console.log("Refreshing access token...");
             refreshAccessToken();
         }, refreshTime);
 
         return () => {
-            console.log("Clearing refresh timer");
+            //console.log("Clearing refresh timer");
             clearRefreshTimer();
         };
     }, [accessToken, refreshAccessToken]);
@@ -129,6 +136,7 @@ export const AuthProvider = ({children}) => {
     useEffect(() => {
         const initializeAuth = () => {
             const storedToken = localStorage.getItem("accessToken");
+            const storedRefresh = localStorage.getItem("refreshToken"); // NEW
             const storedUser = localStorage.getItem("user");
 
             if (storedToken && storedUser) {
@@ -138,6 +146,7 @@ export const AuthProvider = ({children}) => {
 
                     if (decodedToken.exp > now) {
                         setAccessToken(storedToken);
+                        setRefreshToken(storedRefresh); // NEW
                         setUser(JSON.parse(storedUser));
                     } else {
                         logout({skipApiCall: true}); // token expired

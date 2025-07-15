@@ -3,7 +3,7 @@
 ## Backend Deployment
 
 ```bash
-# Commit and push to production
+# Commit and push to development, then:
 git subtree push --prefix backend origin deploy-backend
 ```
 
@@ -14,7 +14,7 @@ cd frontend
 npm run build
 cd ..
 git add -f frontend/build
-# Commit and push to production
+# Commit and push to development, then:
 git subtree push --prefix frontend/build origin deploy-frontend
 ```
 
@@ -24,4 +24,17 @@ After having updated the deploy-xxxxxend branch, access to the server's console 
 ```bash
 cd mgmt.esnpolimi.it
 ./gitpull_xxxxxend.sh
+
+# Eventually, reinstall django dependencies
+cd backend
+pip install -r requirements.txt
+
+# Eventually, make and apply migrations (if models have changed)
+python manage.py makemigrations
+python manage.py migrate
+
+# Collect static files
+python manage.py collectstatic --noinput
 ```
+
+Lastly, restart the backend service from the cPanel Python WEB APPLICATIONS console

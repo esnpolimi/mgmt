@@ -98,17 +98,30 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         return total;
     };
 
-    // Helper to show confirm dialog message for payment changes
-    const getConfirmMessage = () => {
-        // Detect status changes for quota/cauzione
+    // Helper to detect status changes for quota/cauzione
+    const getStatusChanges = () => {
         const quotaChangedToPaid = data.status_quota === 'paid' && (!isEdit || subscription?.status_quota !== 'paid');
         const quotaChangedToPending = isEdit && subscription?.status_quota === 'paid' && data.status_quota === 'pending';
         const cauzioneChangedToPaid = event.deposit > 0 && data.status_cauzione === 'paid' && (!isEdit || subscription?.status_cauzione !== 'paid');
         const cauzioneChangedToPending = isEdit && subscription?.status_cauzione === 'paid' && data.status_cauzione === 'pending';
+        return { quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending };
+    };
 
+    // Helper to show confirm dialog message for payment changes
+    const getConfirmMessage = () => {
+        const { quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending } = getStatusChanges();
         const accountObj = accounts.find(acc => acc.id === data.account_id);
         const accountName = accountObj ? accountObj.name : 'N/A';
 
+        // Check both toggled to paid first
+        if (quotaChangedToPaid && cauzioneChangedToPaid) {
+            return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
+        }
+        // Check both toggled to pending first
+        if (quotaChangedToPending && cauzioneChangedToPending) {
+            return `Confermi la rimozione di entrambi i pagamenti (quota + cauzione) per un totale di €${getTotalImport().toFixed(2)}? Verranno stornati dalla cassa.`;
+        }
+        // Then single checks
         if (quotaChangedToPaid) {
             return `Confermi il pagamento della quota di €${getQuotaImport().toFixed(2)} in cassa ${accountName}?`;
         }
@@ -120,14 +133,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         }
         if (cauzioneChangedToPending) {
             return `Confermi la rimozione del pagamento della cauzione di €${getCauzioneImport().toFixed(2)}? Verrà stornato dalla cassa.`;
-        }
-        // If both are newly paid
-        if (quotaChangedToPaid && cauzioneChangedToPaid) {
-            return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
-        }
-        // If both are being removed
-        if (quotaChangedToPending && cauzioneChangedToPending) {
-            return `Confermi la rimozione di entrambi i pagamenti (quota + cauzione) per un totale di €${getTotalImport().toFixed(2)}? Verranno stornati dalla cassa.`;
         }
         // Default: if either is paid
         if (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) {
@@ -150,13 +155,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             return;
         }
 
-        // Show confirm dialog if status changes from paid to pending or pending to paid
-        const quotaChangedToPaid = data.status_quota === 'paid' && (!isEdit || subscription?.status_quota !== 'paid');
-        const quotaChangedToPending = isEdit && subscription?.status_quota === 'paid' && data.status_quota === 'pending';
-        const cauzioneChangedToPaid = event.deposit > 0 && data.status_cauzione === 'paid' && (!isEdit || subscription?.status_cauzione !== 'paid');
-        const cauzioneChangedToPending = isEdit && subscription?.status_cauzione === 'paid' && data.status_cauzione === 'pending';
+        const { quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending } = getStatusChanges();
+        const accountChanged = isEdit && subscription?.account_id !== data.account_id;
 
-        if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending) {
+        if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending || accountChanged) {
             setConfirmDialog({
                 open: true,
                 action: () => doSubmit(),
@@ -164,8 +166,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             });
             return;
         }
-        // Also show confirm if either is paid (for new subscriptions)
-        if (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) {
+        // For new subscriptions, show confirm only if either is paid
+        if (!isEdit && (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid'))) {
             setConfirmDialog({
                 open: true,
                 action: () => doSubmit(),
@@ -226,10 +228,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
     };
 
     const handleChange = (e) => {
-        setData({
-            ...data,
-            [e.target.name]: e.target.value,
-        });
+        setData({...data, [e.target.name]: e.target.value});
     };
 
     // Helper to check if either quota or cauzione is reimbursed

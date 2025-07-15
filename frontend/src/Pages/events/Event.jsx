@@ -63,10 +63,7 @@ export default function Event() {
         setLoading(true);
         const eventId = id || eventFromState?.id;
         fetchCustom("GET", `/event/${eventId}/`, {
-            onSuccess: (data) => {
-                setData(data);
-                console.log("Event Data: ", data);
-            },
+            onSuccess: (data) => setData(data),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setLoading(false)
         });
@@ -90,7 +87,7 @@ export default function Event() {
         setEventModalOpen(true);
     };
 
-    const handleCloseEventModal = async (success, message) => {
+    const handleCloseEventModal = (success, message) => {
         setEventModalOpen(false);
         if (success && message === 'deleted') {
             navigate('/events/');
@@ -98,15 +95,15 @@ export default function Event() {
         }
         if (success) {
             setPopup({message: "Evento modificato con successo!", state: "success"});
-            await refreshEventData();
+            refreshEventData();
         }
     };
 
-    const handleCloseSubscriptionModal = async (success, message) => {
+    const handleCloseSubscriptionModal = (success, message) => {
         setSubscriptionModalOpen(false);
         if (success) {
             setPopup({message: message, state: "success"});
-            await refreshEventData();
+            refreshEventData();
         }
         setSelectedList(null);
     };
@@ -148,7 +145,7 @@ export default function Event() {
 
     const handleEditSubscription = (subscriptionId) => {
         // Implementation for editing a subscription
-        console.log("Editing subscription:", subscriptionId);
+        //console.log("Editing subscription:", subscriptionId);
         setSelectedList(null);
         setSubscription(data.subscriptions.find(sub => sub.id === subscriptionId) || null);
         setSubscriptionIsEdit(true);
@@ -454,36 +451,36 @@ export default function Event() {
 
     // Handlers for actions
     const handleMoveToList = (selectedRows, listId) => {
-        console.log("Moving selected rows to another list:", selectedRows);
+        //console.log("Moving selected rows to another list:", selectedRows);
         setSelectedRows(selectedRows);
         setSelectedList(listId);
         setMoveToListModalOpen(true);
     };
 
-    const handleCloseMoveToListModal = async (success) => {
+    const handleCloseMoveToListModal = (success) => {
         setMoveToListModalOpen(false);
         if (success) {
             setPopup({message: "Spostamento effettuato con successo!", state: "success"});
-            await refreshEventData();
+            refreshEventData();
         }
     }
 
-    const handleCloseRemburseDepositsModal = async (success, message) => {
+    const handleCloseRemburseDepositsModal = (success, message) => {
         setReimburseDepositsModalOpen(false);
         setReimburseDepositsListId(null);
         setSingleSubToReimburse(null);
         if (success) {
             setPopup({message: message, state: "success"});
-            await refreshEventData();
+            refreshEventData();
         }
     }
 
-    const handleCloseReimburseQuotaModal = async (success, message) => {
+    const handleCloseReimburseQuotaModal = (success, message) => {
         setReimburseQuotaModalOpen(false);
         setSingleSubToReimburseQuota(null);
         if (success) {
             setPopup({message: message, state: "success"});
-            await refreshEventData();
+            refreshEventData();
         }
     }
 

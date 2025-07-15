@@ -58,7 +58,7 @@ export default function ReimbursementRequestModal({open, onClose}) {
         });
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         resetErrors();
         if (!validate()) return;
@@ -180,8 +180,6 @@ export default function ReimbursementRequestModal({open, onClose}) {
                                    required
                                    error={!!errors.description}
                                    helperText={errors.description}
-                                   multiline
-                                   rows={2}
                                    fullWidth/>
                     </Grid>
                 </Grid>
