@@ -56,55 +56,26 @@ class EventListAdmin(admin.ModelAdmin):
 
 @admin.register(EventOrganizer)
 class EventOrganizerAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'event', 'is_lead', 'role', 'is_superuser')
+    list_display = ('profile', 'event', 'is_lead', 'role')
     list_filter = ('event', 'is_lead')
     search_fields = (
         'profile__name', 'profile__surname', 'profile__email', 'event__name', 'role'
     )
 
-    def is_superuser(self, obj):
-        return hasattr(obj.profile, 'user') and obj.profile.user and obj.profile.user.is_superuser
-    is_superuser.boolean = True
-    is_superuser.short_description = 'Is Superuser'
-
-
-class IsSuperuserSubscriptionFilter(admin.SimpleListFilter):
-    title = 'Profile Is Superuser'
-    parameter_name = 'profile_is_superuser'
-
-    def lookups(self, request, model_admin):
-        return (
-            ('yes', 'Yes'),
-            ('no', 'No'),
-        )
-
-    def queryset(self, request, queryset):
-        value = self.value()
-        if value == 'yes':
-            return queryset.filter(profile__user__is_superuser=True)
-        elif value == 'no':
-            return queryset.filter(profile__user__is_superuser=False)
-        return queryset
-
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
     list_display = (
-        'profile', 'profile_is_superuser', 'event', 'list', 'created_at'
+        'profile', 'event', 'list', 'created_at'
     )
     list_filter = (
-        'event', 'list', 'created_at', 'enable_refund', IsSuperuserSubscriptionFilter
+        'event', 'list', 'created_at', 'enable_refund'
     )
     search_fields = (
         'profile__name', 'profile__surname', 'profile__email', 'event__name', 'list__name'
     )
     date_hierarchy = 'created_at'
     readonly_fields = ('created_at', 'updated_at')
-
-    def profile_is_superuser(self, obj):
-        return hasattr(obj.profile, 'user') and obj.profile.user and obj.profile.user.is_superuser
-    profile_is_superuser.boolean = True
-    profile_is_superuser.short_description = 'Profile Is Superuser'
 
     def get_queryset(self, request):
         # Prefetch related user for efficiency

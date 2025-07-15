@@ -11,6 +11,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from profiles.models import Profile
@@ -50,7 +51,7 @@ def log_in(request):
                 access_token = str(refresh.access_token)
                 logger.info(f"User {user} logged in")
 
-                response = Response({'access': access_token}, status=200)
+                response = Response({'access': access_token, 'refresh': str(refresh)}, status=200)
                 response.set_cookie(
                     key='refresh_token',
                     value=str(refresh),
@@ -72,6 +73,13 @@ def log_in(request):
 @api_view(['POST'])
 def log_out(request):
     try:
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            except Exception as e:
+                logger.error(f"Error blacklisting token: {str(e)}")
         response = Response({'detail': 'Log out avvenuto con successo'}, status=200)
         response.delete_cookie('refresh_token')
         return response
