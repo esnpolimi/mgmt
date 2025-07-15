@@ -32,6 +32,10 @@ class ESNcard(BaseEntity):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     number = models.CharField(max_length=11, unique=True)
 
+    class Meta:
+        verbose_name = "ESNcard"
+        verbose_name_plural = "ESNcards"
+
     @property
     def expiration(self):
         return date(self.created_at.year + 1 if self.created_at.month >= 9 else self.created_at.year, 9, 1)

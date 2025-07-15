@@ -31,7 +31,7 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
         });
     }, [open]);
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         setPopup(null);
         if (!selectedAccount) {
             setPopup({message: "Seleziona una cassa.", state: "error"});
@@ -115,7 +115,7 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
                                            label="Note (opzionale)"
                                            value={notes}
                                            onChange={e => setNotes(e.target.value)}
-                                           sx={{mb: 2}}/>
+                                           sx={{mb: 2, mt: 1}}/>
                             </Grid>
                             <Grid size={{xs: 12}}>
                                 <Box sx={{display: 'flex', justifyContent: 'flex-end', gap: 2}}>

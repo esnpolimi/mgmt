@@ -26,10 +26,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         id: '',
         name: '',
         date: dayjs(),
-        description: '<h3>Titolone</h3>' +
-            '    <p>Ecco un <a href="https://www.italia.it" target="_blank">link all\'Italia</a>.</p>' +
-            '    <blockquote>Citazione elegante.</blockquote>' +
-            '    <p style="text-align: center;">Adios.</p>',
+        description: '',
         cost: '',
         deposit: '',
         subscription_start_date: dayjs().hour(12).minute(0),
@@ -51,9 +48,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
     useEffect(() => {
         if (isEdit) {
-            console.log("Setting form data: ", event);
             setData(event);
-            console.log("#Subsciptions: ", event.subscriptions.length);
             setHasSubscriptions(event.subscriptions.length > 0)
         }
         setLoading(false);

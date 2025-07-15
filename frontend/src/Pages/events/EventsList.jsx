@@ -239,11 +239,11 @@ export default function EventsList() {
         }));
     };
 
-    const handleCloseEventModal = async (success) => {
+    const handleCloseEventModal = (success) => {
         setEventModalOpen(false);
         if (success) {
             setPopup({message: "Evento creato con successo!", state: "success"});
-            await refreshData();
+            refreshData();
         }
     };
 

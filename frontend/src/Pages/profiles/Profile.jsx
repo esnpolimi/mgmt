@@ -163,11 +163,11 @@ export default function Profile() {
         setESNcardModalOpen(true);
     };
 
-    const handleCloseESNcardModal = async (success) => {
+    const handleCloseESNcardModal = (success) => {
         setESNcardModalOpen(false);
         if (success) {
             setPopup({message: "ESNcard emessa con successo!", state: "success"});
-            await refreshProfileData();
+            refreshProfileData();
         }
     };
 
@@ -397,93 +397,142 @@ export default function Profile() {
     const handleSubscriptionModalClose = (success, msg) => {
         setSubscriptionModalOpen(false);
         setSubscriptionEvent(null);
+        if (success) refreshProfileData();
         if (success && msg) setPopup({message: msg, state: "success"});
     };
 
-    const subscriptionsColumns = useMemo(() => [
-        {
-            accessorKey: 'subscribed_at',
-            header: 'Data e Ora Iscrizione',
-            size: 120,
-            Cell: ({cell}) => {
-                const date = cell.getValue();
-                if (!date) return '';
-                const d = new Date(date);
-                return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'}) + ' ' +
-                    d.toLocaleTimeString('it-IT');
-            }
-        },
-        {
-            accessorKey: 'event_name',
-            header: 'Evento',
-            size: 150,
-            Cell: ({row}) => (
-                <span>
-                    <Button variant="text"
-                            color="primary"
-                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                            endIcon={<OpenInNewIcon fontSize="small"/>}
-                            onClick={() => window.open(`/event/${row.original.event_id}`, '_blank', 'noopener,noreferrer')}>
-                        {row.original.event_name}
-                    </Button>
-                </span>
-            ),
-        },
-        {
-            accessorKey: 'list_name',
-            header: 'Lista',
-            size: 100,
-        },
-        {
-            accessorKey: 'event_date',
-            header: 'Data',
-            size: 100,
-            Cell: ({cell}) => {
-                const date = cell.getValue();
-                if (!date) return '';
-                const d = new Date(date);
-                return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'});
-            }
-        },
-        {
-            accessorKey: 'status_quota',
-            header: 'Stato Pagamento',
-            size: 100,
-            Cell: ({cell}) => {
-                const status = cell.getValue();
-                let color;
-                let label;
-                switch (status) {
-                    case 'paid':
-                        color = "success";
-                        label = "Pagato";
-                        break;
-                    case 'pending':
-                        color = "warning";
-                        label = "In attesa";
-                        break;
-                    case 'reimbursed':
-                        color = "success";
-                        label = "Rimborsato";
-                        break;
-                    default:
-                        color = "error";
-                        label = status || "Sconosciuto";
+    // Determine which columns to show based on subscriptions data
+    const showQuotaColumn = subscriptions.some(sub => sub.status_quota !== undefined && sub.status_quota !== null);
+    const showCauzioneColumn = subscriptions.some(sub => sub.status_cauzione !== undefined && sub.status_cauzione !== null);
+
+    const subscriptionsColumns = useMemo(() => {
+        const cols = [
+            {
+                accessorKey: 'subscribed_at',
+                header: 'Data e Ora Iscrizione',
+                size: 120,
+                Cell: ({cell}) => {
+                    const date = cell.getValue();
+                    if (!date) return '';
+                    const d = new Date(date);
+                    return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'}) + ' ' +
+                        d.toLocaleTimeString('it-IT');
                 }
-                return (
-                    <span style={{
-                        color:
-                            color === "success" ? "#388e3c" :
-                                color === "warning" ? "#f57c00" :
-                                    "#d32f2f",
-                        fontWeight: 600
-                    }}>
-                        {label}
+            },
+            {
+                accessorKey: 'event_name',
+                header: 'Evento',
+                size: 150,
+                Cell: ({row}) => (
+                    <span>
+                        <Button variant="text"
+                                color="primary"
+                                sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                endIcon={<OpenInNewIcon fontSize="small"/>}
+                                onClick={() => window.open(`/event/${row.original.event_id}`, '_blank', 'noopener,noreferrer')}>
+                            {row.original.event_name}
+                        </Button>
                     </span>
-                );
-            }
-        },
-    ], [navigate]);
+                ),
+            },
+            {
+                accessorKey: 'list_name',
+                header: 'Lista',
+                size: 100,
+            },
+            {
+                accessorKey: 'event_date',
+                header: 'Data Evento',
+                size: 100,
+                Cell: ({cell}) => {
+                    const date = cell.getValue();
+                    if (!date) return '';
+                    const d = new Date(date);
+                    return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'});
+                }
+            },
+        ];
+        if (showQuotaColumn) {
+            cols.push({
+                accessorKey: 'status_quota',
+                header: 'Stato Pagamento Quota',
+                size: 100,
+                Cell: ({cell}) => {
+                    const status = cell.getValue();
+                    if (!status) return '';
+                    let color;
+                    let label;
+                    switch (status) {
+                        case 'paid':
+                            color = "success";
+                            label = "Pagato";
+                            break;
+                        case 'pending':
+                            color = "warning";
+                            label = "In attesa";
+                            break;
+                        case 'reimbursed':
+                            color = "success";
+                            label = "Rimborsato";
+                            break;
+                        default:
+                            color = "error";
+                            label = status || "Sconosciuto";
+                    }
+                    return (
+                        <span style={{
+                            color: color === "success" ? "#388e3c" : color === "warning" ? "#f57c00" : "#d32f2f",
+                            fontWeight: 600
+                        }}>
+                            {label}
+                        </span>
+                    );
+                }
+            });
+        }
+        if (showCauzioneColumn) {
+            cols.push({
+                accessorKey: 'status_cauzione',
+                header: 'Stato Pagamento Cauzione',
+                size: 100,
+                Cell: ({cell}) => {
+                    const status = cell.getValue();
+                    if (!status) return '';
+                    let color;
+                    let label;
+                    switch (status) {
+                        case 'paid':
+                            color = "success";
+                            label = "Pagato";
+                            break;
+                        case 'pending':
+                            color = "warning";
+                            label = "In attesa";
+                            break;
+                        case 'reimbursed':
+                            color = "success";
+                            label = "Rimborsato";
+                            break;
+                        default:
+                            color = "error";
+                            label = status || "Sconosciuto";
+                    }
+                    return (
+                        <span style={{
+                            color:
+                                color === "success" ? "#388e3c" :
+                                    color === "warning" ? "#f57c00" :
+                                        "#d32f2f",
+                            fontWeight: 600
+                        }}>
+                            {label}
+                        </span>
+                    );
+                }
+            });
+        }
+        return cols;
+    }, [subscriptions, navigate, showQuotaColumn, showCauzioneColumn]);
 
     const subscriptionsTable = useMaterialReactTable({
         columns: subscriptionsColumns,

@@ -48,7 +48,7 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
                     Sposta {selectedRows.length} {selectedRows.length === 1 ? "iscrizione" : "iscrizioni"}
                 </Typography>
                 <Typography variant="body1" id="modal-modal-description" gutterBottom>
-                    Lista di origine: {listName}
+                    <b>Lista di origine:</b> {listName}
                 </Typography>
                 <FormControl fullWidth sx={{mt: 1}}>
                     <InputLabel id="list-select-label">Lista di destinazione</InputLabel>

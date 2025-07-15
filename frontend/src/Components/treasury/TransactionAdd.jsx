@@ -1,4 +1,4 @@
-import {useState, useEffect} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Button, TextField, FormControl, InputLabel, Select, MenuItem, Typography, IconButton, Box, Modal, Grid} from '@mui/material';
 import {defaultErrorHandler, fetchCustom} from '../../api/api';
 import CloseIcon from "@mui/icons-material/Close";
@@ -53,9 +53,14 @@ export default function TransactionAdd({open, onClose, account}) {
                     <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}> <CloseIcon/> </IconButton>
                 </Box>
                 <Typography variant="h5" gutterBottom align="center" sx={{mt: 2}}>
-                    Transazione Manuale - Cassa {account?.name}
+                    Transazione Manuale
                 </Typography>
                 <Grid container spacing={2} sx={{mt: 2}}>
+                    <Grid size={{xs: 12}}>
+                        <Typography>
+                            <b>Cassa:</b> {account?.name}
+                        </Typography>
+                    </Grid>
                     <FormControl fullWidth>
                         <InputLabel>Tipo</InputLabel>
                         <Select
@@ -95,7 +100,7 @@ export default function TransactionAdd({open, onClose, account}) {
                         {submitting ? <CircularProgress size={24} color="inherit"/> : "Conferma"}
                     </Button>
                 </Box>
-                {popup && <Popup message={popup.message} state={popup.state} />}
+                {popup && <Popup message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

@@ -15,6 +15,7 @@ import TransactionAdd from "../../Components/treasury/TransactionAdd";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 import EditIcon from "@mui/icons-material/Edit";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 export default function AccountsList() {
     const [data, setData] = useState([]);
@@ -175,20 +176,20 @@ export default function AccountsList() {
         },
     });
 
-    const handleCloseAccountModal = async (success) => {
+    const handleCloseAccountModal = (success) => {
         setAccountModalOpen(false);
         if (success) {
             setPopup({message: "Cassa creata con successo!", state: "success"});
-            await refreshAccountsData();
+            refreshAccountsData();
         }
         setSelectedAccount(null);
     };
 
-    const handleCloseTransactionModal = async (success) => {
+    const handleCloseTransactionModal = (success) => {
         setTransactionModalOpen(false);
         if (success) {
             setPopup({message: "Transazione registrata con successo!", state: "success"});
-            await refreshAccountsData();
+            refreshAccountsData();
         }
         setSelectedAccount(null);
     }
@@ -207,17 +208,21 @@ export default function AccountsList() {
                 account={selectedAccount}
             />
             <Box sx={{mx: '5%'}}>
-                {isLoading ? <Loader/> : (<>
-                        <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
-                            <IconButton onClick={() => {
-                                navigate(-1);
-                            }} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
-                            <StoreIcon sx={{mr: 2}}/>
-                            <Typography variant="h4">Lista Casse</Typography>
-                        </Box>
-                        <MaterialReactTable table={table}/>
-                    </>
-                )}
+
+                <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
+                    <IconButton onClick={() => {
+                        navigate(-1);
+                    }} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
+                    <StoreIcon sx={{mr: 2}}/>
+                    <Typography variant="h4">Lista Casse</Typography>
+                    <Box sx={{flexGrow: 1}}/>
+                    <IconButton onClick={refreshAccountsData}
+                                title="Aggiorna"
+                                disabled={isLoading}>
+                        <RefreshIcon/>
+                    </IconButton>
+                </Box>
+                {isLoading ? <Loader/> : (<MaterialReactTable table={table}/>)}
             </Box>
             {popup && <Popup message={popup.message} state={popup.state}/>}
         </Box>

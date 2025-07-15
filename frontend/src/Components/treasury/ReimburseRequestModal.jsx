@@ -31,7 +31,7 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
         }
     }, [open, requestData]);
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         // Show confirm dialog with amount and cassa
         const accName = accounts.find(acc => acc.id === selectedAccount)?.name || '';
         setConfirmDialog({
