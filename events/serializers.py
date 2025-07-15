@@ -159,16 +159,22 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     quota_reimbursement_transaction_id = serializers.SerializerMethodField()
     status_quota = serializers.SerializerMethodField()
     status_cauzione = serializers.SerializerMethodField()
+    subscribed_at = serializers.DateTimeField(source='created_at', read_only=True)
+    event_name = serializers.CharField(source='event.name', read_only=True)
+    event_id = serializers.IntegerField(source='event.id', read_only=True)
+    event_date = serializers.DateField(source='event.date', read_only=True)
 
     class Meta:
         model = Subscription
         fields = [
-            'id', 'profile_id', 'profile_name', 'event', 'list_id', 'list_name',
+            'id', 'profile_id', 'profile_name', 'event', 'event_id', 'event_name', 'event_date',
+            'list_id', 'list_name',
             'enable_refund', 'notes', 'created_by_form',
             'account_id', 'account_name',
             'deposit_reimbursement_transaction_id',
             'quota_reimbursement_transaction_id',
-            'status_quota', 'status_cauzione'
+            'status_quota', 'status_cauzione',
+            'subscribed_at'
         ]
 
     @staticmethod
@@ -197,24 +203,29 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_status_quota(obj):
-        # Quota: reimbursed only if rimborso quota transaction exists
-        if Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
-            return 'reimbursed'
-        elif Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.SUBSCRIPTION).exists():
-            return 'paid'
-        else:
-            return 'pending'
+        # Only return if event has quota (cost > 0)
+        if obj.event and obj.event.cost and float(obj.event.cost) > 0:
+            if Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
+                return 'reimbursed'
+            elif Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.SUBSCRIPTION).exists():
+                return 'paid'
+            else:
+                return 'pending'
+        return None
 
     @staticmethod
     def get_status_cauzione(obj):
-        cauzione_tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).first()
-        reimbursed = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
-        if reimbursed:
-            return 'reimbursed'
-        elif cauzione_tx:
-            return 'paid'
-        else:
-            return 'pending'
+        # Only return if event has deposit (deposit > 0)
+        if obj.event and obj.event.deposit and float(obj.event.deposit) > 0:
+            cauzione_tx = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.CAUZIONE).first()
+            reimbursed = Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+            if reimbursed:
+                return 'reimbursed'
+            elif cauzione_tx:
+                return 'paid'
+            else:
+                return 'pending'
+        return None
 
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):

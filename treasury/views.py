@@ -41,13 +41,13 @@ def esncard_emission(request):
             settings = Settings.get()
             if latest_card:
                 if latest_card.is_valid:
-                    amount = float(settings.esncard_lost_fee.amount)
+                    amount = float(settings.esncard_lost_fee)
                     description = "Emissione ESNcard smarrita"
                 else:
-                    amount = float(settings.esncard_release_fee.amount)
+                    amount = float(settings.esncard_release_fee)
                     description = "Rinnovo ESNcard"
             else:
-                amount = float(settings.esncard_release_fee.amount)
+                amount = float(settings.esncard_release_fee)
                 description = "Emissione ESNcard"
 
             # Create the transaction
@@ -493,7 +493,7 @@ def reimburse_deposits(request):
                     executor=request.user,
                     account=account_locked,
                     amount=-deposit_amount,
-                    description=f"Rimborso cauzione per {sub.profile.name} {sub.profile.surname} ({event.name})" + (f" - {notes}" if notes else "")
+                    description=f"Rimborso cauzione {sub.profile.name} {sub.profile.surname} - {event.name}" + (f" - {notes}" if notes else "")
                 )
                 created.append(tx)
             # Return the created transactions
@@ -521,10 +521,7 @@ def reimbursable_deposits(request):
         event = Event.objects.get(id=event_id)
 
         # Subscriptions in this list, with a paid cauzione transaction, not yet reimbursed
-        subs = Subscription.objects.filter(
-            event=event,
-            list__id=list_id
-        )
+        subs = Subscription.objects.filter(event=event, list__id=list_id)
         result = []
         for sub in subs:
             deposit_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
@@ -593,7 +590,7 @@ def reimburse_quota(request):
                 executor=request.user,
                 account=account,
                 amount=-event.cost,
-                description=f"Rimborso quota per {sub.profile.name} {sub.profile.surname} ({event.name})" + (f" - {notes}" if notes else "")
+                description=f"Rimborso quota {sub.profile.name} {sub.profile.surname} - {event.name}" + (f" - {notes}" if notes else "")
             )
             serializer = TransactionViewSerializer(tx)
             return Response(serializer.data, status=201)

@@ -17,8 +17,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         logger.info(f"Authenticating user: {user}")
         token = super().get_token(user)
         token['user_id'] = user.profile.email
-
         return token
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['refresh'] = str(self.get_token(self.user))
+        return data
 
 
 class UserSerializer(serializers.ModelSerializer):
