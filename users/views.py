@@ -1,10 +1,13 @@
 import logging
+from operator import truediv
+
 import sentry_sdk
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from rest_framework.decorators import api_view, permission_classes
@@ -46,6 +49,17 @@ def log_in(request):
                 if not profile.email_is_verified:
                     return Response({'detail': 'Email non verificata'}, status=403)
 
+                first_login = False
+                if user.last_login is None:
+                    first_login = True
+
+                user.last_login = timezone.now()
+                user.save(update_fields=['last_login'])
+
+                if first_login: # pop the last_login field from the returned user
+                    user.last_login = None
+
+
                 refresh = RefreshToken.for_user(user)
                 refresh['user'] = UserReactSerializer(user).data
                 access_token = str(refresh.access_token)
@@ -60,6 +74,7 @@ def log_in(request):
                     samesite='Strict',
                     max_age=settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds(),
                 )
+
                 return response
             else:
                 return Response({'detail': 'Credenziali invalide'}, status=403)
