@@ -1,8 +1,6 @@
 import {useEffect, useState, useRef} from "react";
 import Sidebar from "../Components/Sidebar";
-import {Box, Typography, Card, CardContent, CardActions, Button, Collapse, IconButton, Paper} from "@mui/material";
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import {Box, Typography, Card, CardContent, CardActions, Button, IconButton, Paper} from "@mui/material";
 import ConfirmDialog from "../Components/ConfirmDialog";
 import {defaultErrorHandler, fetchCustom} from "../api/api";
 import {useAuth} from "../Context/AuthContext";
@@ -12,6 +10,10 @@ import {accountDisplayNames as names} from "../utils/displayAttributes";
 import TransactionAdd from "../Components/treasury/TransactionAdd";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReimbursementRequestModal from "../Components/treasury/ReimbursementRequestModal";
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
+import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 
 
 const style = {
@@ -28,13 +30,15 @@ export default function Home() {
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
     const [actionType, setActionType] = useState(""); // "open" or "close"
-    const [casseOpen, setCasseOpen] = useState(false);
     const [popup, setPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [casseLoading, setCasseLoading] = useState(false);
+    const [showAccountDetails, setShowAccountDetails] = useState(false);
     const accountsDetails = user?.permissions.includes("change_account");
     const casseRef = useRef(null);
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
+    const [showFirstLoginBanner, setShowFirstLoginBanner] = useState(!user?.last_login);
+
     const groupname = user?.groups
         ? user.groups[0] === "Aspiranti"
             ? "Aspirante"
@@ -161,18 +165,6 @@ export default function Home() {
         });
     };
 
-    const handleCasseToggle = () => {
-        setCasseOpen(o => {
-            const next = !o;
-            if (!o && casseRef.current) {
-                setTimeout(() => {
-                    casseRef.current.scrollIntoView({behavior: "smooth", block: "start"});
-                }, 150); // Wait for collapse animation to start
-            }
-            return next;
-        });
-    };
-
     const handleTransactionModalOpen = (success) => {
         setTransactionModalOpen(false);
         if (success) {
@@ -192,14 +184,58 @@ export default function Home() {
         if (success) setPopup({message: "Richiesta di rimborso inviata con successo!", state: "success"});
     };
 
+    useEffect(() => {
+        setShowFirstLoginBanner(!user?.last_login);
+    }, [user]);
+
+    const isAspirante = user?.groups && user.groups[0] === "Aspiranti";
+
     return (
         <Box sx={{
             minHeight: "100vh",
             background: "#f9f9fb",
             pb: 2,
+            position: "relative"
         }}>
             {/* Sidebar */}
             <Sidebar/>
+            {/* First Login Banner */}
+            {showFirstLoginBanner && (
+                <Box sx={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    width: "100vw",
+                    height: "100vh",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1300,
+                    background: "rgba(240,245,255,0.75)",
+                }}>
+                    <Paper elevation={6} sx={{
+                        p: 3,
+                        borderRadius: 3,
+                        background: "#e3f2fd",
+                        boxShadow: "0 2px 8px rgba(60,80,120,0.12)",
+                        maxWidth: 600,
+                        textAlign: "center",
+                        position: "relative"
+                    }}>
+                        <Typography variant="h6" sx={{fontWeight: 700, color: "#1976d2", mb: 1}}>
+                            Benvenuto! Ecco alcune istruzioni per iniziare:
+                        </Typography>
+                        <Typography variant="body1" sx={{color: "#2d3a4b", mb: 2}}>
+                            Disabilita il tuo AdBlocker per permetterci di rilevare errori.<br/>
+                            Consulta i link utili qui sotto.<br/>
+                            Se hai bisogno di aiuto, visita la Guida nei link utili.<br/>
+                        </Typography>
+                        <Button variant="contained" color="primary" onClick={() => setShowFirstLoginBanner(false)}>
+                            Ho capito
+                        </Button>
+                    </Paper>
+                </Box>
+            )}
             {/* Simplified Centered Header */}
             <Box sx={{
                 width: "100%",
@@ -311,109 +347,118 @@ export default function Home() {
                        sx={{
                            p: 2,
                            mb: 0,
-                           borderRadius: 6,
+                           borderRadius: 4,
                            background: "#fff",
                            boxShadow: "0 8px 32px rgba(60,80,120,0.08)",
                            border: "1px solid #e3e8f0",
                            mt: 2,
                            width: "100%",
                        }}>
-                    <Box sx={{display: "flex", alignItems: "center", cursor: "pointer"}} onClick={handleCasseToggle}>
-                        <Typography variant="h5" sx={{flexGrow: 1, fontWeight: 600}}>Casse</Typography>
-                        <IconButton>
-                            {casseOpen ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                        </IconButton>
-                    </Box>
-                    <Collapse in={casseOpen} timeout="auto" unmountOnExit>
-                        <Box sx={{display: "flex", alignItems: "center", justifyContent: "flex-end", mt: 1, mb: 1}}>
-                            <IconButton variant="outlined"
-                                        color="primary"
-                                        size="small"
-                                        onClick={fetchAccounts}
-                                        disabled={casseLoading}
-                                        sx={{mr: 2}}>
+                    <Box sx={{display: "flex", alignItems: "center", justifyContent: "space-between"}}>
+                        <Typography variant="h5" sx={{fontWeight: 600}}>Casse</Typography>
+                        <Box>
+                            <IconButton
+                                variant="outlined"
+                                color="primary"
+                                size="small"
+                                onClick={fetchAccounts}
+                                disabled={casseLoading}
+                                sx={{mr: 1}}>
                                 <RefreshIcon/>
                             </IconButton>
+                            {/* Eye icon only if NOT Aspirante */}
+                            {!isAspirante && (
+                                <IconButton
+                                    variant="outlined"
+                                    color="primary"
+                                    size="small"
+                                    onClick={() => setShowAccountDetails(v => !v)}
+                                    sx={{mr: 1}}>
+                                    {showAccountDetails ? <VisibilityOffIcon/> : <VisibilityIcon/>}
+                                </IconButton>
+                            )}
                         </Box>
-                        <Box
-                            sx={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: 2,
-                                mt: 2,
-                                justifyContent: "center",
-                            }}>
-                            {accounts.map((account) => (
-                                <Card
-                                    key={account.id}
-                                    sx={{
-                                        flex: "1 1 320px",
-                                        minWidth: 320,
-                                        maxWidth: 400,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        boxShadow: 4,
-                                        borderRadius: 2,
-                                        m: 1,
-                                    }}>
-                                    <CardContent sx={{flex: 1}}>
-                                        <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
-                                            {account.name}
-                                        </Typography>
-
-                                        {accountsDetails && (<>
+                    </Box>
+                    <Box
+                        sx={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 1,
+                            mt: 2,
+                            justifyContent: "center",
+                        }}>
+                        {accounts.map((account) => (
+                            <Card
+                                key={account.id}
+                                sx={{
+                                    flex: "1 1 300px",
+                                    minWidth: 200,
+                                    maxWidth: 300,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    boxShadow: 4,
+                                    borderRadius: 2,
+                                    m: 1,
+                                }}>
+                                <CardContent sx={{flex: 1}}>
+                                    <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
+                                        {account.name}
+                                    </Typography>
+                                    {/* Show details or nothing for Aspirante */}
+                                    {!isAspirante && (
+                                        <>
                                             <Typography variant="body1" sx={{color: "#3e5060"}}>
-                                                {names.balance}: <b>€{account.balance}</b>
+                                                {names.balance}: <b>
+                                                    {accountsDetails && showAccountDetails
+                                                        ? `€${account.balance}`
+                                                        : '--'}
+                                                </b>
                                             </Typography>
                                             <Typography variant="body2" sx={{color: "#607d8b"}}>
-                                                {names.changed_by}: {account.changed_by.name || "N/A"}
+                                                {names.changed_by}: {accountsDetails && showAccountDetails
+                                                    ? (account.changed_by.name || "N/A")
+                                                    : '--'}
                                             </Typography>
-                                        </>)}
-                                    </CardContent>
-
-                                    {accountsDetails ? (
-                                        <CardActions sx={{pr: 2, flexDirection: 'column', alignItems: 'flex-end'}}>
-                                            {account.status === "closed" && (
-                                                <Button
-                                                    variant="contained"
-                                                    color="success"
-                                                    onClick={() => handleAction(account, "open")}
-                                                    sx={{minWidth: 120, fontWeight: 600}}>
-                                                    Apri Cassa
-                                                </Button>
-                                            )}
-                                            {account.status === "open" && (<>
-                                                    <Button
-                                                        variant="contained"
-                                                        color="error"
-                                                        onClick={() => handleAction(account, "close")}
-                                                        sx={{minWidth: 120, fontWeight: 600, mb: 1}}>
-                                                        Chiudi Cassa
-                                                    </Button>
-                                                    <Button
-                                                        variant="contained"
-                                                        color="primary"
-                                                        onClick={() => openTransactionModal(account)}
-                                                        sx={{minWidth: 120, fontWeight: 600}}>
-                                                        Deposita/Preleva
-                                                    </Button>
-                                                </>
-                                            )}
-                                        </CardActions>
-                                    ) : (
-                                        <Typography
-                                            variant="h7"
-                                            style={{
-                                                color: account.status === "closed" ? 'red' : 'green',
-                                                fontWeight: 'bold',
-                                                padding: '20px'
-                                            }}>
-                                            {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
-                                        </Typography>)}
-                                </Card>
-                            ))}
-                        </Box>
-                    </Collapse>
+                                        </>
+                                    )}
+                                </CardContent>
+                                {accountsDetails ? (
+                                    <CardActions sx={{pr: 2, flexDirection: 'row', alignItems: 'center', gap: 1}}>
+                                        {/* Power IconButton for open/close */}
+                                        <IconButton
+                                            color={account.status === "closed" ? "success" : "error"}
+                                            onClick={() => handleAction(account, account.status === "closed" ? "open" : "close")}
+                                            sx={{minWidth: 40}}
+                                            title={account.status === "closed" ? "Apri Cassa" : "Chiudi Cassa"}
+                                        >
+                                            <PowerSettingsNewIcon />
+                                        </IconButton>
+                                        {/* CurrencyExchange IconButton for deposit/withdraw */}
+                                        {account.status === "open" && (
+                                            <IconButton
+                                                color="primary"
+                                                onClick={() => openTransactionModal(account)}
+                                                sx={{minWidth: 40}}
+                                                title="Deposita/Preleva"
+                                            >
+                                                <CurrencyExchangeIcon />
+                                            </IconButton>
+                                        )}
+                                    </CardActions>
+                                ) : (
+                                    <Typography
+                                        variant="h7"
+                                        style={{
+                                            color: account.status === "closed" ? 'red' : 'green',
+                                            fontWeight: 'bold',
+                                            padding: '20px'
+                                        }}>
+                                        {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
+                                    </Typography>
+                                )}
+                            </Card>
+                        ))}
+                    </Box>
                 </Paper>
             </Box>
             <ConfirmDialog
