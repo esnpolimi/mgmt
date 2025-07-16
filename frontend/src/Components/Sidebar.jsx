@@ -11,8 +11,8 @@ import {
     BabyChangingStation as BabyChangingStationIcon,
     ExpandLess,
     ExpandMore,
-    HomeRepairService as HomeRepairServiceIcon
 } from "@mui/icons-material";
+// import HomeRepairServiceIcon from '@mui/icons-material/HomeRepairService';
 import LogoutButton from './LogoutButton';
 import {useAuth} from "../Context/AuthContext";
 import {useSidebar} from "../Context/SidebarContext";
@@ -39,12 +39,12 @@ export default function Sidebar() {
                 {text: 'ESNers', icon: <BabyChangingStationIcon/>, path: '/profiles/esners'},
             ],
         },
-        {
+        /*{
             text: "Utils",
             icon: <HomeRepairServiceIcon/>,
             children: [
             ],
-        },
+        },*/
     ].filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
 
     const handleProfileOpen = useCallback(() => {
@@ -64,7 +64,9 @@ export default function Sidebar() {
         }}
              role="presentation"
              onClick={toggleDrawer(false)}
-             onKeyDown={toggleDrawer(false)}>
+             onKeyDown={toggleDrawer(false)}
+             onMouseLeave={() => toggleDrawer(false)()}
+        >
             <Box sx={{flexGrow: 1}}>
                 {menuItems.map((item) => (
                     <React.Fragment key={item.text}>
@@ -80,14 +82,18 @@ export default function Sidebar() {
                         ) : (
                             <React.Fragment key={item.text}>
                                 <ListItemButton onClick={(e) => {
-                                    e.stopPropagation(); // Prevent drawer from closing
+                                    e.stopPropagation();
                                     handleExpand(item.text);
                                 }}>
                                     <ListItemIcon>{item.icon}</ListItemIcon>
                                     <ListItemText primary={item.text} slotProps={{primary: {style: {color: "black"},}}}/>
                                     {expandedSection === item.text ? <ExpandLess/> : <ExpandMore/>}
                                 </ListItemButton>
-                                <Collapse in={expandedSection === item.text} timeout="auto" unmountOnExit>
+                                <Collapse
+                                    in={expandedSection === item.text}
+                                    timeout={500}
+                                    unmountOnExit
+                                >
                                     <List component="div" disablePadding>
                                         {item.children?.map((child) => (
                                             <ListItem component={Link}
@@ -159,15 +165,18 @@ export default function Sidebar() {
 
     return (
         <Box sx={{display: "flex"}}>
-            <IconButton
-                edge="start"
-                color="inherit"
-                aria-label="menu"
-                onClick={toggleDrawer(true)}
-                sx={{margin: "10px"}}>
+            <IconButton edge="start"
+                        color="inherit"
+                        aria-label="menu"
+                        onClick={toggleDrawer(true)}
+                        onMouseEnter={() => toggleDrawer(true)()}
+                        sx={{margin: "10px"}}>
                 <MenuIcon/>
             </IconButton>
-            <Drawer anchor="left" open={isDrawerOpen} onClose={toggleDrawer(false)}>
+            <Drawer anchor="left"
+                    open={isDrawerOpen}
+                    onClose={toggleDrawer(false)}
+                    transitionDuration={500}>
                 {drawer}
             </Drawer>
         </Box>
