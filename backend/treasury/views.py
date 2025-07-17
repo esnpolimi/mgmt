@@ -66,9 +66,9 @@ def esncard_emission(request):
             return Response(response_data, status=200)
 
     except PermissionDenied as e:
-        return Response(str(e), status=403)
+        return Response({'error': str(e)}, status=403)
     except (ObjectDoesNotExist, ValueError) as e:
-        return Response(str(e), status=400)
+        return Response({'error': str(e)}, status=400)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -91,9 +91,9 @@ def esncard_detail(request, pk):
             else:
                 return Response({'error': 'Non hai i permessi per modificare questa ESNcard.'}, status=403)
         else:
-            return Response("Metodo non consentito", status=405)
+            return Response({'error': "Metodo non consentito"}, status=405)
     except ESNcard.DoesNotExist:
-        return Response('La ESNcard non esiste', status=400)
+        return Response({'error': 'La ESNcard non esiste'}, status=400)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -105,7 +105,7 @@ def esncard_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def esncard_fees(request):
     try:
-        # Get the settings and add fee information
+         # Get the settings and add fee information
         settings = Settings.get()
         response = Response({
             'esncard_release_fee': str(settings.esncard_release_fee),
@@ -184,7 +184,7 @@ def transactions_list(request):
                 serializer = TransactionViewSerializer(transactions, many=True)
                 return Response({'results': serializer.data, 'count': transactions.count() if hasattr(transactions, 'count') else len(transactions)})
             except ValueError:
-                pass
+                return Response({'error': 'Parametro limit non valido.'}, status=400)
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(transactions, request=request)
@@ -264,7 +264,7 @@ def transaction_detail(request, pk):
             else:
                 return Response({'error': 'Solo i Rimborsi possono essere eliminati manualmente.'}, status=400)
         else:
-            return Response("Metodo non consentito", status=405)
+            return Response({'error': "Metodo non consentito"}, status=405)
     except Transaction.DoesNotExist:
         return Response({'error': 'Transazione non trovata.'}, status=404)
     except Exception as e:
@@ -321,7 +321,7 @@ def account_detail(request, pk):
 
         if request.method == 'GET':
             if request.user.groups.filter(name="Aspiranti").exists():
-                serializer = AccountListViewSerializer(account)  # Do not return sensitive data, like balance
+                serializer = AccountListViewSerializer(account)
             else:
                 serializer = AccountDetailedViewSerializer(account, context={'request': request})
             return Response(serializer.data, status=200)
@@ -338,7 +338,7 @@ def account_detail(request, pk):
             serializer.save()
             return Response(serializer.data, status=200)
         else:
-            return Response("Metodo non consentito", status=405)
+            return Response({'error': "Metodo non consentito"}, status=405)
     except Account.DoesNotExist:
         return Response({'error': 'Account non trovato.'}, status=404)
     except Exception as e:
@@ -393,7 +393,7 @@ def reimbursement_request_detail(request, pk):
             else:
                 return Response({'error': 'Non autorizzato.'}, status=401)
         else:
-            return Response("Metodo non consentito", status=405)
+            return Response({'error': "Metodo non consentito"}, status=405)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -434,7 +434,7 @@ def reimbursement_requests_list(request):
                 serializer = ReimbursementRequestViewSerializer(requests, many=True)
                 return Response({'results': serializer.data, 'count': requests.count() if hasattr(requests, 'count') else len(requests)})
             except ValueError:
-                pass
+                return Response({'error': 'Parametro limit non valido.'}, status=400)
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(requests, request=request)

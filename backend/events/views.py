@@ -1,13 +1,20 @@
 import logging
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 
 import sentry_sdk
+from babel.dates import format_date
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -17,7 +24,7 @@ from events.models import Event, Subscription, EventList
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
-    EventWithSubscriptionsSerializer, SubscriptionSerializer
+    EventWithSubscriptionsSerializer, SubscriptionSerializer, PrintableLiberatoriaSerializer, LiberatoriaProfileSerializer
 )
 from treasury.models import Transaction
 
@@ -101,11 +108,11 @@ def event_detail(request, pk):
                     logger.info(f"Start date: {start_date}, existing: {event.subscription_start_date}")
                     logger.info(f"Start date: {formatted_start}, existing: {existing_date}")
                     if formatted_start != existing_date:
-                        return Response("Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni", status=400)
+                        return Response({'error': "Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni"}, status=400)
 
                     # Not possible to change cost
                     if data_to_validate.get('cost') != str(event.cost):
-                        return Response("Non è possibile modificare il costo se l'evento ha delle iscrizioni", status=400)
+                        return Response({'error': "Non è possibile modificare il costo se l'evento ha delle iscrizioni"}, status=400)
 
                     # Not possible to reduce capacity below current subscription count
                     for list_data in data_to_validate['lists']:
@@ -118,15 +125,15 @@ def event_detail(request, pk):
 
                         subscription_count = Subscription.objects.filter(event=event, list_id=list_id).count()
                         if subscription_count > new_capacity > 0:
-                            return Response(f"Non è possibile impostare una capacità lista minore del numero di iscrizoni presenti ({subscription_count})", status=400)
+                            return Response({'error': f"Non è possibile impostare una capacità lista minore del numero di iscrizoni presenti ({subscription_count})"}, status=400)
 
                 # Not possible to set end date before now or before start date
                 now = timezone.now()  # This is timezone-aware
                 current_start = start_date if start_date else event.subscription_start_date
                 if end_date < now:
-                    return Response("Non è possibile impostare una data fine iscrizioni nel passato", status=400)
+                    return Response({'error': "Non è possibile impostare una data fine iscrizioni nel passato"}, status=400)
                 if current_start and end_date <= current_start:
-                    return Response("Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni", status=400)
+                    return Response({'error': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"}, status=400)
 
                 # Continue with serializer validation and saving
                 serializer = EventCreationSerializer(instance=event, data=data_to_validate, partial=True)
@@ -149,13 +156,167 @@ def event_detail(request, pk):
             event.delete()
             return Response(status=200)
         else:
-            return Response("Metodo non consentito", status=405)
+            return Response({'error': "Metodo non consentito"}, status=405)
     except Event.DoesNotExist:
         return Response({'error': "L'evento non esiste"}, status=404)
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_liberatorie_pdf(request):
+    def italian_date(dt):
+        if not dt:
+            return "N/A"
+        return format_date(dt, format='d MMMM yyyy', locale='it')
+
+    def display_na(value):
+        return value if value not in [None, '', [], {}] else 'N/A'
+
+    try:
+        event_id = request.data.get('event_id')
+        subscription_ids = request.data.get('subscription_ids', [])
+
+        if not event_id or not subscription_ids:
+            return Response({'error': 'Event ID and Subscription IDs are required.'}, status=400)
+
+        event = Event.objects.get(pk=event_id)
+        subscriptions = Subscription.objects.filter(id__in=subscription_ids)
+
+        # Use a more detailed serializer to get all profile info
+        profiles_data = LiberatoriaProfileSerializer([sub.profile for sub in subscriptions], many=True).data
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                rightMargin=1 * cm, leftMargin=1 * cm,
+                                topMargin=1 * cm, bottomMargin=1 * cm)
+        story = []
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name='Justify', alignment=0))  # 0 for Left alignment (1 for Center)
+
+        # --- ESN Logo ---
+        logo_path = 'static/esnpolimi-logo.png'
+        try:
+            scale = 0.2
+            orig_width, orig_height = 600, 334
+            width = orig_width * scale * 0.0352778  # convert px to cm (1 px ≈ 0.0352778 cm)
+            height = orig_height * scale * 0.0352778
+
+            logo = Image(logo_path, width=width * cm, height=height * cm)
+            logo.hAlign = 'CENTER'
+        except (OSError, IOError):
+            logo = None
+
+        # Calculate age limit date (18 years before event)
+        age_limit_date = event.date - timedelta(days=18 * 365.25)
+
+        for profile_data in profiles_data:
+            if logo:
+                story.append(logo)
+                story.append(Spacer(1, 1 * cm))
+
+            # --- Personal Details ---
+            details = f"""
+            <b>Nome/Name:</b> {display_na(profile_data.get('name'))}<br/>
+            <b>Cognome/Surname:</b> {display_na(profile_data.get('surname'))}<br/>
+            <b>Indirizzo/Address:</b> {display_na(profile_data.get('address'))}<br/>
+            <b>ESNcard N°:</b> {display_na(profile_data.get('esncard_number'))}<br/>
+            <b>ID/Passport N°:</b> {display_na(profile_data.get('document_number'))}<br/>
+            <b>Data di scadenza/Expiration date:</b> {display_na(profile_data.get('document_expiry'))}<br/>
+            <b>Data e Luogo di nascita/Date and Place of birth:</b> {display_na(profile_data.get('date_of_birth'))} - {display_na(profile_data.get('place_of_birth'))}<br/>
+            <b>Telefono/Telephone:</b> {display_na(profile_data.get('phone'))}<br/>
+            <b>E-mail:</b> {display_na(profile_data.get('email'))}<br/>
+            <b>Matricola/Enrollment Number:</b> {display_na(profile_data.get('matricola'))}<br/>
+            <b>Codice Persona/Personal Code:</b> {display_na(profile_data.get('codice_persona'))}<br/>
+            """
+            story.append(Paragraph(details, styles['Normal']))
+            story.append(Spacer(1, 1 * cm))
+
+            # --- Waiver Text ---
+            waiver_text_1 = f"""
+            La presente dichiarazione liberatoria dovrà essere letta e firmata, in calce alla stessa, in nome e per conto proprio, oltre che in nome e per conto
+            delle persone sotto elencate, nonchè dal legale responsabile qualora l'iscritto non sia maggiorenne (nato dopo il <b>{italian_date(age_limit_date)}</b>). La firma apposta
+            in fondo alla presente dichiarazione comporta la piena e consapevole lettura e comprensione del contenuto e la conferma della volontà di attenersi
+            alla stessa: sono a conoscenza dei rischi connessi riguardo alla mia partecipazione a questo pacchetto viaggio e alle relative attività collaterali.
+            Con la sottoscrizione della presente dichiaro di voler liberare ed esonerare, come in effetti libero ed esonero, qualsiasi persona dell'organizzazione
+            Erasmus Student Network Politecnico Milano, gli organizzatori dell'evento <b>"{event.name}" ({italian_date(event.date)})</b>, collettivamente
+            denominati organizzatori dell'evento, da tutte le azioni, cause qualsiasi procedimento giudiziario e arbitrale tra questi compresi ma non limitati a
+            quelli relativi al rischio di infortuni durante la disputa delle attività e al rischio di smarrimento di effetti personali per furto o per qualsiasi altra
+            ragione. Prima dell'iscrizione a questo pacchetto viaggio sarà mia cura e onere verificare le norme e le disposizioni che mi consentono di
+            partecipare al viaggio. Inoltre, con la sottoscrizione della presente, concedo agli organizzatori dell'evento la mia completa autorizzazione a tale
+            viaggio con foto, servizi filmati, TV, radio, videoregistrazioni e altri strumenti di comunicazione noti o sconosciuti, indipendentemente da chi li
+            abbia effettuati e a utilizzare gli stessi nel modo che verrà ritenuto più opportuno, con assoluta discrezione, per ogni forma di pubblicità,
+            promozione, annuncio, progetti di scambio o a scopo commerciale senza pretendere alcun rimborso di qualsiasi natura e senza richiedere alcuna
+            forma di ricompensa.
+            """
+            story.append(Paragraph(waiver_text_1, styles['Justify']))
+            story.append(Spacer(1, 1 * cm))
+            story.append(Paragraph("Firma/Signature _______________________________", styles['Normal']))
+            story.append(Spacer(1, 1 * cm))
+
+            privacy_text = """
+            <b>INFORMAZIONI AI SENSI DELLA LEGGE 675/96</b><br/>
+            ESN Politecnico Milano desidera informarla che la legge 675/96 prevede la tutela delle persone rispetto al trattamento dei dati
+            personali. In base alla legge, il trattamento che intendiamo effettuare utilizzando i suoi dati è possibile soltanto con il suo consenso scritto e:il trattamento verrà effettuato con sistemi
+            prevalentemente informatici;ai sensi della legge sulla privacy, il trattamento sarà svolto in base ai principi di correttezza, trasparenza e liceità, per consentire la tutela della riservatezza dei
+            suoi dati e del relativi diritti. Il rilascio dei suoi dati non è obbligatorio se non per le finalità legate alle prenotazioni in corso e in ogni caso avrà la possibilità di esercitare i diritti
+            riconosciuti dall'Art. 13 della legge in oggetto che prevedono in qualsiasi momento la verifica dell'esistenza dei suoi dati presso gli archivi cartacei ed informatici, dei criteri e degli scopi
+            del trattamento dei dati, richiedendo la verifica, cancellazione, aggiornamento ed opposizione al loro utilizzo. Il titolare del trattamento dei suoi dati è ESN Politecnico Milano, Via Bonardi
+            3, 20133, Milano. Acquisite le suddette informazioni, rese ai sensi dell'Art 10 della legge 675/96, acconsento al trattamento dei miei dati personali da parte di ESN Politecnico Milano.<br/><br/>
+            Accettazione: SI NO<br/><br/>
+            Firma/Signature______________________
+            """
+            story.append(Paragraph(privacy_text, styles['Justify']))
+            story.append(PageBreak())
+
+        doc.build(story)
+        buffer.seek(0)
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="ESNPolimi_Liberatoria_{event.name}.pdf"'
+        return response
+
+    except Event.DoesNotExist:
+        return Response({'error': "Event not found"}, status=404)
+    except Exception as e:
+        logger.error(f"Error generating PDF: {e}")
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'An error occurred while generating the PDF.'}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def printable_liberatorie(request, event_id):
+    """
+    Returns all subscriptions for the event with a paid quota (status_quota == 'paid').
+    Optional query param: list=<list_id> to filter by list.
+    """
+    try:
+        event = Event.objects.get(pk=event_id)
+        list_id = request.GET.get('list')
+
+        # Find subscriptions that have a 'SUBSCRIPTION' type transaction and no 'RIMBORSO_QUOTA' transaction
+        subs_with_paid_quota = Subscription.objects.filter(
+            event=event,
+            transaction__type=Transaction.TransactionType.SUBSCRIPTION
+        ).exclude(
+            transaction__type=Transaction.TransactionType.RIMBORSO_QUOTA
+        ).distinct()
+
+        if list_id:
+            subs_with_paid_quota = subs_with_paid_quota.filter(list_id=list_id)
+
+        serializer = PrintableLiberatoriaSerializer(subs_with_paid_quota, many=True)
+        return Response(serializer.data, status=200)
+
+    except Event.DoesNotExist:
+        return Response({'error': "L'evento non esiste"}, status=404)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -394,83 +555,3 @@ def move_subscriptions(request):
         logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
-
-
-# Future implementations
-'''
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def profile_lookup(request):
-    try:
-        form = ProfileLookUpForm(request.data)
-        if not form.is_valid():
-            return Response(form.errors, status=400)
-
-        event = form.cleaned_data['event']
-        profile = Profile.objects.filter(email=form.cleaned_data['email'])
-        if not profile.exists():
-            return Response({'found': False, 'required_fields': event.profile_fields}, status=200)
-        else:
-            required = []
-            for field in event.profile_fields:
-                if getattr(profile, field) is None:
-                    required.append(field)
-            return Response({'found': True, 'required_fields': required}, status=200)
-
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response(status=500)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def form_subscription_creation(request):
-    try:
-        # Extract data from request
-        profile_email = request.data.get('email')
-        event_id = request.data.get('event')
-        list_id = request.data.get('list')
-        notes = request.data.get('notes', '')
-
-        # Validate required fields
-        if not all([profile_email, event_id, list_id]):
-            return Response({'error': 'Missing required fields'}, status=400)
-
-        # Get related objects
-        try:
-            profile = Profile.objects.get(email=profile_email)
-            event = Event.objects.get(id=event_id)
-            list = EventList.objects.get(id=list_id, event=event)
-        except Profile.DoesNotExist:
-            return Response({'error': 'Profile not found'}, status=400)
-        except Event.DoesNotExist:
-            return Response({'error': 'Event not found'}, status=400)
-        except EventList.DoesNotExist:
-            return Response({'error': 'List not found'}, status=400)
-
-        # Check if subscription already exists
-        if Subscription.objects.filter(profile=profile, event=event).exists():
-            return Response({'error': 'Subscription already exists'}, status=400)
-
-        # Create and validate subscription
-        subscription = Subscription(
-            profile=profile,
-            event=event,
-            list=list,
-            notes=notes,
-            created_by_form=True
-        )
-        subscription.clean()
-        subscription.save()
-
-        return Response(SubscriptionSerializer(subscription).data, status=201)
-
-    except ValidationError as e:
-        return Response(str(e), status=400)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': str(e)}, status=500)
-
-'''

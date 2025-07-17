@@ -21,6 +21,7 @@ import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsModal";
 import ReimburseQuotaModal from "../../Components/events/ReimburseQuotaModal";
+import PrintableLiberatorieModal from "../../Components/events/PrintableLiberatorieModal";
 import dayjs from "dayjs";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import FestivalIcon from "@mui/icons-material/Festival";
@@ -42,6 +43,8 @@ export default function Event() {
     const [moveToListModalOpen, setMoveToListModalOpen] = useState(false);
     const [reimburseDepositsModalOpen, setReimburseDepositsModalOpen] = useState(false);
     const [reimburseQuotaModalOpen, setReimburseQuotaModalOpen] = useState(false);
+    const [printableLiberatorieModalOpen, setPrintableLiberatorieModalOpen] = useState(false);
+    const [printableLiberatorieListId, setPrintableLiberatorieListId] = useState(null);
     const [selectedRows, setSelectedRows] = useState([]);
     const [isLoading, setLoading] = useState(true);
     const [popup, setPopup] = useState(null);
@@ -386,11 +389,23 @@ export default function Event() {
                                         onClick={e => {
                                             e.stopPropagation();
                                             setSingleSubToReimburse(null);
-                                            setReimburseDepositsListId(listId);
+                                            setReimburseDepositsListId(config.listId);
                                             setReimburseDepositsModalOpen(true);
                                         }}
                                         sx={{ml: 1}}>
                                     Rimborsa Cauzioni
+                                </Button>
+                            )}
+                            {hasQuota && selectedCount === 0 && (
+                                <Button variant="contained"
+                                        color="info"
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            setPrintableLiberatorieListId(config.listId);
+                                            setPrintableLiberatorieModalOpen(true);
+                                        }}
+                                        sx={{ml: 1}}>
+                                    Stampa Liberatorie
                                 </Button>
                             )}
                         </Box>
@@ -534,6 +549,14 @@ export default function Event() {
                     onClose={handleCloseReimburseQuotaModal}
                     event={data}
                     subscription={singleSubToReimburseQuota}
+                />
+            )}
+            {printableLiberatorieModalOpen && (
+                <PrintableLiberatorieModal
+                    open={printableLiberatorieModalOpen}
+                    onClose={() => setPrintableLiberatorieModalOpen(false)}
+                    event={data}
+                    listId={printableLiberatorieListId}
                 />
             )}
             <Box sx={{mx: '5%'}}>
