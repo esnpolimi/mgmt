@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from treasury.models import ESNcard, Transaction, Account, Settings
+from treasury.models import ESNcard, Transaction, Account, Settings, ReimbursementRequest
 
 
 @admin.register(Settings)
@@ -149,3 +149,63 @@ class TransactionAdmin(admin.ModelAdmin):
             ])
         return response
     export_selected.short_description = "Export selected transactions to CSV"
+
+
+@admin.register(ReimbursementRequest)
+class ReimbursementRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user_link',
+        'amount',
+        'payment',
+        'description_short',
+        'receipt_link_display',
+        'account',
+        'is_reimbursed',
+        'created_at',
+    )
+    list_filter = ('payment', 'account', 'created_at', 'reimbursement_transaction')
+    search_fields = ('user__profile__name', 'user__profile__surname', 'user__email', 'description')
+    readonly_fields = ('created_at', 'reimbursement_transaction', 'is_reimbursed', 'receipt_link')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+
+    def user_link(self, obj):
+        profile = getattr(obj.user, 'profile', None)
+        if profile:
+            return format_html(
+                '<a href="/admin/profiles/profile/{}/change/">{}</a>',
+                profile.id,
+                f"{profile.name} {profile.surname}"
+            )
+        return obj.user.email
+    user_link.short_description = 'User'
+
+    def description_short(self, obj):
+        return (obj.description[:50] + '...') if len(obj.description) > 50 else obj.description
+    description_short.short_description = 'Description'
+
+    def receipt_link_display(self, obj):
+        if obj.receipt_link:
+            return format_html('<a href="{}" target="_blank">Link</a>', obj.receipt_link)
+        return "-"
+    receipt_link_display.short_description = 'Receipt'
+
+    def is_reimbursed(self, obj):
+        return obj.is_reimbursed
+    is_reimbursed.boolean = True
+    is_reimbursed.short_description = 'Reimbursed'
+
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(self.readonly_fields)
+        if obj and obj.is_reimbursed:
+            # Make all fields readonly if reimbursed, except for 'reimbursement_transaction'
+            model_fields = [f.name for f in self.model._meta.fields]
+            ro = list(set(ro + model_fields))
+        return ro
+
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deleting reimbursed requests
+        if obj and obj.is_reimbursed:
+            return False
+        return super().has_delete_permission(request, obj)

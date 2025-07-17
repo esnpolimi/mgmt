@@ -54,6 +54,7 @@ class EventListAdmin(admin.ModelAdmin):
         return super().get_queryset(request).prefetch_related('subscriptions')
 
 
+'''
 @admin.register(EventOrganizer)
 class EventOrganizerAdmin(admin.ModelAdmin):
     list_display = ('profile', 'event', 'is_lead', 'role')
@@ -61,7 +62,7 @@ class EventOrganizerAdmin(admin.ModelAdmin):
     search_fields = (
         'profile__name', 'profile__surname', 'profile__email', 'event__name', 'role'
     )
-
+'''
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
