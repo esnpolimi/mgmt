@@ -1,5 +1,4 @@
 import logging
-from operator import truediv
 
 import sentry_sdk
 from django.conf import settings
@@ -14,9 +13,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
+
 from profiles.models import Profile
 from users.models import User
 from users.serializers import CustomTokenObtainPairSerializer
