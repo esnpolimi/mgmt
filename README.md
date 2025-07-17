@@ -35,6 +35,14 @@ After having installed Docker (Docker Desktop on Windows) you can start the deam
 
 `docker compose -f .\local.yml up` to execute the containers (backend and frontend)
 
+Remember to reserve the ports 8000, 3000, 8080 and 3306 on your machine, as they will be used by the backend and frontend respectively:
+``` bash
+netsh int ipv4 add excludedportrange protocol=tcp startport=3000 numberofports=1
+netsh int ipv4 add excludedportrange protocol=tcp startport=8000 numberofports=1
+netsh int ipv4 add excludedportrange protocol=tcp startport=8080 numberofports=1
+netsh int ipv4 add excludedportrange protocol=tcp startport=3306 numberofports=1
+netsh int ipv4 show excludedportrange protocol=tcp
+```
 This will expose the backend on [http://localhost:8000](http://localhost:8000) and the frontend on [http://localhost:3000](http://localhost:3000).
 
 Enjoy!

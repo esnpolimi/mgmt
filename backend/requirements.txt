@@ -43,6 +43,7 @@ pyasn1_modules==0.4.2
 pyparsing==3.2.3
 python-decouple==3.8
 referencing==0.36.2
+reportlab==4.4.2
 requests==2.32.4
 requests-oauthlib==2.0.0
 rpds-py==0.25.1

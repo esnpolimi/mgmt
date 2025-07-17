@@ -2,6 +2,13 @@ from rest_framework import serializers
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 from treasury.models import Transaction
+import os
+import json
+
+COUNTRY_CODES_PATH = os.path.join(os.path.dirname(__file__), '../utils/countryCodes.json')
+with open(COUNTRY_CODES_PATH, encoding='utf-8') as f:
+    COUNTRY_CODES = json.load(f)
+CODE_TO_NAME = {entry['code']: entry['name'] for entry in COUNTRY_CODES}
 
 
 # Serializers for EventList
@@ -228,6 +235,29 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         return None
 
 
+class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
+    profile_name = serializers.SerializerMethodField()
+    account_name = serializers.SerializerMethodField()
+    list_id = serializers.PrimaryKeyRelatedField(source='list', read_only=True)
+
+    class Meta:
+        model = Subscription
+        fields = ['id', 'profile_name', 'account_name', 'list_id']
+
+    @staticmethod
+    def get_profile_name(obj):
+        return f"{obj.profile.name} {obj.profile.surname}"
+
+    @staticmethod
+    def get_account_name(obj):
+        # Get the account from the first subscription payment transaction
+        transaction = Transaction.objects.filter(
+            subscription=obj,
+            type=Transaction.TransactionType.SUBSCRIPTION
+        ).order_by('created_at').first()
+        return transaction.account.name if transaction and transaction.account else None
+
+
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
     account_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     pay_deposit = serializers.BooleanField(write_only=True, required=False, default=True)
@@ -280,3 +310,70 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         model = Event
         fields = ['id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
                   'subscription_start_date', 'subscription_end_date']
+
+
+class LiberatoriaProfileSerializer(serializers.ModelSerializer):
+    address = serializers.CharField(source='domicile')
+    esncard_number = serializers.SerializerMethodField()
+    document_number = serializers.SerializerMethodField()
+    document_expiry = serializers.SerializerMethodField()
+    date_of_birth = serializers.SerializerMethodField()
+    place_of_birth = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+    matricola = serializers.SerializerMethodField()
+    codice_persona = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = [
+            'name', 'surname', 'address', 'esncard_number',
+            'document_number', 'document_expiry', 'date_of_birth',
+            'place_of_birth', 'phone', 'email', 'matricola', 'codice_persona'
+        ]
+
+    @staticmethod
+    def get_esncard_number(obj):
+        latest_card = getattr(obj, 'latest_esncard', None)
+        return latest_card.number if latest_card else ''
+
+    @staticmethod
+    def get_document_number(obj):
+        latest_doc = getattr(obj, 'latest_document', None)
+        return latest_doc.number if latest_doc else ''
+
+    @staticmethod
+    def get_document_expiry(obj):
+        latest_doc = getattr(obj, 'latest_document', None)
+        if latest_doc and latest_doc.expiration:
+            return latest_doc.expiration.strftime('%d/%m/%Y')
+        return ''
+
+    @staticmethod
+    def get_date_of_birth(obj):
+        if obj.birthdate:
+            return obj.birthdate.strftime('%d/%m/%Y')
+        return ''
+
+    @staticmethod
+    def get_place_of_birth(obj):
+        code = obj.country or ''
+        return CODE_TO_NAME.get(code, code)
+
+    @staticmethod
+    def get_phone(obj):
+        # Prefer whatsapp, then phone, with prefix if present
+        if obj.whatsapp_number:
+            prefix = obj.whatsapp_prefix or ''
+            return f"{prefix} {obj.whatsapp_number}"
+        elif obj.phone_number:
+            prefix = obj.phone_prefix or ''
+            return f"{prefix} {obj.phone_number}"
+        return ''
+
+    @staticmethod
+    def get_matricola(obj):
+        return obj.matricola_number or ''
+
+    @staticmethod
+    def get_codice_persona(obj):
+        return obj.person_code or ''
