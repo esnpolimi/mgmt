@@ -22,7 +22,7 @@ class EventListSerializer(serializers.ModelSerializer):
 class EventsListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'cost', 'status']
+        fields = ['id', 'name', 'date', 'cost', 'status', 'is_a_bando', 'is_allow_external']
 
 
 class EventOrganizerSerializer(serializers.ModelSerializer):
@@ -53,8 +53,10 @@ class EventCreationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
-                  'subscription_start_date', 'subscription_end_date']
+        fields = [
+            'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
+            'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external'
+        ]
 
     def create(self, validated_data):
         lists_data = validated_data.pop('lists', [])
@@ -150,8 +152,11 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
-                  'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status']
+        fields = [
+            'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
+            'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
+            'is_a_bando', 'is_allow_external'
+        ]
 
 
 # Serializers for Subscription
@@ -170,6 +175,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     event_name = serializers.CharField(source='event.name', read_only=True)
     event_id = serializers.IntegerField(source='event.id', read_only=True)
     event_date = serializers.DateField(source='event.date', read_only=True)
+    external_name = serializers.CharField(read_only=True)
+    is_external = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
@@ -181,12 +188,19 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'deposit_reimbursement_transaction_id',
             'quota_reimbursement_transaction_id',
             'status_quota', 'status_cauzione',
-            'subscribed_at'
+            'subscribed_at',
+            'external_name',
+            'is_external'
         ]
 
     @staticmethod
     def get_profile_name(obj):
-        return f"{obj.profile.name} {obj.profile.surname}"
+        # Fix: handle None profile (external subscription)
+        if obj.profile:
+            return f"{obj.profile.name} {obj.profile.surname}"
+        elif obj.external_name:
+            return obj.external_name
+        return ""
 
     @staticmethod
     def get_account_id(obj):
@@ -234,6 +248,10 @@ class SubscriptionSerializer(serializers.ModelSerializer):
                 return 'pending'
         return None
 
+    @staticmethod
+    def get_is_external(obj):
+        return bool(obj.external_name)
+
 
 class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
     profile_name = serializers.SerializerMethodField()
@@ -246,7 +264,12 @@ class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_profile_name(obj):
-        return f"{obj.profile.name} {obj.profile.surname}"
+        # Fix: handle None profile (external subscription)
+        if obj.profile:
+            return f"{obj.profile.name} {obj.profile.surname}"
+        elif obj.external_name:
+            return obj.external_name
+        return ""
 
     @staticmethod
     def get_account_name(obj):
@@ -263,20 +286,28 @@ class SubscriptionCreateSerializer(serializers.ModelSerializer):
     pay_deposit = serializers.BooleanField(write_only=True, required=False, default=True)
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
+    external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione']
+        fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione', 'external_name']
 
     def validate(self, attrs):
-        # Check if profile is already registered for this event
         profile = attrs.get('profile')
         event = attrs.get('event')
+        external_name = attrs.get('external_name', '').strip() if attrs.get('external_name') else ''
 
-        if Subscription.objects.filter(profile=profile, event=event).exists():
+        if not profile and not external_name:
+            if event and hasattr(event, 'is_allow_external') and event.is_allow_external:
+                raise serializers.ValidationError("Devi inserire un nominativo esterno se non selezioni un profilo.")
+            else:
+                raise serializers.ValidationError("Seleziona un profilo per l'iscrizione.")
+
+        if profile and Subscription.objects.filter(profile=profile, event=event).exists():
             raise serializers.ValidationError("This profile is already registered for this event")
+        if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
+            raise serializers.ValidationError("Questo nominativo esterno è già registrato per questo evento")
 
-        # Remove account id from validated_data as it's not a field in Subscription model
         self.account = attrs.pop('account_id', None)
         self.pay_deposit = attrs.pop('pay_deposit', True)
         self.status_quota = attrs.pop('status_quota', 'pending')
@@ -288,10 +319,11 @@ class SubscriptionUpdateSerializer(serializers.ModelSerializer):
     account_id = serializers.IntegerField(write_only=True, required=False)
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
+    external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Subscription
-        fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione']
+        fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione', 'external_name']
 
     def validate(self, attrs):
         self.account_id = attrs.get('account_id', self.instance and getattr(self.instance, 'account_id', None))
@@ -308,8 +340,10 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
-                  'subscription_start_date', 'subscription_end_date']
+        fields = [
+            'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
+            'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external'
+        ]
 
 
 class LiberatoriaProfileSerializer(serializers.ModelSerializer):

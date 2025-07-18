@@ -327,19 +327,26 @@ def printable_liberatorie(request, event_id):
 @permission_classes([IsAuthenticated])
 def subscription_create(request):
     try:
-        # Check if the profile is already subscribed to any list in the same event
         profile = request.data.get('profile')
         event_id = request.data.get('event')
-        if Subscription.objects.filter(profile=profile, event=event_id).exists():
-            return Response({'error': "Il profilo è già iscritto all'evento"}, status=400)
-
-        # Fetch the event and validate subscription period
+        external_name = request.data.get('external_name', '').strip()
         event = Event.objects.get(id=event_id)
         now = timezone.now()
         if not (event.subscription_start_date and event.subscription_end_date):
             return Response({'error': "Il periodo di iscrizione non è definito"}, status=400)
         if not (event.subscription_start_date <= now <= event.subscription_end_date):
             return Response({'error': "Il periodo di iscrizione non è attivo"}, status=400)
+
+        # Check for duplicate subscription
+        if profile and Subscription.objects.filter(profile=profile, event=event_id).exists():
+            return Response({'error': "Il profilo è già iscritto all'evento"}, status=400)
+        if external_name and Subscription.objects.filter(external_name=external_name, event=event_id).exists():
+            return Response({'error': "Il nominativo esterno è già iscritto all'evento"}, status=400)
+        if not profile and not external_name:
+            if event.is_allow_external:
+                return Response({'error': "Devi inserire un nominativo esterno se non selezioni un profilo."}, status=400)
+            else:
+                return Response({'error': "Seleziona un profilo per l'iscrizione."}, status=400)
 
         serializer = SubscriptionCreateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -356,6 +363,14 @@ def subscription_create(request):
             status_cauzione = request.data.get('status_cauzione', 'pending')
             account_id = serializer.account
 
+            # Prepare name for description (profile or external)
+            if subscription.profile:
+                sub_name = f"{subscription.profile.name} {subscription.profile.surname}"
+            elif subscription.external_name:
+                sub_name = subscription.external_name
+            else:
+                sub_name = "Esterno"
+
             # Quota transaction
             if status_quota == 'paid' and account_id:
                 t = Transaction(
@@ -364,7 +379,7 @@ def subscription_create(request):
                     subscription=subscription,
                     executor=request.user,
                     amount=Decimal(subscription.event.cost),
-                    description=f"Quota {subscription.profile.name} {subscription.profile.surname} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
+                    description=f"Quota {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
                 )
                 t.save()
 
@@ -376,7 +391,7 @@ def subscription_create(request):
                     subscription=subscription,
                     executor=request.user,
                     amount=Decimal(subscription.event.deposit),
-                    description=f"Cauzione {subscription.profile.name} {subscription.profile.surname} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
+                    description=f"Cauzione {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
                 )
                 t_cauzione.save()
             return Response(serializer.data, status=200)
@@ -555,3 +570,4 @@ def move_subscriptions(request):
         logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
