@@ -23,6 +23,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         account_name: '',
         profile_id: '',
         profile_name: '',
+        external_name: '',
         list_id: listId || '',
         list_name: (event.selectedList ? event.selectedList.name : (event.lists && listId ? (event.lists.find(list => list.id === listId)?.name || 'Lista non trovata') : 'Lista non trovata')),
         notes: '',
@@ -35,16 +36,27 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         account_name: [false, ''],
         profile_id: [false, ''],
         profile_name: [false, ''],
+        external_name: [false, ''],
         status: [false, ''],
         list_id: [false, ''],
         list_name: [false, ''],
         notes: [false, ''],
     });
 
-    const fieldsToValidate = useMemo(() => [
-        {field: 'profile_id', value: data?.profile_id, message: "Selezionare un Profilo"},
-        ...(data?.status === 'paid' ? [{field: 'account_id', value: data?.account_id, message: "Selezionare una Cassa"}] : [])
-    ], [data]);
+    const fieldsToValidate = useMemo(() => {
+        let arr = [];
+        if (!data.profile_id && !data.external_name) {
+            if (event.is_allow_external) {
+                arr.push({field: 'external_name', value: data.external_name, message: "Inserire un nominativo esterno"});
+            } else {
+                arr.push({field: 'profile_id', value: data.profile_id, message: "Selezionare un Profilo"});
+            }
+        }
+        if (data.status_quota === 'paid') {
+            arr.push({field: 'account_id', value: data.account_id, message: "Selezionare una Cassa"});
+        }
+        return arr;
+    }, [data, event]);
 
     const [submitLoading, setSubmitLoading] = useState(false);
 
@@ -104,12 +116,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         const quotaChangedToPending = isEdit && subscription?.status_quota === 'paid' && data.status_quota === 'pending';
         const cauzioneChangedToPaid = event.deposit > 0 && data.status_cauzione === 'paid' && (!isEdit || subscription?.status_cauzione !== 'paid');
         const cauzioneChangedToPending = isEdit && subscription?.status_cauzione === 'paid' && data.status_cauzione === 'pending';
-        return { quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending };
+        return {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending};
     };
 
     // Helper to show confirm dialog message for payment changes
     const getConfirmMessage = () => {
-        const { quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending } = getStatusChanges();
+        const {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending} = getStatusChanges();
         const accountObj = accounts.find(acc => acc.id === data.account_id);
         const accountName = accountObj ? accountObj.name : 'N/A';
 
@@ -155,7 +167,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             return;
         }
 
-        const { quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending } = getStatusChanges();
+        const {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending} = getStatusChanges();
         const accountChanged = isEdit && subscription?.account_id !== data.account_id;
 
         if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending || accountChanged) {
@@ -183,13 +195,14 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         setSubmitLoading(true);
         fetchCustom(isEdit ? "PATCH" : "POST", `/subscription/${isEdit ? data.id + '/' : ''}`, {
             body: {
-                profile: data.profile_id,
+                profile: data.profile_id || null,
                 event: event.id,
                 list: data.list_id,
                 account_id: data.account_id || originalAccountId,
                 notes: data.notes,
                 status_quota: data.status_quota,
-                status_cauzione: data.status_cauzione
+                status_cauzione: data.status_cauzione,
+                external_name: data.external_name || undefined
             },
             onSuccess: () => onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!'),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
@@ -259,26 +272,44 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                         <b>Lista:</b> {data.list_name}
                     </Typography>
                     <Grid container spacing={2} direction="column">
-                        <Grid size={{xs: 12}} sx={{mt: 2}}>
-                            <ProfileSearch
-                                value={data.profile_id ? {
-                                    id: data.profile_id,
-                                    name: data.profile_name
-                                } : null}
-                                onChange={(event, newValue) => {
-                                    setData({
-                                        ...data,
-                                        profile_id: newValue?.id,
-                                        profile_name: newValue ? `${newValue.name} ${newValue.surname}` : ''
-                                    });
-                                }}
-                                error={errors.profile_id && errors.profile_id[0]}
-                                helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
-                                label={isEdit ? data.profile_name : "Cerca profilo"}
-                                required
-                                disabled={isEdit || !!profileId || isReimbursed}
-                            />
-                        </Grid>
+                        {!event.is_allow_external && (
+                            <Grid size={{xs: 12}} sx={{mt: 2}}>
+                                <ProfileSearch
+                                    value={data.profile_id ? {
+                                        id: data.profile_id,
+                                        name: data.profile_name
+                                    } : null}
+                                    onChange={(event, newValue) => {
+                                        setData({
+                                            ...data,
+                                            profile_id: newValue?.id,
+                                            profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
+                                            external_name: ''
+                                        });
+                                    }}
+                                    error={errors.profile_id && errors.profile_id[0]}
+                                    helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
+                                    label={isEdit ? data.profile_name : "Cerca profilo"}
+                                    required={!event.is_allow_external}
+                                    disabled={isEdit || !!profileId || isReimbursed}
+                                />
+                            </Grid>
+                        )}
+                        {event.is_allow_external && !data.profile_id && (
+                            <Grid size={{xs: 12}} sx={{mt: 2}}>
+                                <TextField
+                                    label="Nominativo Esterno"
+                                    name="external_name"
+                                    value={data.external_name}
+                                    onChange={handleChange}
+                                    fullWidth
+                                    required
+                                    error={errors.external_name && errors.external_name[0]}
+                                    helperText={errors.external_name && errors.external_name[1]}
+                                    disabled={isReimbursed}
+                                />
+                            </Grid>
+                        )}
                         {/* Quota status toggle */}
                         {event.cost > 0 && (
                             <Grid size={{xs: 12}}>
@@ -402,8 +433,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             fullWidth
                             sx={{
                                 mt: 2,
-                                bgcolor: data.profile_id ? '#1976d2' : '#9e9e9e',
-                                '&:hover': {bgcolor: data.profile_id ? '#1565c0' : '#757575'}
+                                bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
+                                '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
                             }}
                             onClick={handleSubmit}
                             disabled={submitLoading || isReimbursed}

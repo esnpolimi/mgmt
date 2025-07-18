@@ -17,10 +17,8 @@ class Event(BaseEntity):
     subscription_start_date = models.DateTimeField(null=True)
     subscription_end_date = models.DateTimeField(null=True)
 
-    # is_a_bando = models.BooleanField(default=False)
-    # is_liberatoria = models.BooleanField(default=False)
-    # is_automatic_reimbursement = models.BooleanField(default=False)
-    # is_allow_external = models.BooleanField(default=False)
+    is_a_bando = models.BooleanField(default=False)
+    is_allow_external = models.BooleanField(default=False)
 
     # These fields can be uncommented when implementing the full feature set
     # enable_form = models.BooleanField(default=False)
@@ -110,9 +108,10 @@ class SubscriptionStatus(models.TextChoices):
 
 
 class Subscription(BaseEntity):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, blank=True, null=True)
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     list = models.ForeignKey(EventList, on_delete=models.CASCADE, related_name='subscriptions')
+    external_name = models.CharField(max_length=128, blank=True, null=True)
 
     # Remove static status field
     # Payment status
