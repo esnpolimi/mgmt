@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Modal, Box, TextField, Button, IconButton, Typography, Tooltip, Grid, CircularProgress} from '@mui/material';
+import {Modal, Box, TextField, Button, IconButton, Typography, Tooltip, Grid, CircularProgress, FormControlLabel, Switch} from '@mui/material';
 import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -31,7 +31,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
         deposit: '',
         subscription_start_date: dayjs().hour(12).minute(0),
         subscription_end_date: dayjs().hour(24).minute(0),
-        lists: [{id: '', name: 'Main List', capacity: ''}]
+        lists: [{id: '', name: 'Main List', capacity: ''}],
+        is_a_bando: false,
+        is_allow_external: false
     });
 
     const [errors, setErrors] = React.useState({
@@ -109,45 +111,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 id: t.id,
                 name: t.name,
                 capacity: Math.floor(Number(t.capacity))
-            }))
-            /*enable_form: data.enableForm,
-            profile_fields: data.profileFields,
-            additional_fields: Object.fromEntries(data.additionalFields.map((f) => {
-                switch (f.type) {
-                    case 'text':
-                        return ['t_' + f.name, {
-                            office_edit: f.edilistByOffice,
-                            office_view: f.visibleByOffice,
-                            length: f.length // Add length here
-                        }]
-                    case 'integer':
-                        return ['i_' + f.name, {
-                            office_edit: f.edilistByOffice,
-                            office_view: f.visibleByOffice
-                        }]
-                    case 'float':
-                        return ['f_' + f.name, {
-                            office_edit: f.edilistByOffice,
-                            office_view: f.visibleByOffice
-                        }]
-                    case 'single choice':
-                        return ['c_' + f.name, {
-                            office_edit: f.edilistByOffice,
-                            office_view: f.visibleByOffice,
-                            choices: Object.fromEntries(f.choices.map((c) => {
-                                return [c.value, c.color]
-                            }))
-                        }]
-                    case 'multiple choice':
-                        return ['m_' + f.name, {
-                            office_edit: f.edilistByOffice,
-                            office_view: f.visibleByOffice,
-                            choices: Object.fromEntries(f.choices.map((c) => {
-                                return [c.value, c.color]
-                            }))
-                        }]
-                }
-            }))*/
+            })),
+            is_a_bando: !!data.is_a_bando,
+            is_allow_external: !!data.is_allow_external
         })
     }
 
@@ -352,7 +318,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     error={errors.date[0]}/>
                             </LocalizationProvider>
                         </Grid>
-                        <Grid size={{xs: 12, md: 3}}>
+                        <Grid size={{xs: 12, md: 4}}>
                             <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <div>
                                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
@@ -375,7 +341,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 </div>
                             </Tooltip>
                         </Grid>
-                        <Grid size={{xs: 12, md: 3}}>
+                        <Grid size={{xs: 12, md: 4}}>
                             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                 <DateTimePicker
                                     label={eventNames.subscription_end_date}
@@ -388,7 +354,22 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 />
                             </LocalizationProvider>
                         </Grid>
-                        <Grid size={{xs: 12, md: 3}}>
+                        <Grid size={{xs: 12, md: 4}}>
+                            <FormControlLabel
+                                label="Evento A Bando"
+                                labelPlacement="start"
+                                control={
+                                    <Switch
+                                        checked={!!data.is_a_bando}
+                                        onChange={handleInputChange}
+                                        name="is_a_bando"
+                                        color="primary"
+                                    />
+                                }
+                            />
+                        </Grid>
+
+                        <Grid size={{xs: 12, md: 4}}>
                             <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <div>
                                     <TextField
@@ -407,7 +388,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 </div>
                             </Tooltip>
                         </Grid>
-                        <Grid size={{xs: 12, md: 3}}>
+                        <Grid size={{xs: 12, md: 4}}>
                             <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <div>
                                     <TextField
@@ -423,6 +404,20 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     />
                                 </div>
                             </Tooltip>
+                        </Grid>
+                        <Grid size={{xs: 12, md: 4}}>
+                            <FormControlLabel
+                                label="Consenti iscrizione esterni"
+                                labelPlacement="start"
+                                control={
+                                    <Switch
+                                        checked={!!data.is_allow_external}
+                                        onChange={handleInputChange}
+                                        name="is_allow_external"
+                                        color="primary"
+                                    />
+                                }
+                            />
                         </Grid>
                     </Grid>
                     <Grid size={{xs: 12}} data-color-mode="light" sx={{mt: 2}}>
@@ -503,173 +498,3 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
     );
 }
-// *1
-/*<FormControlLabel
-    control={<Switch
-        checked={data.enableForm}
-        onChange={handleInputChange}
-        name="enableForm"
-        color="primary"
-    />}
-    label="Attiva Form"
-/>*/
-
-// *2
-/*<Box my={2}>
-    <Grid container spacing={2}>
-        <Grid size={{xs: 12, md: 6}}>
-            <Typography variant="h6" gutterBottom>Campi Profilo</Typography>
-            <FormControl sx={{minWidth: '100%'}}>
-                <Select
-                    variant="outlined"
-                    multiple
-                    value={data.profileFields}
-                    onChange={handleProfileFieldChange}
-                    renderValue={(selected) => selected.join(', ')}
-                >
-                    {profileFieldOptions.map((option) => (
-                        <MenuItem key={option} value={option}>
-                            <Checkbox checked={data.profileFields.indexOf(option) > -1}/>
-                            {names[option]}
-                        </MenuItem>
-                    ))}
-                </Select>
-            </FormControl>
-        </Grid>
-    </Grid>
-</Box>*/
-
-// *3
-/*{
-    ['additionalFields', 'formFields'].map((fieldType) => (
-        <Box my={2} key={fieldType}>
-            <Grid container spacing={2} alignItems="center">
-                <Grid size={{xs: 6}}>
-                    <Typography variant="h6" gutterBottom>
-                        {fieldType === 'additionalFields' ? 'Campi Aggiuntivi' : 'Campi Form'}
-                    </Typography>
-                </Grid>
-                <Grid size={{xs: 6}} textAlign="right">
-                    <IconButton onClick={() => handleAddField(fieldType)}><AddIcon/></IconButton>
-                </Grid>
-            </Grid>
-            {data[fieldType].map((field, index) => (
-                <Paper key={index} sx={{p: 2, mb: 1}}>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid size={{xs: 4}}>
-                            <TextField
-                                fullWidth
-                                label="Nome campo"
-                                name="name"
-                                value={field.name}
-                                onChange={(e) => handleFieldChange(fieldType, index, e)}
-                            />
-                        </Grid>
-                        <Grid size={{xs: 2}}>
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={field.edilistByOffice}
-                                        onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                        name="edilistByOffice"
-                                    />
-                                }
-                                label="Editabile"
-                            />
-                        </Grid>
-                        <Grid size={{xs: 2}}>
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={field.visibleByOffice}
-                                        onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                        name="visibleByOffice"
-                                    />
-                                }
-                                label="Visibile"
-                            />
-                        </Grid>
-                        <Grid size={{xs: 3}}>
-                            <FormControl fullWidth>
-                                <InputLabel>Formato</InputLabel>
-                                <Select
-                                    variant="outlined"
-                                    name="type"
-                                    label="Formato"
-                                    value={field.type}
-                                    onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                >
-                                    <MenuItem value="text">Testo</MenuItem>
-                                    <MenuItem value="integer">Numerico Intero</MenuItem>
-                                    <MenuItem value="float">Numerico Decimale</MenuItem>
-                                    <MenuItem value="single choice">Scelta Singola</MenuItem>
-                                    <MenuItem value="multiple choice">Scelta Multipla</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid size={{xs: 1}}>
-                            <IconButton onClick={() => handleDeleteField(fieldType, index)}>
-                                <DeleteIcon/>
-                            </IconButton>
-                        </Grid>
-                    </Grid>
-                    {field.type === 'text' && (
-                        <Grid container spacing={2} alignItems="center">
-                            <Grid size={{xs: 4}}>
-                                <TextField
-                                    fullWidth
-                                    label="Lunghezza"
-                                    name="length"
-                                    value={field.length}
-                                    onChange={(e) => handleFieldChange(fieldType, index, e)}
-                                    type="number"
-                                />
-                            </Grid>
-                        </Grid>
-                    )}
-                    {(field.type === 'single choice' || field.type === 'multiple choice') && (
-                        <Box mt={2} ml={2}>
-                            <Grid container spacing={2}>
-                                <Grid size={{xs: 12}}>
-                                    <Button onClick={() => handleAddChoice(fieldType, index)}>Aggiungi Scelta</Button>
-                                </Grid>
-                                {field.choices.map((choice, choiceIndex) => (
-                                    <Grid container spacing={2} key={choiceIndex} alignItems="center">
-                                        <Grid size={{xs: 5}}>
-                                            <TextField
-                                                fullWidth
-                                                label="Valore"
-                                                name="value"
-                                                value={choice.value}
-                                                onChange={(e) => handleChoiceChange(fieldType, index, choiceIndex, e)}
-                                            />
-                                        </Grid>
-                                        <Grid size={{xs: 5}}>
-                                            <FormControl fullWidth>
-                                                <InputLabel>Colore</InputLabel>
-                                                <Select
-                                                    variant="outlined"
-                                                    name="color"
-                                                    label="Colore"
-                                                    value={choice.color}
-                                                    onChange={(e) => handleColorChange(fieldType, index, choiceIndex, e)}
-                                                >
-                                                    {colorOptions.map((option) => (
-                                                        <MenuItem key={option.value} value={option.value}>
-                                                            <div style={{backgroundColor: option.value, width: 20, height: 20, display: 'inline-block', marginRight: 8}}></div>
-                                                            {option.label}
-                                                        </MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                        </Grid>
-                                    </Grid>
-                                ))}
-                            </Grid>
-                        </Box>
-                    )}
-                </Paper>
-            ))}
-        </Box>
-    ))
-}*/

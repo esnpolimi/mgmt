@@ -100,6 +100,30 @@ export default function EventsList() {
             ),
         },
         {
+            accessorKey: 'is_a_bando',
+            header: 'A Bando',
+            size: 100,
+            Cell: ({cell}) => (
+                <Chip
+                    label={cell.getValue() ? "Sì" : "No"}
+                    color={cell.getValue() ? "success" : "error"}
+                    variant="outlined"
+                />
+            ),
+        },
+        {
+            accessorKey: 'is_allow_external',
+            header: 'Iscrizione Esterni',
+            size: 100,
+            Cell: ({cell}) => (
+                <Chip
+                    label={cell.getValue() ? "Sì" : "Solo ESNers/Erasmus"}
+                    color={cell.getValue() ? "success" : "error"}
+                    variant="outlined"
+                />
+            ),
+        },
+        {
             accessorKey: 'status',
             header: names.status,
             size: 150,
@@ -171,7 +195,9 @@ export default function EventsList() {
                 id: false,
                 name: true,
                 date: true,
-                cost: true
+                cost: true,
+                is_a_bando: true,
+                is_allow_external: false,
             },
         },
         paginationDisplayMode: 'pages',

@@ -482,18 +482,33 @@ def reimburse_deposits(request):
                     continue
                 cauzione_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
                 if not cauzione_tx:
-                    return Response({'error': 'Nessuna cauzione rimborsabile trovata per ' + str(sub.profile)}, status=400)
+                    # Fix: handle external subscriptions gracefully
+                    sub_name = None
+                    if sub.profile:
+                        sub_name = f"{sub.profile.name} {sub.profile.surname}"
+                    elif sub.external_name:
+                        sub_name = sub.external_name
+                    else:
+                        sub_name = "Esterno"
+                    return Response({'error': f'Nessuna cauzione rimborsabile trovata per {sub_name}'}, status=400)
                 if account_locked.status == "closed":
                     return Response({'error': 'La cassa è chiusa.'}, status=400)
                 if account_locked.balance < deposit_amount:
                     return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
+                # Fix: handle external subscriptions for description
+                if sub.profile:
+                    sub_name = f"{sub.profile.name} {sub.profile.surname}"
+                elif sub.external_name:
+                    sub_name = sub.external_name
+                else:
+                    sub_name = "Esterno"
                 tx = Transaction.objects.create(
                     type=Transaction.TransactionType.RIMBORSO_CAUZIONE,
                     subscription=sub,
                     executor=request.user,
                     account=account_locked,
                     amount=-deposit_amount,
-                    description=f"Rimborso cauzione {sub.profile.name} {sub.profile.surname} - {event.name}" + (f" - {notes}" if notes else "")
+                    description=f"Rimborso cauzione {sub_name} - {event.name}" + (f" - {notes}" if notes else "")
                 )
                 created.append(tx)
             # Return the created transactions
@@ -583,6 +598,14 @@ def reimburse_quota(request):
         if account.balance < event.cost:
             return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
+        # Fix: handle external subscriptions for description
+        if sub.profile:
+            sub_name = f"{sub.profile.name} {sub.profile.surname}"
+        elif sub.external_name:
+            sub_name = sub.external_name
+        else:
+            sub_name = "Esterno"
+
         with transaction.atomic():
             tx = Transaction.objects.create(
                 type=Transaction.TransactionType.RIMBORSO_QUOTA,
@@ -590,7 +613,7 @@ def reimburse_quota(request):
                 executor=request.user,
                 account=account,
                 amount=-event.cost,
-                description=f"Rimborso quota {sub.profile.name} {sub.profile.surname} - {event.name}" + (f" - {notes}" if notes else "")
+                description=f"Rimborso quota {sub_name} - {event.name}" + (f" - {notes}" if notes else "")
             )
             serializer = TransactionViewSerializer(tx)
             return Response(serializer.data, status=201)

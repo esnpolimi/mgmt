@@ -184,17 +184,25 @@ export default function Event() {
                     accessorKey: 'profile_name',
                     header: 'Profilo',
                     size: 150,
-                    Cell: ({row}) => (
-                        <span>
-                            <Button variant="text"
-                                    color="primary"
-                                    sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                                    endIcon={<OpenInNewIcon fontSize="small"/>}
-                                    onClick={() => window.open(`/profile/${row.original.profile_id}`, '_blank', 'noopener,noreferrer')}>
-                                {row.original.profile_name}
-                            </Button>
-                        </span>
-                    )
+                    Cell: ({row}) => {
+                        const sub = row.original;
+                        // If external_name is present, show it as plain text
+                        if (sub.external_name) {
+                            return <span>{sub.external_name}</span>;
+                        }
+                        // Otherwise, show profile_name as a link
+                        return (
+                            <span>
+                                <Button variant="text"
+                                        color="primary"
+                                        sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                        endIcon={<OpenInNewIcon fontSize="small"/>}
+                                        onClick={() => window.open(`/profile/${sub.profile_id}`, '_blank', 'noopener,noreferrer')}>
+                                    {sub.profile_name}
+                                </Button>
+                            </span>
+                        );
+                    }
                 },
                 // Stato Quota column only if hasQuota
                 hasQuota && {
@@ -244,10 +252,26 @@ export default function Event() {
                         return <Chip label={label} color={color}/>;
                     }
                 },
+                data.is_allow_external && {
+                    accessorKey: 'is_external',
+                    header: 'Esterno',
+                    size: 80,
+                    Cell: ({row}) => {
+                        const sub = row.original;
+                        const isExternal = !!sub.external_name;
+                        return (
+                            <Chip
+                                label={isExternal ? "Sì" : "No"}
+                                color={isExternal ? "success" : "error"}
+                                variant="outlined"
+                            />
+                        );
+                    }
+                },
                 {
                     accessorKey: 'notes',
                     header: 'Note',
-                    size: 200,
+                    size: 150,
                 },
             ].filter(Boolean);
 
@@ -255,7 +279,7 @@ export default function Event() {
                 listSubscriptionsColumns.push({
                     accessorKey: 'actions',
                     header: 'Azioni',
-                    size: 80,
+                    size: 100,
                     enableSorting: false,
                     enableColumnActions: false,
                     Cell: ({row}) => {
@@ -396,7 +420,7 @@ export default function Event() {
                                     Rimborsa Cauzioni
                                 </Button>
                             )}
-                            {hasQuota && selectedCount === 0 && (
+                            {hasQuota && selectedCount === 0 && data.is_a_bando && (
                                 <Button variant="contained"
                                         color="info"
                                         onClick={e => {
@@ -611,6 +635,21 @@ export default function Event() {
                                         </Box>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
                                             {handleSubscriptionStatus().chip}
+                                        </Box>
+                                    </Grid>
+                                    <Grid size={{xs: 12, md: 3}}>
+                                        <Box sx={{display: 'flex', alignItems: 'center'}}>
+                                            <Chip
+                                                label={data.is_a_bando ? "Evento a Bando" : "Evento non a Bando"}
+                                                color={data.is_a_bando ? "success" : "error"}
+                                                sx={{mr: 1}}
+                                            />
+                                            {data.is_a_bando && (
+                                                <Chip label="Evento a Bando" color="success"/>
+                                            )}
+                                            {data.is_allow_external && (
+                                                <Chip label="Iscrizione Esterni Consentita" color="success"/>
+                                            )}
                                         </Box>
                                     </Grid>
                                     <Grid size={{xs: 12}}>
