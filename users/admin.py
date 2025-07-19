@@ -4,6 +4,7 @@ from .forms import UserForm
 from django.contrib.admin import SimpleListFilter
 from profiles.models import Profile
 
+
 class UserProfileNameFilter(SimpleListFilter):
     title = 'Profile Name'
     parameter_name = 'profile__name'
@@ -19,6 +20,7 @@ class UserProfileNameFilter(SimpleListFilter):
             return queryset.filter(profile__name=value)
         return queryset
 
+
 class UserProfileSurnameFilter(SimpleListFilter):
     title = 'Profile Surname'
     parameter_name = 'profile__surname'
@@ -33,6 +35,7 @@ class UserProfileSurnameFilter(SimpleListFilter):
         if value:
             return queryset.filter(profile__surname=value)
         return queryset
+
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -64,18 +67,38 @@ class UserAdmin(admin.ModelAdmin):
     ordering = ('-date_joined',)
     list_per_page = 50
 
+    def get_fieldsets(self, request, obj=None):
+        if not obj:  # Adding a new user
+            return [
+                (None, {'fields': ['profile', 'password', 'is_staff', 'is_superuser', 'groups', 'user_permissions']}),
+            ]
+        else:  # Editing existing user
+            return [
+                (None, {'fields': ['profile', 'is_staff', 'is_superuser', 'groups', 'user_permissions']}),
+            ]
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(self.readonly_fields)
+        if obj:  # Editing existing user
+            readonly.append('password')  # Make password read-only for existing users
+        return readonly
+
     def profile_id(self, obj):
         return obj.profile.id
+
     profile_id.short_description = 'Profile ID'
 
     def profile_email(self, obj):
         return obj.profile.email
+
     profile_email.short_description = 'Email'
 
     def profile_name(self, obj):
         return obj.profile.name
+
     profile_name.short_description = 'Name'
 
     def profile_surname(self, obj):
         return obj.profile.surname
+
     profile_surname.short_description = 'Surname'
