@@ -20,10 +20,6 @@ App: contenttypes, Model: contenttype, Permission: add_contenttype
 App: contenttypes, Model: contenttype, Permission: change_contenttype
 App: contenttypes, Model: contenttype, Permission: delete_contenttype
 App: contenttypes, Model: contenttype, Permission: view_contenttype
-App: events, Model: depositreimbursement, Permission: add_depositreimbursement
-App: events, Model: depositreimbursement, Permission: change_depositreimbursement
-App: events, Model: depositreimbursement, Permission: delete_depositreimbursement
-App: events, Model: depositreimbursement, Permission: view_depositreimbursement
 App: events, Model: event, Permission: add_event
 App: events, Model: event, Permission: change_event
 App: events, Model: event, Permission: delete_event
@@ -36,14 +32,6 @@ App: events, Model: eventorganizer, Permission: add_eventorganizer
 App: events, Model: eventorganizer, Permission: change_eventorganizer
 App: events, Model: eventorganizer, Permission: delete_eventorganizer
 App: events, Model: eventorganizer, Permission: view_eventorganizer
-App: events, Model: eventtable, Permission: add_eventtable
-App: events, Model: eventtable, Permission: change_eventtable
-App: events, Model: eventtable, Permission: delete_eventtable
-App: events, Model: eventtable, Permission: view_eventtable
-App: events, Model: historicalsubscription, Permission: add_historicalsubscription
-App: events, Model: historicalsubscription, Permission: change_historicalsubscription
-App: events, Model: historicalsubscription, Permission: delete_historicalsubscription
-App: events, Model: historicalsubscription, Permission: view_historicalsubscription
 App: events, Model: subscription, Permission: add_subscription
 App: events, Model: subscription, Permission: change_subscription
 App: events, Model: subscription, Permission: delete_subscription
@@ -52,18 +40,6 @@ App: profiles, Model: document, Permission: add_document
 App: profiles, Model: document, Permission: change_document
 App: profiles, Model: document, Permission: delete_document
 App: profiles, Model: document, Permission: view_document
-App: profiles, Model: historicalprofile, Permission: add_historicalprofile
-App: profiles, Model: historicalprofile, Permission: change_historicalprofile
-App: profiles, Model: historicalprofile, Permission: delete_historicalprofile
-App: profiles, Model: historicalprofile, Permission: view_historicalprofile
-App: profiles, Model: matricola, Permission: add_matricola
-App: profiles, Model: matricola, Permission: change_matricola
-App: profiles, Model: matricola, Permission: delete_matricola
-App: profiles, Model: matricola, Permission: view_matricola
-App: profiles, Model: pendingprofile, Permission: add_pendingprofile
-App: profiles, Model: pendingprofile, Permission: change_pendingprofile
-App: profiles, Model: pendingprofile, Permission: delete_pendingprofile
-App: profiles, Model: pendingprofile, Permission: view_pendingprofile
 App: profiles, Model: profile, Permission: add_profile
 App: profiles, Model: profile, Permission: change_profile
 App: profiles, Model: profile, Permission: delete_profile
@@ -88,10 +64,6 @@ App: treasury, Model: esncard, Permission: add_esncard
 App: treasury, Model: esncard, Permission: change_esncard
 App: treasury, Model: esncard, Permission: delete_esncard
 App: treasury, Model: esncard, Permission: view_esncard
-App: treasury, Model: historicalaccount, Permission: add_historicalaccount
-App: treasury, Model: historicalaccount, Permission: change_historicalaccount
-App: treasury, Model: historicalaccount, Permission: delete_historicalaccount
-App: treasury, Model: historicalaccount, Permission: view_historicalaccount
 App: treasury, Model: reimbursementrequest, Permission: add_reimbursementrequest
 App: treasury, Model: reimbursementrequest, Permission: change_reimbursementrequest
 App: treasury, Model: reimbursementrequest, Permission: delete_reimbursementrequest
@@ -108,5 +80,4 @@ App: users, Model: user, Permission: add_user
 App: users, Model: user, Permission: change_user
 App: users, Model: user, Permission: delete_user
 App: users, Model: user, Permission: view_user
-
 ```
