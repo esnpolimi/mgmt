@@ -105,11 +105,11 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
             aria-describedby="modal-modal-description">
             <Box sx={style}>
                 {isLoading ? <Loader/> : (<>
-                        <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
+                        <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 0}}>
                             <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                         </Box>
-                        <Typography variant="h4" component="h2" gutterBottom>Emissione ESNcard</Typography>
-                        <Divider sx={{mb: 2}}/>
+                        <Typography variant="h4" component="h2" align="center">Emissione ESNcard</Typography>
+                        <Divider sx={{mt: 1, mb: 2}}/>
                         <Typography variant="subtitle1" gutterBottom><b>A:</b> {profile.name} {profile.surname}</Typography>
                         <Typography variant="subtitle1" gutterBottom><b>Importo:</b> {amount}€</Typography>
 

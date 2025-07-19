@@ -1,10 +1,19 @@
 from django import forms
 from .models import User
 
+
 class UserForm(forms.ModelForm):
-    #birthdate = forms.DateField(widget=forms.TextInput(attrs={'type': 'date'}))
-    password = forms.CharField(widget=forms.PasswordInput())
+    password = forms.CharField(widget=forms.PasswordInput(), required=False)
 
     class Meta:
         model = User
-        exclude = ['creation_time','last_modified']
+        exclude = ['date_joined', 'last_login']
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        password = self.cleaned_data.get('password')
+        if password:
+            user.set_password(password)
+        if commit:
+            user.save()
+        return user

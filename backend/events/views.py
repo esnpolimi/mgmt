@@ -31,9 +31,41 @@ from treasury.models import Transaction
 logger = logging.getLogger(__name__)
 
 
+def get_action_permissions(request, action, default_perm=None):
+    """
+    Returns True if the user has the required permission for the action.
+    You can customize this mapping per view/action.
+    """
+    # Example: define permissions per action
+    perms_map = {
+        'event_detail_GET': 'events.view_event',
+        'event_detail_PATCH': 'events.change_event',
+        'event_detail_DELETE': 'events.delete_event',
+        'subscription_detail_GET': 'events.view_subscription',
+        'subscription_detail_PATCH': 'events.change_subscription',
+        'subscription_detail_DELETE': 'events.delete_subscription',
+        'event_creation_POST': 'events.add_event',
+        'subscription_create_POST': 'events.add_subscription',
+        'move_subscriptions_POST': 'events.change_subscription',
+        'events_list_GET': 'events.view_event',
+    }
+    perm = perms_map.get(action, default_perm)
+
+    # Special case: allow Board group for liberatorie actions
+    if action in ['generate_liberatorie_pdf_POST', 'printable_liberatorie_GET']:
+        if request.user.groups.filter(name='Board').exists():
+            return True
+
+    if perm:
+        return request.user.has_perm(perm)
+    return True  # If no specific permission, allow
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def events_list(request):
+    if not get_action_permissions(request, 'events_list_GET'):
+        return Response({'error': 'Non hai i permessi per visualizzare gli eventi.'}, status=403)
     try:
         events = Event.objects.all().order_by('-created_at')
         search = request.GET.get('search', '').strip()
@@ -67,6 +99,8 @@ def events_list(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def event_creation(request):
+    if not get_action_permissions(request, 'event_creation_POST'):
+        return Response({'error': 'Non hai i permessi per creare eventi.'}, status=403)
     try:
         event_serializer = EventCreationSerializer(data=request.data)
 
@@ -88,67 +122,66 @@ def event_detail(request, pk):
         event = Event.objects.get(pk=pk)
 
         if request.method == 'GET':
+            if not get_action_permissions(request, 'event_detail_GET'):
+                return Response({'error': 'Non hai i permessi per visualizzare questo evento.'}, status=403)
             serializer = EventWithSubscriptionsSerializer(event)
             return Response(serializer.data, status=200)
 
         elif request.method == 'PATCH':
-            if request.user.has_perm('events.change_event'):
-                # Check for existing subscriptions
-                has_subscriptions = Subscription.objects.filter(event=event).exists()
-                data_to_validate = request.data
-                logger.info("Event data: ", data_to_validate)
-                start_date = parse_datetime(data_to_validate.get('subscription_start_date'))
-                end_date = parse_datetime(data_to_validate.get('subscription_end_date'))
-
-                # If event has subscriptions, implement stricter validation
-                if has_subscriptions:
-                    # Not possible to modify start date
-                    formatted_start = start_date.strftime('%Y-%m-%d %H:%M:%S')
-                    existing_date = event.subscription_start_date.strftime('%Y-%m-%d %H:%M:%S')
-                    logger.info(f"Start date: {start_date}, existing: {event.subscription_start_date}")
-                    logger.info(f"Start date: {formatted_start}, existing: {existing_date}")
-                    if formatted_start != existing_date:
-                        return Response({'error': "Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni"}, status=400)
-
-                    # Not possible to change cost
-                    if data_to_validate.get('cost') != str(event.cost):
-                        return Response({'error': "Non è possibile modificare il costo se l'evento ha delle iscrizioni"}, status=400)
-
-                    # Not possible to reduce capacity below current subscription count
-                    for list_data in data_to_validate['lists']:
-                        list_id = list_data.get('id')
-                        new_capacity = int(list_data.get('capacity', 0))
-
-                        # Skip validation for new lists
-                        if not list_id:
-                            continue
-
-                        subscription_count = Subscription.objects.filter(event=event, list_id=list_id).count()
-                        if subscription_count > new_capacity > 0:
-                            return Response({'error': f"Non è possibile impostare una capacità lista minore del numero di iscrizoni presenti ({subscription_count})"}, status=400)
-
-                # Not possible to set end date before now or before start date
-                now = timezone.now()  # This is timezone-aware
-                current_start = start_date if start_date else event.subscription_start_date
-                if end_date < now:
-                    return Response({'error': "Non è possibile impostare una data fine iscrizioni nel passato"}, status=400)
-                if current_start and end_date <= current_start:
-                    return Response({'error': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"}, status=400)
-
-                # Continue with serializer validation and saving
-                serializer = EventCreationSerializer(instance=event, data=data_to_validate, partial=True)
-
-                if serializer.is_valid():
-                    serializer.save()
-                    return Response(serializer.data, status=200)
-                else:
-                    return Response(serializer.errors, status=400)
-            else:
+            if not get_action_permissions(request, 'event_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
+            # Check for existing subscriptions
+            has_subscriptions = Subscription.objects.filter(event=event).exists()
+            data_to_validate = request.data
+            logger.info("Event data: ", data_to_validate)
+            start_date = parse_datetime(data_to_validate.get('subscription_start_date'))
+            end_date = parse_datetime(data_to_validate.get('subscription_end_date'))
 
+            # If event has subscriptions, implement stricter validation
+            if has_subscriptions:
+                # Not possible to modify start date
+                formatted_start = start_date.strftime('%Y-%m-%d %H:%M:%S')
+                existing_date = event.subscription_start_date.strftime('%Y-%m-%d %H:%M:%S')
+                logger.info(f"Start date: {start_date}, existing: {event.subscription_start_date}")
+                logger.info(f"Start date: {formatted_start}, existing: {existing_date}")
+                if formatted_start != existing_date:
+                    return Response({'error': "Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni"}, status=400)
+
+                # Not possible to change cost
+                if data_to_validate.get('cost') != str(event.cost):
+                    return Response({'error': "Non è possibile modificare il costo se l'evento ha delle iscrizioni"}, status=400)
+
+                # Not possible to reduce capacity below current subscription count
+                for list_data in data_to_validate['lists']:
+                    list_id = list_data.get('id')
+                    new_capacity = int(list_data.get('capacity', 0))
+
+                    # Skip validation for new lists
+                    if not list_id:
+                        continue
+
+                    subscription_count = Subscription.objects.filter(event=event, list_id=list_id).count()
+                    if subscription_count > new_capacity > 0:
+                        return Response({'error': f"Non è possibile impostare una capacità lista minore del numero di iscrizoni presenti ({subscription_count})"}, status=400)
+
+            # Not possible to set end date before now or before start date
+            now = timezone.now()  # This is timezone-aware
+            current_start = start_date if start_date else event.subscription_start_date
+            if end_date < now:
+                return Response({'error': "Non è possibile impostare una data fine iscrizioni nel passato"}, status=400)
+            if current_start and end_date <= current_start:
+                return Response({'error': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"}, status=400)
+
+            # Continue with serializer validation and saving
+            serializer = EventCreationSerializer(instance=event, data=data_to_validate, partial=True)
+
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=200)
+            else:
+                return Response(serializer.errors, status=400)
         elif request.method == 'DELETE':
-            # Check user permission
-            if not request.user.has_perm('events.delete_event'):
+            if not get_action_permissions(request, 'event_detail_DELETE'):
                 return Response({'error': 'Non hai i permessi per eliminare questo evento.'}, status=403)
             # Allow deletion only if there are no subscriptions
             if Subscription.objects.filter(event=event).exists():
@@ -180,6 +213,8 @@ def generate_liberatorie_pdf(request):
     def display_na(value):
         return value if value not in [None, '', [], {}] else 'N/A'
 
+    if not get_action_permissions(request, 'generate_liberatorie_pdf_POST'):
+        return Response({'error': 'Non hai i permessi per generare liberatorie.'}, status=403)
     try:
         event_id = request.data.get('event_id')
         subscription_ids = request.data.get('subscription_ids', [])
@@ -297,6 +332,8 @@ def printable_liberatorie(request, event_id):
     Returns all subscriptions for the event with a paid quota (status_quota == 'paid').
     Optional query param: list=<list_id> to filter by list.
     """
+    if not get_action_permissions(request, 'printable_liberatorie_GET'):
+        return Response({'error': 'Non hai i permessi per visualizzare le liberatorie.'}, status=403)
     try:
         event = Event.objects.get(pk=event_id)
         list_id = request.GET.get('list')
@@ -326,6 +363,8 @@ def printable_liberatorie(request, event_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def subscription_create(request):
+    if not get_action_permissions(request, 'subscription_create_POST'):
+        return Response({'error': 'Non hai i permessi per creare iscrizioni.'}, status=403)
     try:
         profile = request.data.get('profile')
         event_id = request.data.get('event')
@@ -418,10 +457,14 @@ def subscription_detail(request, pk):
         cauzione_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
 
         if request.method == 'GET':
+            if not get_action_permissions(request, 'subscription_detail_GET'):
+                return Response({'error': 'Non hai i permessi per visualizzare questa iscrizione.'}, status=403)
             serializer = SubscriptionSerializer(sub)
             return Response(serializer.data, status=200)
 
         if request.method == "PATCH":
+            if not get_action_permissions(request, 'subscription_detail_PATCH'):
+                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
             if quota_reimbursed or cauzione_reimbursed:
                 return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'}, status=400)
             if request.user.has_perm('events.change_subscription'):
@@ -505,6 +548,8 @@ def subscription_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
 
         elif request.method == "DELETE":
+            if not get_action_permissions(request, 'subscription_detail_DELETE'):
+                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
             if quota_reimbursed or cauzione_reimbursed:
                 return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'}, status=400)
             if request.user.has_perm('events.delete_subscription'):
@@ -537,6 +582,8 @@ def subscription_detail(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def move_subscriptions(request):
+    if not get_action_permissions(request, 'move_subscriptions_POST'):
+        return Response({'error': 'Non hai i permessi per spostare iscrizioni.'}, status=403)
     try:
         # Extract data from the request
         subscription_ids = request.data.get('subscriptionIds', [])
@@ -570,4 +617,3 @@ def move_subscriptions(request):
         logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
-
