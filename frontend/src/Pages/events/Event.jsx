@@ -35,6 +35,9 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 export default function Event() {
     const {user} = useAuth();
     const canChangeTransactions = user?.permissions.includes("change_transaction");
+    const canChangeEvent = user?.permissions.includes("change_event");
+    const canChangeSubscription = user?.permissions.includes("change_subscription");
+    const isBoardMember = user?.groups?.includes("Board");
     const {id} = useParams(); // Get the ID from URL
     const location = useLocation();
     const navigate = useNavigate();
@@ -275,7 +278,7 @@ export default function Event() {
                 },
             ].filter(Boolean);
 
-            if (hasDeposit || hasQuota) {
+            if ((hasDeposit || hasQuota) && isBoardMember) {
                 listSubscriptionsColumns.push({
                     accessorKey: 'actions',
                     header: 'Azioni',
@@ -289,7 +292,7 @@ export default function Event() {
                         // Cauzione button logic
                         const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
                         return (<>
-                            {hasQuota && (
+                            {hasQuota && isBoardMember && (
                                 <IconButton
                                     title="Rimborsa Quota"
                                     color="secondary"
@@ -302,7 +305,7 @@ export default function Event() {
                                     <EuroIcon/>
                                 </IconButton>
                             )}
-                            {hasDeposit && (
+                            {hasDeposit && isBoardMember && (
                                 <IconButton
                                     title="Rimborsa Cauzione"
                                     color="primary"
@@ -362,7 +365,6 @@ export default function Event() {
                 renderTopToolbar: ({table}) => {
                     const selectedRows = table.getSelectedRowModel().rows;
                     const selectedCount = selectedRows.length;
-                    // Find the config for this table
                     const listId = config.listId;
                     const capacity = config.capacity;
                     const subscription_count = config.subscription_count;
@@ -376,7 +378,7 @@ export default function Event() {
                                         startIcon={<PersonAddIcon/>}
                                         disabled={!((capacity === 0 || subscription_count < capacity) && isActive)}
                                         onClick={(e) => {
-                                            e.stopPropagation();  // Stop event propagation
+                                            e.stopPropagation();
                                             handleOpenSubscriptionModal(listId);
                                         }}>
                                         ISCRIVI
@@ -387,27 +389,33 @@ export default function Event() {
                                     <Button
                                         variant="outlined"
                                         color="primary"
-                                        onClick={() => handleMoveToList(selectedRows, listId)}>
+                                        onClick={() => handleMoveToList(selectedRows, listId)}
+                                        disabled={!canChangeSubscription}
+                                    >
                                         Sposta in Altra Lista
                                     </Button>
-                                    <Button
-                                        variant="outlined"
-                                        color="secondary"
-                                        onClick={() => handleExportSelected(selectedRows)}>
-                                        Esporta
-                                    </Button>
+                                    {false && (
+                                        <Button
+                                            variant="outlined"
+                                            color="secondary"
+                                            onClick={() => handleExportSelected(selectedRows)}>
+                                            Esporta
+                                        </Button>
+                                    )}
                                 </>
                             )}
                             {selectedCount === 1 && (<>
                                     <Button
                                         variant="contained"
                                         color="primary"
-                                        onClick={() => handleEditSubscription(selectedRows[0].original.id)}>
+                                        onClick={() => handleEditSubscription(selectedRows[0].original.id)}
+                                        disabled={!canChangeSubscription}
+                                    >
                                         Modifica Iscrizione
                                     </Button>
                                 </>
                             )}
-                            {hasDeposit && canChangeTransactions && selectedCount === 0 && (
+                            {hasDeposit && canChangeTransactions && selectedCount === 0 && isBoardMember && (
                                 <Button variant="contained"
                                         color="success"
                                         onClick={e => {
@@ -416,11 +424,12 @@ export default function Event() {
                                             setReimburseDepositsListId(config.listId);
                                             setReimburseDepositsModalOpen(true);
                                         }}
-                                        sx={{ml: 1}}>
+                                        sx={{ml: 1}}
+                                >
                                     Rimborsa Cauzioni
                                 </Button>
                             )}
-                            {hasQuota && selectedCount === 0 && data.is_a_bando && (
+                            {hasQuota && selectedCount === 0 && data.is_a_bando && isBoardMember && (
                                 <Button variant="contained"
                                         color="info"
                                         onClick={e => {
@@ -428,7 +437,8 @@ export default function Event() {
                                             setPrintableLiberatorieListId(config.listId);
                                             setPrintableLiberatorieModalOpen(true);
                                         }}
-                                        sx={{ml: 1}}>
+                                        sx={{ml: 1}}
+                                >
                                     Stampa Liberatorie
                                 </Button>
                             )}
@@ -437,7 +447,7 @@ export default function Event() {
                 },
             }
         }));
-    }, [listConfigs, data]);
+    }, [listConfigs, data, canChangeSubscription, canChangeTransactions, isBoardMember]);
 
     const ListAccordions = React.memo(() => {
         if (!lists || lists.length === 0) {
@@ -644,9 +654,6 @@ export default function Event() {
                                                 color={data.is_a_bando ? "success" : "error"}
                                                 sx={{mr: 1}}
                                             />
-                                            {data.is_a_bando && (
-                                                <Chip label="Evento a Bando" color="success"/>
-                                            )}
                                             {data.is_allow_external && (
                                                 <Chip label="Iscrizione Esterni Consentita" color="success"/>
                                             )}
@@ -671,7 +678,13 @@ export default function Event() {
                                             <EditIcon sx={{color: 'primary.main', mr: 1}}/>
                                             <Typography variant="h6" component="div">Azioni</Typography>
                                         </Box>
-                                        <Button sx={{mt: 2}} variant="contained" color="primary" onClick={handleOpenEventModal}>
+                                        <Button
+                                            sx={{mt: 2}}
+                                            variant="contained"
+                                            color="primary"
+                                            onClick={handleOpenEventModal}
+                                            disabled={!canChangeEvent}
+                                        >
                                             Modifica Evento
                                         </Button>
                                     </Grid>

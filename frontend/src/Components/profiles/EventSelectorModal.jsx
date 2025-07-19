@@ -71,7 +71,7 @@ export default function EventSelectorModal({open, onSelect, onClose}) {
                         <CloseIcon/>
                     </IconButton>
                 </Box>
-                <Typography variant="h6" align="center" sx={{mb: 2}}>Seleziona Evento</Typography>
+                <Typography variant="h4" component="h2" align="center" sx={{mb: 2}}>Seleziona Evento</Typography>
                 {loading ? (
                     <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 80}}>
                         <Loader/>

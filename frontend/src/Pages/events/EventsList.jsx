@@ -18,6 +18,7 @@ import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
 import FestivalIcon from '@mui/icons-material/Festival';
 import RefreshIcon from "@mui/icons-material/Refresh";
+import {useAuth} from "../../Context/AuthContext";
 
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
@@ -43,6 +44,8 @@ export default function EventsList() {
 
     const [localLoading, setLocalLoading] = useState(false);
     const searchInputRef = useRef(null);
+    const {user} = useAuth();
+    const canAddEvent = user?.permissions?.includes("add_event");
 
     const formatDateString = (date) => {
         return dayjs(date).format('YYYY-MM-DD');
@@ -217,7 +220,12 @@ export default function EventsList() {
         renderTopToolbarCustomActions: () => {
             return (
                 <Box sx={{display: 'flex', flexDirection: 'row'}}>
-                    <Button variant='contained' onClick={() => setEventModalOpen(true)} sx={{width: '150px'}}>
+                    <Button
+                        variant='contained'
+                        onClick={() => setEventModalOpen(true)}
+                        sx={{width: '150px'}}
+                        disabled={!canAddEvent}
+                    >
                         Crea
                     </Button>
                 </Box>
