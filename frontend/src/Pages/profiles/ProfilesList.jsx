@@ -1,5 +1,5 @@
 import {useEffect, useState, useRef, forwardRef, useImperativeHandle} from 'react';
-import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton} from '@mui/material';
+import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
@@ -7,6 +7,7 @@ import Loader from "../../Components/Loader";
 import ClearIcon from "@mui/icons-material/Clear";
 import SearchIcon from "@mui/icons-material/Search";
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {useNavigate} from 'react-router-dom';
 
 const ESNCARD_VALIDITY_OPTIONS = [
@@ -42,7 +43,8 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                 setRowCount(data.count || 0);
                 setData(data.results);
             },
-            onError: () => {},
+            onError: () => {
+            },
             onFinally: () => setInternalLoading(false)
         });
     };
@@ -131,6 +133,21 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
+        renderTopToolbarCustomActions: () => {
+            return (
+                <Box sx={{display: 'flex', flexDirection: 'row'}}>
+                    <Button
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<OpenInNewIcon/>}
+                        onClick={() => window.open(profileType === 'Erasmus' ? '/erasmus_form' : '/esner_form', "_blank")}
+                        sx={{ml: 2}}
+                    >
+                        {profileType === "Erasmus" ? "Iscrivi Erasmus" : "Iscrivi ESNer"}
+                    </Button>
+                </Box>
+            );
+        },
     });
 
     const handleFilterChange = (e) => {

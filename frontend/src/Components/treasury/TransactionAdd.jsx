@@ -7,10 +7,12 @@ import {useAuth} from "../../Context/AuthContext";
 import Popup from "../Popup";
 import CircularProgress from "@mui/material/CircularProgress";
 
-export default function TransactionAdd({open, onClose, account}) {
+export default function TransactionAdd({open, onClose}) {
     const {user} = useAuth();
     const [popup, setPopup] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    const [accounts, setAccounts] = useState([]);
+    const [selectedAccount, setSelectedAccount] = useState('');
 
     const [formData, setFormData] = useState({
         amount: '',
@@ -25,16 +27,20 @@ export default function TransactionAdd({open, onClose, account}) {
                 type: 'deposit',
                 description: ''
             });
+            setSelectedAccount('');
+            fetchCustom('GET', '/accounts/', {
+                onSuccess: (data) => setAccounts(data),
+                onError: () => setAccounts([]),
+            });
         }
     }, [open]);
-
 
     const handleSubmit = (e) => {
         e.preventDefault();
         setSubmitting(true);
         fetchCustom('POST', '/transaction/', {
             body: {
-                account: account.id,
+                account: selectedAccount,
                 amount: formData.type === 'deposit' ? Math.abs(formData.amount) : -Math.abs(formData.amount),
                 description: formData.description,
                 type: formData.type,
@@ -57,9 +63,28 @@ export default function TransactionAdd({open, onClose, account}) {
                 </Typography>
                 <Grid container spacing={2} sx={{mt: 2}}>
                     <Grid size={{xs: 12}}>
-                        <Typography>
-                            <b>Cassa:</b> {account?.name}
-                        </Typography>
+                        <FormControl fullWidth>
+                            <InputLabel id="account-label">Cassa</InputLabel>
+                            <Select
+                                variant="outlined"
+                                labelId="account-label"
+                                value={selectedAccount}
+                                label="Cassa"
+                                onChange={e => setSelectedAccount(e.target.value)}
+                                required
+                            >
+                                {accounts.map(acc => (
+                                    <MenuItem
+                                        key={acc.id}
+                                        value={acc.id}
+                                        disabled={acc.status === 'closed'}
+                                        style={{color: acc.status === 'closed' ? 'grey' : 'inherit'}}
+                                    >
+                                        {acc.name} {acc.status === 'closed' ? '(Chiusa)' : ''}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
                     </Grid>
                     <FormControl fullWidth>
                         <InputLabel>Tipo</InputLabel>
@@ -96,7 +121,7 @@ export default function TransactionAdd({open, onClose, account}) {
                         variant="contained"
                         color="primary"
                         type="submit"
-                        disabled={submitting || !formData.amount || formData.amount <= 0}>
+                        disabled={submitting || !formData.amount || formData.amount <= 0 || !selectedAccount}>
                         {submitting ? <CircularProgress size={24} color="inherit"/> : "Conferma"}
                     </Button>
                 </Box>

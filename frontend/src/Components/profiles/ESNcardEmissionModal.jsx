@@ -124,6 +124,18 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                                     helperText={errors.esncard_number[1]}
                                     onChange={handleChange}
                                     fullWidth/>
+                                {/* Info below the field */}
+                                <Box sx={{mt: 1}}>
+                                    <Typography
+                                        variant="caption"
+                                        sx={{
+                                            color: data.esncard_number.length === 11 ? 'green' : 'grey',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                        }}>
+                                        Il numero deve essere di 11 cifre
+                                    </Typography>
+                                </Box>
                             </Grid>
                             <Grid size={{xs: 12}} sx={{mt: 0}}>
                                 <FormControl fullWidth required error={errors.account_id[0]}>

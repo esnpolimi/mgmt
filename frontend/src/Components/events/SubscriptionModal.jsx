@@ -329,6 +329,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                     <FormControlLabel
                                         control={
                                             <Switch
+                                                sx={{ml: 1}}
                                                 checked={data.status_quota === 'paid'}
                                                 onChange={() => setData(d => ({
                                                     ...d,
@@ -365,6 +366,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                     <FormControlLabel
                                         control={
                                             <Switch
+                                                sx={{ml: 1}}
                                                 checked={data.status_cauzione === 'paid'}
                                                 onChange={() => setData(d => ({
                                                     ...d,
