@@ -29,6 +29,23 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
+def user_is_board(user):
+    return user.groups.filter(name="Board").exists()
+
+
+def get_action_permissions(action, user):
+    """
+    Returns True if the user is allowed to perform the given action.
+    """
+    if action == 'user_create':
+        return user.has_perm('users.add_user')
+    if action == 'user_modify':
+        return user.has_perm('users.change_user')
+    if action == 'user_delete':
+        return user_is_board(user)
+    return True
+
+
 @api_view(['POST'])
 def log_in(request):
     try:
@@ -55,9 +72,8 @@ def log_in(request):
                 user.last_login = timezone.now()
                 user.save(update_fields=['last_login'])
 
-                if first_login: # pop the last_login field from the returned user
+                if first_login:  # pop the last_login field from the returned user
                     user.last_login = None
-
 
                 refresh = RefreshToken.for_user(user)
                 refresh['user'] = UserReactSerializer(user).data
@@ -138,6 +154,8 @@ def user_list(request):
             serializer = UserSerializer(users, many=True)
             return Response(serializer.data)
         elif request.method == 'POST':
+            if not get_action_permissions('user_create', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
             data = request.data
             serializer = UserSerializer(data=data)
             if serializer.is_valid():
@@ -161,6 +179,8 @@ def user_detail(request, pk):
             serializer = UserSerializer(user)
             return Response(serializer.data)
         elif request.method == 'PATCH':
+            if not get_action_permissions('user_modify', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
             data = request.data
             serializer = UserSerializer(user, data=data, partial=True)
             if serializer.is_valid():
@@ -168,10 +188,10 @@ def user_detail(request, pk):
                 return Response(serializer.data)
             return Response(serializer.errors, status=400)
         elif request.method == 'DELETE':
-            if request.user.has_perm('users.delete_user'):
-                user.delete()
-                return Response(status=204)
-            return Response({'error': 'Non hai i permessi per eliminare questo utente.'}, status=401)
+            if not get_action_permissions('user_delete', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
+            user.delete()
+            return Response(status=204)
         else:
             return Response({'error': 'Metodo non consentito.'}, status=405)
     except User.DoesNotExist:

@@ -30,6 +30,25 @@ logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
 
 
+def user_is_board(user):
+    return user.groups.filter(name="Board").exists()
+
+
+def get_action_permissions(action, user):
+    """
+    Returns True if the user has permission for the specified action.
+    """
+    if action == 'profile_detail_patch':
+        return user.has_perm('profiles.change_profile')
+    if action == 'profile_detail_delete':
+        return user_is_board(user)
+    if action == 'document_patch':
+        return user.has_perm('profiles.change_document')
+    if action == 'document_delete':
+        return user.has_perm('profiles.delete_document')
+    return True
+
+
 # Endpoint to retrieve a list of Erasmus or ESNers profiles. Pagination is implemented
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -273,11 +292,9 @@ def profile_detail(request, pk):
             return Response(serializer.data)
 
         elif request.method == 'PATCH':
-            if request.user.has_perm('profiles.change_profile'):
-                serializer = ProfileFullEditSerializer(profile, data=request.data, partial=True)
-            else:
+            if not get_action_permissions('profile_detail_patch', request.user):
                 return Response({'error': 'Non hai i permessi per modificare questo profilo.'}, status=403)
-
+            serializer = ProfileFullEditSerializer(profile, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
                 group_name = request.data.get('group')
@@ -328,11 +345,11 @@ def profile_detail(request, pk):
             return Response(serializer.errors, status=400)
 
         elif request.method == 'DELETE':
-            if request.user.has_perm('profiles.delete_profile'):
-                profile.enabled = False
-                profile.save()
-                return Response(status=200)
-            return Response({'error': 'Non hai i permessi per eliminare questo profilo.'}, status=401)
+            if not get_action_permissions('profile_detail_delete', request.user):
+                return Response({'error': 'Non hai i permessi per eliminare questo profilo.'}, status=401)
+            profile.enabled = False
+            profile.save()
+            return Response(status=200)
         else:
             return Response({'error': 'Metodo non supportato.'}, status=405)
     except Profile.DoesNotExist:
@@ -368,23 +385,20 @@ def document_detail(request, pk):
     try:
         document = Document.objects.get(pk=pk)
         if request.method == 'PATCH':
-            if request.user.has_perm('profiles.change_document'):
-                document_serializer = DocumentEditSerializer(document, data=request.data, partial=True)
-                if document_serializer.is_valid():
-                    document_serializer.save()
-                    return Response(status=200)
-                else:
-                    return Response(document_serializer.errors, status=400)
-            else:
+            if not get_action_permissions('document_patch', request.user):
                 return Response({'error': 'Non hai i permessi per modificare questo documento.'}, status=403)
-
-        elif request.method == 'DELETE':
-            if request.user.has_perm('profiles.delete_document'):
-                document.enabled = False
-                document.save()
+            document_serializer = DocumentEditSerializer(document, data=request.data, partial=True)
+            if document_serializer.is_valid():
+                document_serializer.save()
                 return Response(status=200)
             else:
+                return Response(document_serializer.errors, status=400)
+        elif request.method == 'DELETE':
+            if not get_action_permissions('document_delete', request.user):
                 return Response({'error': 'Non hai i permessi per eliminare questo documento.'}, status=403)
+            document.enabled = False
+            document.save()
+            return Response(status=200)
         else:
             return Response({'error': 'Metodo non supportato.'}, status=405)
     except Document.DoesNotExist:

@@ -98,12 +98,18 @@ class TransactionAdmin(admin.ModelAdmin):
     def subscription_link(self, obj):
         if obj.subscription:
             event = obj.subscription.event
-            profile = obj.subscription.profile
+            profile = getattr(obj.subscription, 'profile', None)
+            if profile:
+                profile_name = f"{profile.name} {profile.surname}"
+            elif hasattr(obj.subscription, 'external_name') and obj.subscription.external_name:
+                profile_name = obj.subscription.external_name
+            else:
+                profile_name = "Esterno"
             return format_html(
                 '<a href="/admin/events/subscription/{}/change/">{}</a> ({})',
                 obj.subscription.id,
                 event.name,
-                f"{profile.name} {profile.surname}"
+                profile_name
             )
         return "-"
     subscription_link.short_description = 'Subscription'
@@ -135,14 +141,30 @@ class TransactionAdmin(admin.ModelAdmin):
             'ID', 'Account', 'Type', 'Amount', 'Description', 'Executor', 'Subscription', 'ESNcard', 'Created At', 'Updated At'
         ])
         for obj in queryset:
+            # Executor
+            executor_name = ""
+            if hasattr(obj.executor, 'profile') and obj.executor.profile:
+                executor_name = f"{obj.executor.profile.name} {obj.executor.profile.surname}"
+            # Subscription
+            subscription_str = ""
+            if obj.subscription:
+                event_name = obj.subscription.event.name if obj.subscription.event else ""
+                profile = getattr(obj.subscription, 'profile', None)
+                if profile:
+                    profile_name = f"{profile.name} {profile.surname}"
+                elif hasattr(obj.subscription, 'external_name') and obj.subscription.external_name:
+                    profile_name = obj.subscription.external_name
+                else:
+                    profile_name = "Esterno"
+                subscription_str = f"{event_name} ({profile_name})"
             writer.writerow([
                 obj.id,
                 obj.account.name if obj.account else '',
                 obj.type,
                 obj.amount,
                 obj.description,
-                f"{obj.executor.profile.name} {obj.executor.profile.surname}" if hasattr(obj.executor, 'profile') else '',
-                f"{obj.subscription.event.name} ({obj.subscription.profile.name} {obj.subscription.profile.surname})" if obj.subscription else '',
+                executor_name,
+                subscription_str,
                 obj.esncard.number if obj.esncard else '',
                 obj.created_at,
                 obj.updated_at,

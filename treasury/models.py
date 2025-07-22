@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import Group
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 
@@ -30,7 +30,7 @@ class Settings(models.Model):
 class ESNcard(BaseEntity):
     id = models.AutoField(primary_key=True)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    number = models.CharField(max_length=11, unique=True)
+    number = models.CharField(max_length=15, unique=True)
 
     class Meta:
         verbose_name = "ESNcard"
