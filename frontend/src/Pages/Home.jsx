@@ -33,8 +33,7 @@ export default function Home() {
     const [popup, setPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
     const [casseLoading, setCasseLoading] = useState(false);
-    const [showAccountDetails, setShowAccountDetails] = useState(false);
-    const accountsDetails = user?.permissions.includes("change_account");
+    const [showAccountDetails, setShowAccountDetails] = useState(false); // hidden by default
     const casseRef = useRef(null);
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
     const [showFirstLoginBanner, setShowFirstLoginBanner] = useState(!user?.last_login);
@@ -189,6 +188,8 @@ export default function Home() {
     }, [user]);
 
     const isAspirante = user?.groups && user.groups[0] === "Aspiranti";
+    const isActive = user?.groups && user.groups[0] === "Attivi";
+    const isBoard = user?.groups && user.groups[0] === "Board";
 
     return (
         <Box sx={{
@@ -258,7 +259,7 @@ export default function Home() {
                     Sistema di Gestione
                 </Typography>
                 <Typography variant="h5" sx={{fontWeight: 500, color: "#2d3a4b", mt: 1, mb: 2}}>
-                    {user ? user.profile.name  + ' ' + user.profile.surname + ' - ' + groupname : ''}
+                    {user ? user.profile.name + ' ' + user.profile.surname + ' - ' + groupname : ''}
                 </Typography>
             </Box>
             {/* Main Content */}
@@ -366,8 +367,7 @@ export default function Home() {
                                 sx={{mr: 1}}>
                                 <RefreshIcon/>
                             </IconButton>
-                            {/* Eye icon only if NOT Aspirante */}
-                            {!isAspirante && (
+                            {isBoard && (
                                 <IconButton
                                     variant="outlined"
                                     color="primary"
@@ -404,25 +404,43 @@ export default function Home() {
                                     <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
                                         {account.name}
                                     </Typography>
-                                    {/* Show details or nothing for Aspirante */}
-                                    {!isAspirante && (
+                                    {/* Aspirante: only name and state */}
+                                    {isAspirante && (
+                                        <Typography
+                                            variant="h7"
+                                            style={{
+                                                color: account.status === "closed" ? 'red' : 'green',
+                                                fontWeight: 'bold',
+                                                padding: '1'
+                                            }}>
+                                            {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
+                                        </Typography>
+                                    )}
+                                    {/* Active: name, state, last modifications */}
+                                    {isActive && (
+                                        <>
+                                            {account.changed_by &&
+                                                <Typography variant="body2" sx={{color: "#607d8b"}}>
+                                                    {names.changed_by}: {account.changed_by.name}
+                                                </Typography>
+                                            }
+                                        </>
+                                    )}
+                                    {/* Board: everything */}
+                                    {isBoard && (
                                         <>
                                             <Typography variant="body1" sx={{color: "#3e5060"}}>
-                                                {names.balance}: <b>
-                                                    {accountsDetails && showAccountDetails
-                                                        ? `€${account.balance}`
-                                                        : '--'}
-                                                </b>
+                                                {names.balance}: <b>€{showAccountDetails ? account.balance : " --"}</b>
                                             </Typography>
-                                            <Typography variant="body2" sx={{color: "#607d8b"}}>
-                                                {names.changed_by}: {accountsDetails && showAccountDetails
-                                                    ? (account.changed_by.name || "N/A")
-                                                    : '--'}
-                                            </Typography>
+                                            {account.changed_by &&
+                                                <Typography variant="body2" sx={{color: "#607d8b"}}>
+                                                    {names.changed_by}: {account.changed_by.name}
+                                                </Typography>
+                                            }
                                         </>
                                     )}
                                 </CardContent>
-                                {accountsDetails ? (
+                                {(isActive || isBoard) ? (
                                     <CardActions sx={{pr: 2, flexDirection: 'row', alignItems: 'center', gap: 1}}>
                                         {/* Power IconButton for open/close */}
                                         <IconButton
@@ -431,30 +449,31 @@ export default function Home() {
                                             sx={{minWidth: 40}}
                                             title={account.status === "closed" ? "Apri Cassa" : "Chiudi Cassa"}
                                         >
-                                            <PowerSettingsNewIcon />
+                                            <PowerSettingsNewIcon/>
                                         </IconButton>
-                                        {/* CurrencyExchange IconButton for deposit/withdraw */}
-                                        {account.status === "open" && (
+                                        {isBoard && account.status === "open" && (
                                             <IconButton
                                                 color="primary"
                                                 onClick={() => openTransactionModal(account)}
                                                 sx={{minWidth: 40}}
                                                 title="Deposita/Preleva"
                                             >
-                                                <CurrencyExchangeIcon />
+                                                <CurrencyExchangeIcon/>
                                             </IconButton>
                                         )}
                                     </CardActions>
                                 ) : (
-                                    <Typography
-                                        variant="h7"
-                                        style={{
-                                            color: account.status === "closed" ? 'red' : 'green',
-                                            fontWeight: 'bold',
-                                            padding: '20px'
-                                        }}>
-                                        {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
-                                    </Typography>
+                                    !isAspirante && (
+                                        <Typography
+                                            variant="h7"
+                                            style={{
+                                                color: account.status === "closed" ? 'red' : 'green',
+                                                fontWeight: 'bold',
+                                                padding: '20px'
+                                            }}>
+                                            {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
+                                        </Typography>
+                                    )
                                 )}
                             </Card>
                         ))}

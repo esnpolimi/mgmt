@@ -48,7 +48,14 @@ class ESNcardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ESNcard
-        exclude = ['profile']
+        fields = ['id', 'number', 'expiration', 'is_valid', 'created_at']
+        read_only_fields = ['id', 'expiration', 'is_valid', 'created_at']
+
+    @staticmethod
+    def validate_number(value):
+        if len(value) < 8 or len(value) > 14:
+            raise serializers.ValidationError("Il numero ESNcard deve essere compreso tra 8 e 14 caratteri.")
+        return value
 
 
 # Serializer to create transactions

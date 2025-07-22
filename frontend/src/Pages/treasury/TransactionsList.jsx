@@ -15,6 +15,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import EditIcon from '@mui/icons-material/Edit';
 import TransactionModal from "../../Components/treasury/TransactionModal.jsx";
+import TransactionAdd from "../../Components/treasury/TransactionAdd.jsx";
 import Popup from "../../Components/Popup";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
@@ -38,6 +39,7 @@ export default function TransactionsList() {
     const navigate = useNavigate();
     const [popup, setPopup] = useState(null);
     const [transactionModalOpen, setTransactionModalOpen] = useState(false);
+    const [transactionAddOpen, setTransactionAddOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [pagination, setPagination] = useState({pageIndex: 0, pageSize: 10});
     const [rowCount, setRowCount] = useState(0);
@@ -222,6 +224,19 @@ export default function TransactionsList() {
         onPaginationChange: setPagination,
         state: {pagination},
         localization: MRT_Localization_IT,
+        renderTopToolbarCustomActions: () => (
+            <Box sx={{display: 'flex', flexDirection: 'row', alignItems: 'center'}}>
+                <Button
+                    variant="contained"
+                    sx={{ml: 2}}
+                    onClick={() => {
+                        setTransactionAddOpen(true);
+                    }}
+                >
+                    Deposita/Preleva
+                </Button>
+            </Box>
+        ),
     });
 
     const handleSearchApply = () => {
@@ -285,6 +300,19 @@ export default function TransactionsList() {
                 onClose={handleCloseTransactionModal}
                 transaction={selectedTransaction}
             />}
+            {/* Transaction Add Modal */}
+            {transactionAddOpen &&
+                <TransactionAdd
+                    open={transactionAddOpen}
+                    onClose={(success) => {
+                        setTransactionAddOpen(false);
+                        if (success) {
+                            setPopup({message: "Transazione aggiunta con successo!", state: "success"});
+                            refreshTransactionsData();
+                        }
+                    }}
+                />
+            }
             <Box sx={{mx: '5%'}}>
                 <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                     <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
@@ -292,10 +320,11 @@ export default function TransactionsList() {
                         <ReceiptIcon sx={{mr: 2}}/>
                         Lista Transazioni
                     </Typography>
-                    <Box sx={{flexGrow: 1}} />
+                    <Box sx={{flexGrow: 1}}/>
                     <IconButton onClick={refreshTransactionsData}
                                 title="Aggiorna"
-                                disabled={isLoading}>
+                                disabled={isLoading}
+                                sx={{ml: 1}}>
                         <RefreshIcon/>
                     </IconButton>
                 </Box>

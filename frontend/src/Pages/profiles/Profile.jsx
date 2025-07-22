@@ -834,10 +834,15 @@ export default function Profile() {
                                                     labelId="group-label"
                                                     label={names.group}
                                                     name="group"
-                                                    value={updatedData.group || ''}
+                                                    value={
+                                                        groups.some(g => g.name === updatedData.group)
+                                                            ? updatedData.group
+                                                            : ""
+                                                    }
                                                     onChange={handleChange}
                                                     slotProps={{input: {readOnly: readOnly.group}}}
                                                     sx={{backgroundColor: readOnly.group ? 'grey.200' : 'white'}}>
+                                                    <MenuItem value=""><em>None</em></MenuItem>
                                                     {groups.map((group) => (<MenuItem key={group.name} value={group.name}>{group.name}</MenuItem>))}
                                                 </Select>
                                             </FormControl>
