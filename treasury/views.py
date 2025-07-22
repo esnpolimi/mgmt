@@ -24,6 +24,34 @@ from users.models import User
 logger = logging.getLogger(__name__)
 
 
+def user_is_board(user):
+    return user.groups.filter(name="Board").exists()
+
+
+def get_action_permissions(action, user):
+    """
+    Returns True if the user is allowed to perform the given action.
+    """
+    if action in ['reimburse_deposits', 'reimburse_quota']:
+        return user_is_board(user)
+    if action == 'account_creation':
+        return user_is_board(user)
+    if action == 'account_detail_patch':
+        return user.has_perm('treasury.change_account')
+    if action == 'transaction_add':
+        return user.has_perm('treasury.add_transaction')
+    if action == 'transaction_detail_patch':
+        return user.has_perm('treasury.change_transaction')
+    if action == 'transaction_detail_delete':
+        return user.has_perm('treasury.delete_transaction')
+    if action == 'esncard_detail_patch':
+        return user.has_perm('treasury.change_esncard')
+    if action == 'reimbursement_request_detail_patch':
+        return user_is_board(user)
+    # Default: allow
+    return True
+
+
 # Endpoint for ESNcard emission.
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -81,15 +109,16 @@ def esncard_detail(request, pk):
     try:
         esncard = ESNcard.objects.get(pk=pk)
         if request.method == 'PATCH':
-            if request.user.has_perm('treasury.change_esncard'):
-                esncard_serializer = ESNcardSerializer(esncard, data=request.data, partial=True)
-                if esncard_serializer.is_valid():
-                    esncard_serializer.save()
-                    return Response(status=200)
-                else:
-                    return Response(esncard_serializer.errors, status=400)
+            if not get_action_permissions('esncard_detail_patch', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
+            update_data = {}
+            if 'number' in request.data:
+                update_data['number'] = request.data['number']
+            esncard_serializer = ESNcardSerializer(esncard, data=update_data, partial=True)
+            if esncard_serializer.is_valid():
+                esncard_serializer.save()
             else:
-                return Response({'error': 'Non hai i permessi per modificare questa ESNcard.'}, status=403)
+                return Response(esncard_serializer.errors, status=400)
         else:
             return Response({'error': "Metodo non consentito"}, status=405)
     except ESNcard.DoesNotExist:
@@ -105,7 +134,7 @@ def esncard_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def esncard_fees(request):
     try:
-         # Get the settings and add fee information
+        # Get the settings and add fee information
         settings = Settings.get()
         response = Response({
             'esncard_release_fee': str(settings.esncard_release_fee),
@@ -123,6 +152,9 @@ def esncard_fees(request):
 @permission_classes([IsAuthenticated])
 def transaction_add(request):
     try:
+        if not get_action_permissions('transaction_add', request.user):
+            return Response({'error': 'Non autorizzato.'}, status=401)
+
         transaction_serializer = TransactionCreateSerializer(data=request.data)
         if not transaction_serializer.is_valid():
             return Response(transaction_serializer.errors, status=400)
@@ -209,7 +241,7 @@ def transaction_detail(request, pk):
             return Response(serializer.data, status=200)
 
         elif request.method == 'PATCH':
-            if not request.user.has_perm('treasury.change_transaction'):
+            if not get_action_permissions('transaction_detail_patch', request.user):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
             executor = request.data.get('executor')
@@ -248,6 +280,8 @@ def transaction_detail(request, pk):
 
                 return Response(status=200)
         elif request.method == 'DELETE':
+            if not get_action_permissions('transaction_detail_delete', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
             # Allow deletion only for specific transaction types
             list_deleteable = [
                 Transaction.TransactionType.RIMBORSO_CAUZIONE,
@@ -297,7 +331,7 @@ def accounts_list(request):
 @permission_classes([IsAuthenticated])
 def account_creation(request):
     try:
-        if not request.user.has_perm('treasury.add_account'):
+        if not get_action_permissions('account_creation', request.user):
             return Response({'error': 'Non autorizzato.'}, status=401)
 
         account_serializer = AccountCreateSerializer(data=request.data)
@@ -327,7 +361,7 @@ def account_detail(request, pk):
             return Response(serializer.data, status=200)
 
         if request.method == 'PATCH':
-            if not request.user.has_perm('treasury.change_account'):
+            if not get_action_permissions('account_detail_patch', request.user):
                 return Response({'error': 'Non autorizzato.'}, status=401)
             data = request.data
             data['changed_by'] = request.user
@@ -376,6 +410,8 @@ def reimbursement_request_detail(request, pk):
             return Response(serializer.data, status=200)
 
         elif request.method == 'PATCH':
+            if not get_action_permissions('reimbursement_request_detail_patch', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
             if request.user.has_perm('treasury.change_reimbursementrequest'):
                 allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
                 data = {k: v for k, v in request.data.items() if k in allowed_fields}
@@ -454,7 +490,7 @@ def reimburse_deposits(request):
     Expects: { "event": <event_id>, "subscription_ids": [<id1>, <id2>, ...], "account": <account_id>, "notes": <optional> }
     """
     try:
-        if not request.user.has_perm('events.add_depositreimbursement'):
+        if not get_action_permissions('reimburse_deposits', request.user):
             return Response({'error': 'Non autorizzato.'}, status=401)
 
         event_id = request.data.get('event')
@@ -563,7 +599,7 @@ def reimburse_quota(request):
     Expects: { "event": <event_id>, "subscription_id": <id>, "account": <account_id>, "notes": <optional> }
     """
     try:
-        if not request.user.has_perm('events.add_depositreimbursement'):
+        if not get_action_permissions('reimburse_quota', request.user):
             return Response({'error': 'Non autorizzato.'}, status=401)
 
         event_id = request.data.get('event')
