@@ -165,7 +165,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         const hasListErrors = listErrors.some(error => error.name || error.capacity);
         setErrors({...errors, listItems: listErrors, lists: [hasListErrors]});
         if (hasListErrors) {
-            setPopup({message: 'Errore campi Liste', state: 'error'});
+            setPopup({message: 'Errore campi Liste', state: 'error', id: Date.now()});
             scrollUp();
             return;
         }
@@ -485,7 +485,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Button>
                         )}
                     </Box>
-                    {popup && <Popup message={popup.message} state={popup.state}/>}
+                    {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     <ConfirmDialog
                         open={confirmOpen}
                         message="Sei sicuro di voler eliminare questo evento? L'operazione è irreversibile."

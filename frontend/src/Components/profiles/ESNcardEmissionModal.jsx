@@ -165,7 +165,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                         </Grid>
 
                         <Button variant="contained" fullWidth sx={{mt: 2}} onClick={handleSubmit}>Conferma</Button>
-                        {popup && <Popup message={popup.message} state={popup.state}/>}
+                        {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                         <ConfirmDialog
                             open={confirmDialog.open}
                             message={confirmDialog.message}

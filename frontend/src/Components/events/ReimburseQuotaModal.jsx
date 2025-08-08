@@ -34,11 +34,11 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
     const handleSubmit = () => {
         setPopup(null);
         if (!selectedAccount) {
-            setPopup({message: "Seleziona una cassa.", state: "error"});
+            setPopup({message: "Seleziona una cassa.", state: "error", id: Date.now()});
             return;
         }
         if (!subscription) {
-            setPopup({message: "Iscrizione non trovata.", state: "error"});
+            setPopup({message: "Iscrizione non trovata.", state: "error", id: Date.now()});
             return;
         }
         const quotaAmount = Number(event.cost || 0);
@@ -136,7 +136,7 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
                             onConfirm={confirmDialog.action}
                             onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
                         />
-                        {popup && <Popup message={popup.message} state={popup.state}/>}
+                        {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </>
                 )}
             </Box>

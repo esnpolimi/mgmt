@@ -120,7 +120,7 @@ export default function TransactionModal({open, onClose, transaction}) {
 
     const handleDelete = () => {
         if (!transaction || !deletableTranTypes.includes(transaction.type)) {
-            setPopup({message: 'Transazione non eliminabile', state: 'error'});
+            setPopup({message: 'Transazione non eliminabile', state: 'error', id: Date.now()});
             return;
         }
         // Confirm dialog for delete
@@ -155,7 +155,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                     <Typography variant="h5" gutterBottom align="center" sx={{mb: 2}}>
                         Modifica Transazione
                     </Typography>
-                    {popup && <Popup message={popup.message} state={popup.state}/>}
+                    {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     <Grid container spacing={2} sx={{mt: 2}}>
                         <Typography variant="subtitle1" gutterBottom>
                             <b>Tipo:</b> {names.tran_type[data.type] || 'Non specificato'}

@@ -196,7 +196,7 @@ export default function ReimbursementRequestModal({open, onClose}) {
                     onConfirm={confirmDialog.action}
                     onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
                 />
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

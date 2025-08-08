@@ -80,7 +80,7 @@ export default function AccountModal({open, onClose, account = null}) {
                     <Typography variant="h5" gutterBottom align="center" sx={{mb: 2}}>
                         {isEdit ? `Modifica Cassa - ${account?.name}` : 'Crea Cassa'}
                     </Typography>
-                    {popup && <Popup message={popup.message} state={popup.state}/>}
+                    {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
 
                     <Grid container spacing={2}>
                         <Grid size={{xs: 12}}>

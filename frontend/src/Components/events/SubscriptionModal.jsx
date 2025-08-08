@@ -456,7 +456,7 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             Elimina Iscrizione
                         </Button>
                     )}
-                    {popup && <Popup message={popup.message} state={popup.state}/>}
+                    {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                 </>)}
                 <ConfirmDialog
                     open={confirmDialog.open}

@@ -125,7 +125,7 @@ export default function TransactionAdd({open, onClose}) {
                         {submitting ? <CircularProgress size={24} color="inherit"/> : "Conferma"}
                     </Button>
                 </Box>
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

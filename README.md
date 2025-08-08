@@ -6,7 +6,7 @@ This is a webapp designed to manage the activities and events of the Erasmus Stu
 ## Branch principali
 
 #### `main`: Codice stabile e pronto per la produzione, usato solo per il codice già testato e approvato.
-#### `develop`: Area di staging per integrare nuove funzionalità e fix; Tutto il codice completato e testato si unisce prima qui.
+#### `development`: Area di staging per integrare nuove funzionalità e fix; Tutto il codice completato e testato si unisce prima qui.
 
 ## Branch per nuove modifiche
 
