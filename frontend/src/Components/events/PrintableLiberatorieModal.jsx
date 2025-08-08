@@ -153,7 +153,7 @@ export default function PrintableLiberatorieModal({open, onClose, event, listId}
                                 </Box>
                             </Grid>
                         </Grid>
-                        {popup && <Popup message={popup.message} state={popup.state}/>}
+                        {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </>
                 )}
             </Box>

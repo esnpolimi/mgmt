@@ -276,7 +276,7 @@ export default function EventsList() {
     const handleCloseEventModal = (success) => {
         setEventModalOpen(false);
         if (success) {
-            setPopup({message: "Evento creato con successo!", state: "success"});
+            setPopup({message: "Evento creato con successo!", state: "success", id: Date.now()});
             refreshData();
         }
     };
@@ -390,7 +390,7 @@ export default function EventsList() {
                 {localLoading
                     ? <Loader/>
                     : <MaterialReactTable table={table}/>}
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );

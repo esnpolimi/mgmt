@@ -63,6 +63,7 @@ const Popup = ({message, state, duration = 4000}) => {
                 backgroundColor: state === 'success' ? successColor : popupStyle.backgroundColor,
                 opacity: visible ? 1 : 0,
                 transition: visible ? 'none' : 'opacity 2s ease-out',
+                pointerEvents: 'none',
             }}
             role="alert"
             onMouseEnter={handleMouseEnter}
@@ -75,6 +76,7 @@ const Popup = ({message, state, duration = 4000}) => {
                     color: 'white',
                     backgroundColor: 'transparent',
                     padding: 0,
+                    pointerEvents: 'auto',
                 }}
                         onClick={() => navigator.clipboard.writeText(message)}
                         aria-label="Copy error">

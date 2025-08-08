@@ -254,7 +254,7 @@ export default function TransactionsList() {
     const handleCloseTransactionModal = (success) => {
         setTransactionModalOpen(false);
         if (success) {
-            setPopup({message: "Transazione modificata con successo!", state: "success"});
+            setPopup({message: "Transazione modificata con successo!", state: "success", id: Date.now()});
             refreshTransactionsData();
         }
         setSelectedTransaction(null);
@@ -307,7 +307,7 @@ export default function TransactionsList() {
                     onClose={(success) => {
                         setTransactionAddOpen(false);
                         if (success) {
-                            setPopup({message: "Transazione aggiunta con successo!", state: "success"});
+                            setPopup({message: "Transazione aggiunta con successo!", state: "success", id: Date.now()});
                             refreshTransactionsData();
                         }
                     }}
@@ -438,7 +438,7 @@ export default function TransactionsList() {
                     </Grid>
                 </Grid>
                 {isLoading ? <Loader/> : <MaterialReactTable sx={{mt: 2}} table={table}/>}
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );

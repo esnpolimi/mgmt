@@ -157,7 +157,7 @@ export default function Home() {
             body: {status: actionType === "open" ? "open" : "closed"},
             onSuccess: () => {
                 fetchAccounts();
-                setPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success"});
+                setPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success", id: Date.now()});
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setConfirmDialogOpen(false)
@@ -167,7 +167,7 @@ export default function Home() {
     const handleTransactionModalOpen = (success) => {
         setTransactionModalOpen(false);
         if (success) {
-            setPopup({message: "Transazione registrata con successo!", state: "success"});
+            setPopup({message: "Transazione registrata con successo!", state: "success", id: Date.now()});
             fetchAccounts();
         }
     };
@@ -180,7 +180,7 @@ export default function Home() {
 
     const handleReimbursementRequestModalClose = (success) => {
         setRimborsoModalOpen(false);
-        if (success) setPopup({message: "Richiesta di rimborso inviata con successo!", state: "success"});
+        if (success) setPopup({message: "Richiesta di rimborso inviata con successo!", state: "success", id: Date.now()});
     };
 
     useEffect(() => {
@@ -495,7 +495,7 @@ export default function Home() {
                 open={rimborsoModalOpen}
                 onClose={handleReimbursementRequestModalClose}
             />
-            {popup && <Popup message={popup.message} state={popup.state}/>}
+            {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
         </Box>
     );
 }

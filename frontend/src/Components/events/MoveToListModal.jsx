@@ -80,7 +80,7 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
                 >
                     Conferma
                 </Button>
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>
     );

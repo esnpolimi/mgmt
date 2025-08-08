@@ -20,7 +20,7 @@ export const defaultErrorHandler = (responseOrError, setPopup) => {
             errorMessage = extractErrorMessage(json, responseOrError.status);
             popupData.message = `Errore: ${errorMessage}`;
             if (typeof setPopup === 'function') {
-                setPopup(popupData);
+                setPopup({...popupData, id: Date.now()});
             }
         });
     } else {
@@ -29,7 +29,7 @@ export const defaultErrorHandler = (responseOrError, setPopup) => {
 
         // Simplified - just set the popup directly
         if (typeof setPopup === 'function') {
-            setPopup(popupData);
+            setPopup({...popupData, id: Date.now()});
         }
     }
     return Promise.resolve();

@@ -179,7 +179,7 @@ export default function AccountsList() {
     const handleCloseAccountModal = (success) => {
         setAccountModalOpen(false);
         if (success) {
-            setPopup({message: "Cassa creata con successo!", state: "success"});
+            setPopup({message: "Cassa creata con successo!", state: "success", id: Date.now()});
             refreshAccountsData();
         }
         setSelectedAccount(null);
@@ -188,7 +188,7 @@ export default function AccountsList() {
     const handleCloseTransactionModal = (success) => {
         setTransactionModalOpen(false);
         if (success) {
-            setPopup({message: "Transazione registrata con successo!", state: "success"});
+            setPopup({message: "Transazione registrata con successo!", state: "success", id: Date.now()});
             refreshAccountsData();
         }
         setSelectedAccount(null);
@@ -224,7 +224,7 @@ export default function AccountsList() {
                 </Box>
                 {isLoading ? <Loader/> : (<MaterialReactTable table={table}/>)}
             </Box>
-            {popup && <Popup message={popup.message} state={popup.state}/>}
+            {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
         </Box>
     );
 }

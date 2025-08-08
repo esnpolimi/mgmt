@@ -166,7 +166,7 @@ export default function Profile() {
     const handleCloseESNcardModal = (success) => {
         setESNcardModalOpen(false);
         if (success) {
-            setPopup({message: "ESNcard emessa con successo!", state: "success"});
+            setPopup({message: "ESNcard emessa con successo!", state: "success", id: Date.now()});
             refreshProfileData();
         }
     };
@@ -217,10 +217,10 @@ export default function Profile() {
             body: values,
             onSuccess: () => {
                 setESNcardErrors({});
-                setPopup({message: "ESNcard aggiornata con successo!", state: "success"});
+                setPopup({message: "ESNcard aggiornata con successo!", state: "success", id: Date.now()});
                 refreshProfileData();
             },
-            onError: (responseOrError) => setPopup({message: "Errore nell'aggiornamento ESNcard: " + responseOrError.message, state: "error"}),
+            onError: (responseOrError) => setPopup({message: "Errore nell'aggiornamento ESNcard: " + responseOrError.message, state: "error", id: Date.now()}),
             onFinally: () => setSaving(false)
         });
     }
@@ -279,7 +279,7 @@ export default function Profile() {
         fetchCustom("DELETE", `/document/${row.id}/`, {
             onSuccess: () => {
                 setDocumentErrors({});
-                setPopup({message: "Documento eliminato con successo!", state: "success"});
+                setPopup({message: "Documento eliminato con successo!", state: "success", id: Date.now()});
                 refreshProfileData();
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
@@ -295,7 +295,7 @@ export default function Profile() {
             body: val,
             onSuccess: () => {
                 setDocumentErrors({});
-                setPopup({message: "Documento aggiunto con successo!", state: "success"});
+                setPopup({message: "Documento aggiunto con successo!", state: "success", id: Date.now()});
                 refreshProfileData();
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
@@ -310,7 +310,7 @@ export default function Profile() {
             body: values,
             onSuccess: () => {
                 setDocumentErrors({});
-                setPopup({message: "Documento aggiornato con successo!", state: "success"});
+                setPopup({message: "Documento aggiornato con successo!", state: "success", id: Date.now()});
                 refreshProfileData();
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
@@ -372,7 +372,7 @@ export default function Profile() {
             onSuccess: () => {
                 refreshProfileData();
                 resetErrors();
-                setPopup({message: "Profilo aggiornato con successo!", state: "success"});
+                setPopup({message: "Profilo aggiornato con successo!", state: "success", id: Date.now()});
                 toggleEdit(false);
             },
             onError: (responseOrError) => {
@@ -398,7 +398,7 @@ export default function Profile() {
         setSubscriptionModalOpen(false);
         setSubscriptionEvent(null);
         if (success) refreshProfileData();
-        if (success && msg) setPopup({message: msg, state: "success"});
+        if (success && msg) setPopup({message: msg, state: "success", id: Date.now()});
     };
 
     // Determine which columns to show based on subscriptions data
@@ -917,7 +917,7 @@ export default function Profile() {
                                 </Card>
                             </Grid>
                         </Grid>
-                        {popup && <Popup message={popup.message} state={popup.state}/>}
+                        {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </Box>
                 </>
             )}

@@ -100,7 +100,7 @@ export default function Event() {
             return;
         }
         if (success) {
-            setPopup({message: "Evento modificato con successo!", state: "success"});
+            setPopup({message: "Evento modificato con successo!", state: "success", id: Date.now()});
             refreshEventData();
         }
     };
@@ -108,7 +108,7 @@ export default function Event() {
     const handleCloseSubscriptionModal = (success, message) => {
         setSubscriptionModalOpen(false);
         if (success) {
-            setPopup({message: message, state: "success"});
+            setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
         setSelectedList(null);
@@ -509,7 +509,7 @@ export default function Event() {
     const handleCloseMoveToListModal = (success) => {
         setMoveToListModalOpen(false);
         if (success) {
-            setPopup({message: "Spostamento effettuato con successo!", state: "success"});
+            setPopup({message: "Spostamento effettuato con successo!", state: "success", id: Date.now()});
             refreshEventData();
         }
     }
@@ -519,7 +519,7 @@ export default function Event() {
         setReimburseDepositsListId(null);
         setSingleSubToReimburse(null);
         if (success) {
-            setPopup({message: message, state: "success"});
+            setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
     }
@@ -528,7 +528,7 @@ export default function Event() {
         setReimburseQuotaModalOpen(false);
         setSingleSubToReimburseQuota(null);
         if (success) {
-            setPopup({message: message, state: "success"});
+            setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
     }
@@ -700,7 +700,7 @@ export default function Event() {
                         </Card>
                     </>
                 )}
-                {popup && <Popup message={popup.message} state={popup.state}/>}
+                {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Box>
     );
