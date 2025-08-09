@@ -1,5 +1,18 @@
 import React, {useEffect, useState} from 'react';
-import {Modal, Box, TextField, Button, IconButton, Typography, Tooltip, Grid, CircularProgress, FormControlLabel, Switch} from '@mui/material';
+import {
+    Modal,
+    Box,
+    TextField,
+    Button,
+    IconButton,
+    Typography,
+    Tooltip,
+    Grid,
+    CircularProgress,
+    FormControlLabel,
+    Switch
+} from '@mui/material';
+import {Checkbox, Select, MenuItem, Paper, Chip} from '@mui/material';
 import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -12,10 +25,14 @@ import Loader from "../Loader";
 import CloseIcon from '@mui/icons-material/Close';
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
+import StatusBanner from "../StatusBanner";
+import {profileDisplayNames} from '../../utils/displayAttributes';
+import FieldsTable from './FieldsTable';
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
     const title = isEdit ? 'Modifica Evento - ' + event.name : 'Crea Evento';
+    const [statusMessage, setStatusMessage] = useState(null);
     const [hasSubscriptions, setHasSubscriptions] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -33,7 +50,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
         subscription_end_date: dayjs().hour(24).minute(0),
         lists: [{id: '', name: 'Main List', capacity: ''}],
         is_a_bando: false,
-        is_allow_external: false
+        is_allow_external: false,
+        enable_form: false,
+        profile_fields: ['name', 'surname'],
+        form_fields: [
+            {text: 'What are your allergies?', type: 't'},
+            {text: 'Vegetarian?', type: 'c', choices: ['yes', 'no']}],
+        additional_fields: [],
     });
 
     const [errors, setErrors] = React.useState({
@@ -98,8 +121,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
         setData({...data, subscription_end_date: date});
     };
 
+
     const convert = (data) => {
         return ({
+            ...data,
             name: data.name,
             date: formatDateString(data.date),
             description: data.description,
@@ -113,7 +138,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 capacity: Math.floor(Number(t.capacity))
             })),
             is_a_bando: !!data.is_a_bando,
-            is_allow_external: !!data.is_allow_external
+            is_allow_external: !!data.is_allow_external,
+            form_fields: data.form_fields ?? [],
+            additional_fields: data.additional_fields ?? [],
         })
     }
 
@@ -165,7 +192,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         const hasListErrors = listErrors.some(error => error.name || error.capacity);
         setErrors({...errors, listItems: listErrors, lists: [hasListErrors]});
         if (hasListErrors) {
-            setPopup({message: 'Errore campi Liste', state: 'error', id: Date.now()});
+            setStatusMessage({message: 'Errore campi Liste', state: 'error'});
+            //setPopup({message: 'Errore campi Liste', state: 'error', id: Date.now()});
             scrollUp();
             return;
         }
@@ -181,7 +209,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             onSuccess: () => onClose(true),
             onError: (err) => {
                 defaultErrorHandler(err, setPopup).then(() => {
-                    scrollUp();
+                    scrollUp()
                 });
             },
             onFinally: () => setSubmitting(false)
@@ -208,74 +236,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         onClose(false);
     }
 
-    /*
-    const profileFieldOptions = ['name', 'surname', 'email', 'phone', 'whatsapp', 'birthdate', 'latest_esncard', 'latest_document', 'matricola_number', 'matricola_expiration', 'person_code', 'domicile'];
-
-    const handleProfileFieldChange = (event) => {
-        const {value} = event.target;
-        setData({
-            ...data,
-            profileFields: value,
-        });
-    };
-
-    const handleAddField = (fieldType) => {
-        setData({
-            ...data,
-            [fieldType]: [...data[fieldType], {name: '', edilistByOffice: false, visibleByOffice: false, type: '', choices: [], length: ''}],
-        });
-    };
-
-    const handleFieldChange = (fieldType, index, event) => {
-        const {name, value, type, checked} = event.target;
-        const updatedFields = data[fieldType].map((field, i) =>
-            i === index ? {...field, [name]: type === 'checkbox' ? checked : value} : field
-        );
-        setData({...data, [fieldType]: updatedFields});
-    };
-
-    const handleDeleteField = (fieldType, index) => {
-        setData({
-            ...data,
-            [fieldType]: data[fieldType].filter((_, i) => i !== index),
-        });
-    };
-
-    const handleAddChoice = (fieldType, index) => {
-        const updatedFields = data[fieldType].map((field, i) =>
-            i === index ? {...field, choices: [...field.choices, {value: '', color: '#FFFFFF'}]} : field
-        );
-        setData({...data, [fieldType]: updatedFields});
-    };
-
-    const handleChoiceChange = (fieldType, fieldIndex, choiceIndex, event) => {
-        const {name, value} = event.target;
-        const updatedFields = data[fieldType].map((field, i) => {
-            if (i === fieldIndex) {
-                const updatedChoices = field.choices.map((choice, j) =>
-                    j === choiceIndex ? {...choice, [name]: value} : choice
-                );
-                return {...field, choices: updatedChoices};
-            }
-            return field;
-        });
-        setData({...data, [fieldType]: updatedFields});
-    };
-
-    const handleColorChange = (fieldType, fieldIndex, choiceIndex, event) => {
-        const {value} = event.target;
-        const updatedFields = data[fieldType].map((field, i) => {
-            if (i === fieldIndex) {
-                const updatedChoices = field.choices.map((choice, j) =>
-                    j === choiceIndex ? {...choice, color: value} : choice
-                );
-                return {...field, choices: updatedChoices};
-            }
-            return field;
-        });
-        setData({...data, [fieldType]: updatedFields});
-    };
-    */
+    const excludedProfileFields = ['group'];
 
     return (
         <Modal open={open} onClose={handleClose}>
@@ -285,12 +246,14 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                     </Box>
                     <Typography variant="h5" gutterBottom sx={{mb: 2}} align="center">{title}</Typography>
+                    {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
                     {isEdit && hasSubscriptions && (
                         <Box sx={{mb: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1}}>
                             <Typography variant="body2" color="warning.main">
                                 <InfoIcon fontSize="small" sx={{verticalAlign: 'middle', mr: 1}}/>
-                                Alcuni campi non sono modificabili perché ci sono già iscrizioni. Rimuovi tutte le iscrizioni per abilitare la modifica.
+                                Alcuni campi non sono modificabili perché ci sono già iscrizioni. Rimuovi tutte le
+                                iscrizioni per abilitare la modifica.
                             </Typography>
                         </Box>
                     )}
@@ -319,7 +282,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </LocalizationProvider>
                         </Grid>
                         <Grid size={{xs: 12, md: 4}}>
-                            <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                            <Tooltip
+                                title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <div>
                                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                         <DateTimePicker
@@ -370,7 +334,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
 
                         <Grid size={{xs: 12, md: 4}}>
-                            <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                            <Tooltip
+                                title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <div>
                                     <TextField
                                         fullWidth
@@ -389,7 +354,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Tooltip>
                         </Grid>
                         <Grid size={{xs: 12, md: 4}}>
-                            <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                            <Tooltip
+                                title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <div>
                                     <TextField
                                         fullWidth
@@ -420,6 +386,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             />
                         </Grid>
                     </Grid>
+
                     <Grid size={{xs: 12}} data-color-mode="light" sx={{mt: 2}}>
                         <Typography variant="h6" component="div" sx={{mb: 1}}>{eventNames.description}</Typography>
                         <CustomEditor
@@ -430,50 +397,75 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         />
                     </Grid>
 
-                    <Box my={2}>
-                        <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mb: 1}}>
-                            <Typography variant="h6">Liste</Typography>
-                            <IconButton onClick={handleAddList} sx={{ml: -1}}><AddIcon/></IconButton>
-                        </Grid>
-                        {data.lists.map((list, index) => (
-                            <Grid container spacing={2} alignItems="center" mb={2} key={index}>
-                                <Grid>
-                                    <TextField
-                                        label={eventNames.list_name}
-                                        name="name"
-                                        value={list.name}
-                                        onChange={(e) => handleListChange(index, e)}
-                                        required
-                                        error={errors.listItems[index]?.name}
-                                        helperText={errors.listItems[index]?.name ? "Il nome è obbligatorio" : ""}
-                                    />
-                                </Grid>
-                                <Grid>
-                                    <TextField
-                                        label={eventNames.list_capacity}
-                                        name="capacity"
-                                        type="number"
-                                        value={list.capacity}
-                                        slotProps={{htmlInput: {min: "0", step: "1"}}}
-                                        onChange={(e) => handleListChange(index, e)}
-                                        placeholder="Inserisci 0 se illimitata"
-                                        required
-                                        error={errors.listItems[index]?.capacity}
-                                        helperText={errors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
-                                    />
-                                </Grid>
-                                <Grid size={{xs: 2}}><IconButton onClick={() => handleDeleteList(index)}><DeleteIcon/></IconButton></Grid>
+                    <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
+                        <Typography variant="h6">Liste</Typography>
+                        <IconButton title="Aggiungi Lista" onClick={handleAddList} sx={{ml: -2}}><AddIcon/></IconButton>
+                    </Grid>
+                    {data.lists.map((list, index) => (
+                        <Grid container spacing={2} alignItems="center" sx={{mt: 2}} key={index}>
+                            <Grid>
+                                <TextField
+                                    label={eventNames.list_name}
+                                    name="name"
+                                    value={list.name}
+                                    onChange={(e) => handleListChange(index, e)}
+                                    required
+                                    error={errors.listItems[index]?.name}
+                                    helperText={errors.listItems[index]?.name ? "Il nome è obbligatorio" : ""}
+                                />
                             </Grid>
-                        ))}
+                            <Grid>
+                                <TextField
+                                    label={eventNames.list_capacity}
+                                    name="capacity"
+                                    type="number"
+                                    value={list.capacity}
+                                    slotProps={{htmlInput: {min: "0", step: "1"}}}
+                                    onChange={(e) => handleListChange(index, e)}
+                                    placeholder="Inserisci 0 se illimitata"
+                                    required
+                                    error={errors.listItems[index]?.capacity}
+                                    helperText={errors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
+                                />
+                            </Grid>
+                            <Grid size={{xs: 2}}><IconButton
+                                onClick={() => handleDeleteList(index)}><DeleteIcon/></IconButton></Grid>
+                        </Grid>
+                    ))}
+
+
+                    {/* Abilita Form Switch */}
+                    <Box my={2}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={!!data.enable_form}
+                                    onChange={(e) => setData({...data, enable_form: e.target.checked})}
+                                    name="enable_form"
+                                    color="primary"
+                                />
+                            }
+                            label="Abilita Form"
+                        />
                     </Box>
 
-                    {/* Insert *1 */}
-                    {/* Insert *2 */}
-                    {/* Insert *3 */}
+                    {/* Move form sections to FieldsTable */}
+                    {data.enable_form && (
+                        <FieldsTable
+                            profile_fields={data.profile_fields}
+                            setProfileFields={(fields) => setData({...data, profile_fields: fields})}
+                            excludedProfileFields={excludedProfileFields}
+                            form_fields={data.form_fields}
+                            setFormFields={(qs) => setData({...data, form_fields: qs})}
+                            additional_fields={data.additional_fields}
+                            setAdditionalFields={(fields) => setData({...data, additional_fields: fields})}
+                        />
+                    )}
 
                     <Box mt={2} sx={{display: 'flex', gap: 2}}>
                         <Button variant="contained" color="primary" type="submit" disabled={submitting}>
-                            {submitting ? (<CircularProgress size={24} color="inherit"/>) : (isEdit ? 'Salva Modifiche' : 'Crea')}
+                            {submitting ? (
+                                <CircularProgress size={24} color="inherit"/>) : (isEdit ? 'Salva Modifiche' : 'Crea')}
                         </Button>
                         {isEdit && !hasSubscriptions && (
                             <Button variant="outlined"
