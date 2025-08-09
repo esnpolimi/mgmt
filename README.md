@@ -21,10 +21,10 @@ This is a webapp designed to manage the activities and events of the Erasmus Stu
    - Testa i cambiamenti in locale.
 
 3. **Richiedi una Pull Request (PR)**:
-   - Al termine del lavoro, richiedi una PR verso il branch `develop`.
+   - Al termine del lavoro, richiedi una PR verso il branch `development`.
 
 4. **Revisione**:
-   - La PR sarà revisionata e, una volta approvata, il codice sarà unito a `develop`.
+   - La PR sarà revisionata e, una volta approvata, il codice sarà unito a `development`.
 
 ---
 
