@@ -21,6 +21,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from events.models import Event, Subscription, EventList
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from events.models import Event, Subscription
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
@@ -95,7 +98,7 @@ def events_list(request):
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
-
+# Endpoint to create event
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def event_creation(request):
@@ -114,7 +117,7 @@ def event_creation(request):
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
-
+# Endpoint to edit/view/delete event in detail
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def event_detail(request, pk):
@@ -200,6 +203,278 @@ def event_detail(request, pk):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def subscription_create(request):
+    if not get_action_permissions(request, 'subscription_create_POST'):
+        return Response({'error': 'Non hai i permessi per creare iscrizioni.'}, status=403)
+    try:
+        profile = request.data.get('profile')
+        event_id = request.data.get('event')
+        external_name = request.data.get('external_name', '').strip()
+        event = Event.objects.get(id=event_id)
+        now = timezone.now()
+        if not (event.subscription_start_date and event.subscription_end_date):
+            return Response({'error': "Il periodo di iscrizione non è definito"}, status=400)
+        if not (event.subscription_start_date <= now <= event.subscription_end_date):
+            return Response({'error': "Il periodo di iscrizione non è attivo"}, status=400)
+
+        # Check for duplicate subscription
+        if profile and Subscription.objects.filter(profile=profile, event=event_id).exists():
+            return Response({'error': "Il profilo è già iscritto all'evento"}, status=400)
+        if external_name and Subscription.objects.filter(external_name=external_name, event=event_id).exists():
+            return Response({'error': "Il nominativo esterno è già iscritto all'evento"}, status=400)
+        if not profile and not external_name:
+            if event.is_allow_external:
+                return Response({'error': "Devi inserire un nominativo esterno se non selezioni un profilo."}, status=400)
+            else:
+                return Response({'error': "Seleziona un profilo per l'iscrizione."}, status=400)
+
+        serializer = SubscriptionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        with transaction.atomic():
+            subscription_data = {key: value for key, value in serializer.validated_data.items()}
+            subscription = Subscription(**subscription_data)
+            subscription.clean()
+            subscription = serializer.save()
+
+            # Only create transactions if status_quota/cauzione are 'paid'
+            status_quota = request.data.get('status_quota', 'pending')
+            status_cauzione = request.data.get('status_cauzione', 'pending')
+            account_id = serializer.account
+
+            # Prepare name for description (profile or external)
+            if subscription.profile:
+                sub_name = f"{subscription.profile.name} {subscription.profile.surname}"
+            elif subscription.external_name:
+                sub_name = subscription.external_name
+            else:
+                sub_name = "Esterno"
+
+            # Quota transaction
+            if status_quota == 'paid' and account_id:
+                t = Transaction(
+                    type=Transaction.TransactionType.SUBSCRIPTION,
+                    account_id=account_id,
+                    subscription=subscription,
+                    executor=request.user,
+                    amount=Decimal(subscription.event.cost),
+                    description=f"Quota {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
+                )
+                t.save()
+
+            # Cauzione transaction
+            if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
+                t_cauzione = Transaction(
+                    type=Transaction.TransactionType.CAUZIONE,
+                    account_id=account_id,
+                    subscription=subscription,
+                    executor=request.user,
+                    amount=Decimal(subscription.event.deposit),
+                    description=f"Cauzione {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
+                )
+                t_cauzione.save()
+            return Response(serializer.data, status=200)
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=400)
+    except ObjectDoesNotExist as e:
+        return Response({'error': str(e)}, status=400)
+    except PermissionDenied as e:
+        return Response({'error': str(e)}, status=403)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+# Endpoint to edit/view/delete subscription in detail
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def subscription_detail(request, pk):
+    try:
+        sub = Subscription.objects.get(pk=pk)
+
+        # Check if quota or cauzione is reimbursed
+        quota_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
+        cauzione_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+
+        if request.method == 'GET':
+            if not get_action_permissions(request, 'subscription_detail_GET'):
+                return Response({'error': 'Non hai i permessi per visualizzare questa iscrizione.'}, status=403)
+            serializer = SubscriptionSerializer(sub)
+            return Response(serializer.data, status=200)
+
+        if request.method == "PATCH":
+            ''' TODO:
+            # if user is  organizer, allow full modification of the subscription
+            if request.user.profile.id in sub.event.organizers:
+                serializer = SubscriptionOfficeEditSerializer(instance=sub, data=request.data, partial=True)
+            
+            # if not, check that they have permissions
+            elif request.user.has_perm('events.change_subscription'):
+                serializer = SubscriptionOfficeEditSerializer(instance=sub, data=request.data, partial=True)
+            
+            # otherwise return permission denied
+            else:'''
+            if not get_action_permissions(request, 'subscription_detail_PATCH'):
+                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+            if quota_reimbursed or cauzione_reimbursed:
+                return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'}, status=400)
+            if request.user.has_perm('events.change_subscription'):
+                serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
+                if not serializer.is_valid():
+                    return Response(serializer.errors, status=400)
+
+                with transaction.atomic():
+                    for attr, value in serializer.validated_data.items():
+                        setattr(sub, attr, value)
+                    sub.clean()
+                    subscription = serializer.save()
+
+                    account_id = serializer.account_id
+                    status_quota = request.data.get('status_quota', 'pending')
+                    status_cauzione = request.data.get('status_cauzione', 'pending')
+
+                    # Quota transaction
+                    quota_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.SUBSCRIPTION).first()
+                    cauzione_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.CAUZIONE).first()
+
+                    # --- QUOTA ---
+                    if status_quota == 'paid' and account_id:
+                        if not quota_tx:
+                            # Create transaction if not exists
+                            t = Transaction(
+                                type=Transaction.TransactionType.SUBSCRIPTION,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=Decimal(subscription.event.cost),
+                                description=f"Pagamento per {subscription.event.name}"
+                            )
+                            t.save()
+                        elif quota_tx.account_id != account_id:
+                            # Move transaction to new account
+                            quota_amount = Decimal(subscription.event.cost)
+                            quota_tx.delete()
+                            t = Transaction(
+                                type=Transaction.TransactionType.SUBSCRIPTION,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=quota_amount,
+                                description=f"Pagamento per {subscription.event.name} (spostato da altra cassa)"
+                            )
+                            t.save()
+                    elif status_quota != 'paid' and quota_tx:
+                        quota_tx.delete()
+
+                    # --- CAUZIONE ---
+                    if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
+                        if not cauzione_tx:
+                            t_cauzione = Transaction(
+                                type=Transaction.TransactionType.CAUZIONE,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=Decimal(subscription.event.deposit),
+                                description=f"Cauzione per {subscription.event.name}"
+                            )
+                            t_cauzione.save()
+                        elif cauzione_tx.account_id != account_id:
+                            # Move transaction to new account
+                            cauzione_amount = Decimal(subscription.event.deposit)
+                            cauzione_tx.delete()
+                            t_cauzione = Transaction(
+                                type=Transaction.TransactionType.CAUZIONE,
+                                account_id=account_id,
+                                subscription=subscription,
+                                executor=request.user,
+                                amount=cauzione_amount,
+                                description=f"Cauzione per {subscription.event.name} (spostata da altra cassa)"
+                            )
+                            t_cauzione.save()
+                    elif status_cauzione != 'paid' and cauzione_tx:
+                        cauzione_tx.delete()
+
+                return Response(serializer.data, status=200)
+            else:
+                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+
+        elif request.method == "DELETE":
+            if not get_action_permissions(request, 'subscription_detail_DELETE'):
+                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
+            if quota_reimbursed or cauzione_reimbursed:
+                return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'}, status=400)
+            if request.user.has_perm('events.delete_subscription'):
+                related_transactions = Transaction.objects.filter(
+                    subscription=sub,
+                    type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
+                )
+                for t in related_transactions:
+                    t.delete()
+                sub.delete()
+                return Response(status=200)
+            else:
+                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
+        else:
+            return Response("Metodo non consentito", status=405)
+    except Subscription.DoesNotExist:
+        return Response({'error': "L'iscrizione non esiste"}, status=404)
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=400)
+    except ObjectDoesNotExist as e:
+        return Response({'error': str(e)}, status=400)
+    except PermissionDenied as e:
+        return Response({'error': str(e)}, status=403)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def move_subscriptions(request):
+    if not get_action_permissions(request, 'move_subscriptions_POST'):
+        return Response({'error': 'Non hai i permessi per spostare iscrizioni.'}, status=403)
+    try:
+        # Extract data from the request
+        subscription_ids = request.data.get('subscriptionIds', [])
+        target_list_id = request.data.get('targetListId')
+
+        if not subscription_ids or not target_list_id:
+            return Response({'error': "ID iscrizioni o ID lista di destinazione mancanti"}, status=400)
+
+        # Fetch the target list and validate its existence
+        try:
+            target_list = EventList.objects.get(id=target_list_id)
+        except EventList.DoesNotExist:
+            return Response({'error': "Lista di destinazione inesistente"}, status=400)
+
+        # Check if moving the subscriptions would exceed the target list's capacity
+        current_count = Subscription.objects.filter(list=target_list).count()
+        if target_list.capacity > 0 and current_count + len(subscription_ids) > target_list.capacity:
+            return Response({'error': "Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione"}, status=400)
+
+        # Fetch the subscriptions to be moved
+        subscriptions = Subscription.objects.filter(id__in=subscription_ids)
+
+        # Update the list for each subscription
+        with transaction.atomic():
+            for subscription in subscriptions:
+                subscription.list = target_list
+                subscription.save()
+
+        return Response({'message': "Iscrizioni spostate con successo"}, status=200)
+    except Exception as e:
+        logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
 
 
 @api_view(['POST'])
@@ -356,264 +631,5 @@ def printable_liberatorie(request, event_id):
         return Response({'error': "L'evento non esiste"}, status=404)
     except Exception as e:
         logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def subscription_create(request):
-    if not get_action_permissions(request, 'subscription_create_POST'):
-        return Response({'error': 'Non hai i permessi per creare iscrizioni.'}, status=403)
-    try:
-        profile = request.data.get('profile')
-        event_id = request.data.get('event')
-        external_name = request.data.get('external_name', '').strip()
-        event = Event.objects.get(id=event_id)
-        now = timezone.now()
-        if not (event.subscription_start_date and event.subscription_end_date):
-            return Response({'error': "Il periodo di iscrizione non è definito"}, status=400)
-        if not (event.subscription_start_date <= now <= event.subscription_end_date):
-            return Response({'error': "Il periodo di iscrizione non è attivo"}, status=400)
-
-        # Check for duplicate subscription
-        if profile and Subscription.objects.filter(profile=profile, event=event_id).exists():
-            return Response({'error': "Il profilo è già iscritto all'evento"}, status=400)
-        if external_name and Subscription.objects.filter(external_name=external_name, event=event_id).exists():
-            return Response({'error': "Il nominativo esterno è già iscritto all'evento"}, status=400)
-        if not profile and not external_name:
-            if event.is_allow_external:
-                return Response({'error': "Devi inserire un nominativo esterno se non selezioni un profilo."}, status=400)
-            else:
-                return Response({'error': "Seleziona un profilo per l'iscrizione."}, status=400)
-
-        serializer = SubscriptionCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-
-        with transaction.atomic():
-            subscription_data = {key: value for key, value in serializer.validated_data.items()}
-            subscription = Subscription(**subscription_data)
-            subscription.clean()
-            subscription = serializer.save()
-
-            # Only create transactions if status_quota/cauzione are 'paid'
-            status_quota = request.data.get('status_quota', 'pending')
-            status_cauzione = request.data.get('status_cauzione', 'pending')
-            account_id = serializer.account
-
-            # Prepare name for description (profile or external)
-            if subscription.profile:
-                sub_name = f"{subscription.profile.name} {subscription.profile.surname}"
-            elif subscription.external_name:
-                sub_name = subscription.external_name
-            else:
-                sub_name = "Esterno"
-
-            # Quota transaction
-            if status_quota == 'paid' and account_id:
-                t = Transaction(
-                    type=Transaction.TransactionType.SUBSCRIPTION,
-                    account_id=account_id,
-                    subscription=subscription,
-                    executor=request.user,
-                    amount=Decimal(subscription.event.cost),
-                    description=f"Quota {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
-                )
-                t.save()
-
-            # Cauzione transaction
-            if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
-                t_cauzione = Transaction(
-                    type=Transaction.TransactionType.CAUZIONE,
-                    account_id=account_id,
-                    subscription=subscription,
-                    executor=request.user,
-                    amount=Decimal(subscription.event.deposit),
-                    description=f"Cauzione {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
-                )
-                t_cauzione.save()
-            return Response(serializer.data, status=200)
-    except ValidationError as e:
-        return Response({'error': str(e)}, status=400)
-    except ObjectDoesNotExist as e:
-        return Response({'error': str(e)}, status=400)
-    except PermissionDenied as e:
-        return Response({'error': str(e)}, status=403)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
-@api_view(['GET', 'PATCH', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def subscription_detail(request, pk):
-    try:
-        sub = Subscription.objects.get(pk=pk)
-
-        # Check if quota or cauzione is reimbursed
-        quota_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
-        cauzione_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
-
-        if request.method == 'GET':
-            if not get_action_permissions(request, 'subscription_detail_GET'):
-                return Response({'error': 'Non hai i permessi per visualizzare questa iscrizione.'}, status=403)
-            serializer = SubscriptionSerializer(sub)
-            return Response(serializer.data, status=200)
-
-        if request.method == "PATCH":
-            if not get_action_permissions(request, 'subscription_detail_PATCH'):
-                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
-            if quota_reimbursed or cauzione_reimbursed:
-                return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'}, status=400)
-            if request.user.has_perm('events.change_subscription'):
-                serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
-                if not serializer.is_valid():
-                    return Response(serializer.errors, status=400)
-
-                with transaction.atomic():
-                    for attr, value in serializer.validated_data.items():
-                        setattr(sub, attr, value)
-                    sub.clean()
-                    subscription = serializer.save()
-
-                    account_id = serializer.account_id
-                    status_quota = request.data.get('status_quota', 'pending')
-                    status_cauzione = request.data.get('status_cauzione', 'pending')
-
-                    # Quota transaction
-                    quota_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.SUBSCRIPTION).first()
-                    cauzione_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.CAUZIONE).first()
-
-                    # --- QUOTA ---
-                    if status_quota == 'paid' and account_id:
-                        if not quota_tx:
-                            # Create transaction if not exists
-                            t = Transaction(
-                                type=Transaction.TransactionType.SUBSCRIPTION,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=Decimal(subscription.event.cost),
-                                description=f"Pagamento per {subscription.event.name}"
-                            )
-                            t.save()
-                        elif quota_tx.account_id != account_id:
-                            # Move transaction to new account
-                            quota_amount = Decimal(subscription.event.cost)
-                            quota_tx.delete()
-                            t = Transaction(
-                                type=Transaction.TransactionType.SUBSCRIPTION,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=quota_amount,
-                                description=f"Pagamento per {subscription.event.name} (spostato da altra cassa)"
-                            )
-                            t.save()
-                    elif status_quota != 'paid' and quota_tx:
-                        quota_tx.delete()
-
-                    # --- CAUZIONE ---
-                    if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
-                        if not cauzione_tx:
-                            t_cauzione = Transaction(
-                                type=Transaction.TransactionType.CAUZIONE,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=Decimal(subscription.event.deposit),
-                                description=f"Cauzione per {subscription.event.name}"
-                            )
-                            t_cauzione.save()
-                        elif cauzione_tx.account_id != account_id:
-                            # Move transaction to new account
-                            cauzione_amount = Decimal(subscription.event.deposit)
-                            cauzione_tx.delete()
-                            t_cauzione = Transaction(
-                                type=Transaction.TransactionType.CAUZIONE,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=cauzione_amount,
-                                description=f"Cauzione per {subscription.event.name} (spostata da altra cassa)"
-                            )
-                            t_cauzione.save()
-                    elif status_cauzione != 'paid' and cauzione_tx:
-                        cauzione_tx.delete()
-
-                return Response(serializer.data, status=200)
-            else:
-                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
-
-        elif request.method == "DELETE":
-            if not get_action_permissions(request, 'subscription_detail_DELETE'):
-                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
-            if quota_reimbursed or cauzione_reimbursed:
-                return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'}, status=400)
-            if request.user.has_perm('events.delete_subscription'):
-                related_transactions = Transaction.objects.filter(
-                    subscription=sub,
-                    type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
-                )
-                for t in related_transactions:
-                    t.delete()
-                sub.delete()
-                return Response(status=200)
-            else:
-                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
-        else:
-            return Response("Metodo non consentito", status=405)
-    except Subscription.DoesNotExist:
-        return Response({'error': "L'iscrizione non esiste"}, status=404)
-    except ValidationError as e:
-        return Response({'error': str(e)}, status=400)
-    except ObjectDoesNotExist as e:
-        return Response({'error': str(e)}, status=400)
-    except PermissionDenied as e:
-        return Response({'error': str(e)}, status=403)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def move_subscriptions(request):
-    if not get_action_permissions(request, 'move_subscriptions_POST'):
-        return Response({'error': 'Non hai i permessi per spostare iscrizioni.'}, status=403)
-    try:
-        # Extract data from the request
-        subscription_ids = request.data.get('subscriptionIds', [])
-        target_list_id = request.data.get('targetListId')
-
-        if not subscription_ids or not target_list_id:
-            return Response({'error': "ID iscrizioni o ID lista di destinazione mancanti"}, status=400)
-
-        # Fetch the target list and validate its existence
-        try:
-            target_list = EventList.objects.get(id=target_list_id)
-        except EventList.DoesNotExist:
-            return Response({'error': "Lista di destinazione inesistente"}, status=400)
-
-        # Check if moving the subscriptions would exceed the target list's capacity
-        current_count = Subscription.objects.filter(list=target_list).count()
-        if target_list.capacity > 0 and current_count + len(subscription_ids) > target_list.capacity:
-            return Response({'error': "Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione"}, status=400)
-
-        # Fetch the subscriptions to be moved
-        subscriptions = Subscription.objects.filter(id__in=subscription_ids)
-
-        # Update the list for each subscription
-        with transaction.atomic():
-            for subscription in subscriptions:
-                subscription.list = target_list
-                subscription.save()
-
-        return Response({'message': "Iscrizioni spostate con successo"}, status=200)
-    except Exception as e:
-        logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
