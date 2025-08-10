@@ -133,56 +133,16 @@ def event_detail(request, pk):
         elif request.method == 'PATCH':
             if not get_action_permissions(request, 'event_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
-            # Check for existing subscriptions
-            has_subscriptions = Subscription.objects.filter(event=event).exists()
-            data_to_validate = request.data
-            logger.info("Event data: ", data_to_validate)
-            start_date = parse_datetime(data_to_validate.get('subscription_start_date'))
-            end_date = parse_datetime(data_to_validate.get('subscription_end_date'))
 
-            # If event has subscriptions, implement stricter validation
-            if has_subscriptions:
-                # Not possible to modify start date
-                formatted_start = start_date.strftime('%Y-%m-%d %H:%M:%S')
-                existing_date = event.subscription_start_date.strftime('%Y-%m-%d %H:%M:%S')
-                logger.info(f"Start date: {start_date}, existing: {event.subscription_start_date}")
-                logger.info(f"Start date: {formatted_start}, existing: {existing_date}")
-                if formatted_start != existing_date:
-                    return Response({'error': "Non è possibile modificare le date d'iscrizione se l'evento ha delle iscrizioni"}, status=400)
-
-                # Not possible to change cost
-                if data_to_validate.get('cost') != str(event.cost):
-                    return Response({'error': "Non è possibile modificare il costo se l'evento ha delle iscrizioni"}, status=400)
-
-                # Not possible to reduce capacity below current subscription count
-                for list_data in data_to_validate['lists']:
-                    list_id = list_data.get('id')
-                    new_capacity = int(list_data.get('capacity', 0))
-
-                    # Skip validation for new lists
-                    if not list_id:
-                        continue
-
-                    subscription_count = Subscription.objects.filter(event=event, list_id=list_id).count()
-                    if subscription_count > new_capacity > 0:
-                        return Response({'error': f"Non è possibile impostare una capacità lista minore del numero di iscrizoni presenti ({subscription_count})"}, status=400)
-
-            # Not possible to set end date before now or before start date
-            now = timezone.now()  # This is timezone-aware
-            current_start = start_date if start_date else event.subscription_start_date
-            if end_date < now:
-                return Response({'error': "Non è possibile impostare una data fine iscrizioni nel passato"}, status=400)
-            if current_start and end_date <= current_start:
-                return Response({'error': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"}, status=400)
-
-            # Continue with serializer validation and saving
-            serializer = EventCreationSerializer(instance=event, data=data_to_validate, partial=True)
+            # Validation logic is handled in the serializer
+            serializer = EventCreationSerializer(instance=event, data=request.data, partial=True)
 
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=200)
             else:
                 return Response(serializer.errors, status=400)
+
         elif request.method == 'DELETE':
             if not get_action_permissions(request, 'event_detail_DELETE'):
                 return Response({'error': 'Non hai i permessi per eliminare questo evento.'}, status=403)
