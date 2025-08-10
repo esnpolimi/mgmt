@@ -16,17 +16,17 @@ from profiles.models import Profile, BaseEntity
 
 # Schema of json representing the profile fields required for the participants of the event.
 # This data is obtained from the database and then populates the tables of the event.
-# Example: ['name','surname','email',...] TODO: check fields
+# Example: ['name','surname','email',...]
 profile_fields_schema = {
     "type": "array",
     "items": {"enum": [
-        'id', 'name', 'surname', 'email', 'phone_prefix', 'phone_number', 'whatsapp_prefix',
+        'name', 'surname', 'email', 'phone_prefix', 'phone_number', 'whatsapp_prefix',
         'whatsapp_number', 'country', 'birthdate', 'latest_esncard', 'latest_document',
         'matricola_number', 'matricola_expiration', 'course', 'person_code', 'domicile'
     ]}
 }
 
-# Schema of json representing the questions / fields asked in the form.
+# Schema of json representing the questions / fields asked in the form and in additonal fields.
 # Types:
 #  't': testo
 #  'n': numero
@@ -34,27 +34,9 @@ profile_fields_schema = {
 #  'm': multiple choice, risposta multipla
 #  'b': boolean, risposta yes/no
 #
-# Example: [{'text':'What are your allergies?', 'type':'t'},
-#           {'text':'Are you vegan?','type':'b', 'choices':['yes','no'] }]
+# Example: [{'name':'What are your allergies?', 'type':'t'},
+#           {'name':'Are you vegan?','type':'b', 'choices':['yes','no'] }]
 #
-# Note: this schema requires that 'choices':[] should be specified also for text or number field types.
-form_fields_schema = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "text": {"type": "string"},
-            "type": {"enum": ["t", "n", "c", "m", "b"]},
-            "choices": {
-                "type": "array",
-                "items": {"type": "string"}
-            }
-        },
-    }
-}
-
-# Schema of json representing the additional fields / columns for the lists / tables.
-# Types of data are specified as before.
 # Additionally, there is the possibility of restricting the ability to view / edit by the office.
 #
 # Accessibility legend:
@@ -64,22 +46,79 @@ form_fields_schema = {
 #
 # Example: [{'name': 'Pagamento verificato', 'type':'b', 'choices':['Yes','No'], 'accessibility':0},
 #           {'name': 'Contattato via email','type':'b', 'choices':['Yes','No'], 'accessibility':2 }]
-additional_fields_schema = {
+unified_fields_schema = {
     "type": "array",
     "items": {
         "type": "object",
         "properties": {
-            "name": {"type": "string"},  # fixed from "text"
+            "name": {"type": "string"},
             "type": {"enum": ["t", "n", "c", "m", "b"]},
+            "field_type": {"enum": ["form", "additional"]},
             "choices": {
                 "type": "array",
                 "items": {"type": "string"}
             },
-            "accessibility": {"enum": [0, 1, 2]}
+            # "accessibility": {"enum": [0, 1, 2]},
+            "required": {"type": "boolean"}
         },
-        "required": ["name", "type", "choices", "accessibility"]
+        "required": ["name", "type", "field_type"],
+        "allOf": [
+            {
+                "if": {"properties": {"type": {"enum": ["c", "m"]}}},
+                "then": {"required": ["choices"]}
+            },
+            # {
+            #     "if": {"properties": {"field_type": {"const": "additional"}}},
+            #     "then": {"required": ["accessibility"]}
+            # }
+            {
+                "if": {"properties": {"field_type": {"const": "form"}}},
+                "then": {"properties": {"required": {"type": "boolean"}}}
+            }
+        ]
     }
 }
+
+
+def validate_field_data(field_config, data_dict, field_type_filter=None):
+    errors = []
+    relevant_fields = field_config
+    if field_type_filter:
+        relevant_fields = [f for f in field_config if f.get('field_type') == field_type_filter]
+    for field in relevant_fields:
+        field_name = field['name']
+        field_type = field['type']
+        if field_name not in data_dict:
+            continue
+        value = data_dict[field_name]
+        if value is None or value == '':
+            continue
+        if field_type == 't' and not isinstance(value, str):
+            errors.append(f'Invalid data type for field "{field_name}" - expected string')
+        elif field_type == 'n':
+            if not isinstance(value, (int, float)):
+                try:
+                    float(value)
+                except (ValueError, TypeError):
+                    errors.append(f'Invalid data type for field "{field_name}" - expected number')
+        elif field_type == 'c' and value not in field.get('choices', []):
+            errors.append(
+                f'Invalid value "{value}" for field "{field_name}" - must be one of {field.get("choices", [])}')
+        elif field_type == 'm':
+            if not isinstance(value, list):
+                errors.append(f'Invalid data type for field "{field_name}" - expected list')
+            else:
+                for val in value:
+                    if val not in field.get('choices', []):
+                        errors.append(
+                            f'Invalid value "{val}" for field "{field_name}" - must be one of {field.get("choices", [])}')
+        elif field_type == 'b' and not isinstance(value, bool):
+            errors.append(f'Invalid data type for field "{field_name}" - expected boolean')
+    valid_field_names = [f['name'] for f in relevant_fields]
+    for provided_field in data_dict.keys():
+        if provided_field not in valid_field_names:
+            errors.append(f"Unknown field '{provided_field}' provided")
+    return errors
 
 
 # Class the describes an event
@@ -105,11 +144,8 @@ class Event(BaseEntity):
     # Required profile fields (i.e. name, surname, whatsapp number, email)
     profile_fields = models.JSONField(default=list, blank=True)
 
-    # Form fields ( questions ) (i.e. 'Are you vegetarian?' )
-    form_fields = models.JSONField(default=list, blank=True)
-
-    # Additional fields ( columns ) in the lists
-    additional_fields = models.JSONField(default=list, blank=True)
+    # Unified fields (replaces form_fields and additional_fields)
+    fields = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.date})"
@@ -118,10 +154,16 @@ class Event(BaseEntity):
         super().clean()
         if self.profile_fields is not None:
             validate(instance=self.profile_fields, schema=profile_fields_schema)
-        if self.form_fields is not None:
-            validate(instance=self.form_fields, schema=form_fields_schema)
-        if self.additional_fields is not None:
-            validate(instance=self.additional_fields, schema=additional_fields_schema)
+        if self.fields is not None:
+            validate(instance=self.fields, schema=unified_fields_schema)
+
+    @property
+    def form_fields(self):
+        return [f for f in self.fields if f.get('field_type') == 'form']
+
+    @property
+    def additional_fields(self):
+        return [f for f in self.fields if f.get('field_type') == 'additional']
 
     @property
     def status(self):
@@ -201,8 +243,9 @@ class Subscription(BaseEntity):
     enable_refund = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
     created_by_form = models.BooleanField(default=False)
-    form_data = models.JSONField(blank=True, default=dict)  # Use dict for key-value answers
-    additional_data = models.JSONField(blank=True, default=dict)  # Use dict for key-value answers
+    profile_data = models.JSONField(blank=True, default=dict)
+    form_data = models.JSONField(blank=True, default=dict)
+    additional_data = models.JSONField(blank=True, default=dict)
 
     class Meta:
         constraints = [
@@ -212,6 +255,31 @@ class Subscription(BaseEntity):
             )
         ]
 
+    def save(self, *args, **kwargs):
+        # On creation, if profile is set and profile_data is empty, copy only requested fields from profile
+        if self.profile and self._state.adding and not self.profile_data:
+            requested_fields = self.event.profile_fields if self.event and self.event.profile_fields else []
+            data = {}
+            for field in requested_fields:
+                value = getattr(self.profile, field, None)
+                # Convert date fields to isoformat if not None
+                if value is not None and field in ['birthdate', 'matricola_expiration']:
+                    value = value.isoformat()
+                data[field] = value
+            self.profile_data = data
+        super().save(*args, **kwargs)
+
+    def populate_profile_data_from_profile(self):
+        """Force copy only requested profile fields from profile (overwrite)."""
+        if self.profile and self.event and self.event.profile_fields:
+            data = {}
+            for field in self.event.profile_fields:
+                value = getattr(self.profile, field, None)
+                if value is not None and field in ['birthdate', 'matricola_expiration']:
+                    value = value.isoformat()
+                data[field] = value
+            self.profile_data = data
+
     def clean(self):
         super().clean()
         # Ensure list capacity isn't exceeded (if capacity is not 0/unlimited)
@@ -219,58 +287,16 @@ class Subscription(BaseEntity):
             current_count = Subscription.objects.filter(list=self.list).exclude(pk=self.pk).count()
             if current_count >= self.list.capacity:
                 raise ValidationError(f"{self.list.name} capacity exceeded")
-
-        # Validate form data
+        # Validate form data using unified fields
         if self.form_data:
-            for question in self.event.form_fields:
-                text = question['text']
-                type_ = question['type']
-                if text not in self.form_data:
-                    raise ValidationError(f'Missing form data for field "{text}"')
-                value = self.form_data[text]
-                if type_ == 't' and not isinstance(value, str):
-                    raise ValidationError(f'Invalid data type for field "{text}"')
-                if type_ == 'n' and not isinstance(value, (int, float)):
-                    raise ValidationError(f'Invalid data type for field "{text}"')
-                if type_ == 'c' and value not in question['choices']:
-                    raise ValidationError(f'Invalid value for field "{text}"')
-                if type_ == 'm':
-                    if not isinstance(value, list):
-                        raise ValidationError(f'Invalid data type for field "{text}"')
-                    for ans in value:
-                        if ans not in question['choices']:
-                            raise ValidationError(f'Invalid value for field "{text}"')
-                if type_ == 'b' and not isinstance(value, bool):
-                    raise ValidationError(f'Invalid data type for field "{text}"')
-            for provided_field in self.form_data.keys():
-                if provided_field not in [f['text'] for f in self.event.form_fields]:
-                    raise ValidationError(f"Unknown form field '{provided_field}' provided in form_data")
-
-        # Validate additional data, i.e. check that it contains valid values for the additional fields.
+            errors = validate_field_data(self.event.fields, self.form_data, 'form')
+            if errors:
+                raise ValidationError('; '.join(errors))
+        # Validate additional data using unified fields
         if self.additional_data:
-            for field in self.event.additional_fields:
-                name = field['name']
-                type_ = field['type']
-                if name not in self.additional_data:
-                    continue
-                value = self.additional_data[name]
-                if type_ == 't' and not isinstance(value, str):
-                    raise ValidationError(f'Invalid data type for field "{name}"')
-                if type_ == 'n' and not isinstance(value, (int, float)):
-                    raise ValidationError(f'Invalid data type for field "{name}"')
-                if type_ == 'c' and value not in field['choices']:
-                    raise ValidationError(f'Invalid value for field "{name}"')
-                if type_ == 'm':
-                    if not isinstance(value, list):
-                        raise ValidationError(f'Invalid data type for field "{name}"')
-                    for val in value:
-                        if val not in field['choices']:
-                            raise ValidationError(f'Invalid value for field "{name}"')
-                if type_ == 'b' and not isinstance(value, bool):
-                    raise ValidationError(f'Invalid data type for field "{name}"')
-            for provided_field in self.additional_data.keys():
-                if provided_field not in [f['name'] for f in self.event.additional_fields]:
-                    raise ValidationError(f"Unknown additional field '{provided_field}' provided in additional_data")
+            errors = validate_field_data(self.event.fields, self.additional_data, 'additional')
+            if errors:
+                raise ValidationError('; '.join(errors))
 
     def __str__(self):
         return f"{self.profile} - {self.event} ({self.list.name})"

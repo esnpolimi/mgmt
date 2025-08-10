@@ -97,8 +97,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         write_only=True
     )
     profile_fields = serializers.ListField(required=False, default=list)
-    form_fields = serializers.ListField(required=False, default=list)
-    additional_fields = serializers.ListField(required=False, default=list)
+    fields = serializers.ListField(required=False, default=list)  # Unified fields
     enable_form = serializers.BooleanField(required=False, default=False)
     description = serializers.CharField(required=False, allow_blank=True)
 
@@ -107,7 +106,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         fields = [
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'profile_fields', 'form_fields', 'additional_fields', 'enable_form'
+            'profile_fields', 'fields', 'enable_form'
         ]
 
     def create(self, validated_data):
@@ -134,10 +133,99 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         return event
 
     def update(self, instance, validated_data):
-        # Remove any relationship fields that need special handling
+        # Remove relationship fields that need special handling
         lists_data = validated_data.pop('lists', None)
         organizers = validated_data.pop('organizers', None)
         lead_organizer = validated_data.pop('lead_organizer', None)
+
+        # Check if event has subscriptions for validation
+        has_subscriptions = instance.pk and instance.subscription_set.exists()
+
+        # Prevent editing certain fields if there are subscriptions
+        if has_subscriptions:
+            # Only restrict form-related fields and profile_fields
+            # Allow modification of additional fields in the unified fields
+            restricted_fields = ['profile_fields', 'enable_form']
+            for field in restricted_fields:
+                if field in validated_data:
+                    validated_data.pop(field)
+
+            # For unified fields, preserve form fields and existing additional fields,
+            # but allow new additional fields to be added
+            if 'fields' in validated_data:
+                new_fields = validated_data['fields']
+                existing_form_fields = [f for f in instance.fields if f.get('field_type') == 'form']
+                existing_additional_fields = [f for f in instance.fields if f.get('field_type') == 'additional']
+                new_additional_fields = [f for f in new_fields if f.get('field_type') == 'additional']
+
+                # Only keep truly new additional fields (not existing ones being modified)
+                truly_new_additional = []
+                existing_additional_names = {f.get('name') for f in existing_additional_fields}
+
+                for new_field in new_additional_fields:
+                    if new_field.get('name') not in existing_additional_names:
+                        truly_new_additional.append(new_field)
+
+                validated_data['fields'] = existing_form_fields + existing_additional_fields + truly_new_additional
+
+        # Validate subscription start date hasn't changed
+        if 'subscription_start_date' in validated_data:
+            new_start = validated_data['subscription_start_date']
+            if new_start != instance.subscription_start_date:
+                raise serializers.ValidationError({
+                    'subscription_start_date': "Non è possibile modificare la data d'inizio iscrizione se l'evento ha delle iscrizioni"
+                })
+
+        # Validate cost hasn't changed
+        if 'cost' in validated_data:
+            new_cost = validated_data['cost']
+            if new_cost != instance.cost:
+                raise serializers.ValidationError({
+                    'cost': "Non è possibile modificare il costo se l'evento ha delle iscrizioni"
+                })
+
+        # Validate deposit hasn't changed
+        if 'deposit' in validated_data:
+            new_deposit = validated_data['deposit']
+            if new_deposit != instance.deposit:
+                raise serializers.ValidationError({
+                    'deposit': "Non è possibile modificare la cauzione se l'evento ha delle iscrizioni"
+                })
+
+        # Validate subscription end date
+        if 'subscription_end_date' in validated_data:
+            from django.utils import timezone
+            end_date = validated_data['subscription_end_date']
+            now = timezone.now()
+
+            if end_date < now:
+                raise serializers.ValidationError({
+                    'subscription_end_date': "Non è possibile impostare una data fine iscrizioni nel passato"
+                })
+
+            start_date = validated_data.get('subscription_start_date', instance.subscription_start_date)
+            if start_date and end_date <= start_date:
+                raise serializers.ValidationError({
+                    'subscription_end_date': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"
+                })
+
+        # Handle list capacity validation if there are subscriptions
+        if has_subscriptions and lists_data is not None:
+            from events.models import Subscription
+            for list_data in lists_data:
+                list_id = list_data.get('id')
+                new_capacity = list_data.get('capacity', 0)
+
+                # Skip validation for new lists (no ID)
+                if not list_id:
+                    continue
+
+                # Get current subscription count for this list
+                subscription_count = Subscription.objects.filter(event=instance, list_id=list_id).count()
+                if subscription_count > new_capacity > 0:
+                    raise serializers.ValidationError({
+                        'lists': f"Non è possibile impostare una capacità lista minore del numero di iscrizioni presenti ({subscription_count})"
+                    })
 
         # Update the instance with the remaining data
         for attr, value in validated_data.items():
@@ -147,27 +235,26 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Handle lists separately
         if lists_data is not None:
-            # Get existing lists
-            existing_lists = {list_obj.id: list_obj for list_obj in instance.lists.all()}
-
-            # Process each list in the request
+            # Instead of complex logic, just update existing lists and ignore new ones without valid IDs
             for list_data in lists_data:
                 list_id = list_data.get('id')
-                if list_id and list_id in existing_lists:
-                    # Update existing list
-                    list_obj = existing_lists[list_id]
-                    for attr, value in list_data.items():
-                        setattr(list_obj, attr, value)
-                    list_obj.save()
-                    del existing_lists[list_id]
-                else:
-                    # Create new list - remove empty id field
-                    create_data = {k: v for k, v in list_data.items() if k != 'id' or v}
-                    EventList.objects.create(event=instance, **create_data)
 
-            # Delete lists not included in the update
-            for remaining_list in existing_lists.values():
-                remaining_list.delete()
+                # Only process lists that have a valid ID (existing lists)
+                if list_id:
+                    try:
+                        # Get the existing list
+                        existing_list = EventList.objects.get(id=list_id, event=instance)
+
+                        # Update its properties directly
+                        existing_list.name = list_data.get('name', existing_list.name)
+                        existing_list.capacity = list_data.get('capacity', existing_list.capacity)
+                        if 'display_order' in list_data:
+                            existing_list.display_order = list_data.get('display_order', existing_list.display_order)
+
+                        existing_list.save()
+                    except EventList.DoesNotExist:
+                        # If the list doesn't exist, skip it (don't create new ones here)
+                        continue
 
         # Handle organizers
         if organizers is not None:
@@ -187,8 +274,10 @@ class EventDetailSerializer(serializers.ModelSerializer):
     lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
     profile_fields = serializers.ListField(read_only=True)
-    form_fields = serializers.ListField(read_only=True)
-    additional_fields = serializers.ListField(read_only=True)
+    fields = serializers.ListField(read_only=True)
+    form_fields = serializers.SerializerMethodField()
+    additional_fields = serializers.SerializerMethodField()
+    available_profile_fields = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Event
@@ -196,8 +285,16 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external',
-            'profile_fields', 'form_fields', 'additional_fields'
+            'profile_fields', 'fields', 'form_fields', 'additional_fields'
         ]
+
+    @staticmethod
+    def get_form_fields(obj):
+        return obj.form_fields
+
+    @staticmethod
+    def get_additional_fields(obj):
+        return obj.additional_fields
 
 
 # Serializer to create subscription from form
@@ -208,10 +305,11 @@ class FormSubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.Mo
         slug_field='email'
     )
     additional_data = serializers.DictField(required=False, default=dict)
+    profile_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data']
+        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'profile_data']
 
     def create(self, validated_data):
         validated_data['additional_data'] = validated_data.get('additional_data', {})
@@ -236,7 +334,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     event_date = serializers.DateField(source='event.date', read_only=True)
     external_name = serializers.CharField(read_only=True)
     is_external = serializers.SerializerMethodField()
+    form_data = serializers.DictField(read_only=True)
     additional_data = serializers.DictField(read_only=True)
+    profile_data = serializers.DictField(read_only=True)
 
     class Meta:
         model = Subscription
@@ -252,7 +352,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'external_name',
             'is_external',
             'form_data',
-            'additional_data'
+            'additional_data',
+            'profile_data'
         ]
 
     def create(self, validated_data):
@@ -329,12 +430,14 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
+    profile_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione',
-                  'external_name', 'additional_data']
+                  'external_name', 'form_data', 'additional_data', 'profile_data']
 
     def validate(self, attrs):
         profile = attrs.get('profile')
@@ -364,12 +467,14 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
+    profile_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione', 'external_name',
-                  'additional_data']
+                  'form_data', 'additional_data', 'profile_data']
 
     def validate(self, attrs):
         self.account_id = attrs.get('account_id', self.instance and getattr(self.instance, 'account_id', None))
@@ -378,18 +483,42 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         attrs.pop('account_id', None)
         return attrs
 
+    def update(self, instance, validated_data):
+        # Ensure profile_data is properly handled
+        if 'profile_data' in validated_data:
+            # Update profile_data while preserving existing data
+            current_profile_data = instance.profile_data or {}
+            new_profile_data = validated_data.get('profile_data', {})
+            # Merge the data - new values override existing ones
+            merged_profile_data = {**current_profile_data, **new_profile_data}
+            validated_data['profile_data'] = merged_profile_data
+
+        return super().update(instance, validated_data)
+
 
 class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
     subscriptions = SubscriptionSerializer(many=True, read_only=True, source='subscription_set')
+    profile_fields = serializers.ListField(read_only=True)
+    fields = serializers.ListField(read_only=True)
+    enable_form = serializers.BooleanField(read_only=True)
+    form_fields = serializers.SerializerMethodField()
+    additional_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
-            'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external'
+            'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
+            'profile_fields', 'fields', 'enable_form', 'form_fields', 'additional_fields'
         ]
+
+    def get_form_fields(self, obj):
+        return obj.form_fields
+
+    def get_additional_fields(self, obj):
+        return obj.additional_fields
 
 
 class LiberatoriaProfileSerializer(serializers.ModelSerializer):
@@ -474,7 +603,7 @@ class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
         if obj.profile:
             return f"{obj.profile.name} {obj.profile.surname}"
         elif obj.external_name:
-            return obj.external_name
+            obj.external_name
         return ""
 
     @staticmethod
@@ -485,3 +614,4 @@ class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
             type=Transaction.TransactionType.SUBSCRIPTION
         ).order_by('created_at').first()
         return transaction.account.name if transaction and transaction.account else None
+

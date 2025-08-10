@@ -2,7 +2,7 @@ import {useState, useEffect} from 'react';
 import {useParams} from 'react-router-dom';
 import {Container, Typography, Box} from '@mui/material';
 import {defaultErrorHandler, fetchCustom} from "../api/api";
-import StatusBanner from '../components/StatusBanner';
+import StatusBanner from '../Components/StatusBanner';
 
 export default function EmailVerification() {
     const {uid, token} = useParams();
