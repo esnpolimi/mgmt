@@ -30,6 +30,8 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import {useAuth} from "../../Context/AuthContext";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import EditAnswersModal from "../../Components/events/EditAnswersModal";
 
 
 export default function Event() {
@@ -62,6 +64,8 @@ export default function Event() {
     const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
     const [singleSubToReimburseQuota, setSingleSubToReimburseQuota] = useState(null);
     const [expandedAccordion, setExpandedAccordion] = useState([]);
+    const [editAnswersModalOpen, setEditAnswersModalOpen] = useState(false);
+    const [editAnswersSubscription, setEditAnswersSubscription] = useState(null);
     const hasDeposit = data?.deposit > 0;
     const hasQuota = data?.cost > 0;
 
@@ -165,6 +169,11 @@ export default function Event() {
         setSubscriptionModalOpen(true);
     };
 
+    const handleOpenEditAnswers = (subscription) => {
+        setEditAnswersSubscription(subscription);
+        setEditAnswersModalOpen(true);
+    }
+
     // Replace handleAccordionChange with a simple toggle function:
     const toggleCollapse = (panel) => {
         setExpandedAccordion(prev =>
@@ -175,8 +184,79 @@ export default function Event() {
     // Columns and data for lists
     const listConfigs = React.useMemo(() => {
         if (!data?.lists) return [];
+        // Helper to get value from subscription for a profile field
+        const getProfileFieldValue = (sub, field) => {
+            // First try profile_data (from form submissions or manual edits)
+            if (sub.profile_data && sub.profile_data[field] !== undefined && sub.profile_data[field] !== null) {
+                return sub.profile_data[field];
+            }
+            // Fallback to direct subscription field (shouldn't happen with current structure)
+            if (sub[field] !== undefined && sub[field] !== null) {
+                return sub[field];
+            }
+            // If profile exists, get from profile object
+            if (sub.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
+                return sub.profile[field];
+            }
+            return '';
+        };
+
+        // Helper to get value from subscription for a form field
+        const getFormFieldValue = (sub, field) => {
+            if (!sub.form_data) return '';
+            const val = sub.form_data[field.name];
+            if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
+            if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
+            return val ?? '';
+        };
+
+        // Helper to get value from subscription for an additional field
+        const getAdditionalFieldValue = (sub, field) => {
+            if (!sub.additional_data) return '';
+            const val = sub.additional_data[field.name];
+            if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
+            if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
+            return val ?? '';
+        };
+
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
+            // --- Dynamic columns ---
+            let dynamicColumns = [];
+            // Dati anagrafica (profile fields)
+            if (Array.isArray(data.profile_fields)) {
+                dynamicColumns = dynamicColumns.concat(
+                    data.profile_fields.map(field => ({
+                        accessorKey: `profile_field_${field}`,
+                        header: field.charAt(0).toUpperCase() + field.slice(1),
+                        size: 120,
+                        Cell: ({row}) => getProfileFieldValue(row.original, field)
+                    }))
+                );
+            }
+            // Form fields
+            if (Array.isArray(data.form_fields)) {
+                dynamicColumns = dynamicColumns.concat(
+                    data.form_fields.map((field, idx) => ({
+                        accessorKey: `form_field_${idx}`,
+                        header: field.name,
+                        size: 180,
+                        Cell: ({row}) => getFormFieldValue(row.original, field)
+                    }))
+                );
+            }
+            // Additional fields
+            if (Array.isArray(data.additional_fields)) {
+                dynamicColumns = dynamicColumns.concat(
+                    data.additional_fields.map((field, idx) => ({
+                        accessorKey: `additional_field_${idx}`,
+                        header: field.name,
+                        size: 180,
+                        Cell: ({row}) => getAdditionalFieldValue(row.original, field)
+                    }))
+                );
+            }
+
             const listSubscriptionsColumns = [
                 {
                     accessorKey: 'id',
@@ -278,8 +358,21 @@ export default function Event() {
                 },
             ].filter(Boolean);
 
+            // Insert dynamic columns after 'Profilo'
+            let columns = [];
+            const profileIdx = listSubscriptionsColumns.findIndex(col => col.accessorKey === 'profile_name');
+            if (profileIdx !== -1) {
+                columns = [
+                    ...listSubscriptionsColumns.slice(0, profileIdx + 1),
+                    ...dynamicColumns,
+                    ...listSubscriptionsColumns.slice(profileIdx + 1)
+                ];
+            } else {
+                columns = [...listSubscriptionsColumns, ...dynamicColumns];
+            }
+
             if ((hasDeposit || hasQuota) && isBoardMember) {
-                listSubscriptionsColumns.push({
+                columns.push({
                     accessorKey: 'actions',
                     header: 'Azioni',
                     size: 100,
@@ -292,6 +385,16 @@ export default function Event() {
                         // Cauzione button logic
                         const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
                         return (<>
+                            <IconButton
+                                title="Modifica Risposte Form"
+                                color="primary"
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    handleOpenEditAnswers(sub);
+                                }}
+                            >
+                                <EditNoteIcon/>
+                            </IconButton>
                             {hasQuota && isBoardMember && (
                                 <IconButton
                                     title="Rimborsa Quota"
@@ -321,6 +424,30 @@ export default function Event() {
                         </>);
                     },
                 });
+            } else {
+                // If not board member, still allow edit answers for own subscriptions (optional, adjust as needed)
+                columns.push({
+                    accessorKey: 'actions',
+                    header: 'Azioni',
+                    size: 100,
+                    enableSorting: false,
+                    enableColumnActions: false,
+                    Cell: ({row}) => {
+                        const sub = row.original;
+                        return (
+                            <IconButton
+                                title="Modifica Risposte Form"
+                                color="primary"
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    handleOpenEditAnswers(sub);
+                                }}
+                            >
+                                <EditNoteIcon/>
+                            </IconButton>
+                        );
+                    }
+                });
             }
 
             return {
@@ -329,10 +456,10 @@ export default function Event() {
                 capacity: list.capacity,
                 subscription_count: list.subscription_count,
                 subscriptions: listSubscriptions,
-                columns: listSubscriptionsColumns
+                columns
             };
         });
-    }, [data, hasDeposit, hasQuota]);
+    }, [data, hasDeposit, hasQuota, isBoardMember]);
 
     const lists = React.useMemo(() => {
         return listConfigs.map(config => ({
@@ -340,7 +467,6 @@ export default function Event() {
             tableOptions: {
                 columns: config.columns,
                 data: config.subscriptions,
-                enableStickyHeader: true,
                 enablePagination: true,
                 enableRowSelection: true,
                 enableRowActions: false,
@@ -533,6 +659,15 @@ export default function Event() {
         }
     }
 
+    const handleCloseEditAnswersModal = (updated) => {
+        setEditAnswersModalOpen(false);
+        setEditAnswersSubscription(null);
+        if (updated) {
+            setPopup({message: "Risposte aggiornate con successo!", state: "success", id: Date.now()});
+            refreshEventData();
+        }
+    };
+
     const handleExportSelected = (selectedRows) => {
         console.log("Exporting selected rows:", selectedRows);
         // TODO: Implement export logic here
@@ -591,6 +726,14 @@ export default function Event() {
                     onClose={() => setPrintableLiberatorieModalOpen(false)}
                     event={data}
                     listId={printableLiberatorieListId}
+                />
+            )}
+            {editAnswersModalOpen && (
+                <EditAnswersModal
+                    open={editAnswersModalOpen}
+                    onClose={handleCloseEditAnswersModal}
+                    event={data}
+                    subscription={editAnswersSubscription}
                 />
             )}
             <Box sx={{mx: '5%'}}>

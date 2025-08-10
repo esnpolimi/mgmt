@@ -44,7 +44,7 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
                         <CloseIcon/>
                     </IconButton>
                 </Box>
-                <Typography variant="h4" component="h3" gutterBottom>
+                <Typography variant="h4" component="h3" align="center" gutterBottom>
                     Sposta {selectedRows.length} {selectedRows.length === 1 ? "iscrizione" : "iscrizioni"}
                 </Typography>
                 <Typography variant="body1" id="modal-modal-description" gutterBottom>

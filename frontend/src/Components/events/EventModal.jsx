@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useCallback} from 'react';
 import {
     Modal,
     Box,
@@ -53,10 +53,11 @@ export default function EventModal({open, event, isEdit, onClose}) {
         is_allow_external: false,
         enable_form: false,
         profile_fields: ['name', 'surname'],
-        form_fields: [
-            {text: 'What are your allergies?', type: 't'},
-            {text: 'Vegetarian?', type: 'c', choices: ['yes', 'no']}],
-        additional_fields: [],
+        fields: [ // unified fields of form fields and additional columns
+            {field_type: 'form', name: 'What are your allergies?', type: 't'},
+            {field_type: 'form', name: 'Vegetarian?', type: 'c', choices: ['yes', 'no']},
+            {field_type: 'additional', name: 'Note', type: 't'},
+        ],
     });
 
     const [errors, setErrors] = React.useState({
@@ -71,13 +72,25 @@ export default function EventModal({open, event, isEdit, onClose}) {
         listItems: []
     });
 
+    const [originalAdditionalFields, setOriginalAdditionalFields] = useState([]);
+
     useEffect(() => {
         if (isEdit) {
-            setData(event);
-            setHasSubscriptions(event.subscriptions.length > 0)
+            const eventData = {
+                ...event,
+                profile_fields: Array.isArray(event.profile_fields) ? event.profile_fields : ['name', 'surname'],
+                fields: Array.isArray(event.fields) ? event.fields : [],
+                enable_form: Boolean(event.enable_form),
+            };
+            setData(eventData);
+            setHasSubscriptions(event.subscriptions && event.subscriptions.length > 0);
+
+            // Store original additional fields for comparison
+            const originalAdditional = eventData.fields.filter(f => f.field_type === 'additional');
+            setOriginalAdditionalFields(originalAdditional);
         }
         setLoading(false);
-    }, []);
+    }, [event, isEdit]);
 
     const formatDateString = (date) => {
         return dayjs(date).format('YYYY-MM-DD');
@@ -139,8 +152,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             })),
             is_a_bando: !!data.is_a_bando,
             is_allow_external: !!data.is_allow_external,
-            form_fields: data.form_fields ?? [],
-            additional_fields: data.additional_fields ?? [],
+            fields: data.fields ?? [],
         })
     }
 
@@ -193,9 +205,17 @@ export default function EventModal({open, event, isEdit, onClose}) {
         setErrors({...errors, listItems: listErrors, lists: [hasListErrors]});
         if (hasListErrors) {
             setStatusMessage({message: 'Errore campi Liste', state: 'error'});
-            //setPopup({message: 'Errore campi Liste', state: 'error', id: Date.now()});
             scrollUp();
             return;
+        }
+
+        // Validate fields' names and choices
+        if (data.enable_form && typeof FieldsTable.validateFields === 'function') {
+            if (!FieldsTable.validateFields()) {
+                setStatusMessage({message: 'Errore nei campi del form: tutti i nomi e le opzioni devono essere compilati.', state: 'error'});
+                scrollUp();
+                return;
+            }
         }
 
         setSubmitting(true);
@@ -238,6 +258,53 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
     const excludedProfileFields = ['group'];
 
+    // Helper to disable form/profile fields editing if there are subscriptions
+    const formFieldsDisabled = isEdit && hasSubscriptions;
+
+    // Memoize the setter functions to prevent infinite re-renders
+    const handleSetProfileFields = useCallback((fields) => {
+        setData(prev => {
+            if (formFieldsDisabled) return prev;
+            return {...prev, profile_fields: fields};
+        });
+    }, [formFieldsDisabled]);
+
+    const handleSetFields = useCallback((fields) => {
+        setData(prev => {
+            if (isEdit && hasSubscriptions) {
+                // Keep existing form fields unchanged
+                const existingFormFields = prev.fields.filter(f => f.field_type === 'form');
+
+                // For additional fields: allow editing name and deletion, but not type change
+                // Match original additional fields by index
+                const newAdditionalFields = fields.filter(f => f.field_type === 'additional');
+                const updatedAdditionalFields = [];
+
+                // Update existing additional fields by index
+                for (let i = 0; i < originalAdditionalFields.length; i++) {
+                    // If the field at this index still exists in the new fields, update its name (and other editable props)
+                    const updated = newAdditionalFields[i];
+                    if (updated) {
+                        // Preserve original type, allow name/other edits
+                        updatedAdditionalFields.push({
+                            ...updated,
+                            type: originalAdditionalFields[i].type,
+                        });
+                    }
+                    // If not present, it was deleted (skip)
+                }
+                // Add any truly new additional fields (those beyond the original length)
+                for (let i = originalAdditionalFields.length; i < newAdditionalFields.length; i++) {
+                    updatedAdditionalFields.push(newAdditionalFields[i]);
+                }
+
+                return {...prev, fields: [...existingFormFields, ...updatedAdditionalFields]};
+            }
+
+            return {...prev, fields: fields};
+        });
+    }, [isEdit, hasSubscriptions, originalAdditionalFields]);
+
     return (
         <Modal open={open} onClose={handleClose}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate={false}>
@@ -253,7 +320,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             <Typography variant="body2" color="warning.main">
                                 <InfoIcon fontSize="small" sx={{verticalAlign: 'middle', mr: 1}}/>
                                 Alcuni campi non sono modificabili perché ci sono già iscrizioni. Rimuovi tutte le
-                                iscrizioni per abilitare la modifica.
+                                iscrizioni per abilitare la modifica.<br/>
                             </Typography>
                         </Box>
                     )}
@@ -284,7 +351,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Grid size={{xs: 12, md: 4}}>
                             <Tooltip
                                 title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <div>
+                                <span>
                                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                                         <DateTimePicker
                                             label={eventNames.subscription_start_date}
@@ -302,7 +369,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                             error={errors.subscription_start_date[0]}
                                         />
                                     </LocalizationProvider>
-                                </div>
+                                </span>
                             </Tooltip>
                         </Grid>
                         <Grid size={{xs: 12, md: 4}}>
@@ -336,7 +403,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Grid size={{xs: 12, md: 4}}>
                             <Tooltip
                                 title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <div>
+                                <span>
                                     <TextField
                                         fullWidth
                                         label={eventNames.cost + " (decimali con punto)"}
@@ -350,13 +417,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                         error={errors.cost[0]}
                                         disabled={isEdit && hasSubscriptions}
                                     />
-                                </div>
+                                </span>
                             </Tooltip>
                         </Grid>
                         <Grid size={{xs: 12, md: 4}}>
                             <Tooltip
                                 title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <div>
+                                <span>
                                     <TextField
                                         fullWidth
                                         label={eventNames.deposit + " (decimali con punto)"}
@@ -368,7 +435,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                         error={errors.deposit && errors.deposit[0]}
                                         disabled={isEdit && hasSubscriptions}
                                     />
-                                </div>
+                                </span>
                             </Tooltip>
                         </Grid>
                         <Grid size={{xs: 12, md: 4}}>
@@ -440,25 +507,31 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             control={
                                 <Switch
                                     checked={!!data.enable_form}
-                                    onChange={(e) => setData({...data, enable_form: e.target.checked})}
+                                    onChange={(e) => {
+                                        if (formFieldsDisabled) return;
+                                        setData({...data, enable_form: e.target.checked})
+                                    }}
                                     name="enable_form"
                                     color="primary"
+                                    disabled={formFieldsDisabled}
                                 />
                             }
-                            label="Abilita Form"
+                            label="Abilita Form Iscrizioni"
                         />
                     </Box>
 
-                    {/* Move form sections to FieldsTable */}
+                    {/* Unified FieldsTable */}
                     {data.enable_form && (
                         <FieldsTable
-                            profile_fields={data.profile_fields}
-                            setProfileFields={(fields) => setData({...data, profile_fields: fields})}
-                            excludedProfileFields={excludedProfileFields}
-                            form_fields={data.form_fields}
-                            setFormFields={(qs) => setData({...data, form_fields: qs})}
-                            additional_fields={data.additional_fields}
-                            setAdditionalFields={(fields) => setData({...data, additional_fields: fields})}
+                            profile_fields={data.profile_fields || []}
+                            setProfileFields={handleSetProfileFields}
+                            fields={data.fields || []}
+                            setFields={handleSetFields}
+                            formFieldsDisabled={formFieldsDisabled}
+                            additionalFieldsDisabled={false}
+                            hasSubscriptions={hasSubscriptions}
+                            isEdit={isEdit}
+                            originalAdditionalFields={originalAdditionalFields}
                         />
                     )}
 

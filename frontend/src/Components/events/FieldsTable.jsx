@@ -1,296 +1,136 @@
-import React, {useMemo, useState, useEffect} from 'react';
-import {MRT_Table, useMaterialReactTable} from 'material-react-table';
-import {TextField, Select, MenuItem, IconButton, Button, Box, Typography, Grid, Paper, Chip} from '@mui/material';
-import {Delete as DeleteIcon, Add as AddIcon} from '@mui/icons-material';
-import {MRT_Localization_IT} from "material-react-table/locales/it";
+import React, {useState} from 'react';
+import {
+    Box,
+    Button,
+    Checkbox,
+    Chip, FormControl,
+    FormControlLabel,
+    Grid,
+    IconButton, InputLabel,
+    MenuItem,
+    Paper,
+    Select,
+    TextField,
+    Tooltip,
+    Typography
+} from '@mui/material';
+import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
 import {profileDisplayNames} from '../../utils/displayAttributes';
 
-// Utility for unique IDs
-function generateId() {
-    return `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-}
-
-// Shared column generator
-function getColumns({ typeLabel, textAccessor, onTextChange, onTypeChange, onDelete, typeOptions }) {
-    return [
-        {
-            accessorKey: textAccessor,
-            header: typeLabel,
-            accessorFn: row => row?.[textAccessor] ?? '',
-            Cell: ({row}) => {
-                if (!row?.original) return null;
-                return (
-                    <TextField
-                        fullWidth
-                        value={row.original[textAccessor] ?? ''}
-                        onChange={(e) => onTextChange(row.original.id, e.target.value)}
-                    />
-                );
-            },
-        },
-        {
-            accessorKey: 'type',
-            header: 'Tipo',
-            accessorFn: row => row?.type ?? 't',
-            Cell: ({row}) => {
-                if (!row?.original) return null;
-                return (
-                    <Select
-                        fullWidth
-                        variant="outlined"
-                        value={row.original.type ?? 't'}
-                        onChange={(e) => onTypeChange(row.original.id, e.target.value)}
-                    >
-                        {typeOptions.map(opt => (
-                            <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                        ))}
-                    </Select>
-                );
-            },
-        },
-        {
-            id: 'actions',
-            header: 'Azioni',
-            Cell: ({row}) => {
-                if (!row?.original) return null;
-                return (
-                    <IconButton onClick={() => onDelete(row.original.id)}>
-                        <DeleteIcon/>
-                    </IconButton>
-                );
-            },
-        },
-    ];
-}
-
-// Shared detail panel for choices
-function ChoicesDetailPanel({row, onChoiceChange, onChoiceDelete, onChoiceAdd}) {
-    if (!row?.original) return null;
-    return (
-        <Box sx={{p: 2}}>
-            {row.original.choices?.map((choice, cIndex) => (
-                <Box key={cIndex} display="flex" alignItems="center" gap={1} mb={1}>
-                    <TextField
-                        value={choice ?? ''}
-                        onChange={(e) => onChoiceChange(row.original.id, cIndex, e.target.value)}
-                        fullWidth
-                        label={`Risposta ${cIndex + 1}`}
-                    />
-                    <IconButton onClick={() => onChoiceDelete(row.original.id, cIndex)}>
-                        <DeleteIcon/>
-                    </IconButton>
-                </Box>
-            ))}
-            <Button onClick={() => onChoiceAdd(row.original.id)}>Aggiungi Risposta</Button>
-        </Box>
-    );
-}
-
 export default function FieldsTable({
-    profile_fields,
-    setProfileFields,
-    excludedProfileFields,
-    form_fields,
-    setFormFields,
-    additional_fields,
-    setAdditionalFields
-}) {
-    // Ensure unique id for each form field and additional field
-    useEffect(() => {
-        if (form_fields.some(f => !f.id)) {
-            setFormFields(form_fields.map(f => f.id ? f : {...f, id: generateId()}));
+                                        profile_fields,
+                                        setProfileFields,
+                                        fields,
+                                        setFields,
+                                        excludedProfileFields = [],
+                                        formFieldsDisabled = false,
+                                        additionalFieldsDisabled = false,
+                                        hasSubscriptions = false,
+                                        isEdit = false,
+                                        originalAdditionalFields = []
+                                    }) {
+
+    const formFields = fields.filter(field => field.field_type === 'form');
+    const additionalFields = fields.filter(field => field.field_type === 'additional');
+
+    const [validationError, setValidationError] = useState('');
+
+    const addField = (fieldType) => {
+        const newField = {
+            name: '',
+            type: 't',
+            field_type: fieldType,
+            choices: [],
+            required: false,
+            // ...(fieldType === 'additional' && {accessibility: 0})
+        };
+        setFields([...fields, newField]);
+    };
+
+    const updateField = (index, updates) => {
+        const updatedFields = [...fields];
+        let newField = {...updatedFields[index], ...updates};
+        // If type is changed and is not 'c' or 'm', remove choices
+        if (
+            Object.prototype.hasOwnProperty.call(updates, 'type') &&
+            !['c', 'm'].includes(updates.type)
+        ) {
+            delete newField.choices;
         }
-        if (additional_fields.some(f => !f.id)) {
-            setAdditionalFields(additional_fields.map(f => f.id ? f : {...f, id: generateId()}));
+        updatedFields[index] = newField;
+        setFields(updatedFields);
+    };
+
+    const deleteField = (index) => {
+        setFields(fields.filter((_, i) => i !== index));
+    };
+
+    const addChoice = (index) => {
+        const updatedFields = [...fields];
+        const choices = Array.isArray(updatedFields[index].choices) ? updatedFields[index].choices : [];
+        updatedFields[index].choices = [...choices, ""];
+        setFields(updatedFields);
+    };
+
+    const updateChoice = (fieldIndex, choiceIndex, value) => {
+        const updatedFields = [...fields];
+        const choices = Array.isArray(updatedFields[fieldIndex].choices) ? updatedFields[fieldIndex].choices : [];
+        choices[choiceIndex] = value;
+        updatedFields[fieldIndex].choices = choices;
+        setFields(updatedFields);
+    };
+
+    const deleteChoice = (fieldIndex, choiceIndex) => {
+        const updatedFields = [...fields];
+        const choices = Array.isArray(updatedFields[fieldIndex].choices) ? updatedFields[fieldIndex].choices : [];
+        choices.splice(choiceIndex, 1);
+        updatedFields[fieldIndex].choices = choices;
+        setFields(updatedFields);
+    };
+
+    // Validation: ensure all field names and choices are non-empty
+    FieldsTable.validateFields = () => {
+        for (const field of fields) {
+            if (!field.name || !field.name.trim()) {
+                setValidationError("Tutti i campi devono avere un nome.");
+                return false;
+            }
+            if (['c', 'm'].includes(field.type)) {
+                if (!Array.isArray(field.choices) || field.choices.length === 0) {
+                    setValidationError("Tutti i campi a scelta devono avere almeno un'opzione.");
+                    return false;
+                }
+                for (const choice of field.choices) {
+                    if (!choice || !choice.trim()) {
+                        setValidationError("Tutte le opzioni devono avere un nome.");
+                        return false;
+                    }
+                }
+            }
         }
-        // eslint-disable-next-line
-    }, []);
-
-    // --- Domande state/handlers ---
-    const [data, setData] = useState(form_fields);
-
-    useEffect(() => {
-        setData(form_fields);
-    }, [form_fields]);
-
-    useEffect(() => {
-        setFormFields(data);
-    }, [data]); // eslint-disable-line
-
-    const handleDomandaTextChange = (id, value) => {
-        setData(prev => prev.map(q => q.id === id ? {...q, text: value} : q));
+        setValidationError('');
+        return true;
     };
-    const handleDomandaTypeChange = (id, value) => {
-        setData(prev => prev.map(q => q.id === id ? {...q, type: value} : q));
-    };
-    const handleDomandaDelete = (id) => {
-        setData(prev => prev.filter(q => q.id !== id));
-    };
-    const handleDomandaAdd = () => {
-        setData(prev => [...prev, {id: generateId(), text: '', type: 't', choices: []}]);
-    };
-    const handleDomandaChoiceAdd = (id) => {
-        setData(prev =>
-            prev.map(q =>
-                q.id === id ? {...q, choices: q.choices ? [...q.choices, ''] : ['']} : q
-            )
-        );
-    };
-    const handleDomandaChoiceChange = (id, cIndex, value) => {
-        setData(prev =>
-            prev.map(q =>
-                q.id === id
-                    ? {...q, choices: q.choices.map((c, i) => i === cIndex ? value : c)}
-                    : q
-            )
-        );
-    };
-    const handleDomandaChoiceDelete = (id, cIndex) => {
-        setData(prev =>
-            prev.map(q =>
-                q.id === id
-                    ? {...q, choices: q.choices.filter((_, i) => i !== cIndex)}
-                    : q
-            )
-        );
-    };
-
-    // --- Campi aggiuntivi handlers ---
-    const [campi, setCampi] = useState(additional_fields);
-
-    useEffect(() => {
-        setCampi(additional_fields);
-    }, [additional_fields]);
-
-    useEffect(() => {
-        setAdditionalFields(campi);
-    }, [campi]); // eslint-disable-line
-
-    const handleCampoTextChange = (id, value) => {
-        setCampi(prev => prev.map(f => f.id === id ? {...f, name: value} : f));
-    };
-    const handleCampoTypeChange = (id, value) => {
-        setCampi(prev => prev.map(f => f.id === id ? {...f, type: value} : f));
-    };
-    const handleCampoDelete = (id) => {
-        setCampi(prev => prev.filter(f => f.id !== id));
-    };
-    const handleCampoAdd = () => {
-        setCampi(prev => [...prev, {id: generateId(), name: '', type: 't', choices: [], accessibility: 0}]);
-    };
-    const handleCampoChoiceAdd = (id) => {
-        setCampi(prev =>
-            prev.map(f =>
-                f.id === id ? {...f, choices: f.choices ? [...f.choices, ''] : ['']} : f
-            )
-        );
-    };
-    const handleCampoChoiceChange = (id, cIndex, value) => {
-        setCampi(prev =>
-            prev.map(f =>
-                f.id === id
-                    ? {...f, choices: f.choices.map((c, i) => i === cIndex ? value : c)}
-                    : f
-            )
-        );
-    };
-    const handleCampoChoiceDelete = (id, cIndex) => {
-        setCampi(prev =>
-            prev.map(f =>
-                f.id === id
-                    ? {...f, choices: f.choices.filter((_, i) => i !== cIndex)}
-                    : f
-            )
-        );
-    };
-
-    // --- Column and table definitions ---
-    const domandaTypeOptions = [
-        {value: 't', label: 'Testo'},
-        {value: 'n', label: 'Numero'},
-        {value: 'c', label: 'Risposta Singola'},
-        {value: 'm', label: 'Risposta Multipla'},
-        {value: 'b', label: 'Vero/Falso'},
-    ];
-    const campoTypeOptions = [
-        {value: 't', label: 'Testo'},
-        {value: 'n', label: 'Numero'},
-        {value: 'c', label: 'Scelta singola'},
-        {value: 'm', label: 'Scelta multipla'},
-        {value: 'b', label: 'Vero/Falso'},
-    ];
-
-    const domandaColumns = useMemo(() =>
-        getColumns({
-            typeLabel: 'Domanda',
-            textAccessor: 'text',
-            onTextChange: handleDomandaTextChange,
-            onTypeChange: handleDomandaTypeChange,
-            onDelete: handleDomandaDelete,
-            typeOptions: domandaTypeOptions,
-        }), []
-    );
-    const campoColumns = useMemo(() =>
-        getColumns({
-            typeLabel: 'Nome colonna',
-            textAccessor: 'name',
-            onTextChange: handleCampoTextChange,
-            onTypeChange: handleCampoTypeChange,
-            onDelete: handleCampoDelete,
-            typeOptions: campoTypeOptions,
-        }), []
-    );
-
-    const domandaTable = useMaterialReactTable({
-        columns: domandaColumns,
-        data: data || [],
-        enableExpanding: true,
-        enableColumnActions: false,
-        enableSorting: false,
-        getRowId: row => row?.id ?? `temp_${Math.random()}`,
-        getRowCanExpand: ({row}) => row?.original && (row.original.type === 'c' || row.original.type === 'm'),
-        renderDetailPanel: ({row}) =>
-            row?.original && (row.original.type === 'c' || row.original.type === 'm') ? (
-                <ChoicesDetailPanel
-                    row={row}
-                    onChoiceChange={handleDomandaChoiceChange}
-                    onChoiceDelete={handleDomandaChoiceDelete}
-                    onChoiceAdd={handleDomandaChoiceAdd}
-                />
-            ) : null,
-        localization: MRT_Localization_IT,
-    });
-
-    const campoTable = useMaterialReactTable({
-        columns: campoColumns,
-        data: campi || [],
-        enableExpanding: true,
-        enableColumnActions: false,
-        enableSorting: false,
-        getRowId: row => row?.id ?? `temp_${Math.random()}`,
-        getRowCanExpand: ({row}) => row?.original && (row.original.type === 'c' || row.original.type === 'm'),
-        renderDetailPanel: ({row}) =>
-            row?.original && (row.original.type === 'c' || row.original.type === 'm') ? (
-                <ChoicesDetailPanel
-                    row={row}
-                    onChoiceChange={handleCampoChoiceChange}
-                    onChoiceDelete={handleCampoChoiceDelete}
-                    onChoiceAdd={handleCampoChoiceAdd}
-                />
-            ) : null,
-        localization: MRT_Localization_IT,
-    });
 
     return (
         <Paper elevation={3} sx={{p: 2, my: 2, border: '1px solid #eee', background: '#fafbfc'}}>
-            {/* Dati anagrafici */}
+            {validationError && (
+                <Typography color="error" sx={{mb: 2}}>
+                    {validationError}
+                </Typography>
+            )}
+            {/* Profile Fields */}
             <Box my={2}>
-                <Typography variant="h6" gutterBottom>Dati anagrafici</Typography>
+                <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
+                    Campi richiesti e salvati per ogni iscrizione via form. {formFieldsDisabled ? "Non modificabili - evento con iscrizioni esistenti." : ""}
+                </Typography>
                 <Select
                     multiple
                     variant="outlined"
-                    value={profile_fields}
-                    onChange={(e) => setProfileFields(e.target.value)}
+                    value={Array.isArray(profile_fields) ? profile_fields : []}
+                    onChange={e => setProfileFields(e.target.value)}
+                    disabled={formFieldsDisabled}
                     renderValue={(selected) => (
                         <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
                             {selected.map((val) => (
@@ -301,42 +141,264 @@ export default function FieldsTable({
                     fullWidth
                 >
                     {Object.entries(profileDisplayNames)
-                        .filter(([k]) => !excludedProfileFields.includes(k))
+                        .filter(([k]) => !excludedProfileFields.includes(k) && k !== 'id' && k !== 'group')
                         .map(([k, v]) => (
-                            <MenuItem key={k} value={k}>
-                                {v}
-                            </MenuItem>
+                            <MenuItem key={k} value={k}>{v}</MenuItem>
                         ))}
                 </Select>
             </Box>
 
-            {/* Domande */}
-            <Box my={2}>
-                <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2, mb: 1}}>
-                    <Typography variant="h6">Domande</Typography>
-                    <IconButton
-                        title="Aggiungi Domanda"
-                        onClick={handleDomandaAdd}
-                        sx={{ml: -2}}>
-                        <AddIcon/>
-                    </IconButton>
-                </Grid>
-                <MRT_Table table={domandaTable}/>
-            </Box>
+            {/* Form Fields */}
+            <FieldSection
+                title="Campi Form"
+                fields={formFields}
+                onAdd={() => addField('form')}
+                onUpdate={updateField}
+                onDelete={deleteField}
+                addChoice={addChoice}
+                updateChoice={updateChoice}
+                deleteChoice={deleteChoice}
+                disabled={formFieldsDisabled}
+                allFields={fields}
+                showAccessibility={false}
+                hasSubscriptions={hasSubscriptions}
+                isEdit={isEdit}
+                originalAdditionalFields={originalAdditionalFields}
+            />
 
-            {/* Campi aggiuntivi */}
-            <Box my={2}>
-                <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2, mb: 1}}>
-                    <Typography variant="h6">Campi aggiuntivi</Typography>
+            {/* Additional Fields */}
+            <FieldSection
+                title="Campi Aggiuntivi"
+                fields={additionalFields}
+                onAdd={() => addField('additional')}
+                onUpdate={updateField}
+                onDelete={deleteField}
+                addChoice={addChoice}
+                updateChoice={updateChoice}
+                deleteChoice={deleteChoice}
+                disabled={additionalFieldsDisabled}
+                allFields={fields}
+                showAccessibility={false}
+                hasSubscriptions={hasSubscriptions}
+                isEdit={isEdit}
+                originalAdditionalFields={originalAdditionalFields}
+            />
+        </Paper>
+    );
+}
+
+function FieldSection({
+                          title,
+                          fields,
+                          onAdd,
+                          onUpdate,
+                          onDelete,
+                          addChoice,
+                          updateChoice,
+                          deleteChoice,
+                          disabled,
+                          allFields,
+                          showAccessibility,
+                          hasSubscriptions = false,
+                          isEdit = false,
+                          originalAdditionalFields = []
+                      }) {
+    // Add a description for each section
+    let description = "";
+    if (title === "Campi Form") {
+        description = "Campi richiesti e salvati per ogni iscrizione via form.";
+        if (isEdit && hasSubscriptions) {
+            description += " Non modificabili - evento con iscrizioni esistenti.";
+        }
+    } else if (title === "Campi Aggiuntivi") {
+        description = "Campi visibili e modificabili solo da ESNers.";
+        if (isEdit && hasSubscriptions) {
+            description += " Puoi aggiungere nuovi campi ma non modificare quelli esistenti.";
+        }
+    }
+
+    return (
+        <>
+            <Box sx={{display: 'flex', alignItems: 'center'}}>
+                <Typography variant="h6">{title}</Typography>
+                <Tooltip title={`Aggiungi ${title.toLowerCase()}`}>
+                    <span>
+                        <IconButton onClick={onAdd} disabled={disabled}>
+                            <AddIcon/>
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            </Box>
+            {description && (
+                <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
+                    {description}
+                </Typography>
+            )}
+            <Paper elevation={1} sx={{p: 2, mb: 3}}>
+                {fields.length === 0 ? (
+                    <Typography color="text.secondary">Nessun campo configurato</Typography>
+                ) : (
+                    fields.map((field) => {
+                        const globalIndex = allFields.findIndex(f => f === field);
+                        const isAdditionalField = field.field_type === 'additional';
+
+                        // Simple check: if this additional field exists in original list, it's existing
+                        const isExistingAdditionalField = isAdditionalField && isEdit && hasSubscriptions &&
+                            originalAdditionalFields.some(original => original.name === field.name && field.name);
+
+                        return (
+                            <FieldRow
+                                key={globalIndex}
+                                field={field}
+                                index={globalIndex}
+                                onUpdate={onUpdate}
+                                onDelete={onDelete}
+                                addChoice={addChoice}
+                                updateChoice={updateChoice}
+                                deleteChoice={deleteChoice}
+                                disabled={disabled || isExistingAdditionalField}
+                                isExistingAdditionalField={isExistingAdditionalField}
+                                // showAccessibility={showAccessibility}
+                            />
+                        );
+                    })
+                )}
+            </Paper>
+        </>
+    );
+}
+
+function FieldRow({
+                      field,
+                      index,
+                      onUpdate,
+                      onDelete,
+                      addChoice,
+                      updateChoice,
+                      deleteChoice,
+                      disabled,
+                      isExistingAdditionalField = false
+    // showAccessibility
+                  }) {
+    const typeOptions = [
+        {value: 't', label: 'Testo'},
+        {value: 'n', label: 'Numero'},
+        {value: 'c', label: 'Scelta Singola'},
+        {value: 'm', label: 'Scelta Multipla'},
+        {value: 'b', label: 'Sì/No'}
+    ];
+
+    /*const accessibilityOptions = [
+        {value: 0, label: 'Visualizza e Modifica'},
+        {value: 1, label: 'Solo Visualizza'},
+        {value: 2, label: 'Nascosto'}
+    ];*/
+
+    const needsChoices = ['c', 'm'].includes(field.type);
+    const isFormField = field.field_type === 'form';
+
+    return (
+        <Box sx={{mb: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1}}>
+            <Grid container spacing={2} alignItems="center">
+                <Grid size={{xs: 12, sm: isFormField ? 7 : 9}}>
+                    <TextField
+                        fullWidth
+                        label="Nome Campo"
+                        required
+                        value={field.name || ''}
+                        onChange={(e) => onUpdate(index, {name: e.target.value})}
+                        disabled={disabled}
+                        size="small"
+                    />
+                </Grid>
+
+                <Grid size={{xs: 12, sm: 2}}>
+                    <FormControl fullWidth>
+                        <InputLabel id="type-label">Tipo</InputLabel>
+                        <Select
+                            labelId="type-label"
+                            label="Tipo"
+                            fullWidth
+                            variant="outlined"
+                            value={field.type || 't'}
+                            onChange={(e) => onUpdate(index, {type: e.target.value})}
+                            disabled={disabled}
+                            size="small"
+                        >
+                            {typeOptions.map(opt => (
+                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Grid>
+
+                {/* Only show Required checkbox for form fields */}
+                {isFormField && (
+                    <Grid size={{xs: 6, sm: 1}} sx={{mr: 2}}>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={field.required || false}
+                                    onChange={(e) => onUpdate(index, {required: e.target.checked})}
+                                    disabled={disabled}
+                                    size="small"
+                                />
+                            }
+                            label="Required"
+                        />
+                    </Grid>
+                )}
+
+                <Grid size={{xs: 6, sm: 1}}>
                     <IconButton
-                        title="Aggiungi Campo"
-                        onClick={handleCampoAdd}
-                        sx={{ml: -2}}>
-                        <AddIcon/>
+                        onClick={() => onDelete(index)}
+                        disabled={disabled}
+                        color="error"
+                        size="small"
+                    >
+                        <DeleteIcon fontSize="small"/>
                     </IconButton>
                 </Grid>
-                <MRT_Table table={campoTable}/>
-            </Box>
-        </Paper>
+            </Grid>
+            {/* Opzioni, if needed */}
+            {needsChoices && (
+                <Box sx={{mt: 2, ml: 1}}>
+                    {Array.isArray(field.choices) && field.choices.length > 0 ? (
+                        field.choices.map((choice, cIdx) => (
+                            <Box key={cIdx} sx={{display: 'flex', alignItems: 'center', mb: 1}}>
+                                <Grid size={{xs: 12, sm: 4}}>
+                                    <TextField
+                                        value={choice}
+                                        onChange={e => updateChoice(index, cIdx, e.target.value)}
+                                        size="small"
+                                        sx={{mr: 1, width: 400}}
+                                        disabled={disabled}
+                                    />
+                                </Grid>
+                                <Grid size={{xs: 12, sm: 1}}>
+                                    <IconButton
+                                        onClick={() => deleteChoice(index, cIdx)}
+                                        disabled={disabled}
+                                        color="error"
+                                        size="small"
+                                    >
+                                        <DeleteIcon fontSize="small"/>
+                                    </IconButton>
+                                </Grid>
+                            </Box>
+                        ))
+                    ) : null}
+                    <Button
+                        onClick={() => addChoice(index)}
+                        disabled={disabled}
+                        size="small"
+                        variant="outlined"
+                        sx={{mt: 1}}
+                    >
+                        Aggiungi Opzione
+                    </Button>
+                </Box>
+            )}
+        </Box>
     );
 }
