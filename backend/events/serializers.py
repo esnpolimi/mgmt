@@ -59,6 +59,8 @@ class ModelCleanSerializerMixin:
 
 # Serializers for EventList
 class EventListSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False, allow_null=True)  # Accept null for new lists
+
     class Meta:
         model = EventList
         fields = ['id', 'name', 'capacity', 'display_order', 'subscription_count']
@@ -100,13 +102,16 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     fields = serializers.ListField(required=False, default=list)  # Unified fields
     enable_form = serializers.BooleanField(required=False, default=False)
     description = serializers.CharField(required=False, allow_blank=True)
+    allow_online_payment = serializers.BooleanField(required=False, default=False)
+    form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = Event
         fields = [
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'enable_form'
+            'profile_fields', 'fields', 'enable_form',
+            'allow_online_payment', 'form_programmed_open_time'
         ]
 
     def create(self, validated_data):
@@ -145,6 +150,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         if has_subscriptions:
             # Only restrict form-related fields and profile_fields
             # Allow modification of additional fields in the unified fields
+            # Allow always form_programmed_open_time
             restricted_fields = ['profile_fields', 'enable_form']
             for field in restricted_fields:
                 if field in validated_data:
@@ -235,26 +241,47 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Handle lists separately
         if lists_data is not None:
-            # Instead of complex logic, just update existing lists and ignore new ones without valid IDs
+            # Get all existing lists for this event
+            existing_lists = {lst.id: lst for lst in instance.lists.all()}
+            provided_list_ids = set()
+
             for list_data in lists_data:
                 list_id = list_data.get('id')
+                list_name = list_data.get('name', '').strip()
+                list_capacity = list_data.get('capacity', 0)
+                list_display_order = list_data.get('display_order', 0)
 
-                # Only process lists that have a valid ID (existing lists)
-                if list_id:
-                    try:
-                        # Get the existing list
-                        existing_list = EventList.objects.get(id=list_id, event=instance)
+                if list_id:  # Existing list
+                    list_id = int(list_id)
+                    provided_list_ids.add(list_id)
 
-                        # Update its properties directly
-                        existing_list.name = list_data.get('name', existing_list.name)
-                        existing_list.capacity = list_data.get('capacity', existing_list.capacity)
-                        if 'display_order' in list_data:
-                            existing_list.display_order = list_data.get('display_order', existing_list.display_order)
-
+                    if list_id in existing_lists:
+                        # Update existing list
+                        existing_list = existing_lists[list_id]
+                        existing_list.name = list_name
+                        existing_list.capacity = list_capacity
+                        existing_list.display_order = list_display_order
                         existing_list.save()
-                    except EventList.DoesNotExist:
-                        # If the list doesn't exist, skip it (don't create new ones here)
-                        continue
+                else:  # New list (no ID or empty ID)
+                    if list_name:  # Only create if name is provided
+                        # Check if a list with this name already exists for this event
+                        existing_list_with_name = instance.lists.filter(name=list_name).first()
+                        if not existing_list_with_name:
+                            # Create new list only if no list with this name exists
+                            EventList.objects.create(
+                                event=instance,
+                                name=list_name,
+                                capacity=list_capacity,
+                                display_order=list_display_order
+                            )
+
+            # Remove lists that are no longer provided (only if they have no subscriptions)
+            lists_to_remove = set(existing_lists.keys()) - provided_list_ids
+            for list_id_to_remove in lists_to_remove:
+                list_to_remove = existing_lists[list_id_to_remove]
+                # Only delete if no subscriptions exist for this list
+                if not list_to_remove.subscriptions.exists():
+                    list_to_remove.delete()
 
         # Handle organizers
         if organizers is not None:
@@ -278,6 +305,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
     form_fields = serializers.SerializerMethodField()
     additional_fields = serializers.SerializerMethodField()
     available_profile_fields = serializers.SerializerMethodField(read_only=True)
+    allow_online_payment = serializers.BooleanField(read_only=True)
+    form_programmed_open_time = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Event
@@ -285,7 +314,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'form_fields', 'additional_fields'
+            'profile_fields', 'fields', 'form_fields', 'additional_fields',
+            'allow_online_payment', 'form_programmed_open_time'
         ]
 
     @staticmethod
@@ -505,13 +535,16 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     enable_form = serializers.BooleanField(read_only=True)
     form_fields = serializers.SerializerMethodField()
     additional_fields = serializers.SerializerMethodField()
+    allow_online_payment = serializers.BooleanField(read_only=True)
+    form_programmed_open_time = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Event
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'enable_form', 'form_fields', 'additional_fields'
+            'profile_fields', 'fields', 'enable_form', 'form_fields', 'additional_fields',
+            'allow_online_payment', 'form_programmed_open_time'
         ]
 
     def get_form_fields(self, obj):

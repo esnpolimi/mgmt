@@ -30,7 +30,9 @@ export const eventDisplayNames = {
     subscription_end_date: 'Data Chiusura Iscrizioni',
     status: 'Stato Iscrizioni',
     list_name: 'Nome Lista',
-    list_capacity: 'Capacità Lista'
+    list_capacity: 'Capacità Lista',
+    allow_online_payment: 'Consenti Pagamenti Online',
+    form_programmed_open_time: 'Orario Apertura Form',
 };
 
 export const accountDisplayNames = {

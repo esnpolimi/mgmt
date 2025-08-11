@@ -27,7 +27,7 @@ import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import StatusBanner from "../StatusBanner";
 import {profileDisplayNames} from '../../utils/displayAttributes';
-import FieldsTable from './FieldsTable';
+import EventModalForm from './EventModalForm';
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
@@ -136,23 +136,27 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
 
     const convert = (data) => {
+        // Remove subscriptions, form_fields, and additional_fields if present
+        const {subscriptions, form_fields, additional_fields, ...rest} = data;
         return ({
-            ...data,
-            name: data.name,
-            date: formatDateString(data.date),
-            description: data.description,
-            subscription_start_date: formatDateTimeString(data.subscription_start_date),
-            subscription_end_date: formatDateTimeString(data.subscription_end_date),
-            cost: Number(data.cost).toFixed(2),
-            deposit: Number(data.deposit).toFixed(2),
-            lists: data.lists.map(t => ({
-                id: t.id,
+            ...rest,
+            name: rest.name,
+            date: formatDateString(rest.date),
+            description: rest.description,
+            subscription_start_date: formatDateTimeString(rest.subscription_start_date),
+            subscription_end_date: formatDateTimeString(rest.subscription_end_date),
+            cost: Number(rest.cost).toFixed(2),
+            deposit: Number(rest.deposit).toFixed(2),
+            lists: rest.lists.map(t => ({
+                id: t.id || null,
                 name: t.name,
                 capacity: Math.floor(Number(t.capacity))
             })),
-            is_a_bando: !!data.is_a_bando,
-            is_allow_external: !!data.is_allow_external,
-            fields: data.fields ?? [],
+            is_a_bando: !!rest.is_a_bando,
+            is_allow_external: !!rest.is_allow_external,
+            fields: rest.fields ?? [],
+            allow_online_payment: allowOnlinePayment,
+            form_programmed_open_time: formProgrammedOpenTime || null,
         })
     }
 
@@ -210,12 +214,25 @@ export default function EventModal({open, event, isEdit, onClose}) {
         }
 
         // Validate fields' names and choices
-        if (data.enable_form && typeof FieldsTable.validateFields === 'function') {
-            if (!FieldsTable.validateFields()) {
-                setStatusMessage({message: 'Errore nei campi del form: tutti i nomi e le opzioni devono essere compilati.', state: 'error'});
+        if (data.enable_form && typeof EventModalForm.validateFields === 'function') {
+            if (!EventModalForm.validateFields()) {
+                setStatusMessage({
+                    message: 'Errore nei campi del form: tutti i nomi e le opzioni devono essere compilati.',
+                    state: 'error'
+                });
                 scrollUp();
                 return;
             }
+        }
+
+        // Prevent submit if form is enabled but no form_programmed_open_time is set
+        if (data.enable_form && !formProgrammedOpenTime) {
+            setStatusMessage({
+                message: 'Devi specificare l\'orario di apertura del form iscrizioni.',
+                state: 'error'
+            });
+            scrollUp();
+            return;
         }
 
         setSubmitting(true);
@@ -255,8 +272,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const handleClose = () => {
         onClose(false);
     }
-
-    const excludedProfileFields = ['group'];
 
     // Helper to disable form/profile fields editing if there are subscriptions
     const formFieldsDisabled = isEdit && hasSubscriptions;
@@ -305,6 +320,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
         });
     }, [isEdit, hasSubscriptions, originalAdditionalFields]);
 
+    // Add state for new fields
+    const [allowOnlinePayment, setAllowOnlinePayment] = React.useState(data.allow_online_payment || false);
+    const [formProgrammedOpenTime, setFormProgrammedOpenTime] = React.useState(data.form_programmed_open_time || '');
+
+    // When data changes (e.g. when opening modal), sync state
+    React.useEffect(() => {
+        setAllowOnlinePayment(data.allow_online_payment || false);
+        setFormProgrammedOpenTime(data.form_programmed_open_time || '');
+    }, [data]);
+
     return (
         <Modal open={open} onClose={handleClose}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate={false}>
@@ -319,8 +344,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Box sx={{mb: 2, p: 1, bgcolor: '#fff3e0', borderRadius: 1}}>
                             <Typography variant="body2" color="warning.main">
                                 <InfoIcon fontSize="small" sx={{verticalAlign: 'middle', mr: 1}}/>
-                                Alcuni campi non sono modificabili perché ci sono già iscrizioni. Rimuovi tutte le
-                                iscrizioni per abilitare la modifica.<br/>
+                                Alcuni campi non sono modificabili perché sono presenti iscrizioni. Rimuovile per
+                                abilitare la modifica.<br/>
                             </Typography>
                         </Box>
                     )}
@@ -386,18 +411,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </LocalizationProvider>
                         </Grid>
                         <Grid size={{xs: 12, md: 4}}>
-                            <FormControlLabel
-                                label="Evento A Bando"
-                                labelPlacement="start"
-                                control={
-                                    <Switch
-                                        checked={!!data.is_a_bando}
-                                        onChange={handleInputChange}
-                                        name="is_a_bando"
-                                        color="primary"
-                                    />
-                                }
-                            />
                         </Grid>
 
                         <Grid size={{xs: 12, md: 4}}>
@@ -438,20 +451,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 </span>
                             </Tooltip>
                         </Grid>
-                        <Grid size={{xs: 12, md: 4}}>
-                            <FormControlLabel
-                                label="Consenti iscrizione esterni"
-                                labelPlacement="start"
-                                control={
-                                    <Switch
-                                        checked={!!data.is_allow_external}
-                                        onChange={handleInputChange}
-                                        name="is_allow_external"
-                                        color="primary"
-                                    />
-                                }
-                            />
-                        </Grid>
                     </Grid>
 
                     <Grid size={{xs: 12}} data-color-mode="light" sx={{mt: 2}}>
@@ -463,6 +462,37 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             }}
                         />
                     </Grid>
+
+                    {/* --- Move all toggles here --- */}
+                    <Grid container spacing={2} sx={{mt: 2, mb: 2}}>
+                        <Grid size={{xs: 12, md: 3}}>
+                            <FormControlLabel
+                                label="Evento A Bando"
+                                control={
+                                    <Switch
+                                        checked={!!data.is_a_bando}
+                                        onChange={handleInputChange}
+                                        name="is_a_bando"
+                                        color="primary"
+                                    />
+                                }
+                            />
+                        </Grid>
+                        <Grid size={{xs: 12, md: 3}}>
+                            <FormControlLabel
+                                label="Consenti iscrizione esterni"
+                                control={
+                                    <Switch
+                                        checked={!!data.is_allow_external}
+                                        onChange={handleInputChange}
+                                        name="is_allow_external"
+                                        color="primary"
+                                    />
+                                }
+                            />
+                        </Grid>
+                    </Grid>
+                    {/* --- End toggles section --- */}
 
                     <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
                         <Typography variant="h6">Liste</Typography>
@@ -500,9 +530,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
                     ))}
 
-
-                    {/* Abilita Form Switch */}
-                    <Box my={2}>
+                    <Grid size={{xs: 12, md: 4}} sx={{mt: 3}}>
                         <FormControlLabel
                             control={
                                 <Switch
@@ -518,11 +546,11 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             }
                             label="Abilita Form Iscrizioni"
                         />
-                    </Box>
+                    </Grid>
 
-                    {/* Unified FieldsTable */}
+                    {/* Unified EventModalForm */}
                     {data.enable_form && (
-                        <FieldsTable
+                        <EventModalForm
                             profile_fields={data.profile_fields || []}
                             setProfileFields={handleSetProfileFields}
                             fields={data.fields || []}
@@ -532,6 +560,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             hasSubscriptions={hasSubscriptions}
                             isEdit={isEdit}
                             originalAdditionalFields={originalAdditionalFields}
+                            allow_online_payment={allowOnlinePayment}
+                            setAllowOnlinePayment={setAllowOnlinePayment}
+                            form_programmed_open_time={formProgrammedOpenTime}
+                            setFormProgrammedOpenTime={setFormProgrammedOpenTime}
                         />
                     )}
 
@@ -540,13 +572,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             {submitting ? (
                                 <CircularProgress size={24} color="inherit"/>) : (isEdit ? 'Salva Modifiche' : 'Crea')}
                         </Button>
-                        {isEdit && !hasSubscriptions && (
+                        {isEdit && (
                             <Button variant="outlined"
                                     color="error"
                                     startIcon={<DeleteIcon/>}
                                     onClick={() => setConfirmOpen(true)}
-                                    disabled={deleting}>
-                                {deleting ? <CircularProgress size={20} color="inherit"/> : "Elimina"}
+                                    disabled={deleting || hasSubscriptions}>
+                                {deleting ? <CircularProgress size={20} color="inherit"/> : "Elimina Evento"}
                             </Button>
                         )}
                     </Box>

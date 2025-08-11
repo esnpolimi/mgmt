@@ -1,37 +1,32 @@
 import React, {useEffect, useState} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import Sidebar from "../../Components/Sidebar";
-import {Box, Button, Card, CardContent, Chip, Divider, IconButton, LinearProgress, Typography, Grid, Collapse} from "@mui/material";
+import {Box, Button, Card, CardContent, Chip, Divider, IconButton, Typography, Grid} from "@mui/material";
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EuroIcon from '@mui/icons-material/Euro';
 import AdjustIcon from '@mui/icons-material/Adjust';
-import BallotIcon from '@mui/icons-material/Ballot';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import Loader from "../../Components/Loader";
 import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import EditIcon from "@mui/icons-material/Edit";
 import EventModal from "../../Components/events/EventModal";
 import CustomEditor from '../../Components/CustomEditor';
 import Popup from "../../Components/Popup";
-import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
-import {MRT_Localization_IT} from "material-react-table/locales/it";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsModal";
 import ReimburseQuotaModal from "../../Components/events/ReimburseQuotaModal";
 import PrintableLiberatorieModal from "../../Components/events/PrintableLiberatorieModal";
 import dayjs from "dayjs";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import FestivalIcon from "@mui/icons-material/Festival";
 import AddCardIcon from '@mui/icons-material/AddCard';
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {useAuth} from "../../Context/AuthContext";
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import EditNoteIcon from '@mui/icons-material/EditNote';
 import EditAnswersModal from "../../Components/events/EditAnswersModal";
+import ListAccordions from "../../Components/events/ListAccordions";
+import PaymentIcon from '@mui/icons-material/Payment';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 
 export default function Event() {
@@ -40,7 +35,7 @@ export default function Event() {
     const canChangeEvent = user?.permissions.includes("change_event");
     const canChangeSubscription = user?.permissions.includes("change_subscription");
     const isBoardMember = user?.groups?.includes("Board");
-    const {id} = useParams(); // Get the ID from URL
+    const {id} = useParams();
     const location = useLocation();
     const navigate = useNavigate();
     const [eventModalOpen, setEventModalOpen] = useState(false);
@@ -63,7 +58,6 @@ export default function Event() {
     const [reimburseDepositsListId, setReimburseDepositsListId] = useState(null);
     const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
     const [singleSubToReimburseQuota, setSingleSubToReimburseQuota] = useState(null);
-    const [expandedAccordion, setExpandedAccordion] = useState([]);
     const [editAnswersModalOpen, setEditAnswersModalOpen] = useState(false);
     const [editAnswersSubscription, setEditAnswersSubscription] = useState(null);
     const hasDeposit = data?.deposit > 0;
@@ -153,15 +147,7 @@ export default function Event() {
         };
     };
 
-    const handleEditSubscription = (subscriptionId) => {
-        // Implementation for editing a subscription
-        //console.log("Editing subscription:", subscriptionId);
-        setSelectedList(null);
-        setSubscription(data.subscriptions.find(sub => sub.id === subscriptionId) || null);
-        setSubscriptionIsEdit(true);
-        setSubscriptionModalOpen(true);
-    };
-
+    // Handlers for ListAccordions component
     const handleOpenSubscriptionModal = (listId) => {
         setSelectedList(listId);
         setSubscription(null);
@@ -169,508 +155,77 @@ export default function Event() {
         setSubscriptionModalOpen(true);
     };
 
-    const handleOpenEditAnswers = (subscription) => {
-        setEditAnswersSubscription(subscription);
-        setEditAnswersModalOpen(true);
-    }
-
-    // Replace handleAccordionChange with a simple toggle function:
-    const toggleCollapse = (panel) => {
-        setExpandedAccordion(prev =>
-            prev.includes(panel) ? prev.filter(p => p !== panel) : [...prev, panel]
-        );
+    const handleEditSubscription = (subscriptionId) => {
+        setSelectedList(null);
+        setSubscription(data.subscriptions.find(sub => sub.id === subscriptionId) || null);
+        setSubscriptionIsEdit(true);
+        setSubscriptionModalOpen(true);
     };
 
-    // Columns and data for lists
-    const listConfigs = React.useMemo(() => {
-        if (!data?.lists) return [];
-        // Helper to get value from subscription for a profile field
-        const getProfileFieldValue = (sub, field) => {
-            // First try profile_data (from form submissions or manual edits)
-            if (sub.profile_data && sub.profile_data[field] !== undefined && sub.profile_data[field] !== null) {
-                return sub.profile_data[field];
-            }
-            // Fallback to direct subscription field (shouldn't happen with current structure)
-            if (sub[field] !== undefined && sub[field] !== null) {
-                return sub[field];
-            }
-            // If profile exists, get from profile object
-            if (sub.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
-                return sub.profile[field];
-            }
-            return '';
-        };
-
-        // Helper to get value from subscription for a form field
-        const getFormFieldValue = (sub, field) => {
-            if (!sub.form_data) return '';
-            const val = sub.form_data[field.name];
-            if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
-            if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
-            return val ?? '';
-        };
-
-        // Helper to get value from subscription for an additional field
-        const getAdditionalFieldValue = (sub, field) => {
-            if (!sub.additional_data) return '';
-            const val = sub.additional_data[field.name];
-            if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
-            if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
-            return val ?? '';
-        };
-
-        return data.lists.map(list => {
-            const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
-            // --- Dynamic columns ---
-            let dynamicColumns = [];
-            // Dati anagrafica (profile fields)
-            if (Array.isArray(data.profile_fields)) {
-                dynamicColumns = dynamicColumns.concat(
-                    data.profile_fields.map(field => ({
-                        accessorKey: `profile_field_${field}`,
-                        header: field.charAt(0).toUpperCase() + field.slice(1),
-                        size: 120,
-                        Cell: ({row}) => getProfileFieldValue(row.original, field)
-                    }))
-                );
-            }
-            // Form fields
-            if (Array.isArray(data.form_fields)) {
-                dynamicColumns = dynamicColumns.concat(
-                    data.form_fields.map((field, idx) => ({
-                        accessorKey: `form_field_${idx}`,
-                        header: field.name,
-                        size: 180,
-                        Cell: ({row}) => getFormFieldValue(row.original, field)
-                    }))
-                );
-            }
-            // Additional fields
-            if (Array.isArray(data.additional_fields)) {
-                dynamicColumns = dynamicColumns.concat(
-                    data.additional_fields.map((field, idx) => ({
-                        accessorKey: `additional_field_${idx}`,
-                        header: field.name,
-                        size: 180,
-                        Cell: ({row}) => getAdditionalFieldValue(row.original, field)
-                    }))
-                );
-            }
-
-            const listSubscriptionsColumns = [
-                {
-                    accessorKey: 'id',
-                    header: 'ID',
-                    size: 50,
-                },
-                {
-                    accessorKey: 'profile_name',
-                    header: 'Profilo',
-                    size: 150,
-                    Cell: ({row}) => {
-                        const sub = row.original;
-                        // If external_name is present, show it as plain text
-                        if (sub.external_name) {
-                            return <span>{sub.external_name}</span>;
-                        }
-                        // Otherwise, show profile_name as a link
-                        return (
-                            <span>
-                                <Button variant="text"
-                                        color="primary"
-                                        sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                                        endIcon={<OpenInNewIcon fontSize="small"/>}
-                                        onClick={() => window.open(`/profile/${sub.profile_id}`, '_blank', 'noopener,noreferrer')}>
-                                    {sub.profile_name}
-                                </Button>
-                            </span>
-                        );
-                    }
-                },
-                // Stato Quota column only if hasQuota
-                hasQuota && {
-                    accessorKey: 'status_quota',
-                    header: 'Stato Quota',
-                    size: 120,
-                    Cell: ({cell}) => {
-                        const status = cell.getValue();
-                        let color, label;
-                        if (status === 'pending') {
-                            color = 'error';
-                            label = 'In attesa';
-                        } else if (status === 'paid') {
-                            color = 'success';
-                            label = 'Pagata';
-                        } else if (status === 'reimbursed') {
-                            color = 'warning';
-                            label = 'Rimborsata';
-                        } else {
-                            color = 'default';
-                            label = status;
-                        }
-                        return <Chip label={label} color={color}/>;
-                    }
-                },
-                // Stato Cauzione column (if deposit enabled)
-                hasDeposit && {
-                    accessorKey: 'status_cauzione',
-                    header: 'Stato Cauzione',
-                    size: 120,
-                    Cell: ({cell}) => {
-                        const status = cell.getValue();
-                        let label, color;
-                        if (status === 'pending') {
-                            label = 'In attesa';
-                            color = 'error';
-                        } else if (status === 'paid') {
-                            label = 'Pagata';
-                            color = 'success';
-                        } else if (status === 'reimbursed') {
-                            label = 'Rimborsata';
-                            color = 'warning';
-                        } else {
-                            label = status;
-                            color = 'default';
-                        }
-                        return <Chip label={label} color={color}/>;
-                    }
-                },
-                data.is_allow_external && {
-                    accessorKey: 'is_external',
-                    header: 'Esterno',
-                    size: 80,
-                    Cell: ({row}) => {
-                        const sub = row.original;
-                        const isExternal = !!sub.external_name;
-                        return (
-                            <Chip
-                                label={isExternal ? "Sì" : "No"}
-                                color={isExternal ? "success" : "error"}
-                                variant="outlined"
-                            />
-                        );
-                    }
-                },
-                {
-                    accessorKey: 'notes',
-                    header: 'Note',
-                    size: 150,
-                },
-            ].filter(Boolean);
-
-            // Insert dynamic columns after 'Profilo'
-            let columns = [];
-            const profileIdx = listSubscriptionsColumns.findIndex(col => col.accessorKey === 'profile_name');
-            if (profileIdx !== -1) {
-                columns = [
-                    ...listSubscriptionsColumns.slice(0, profileIdx + 1),
-                    ...dynamicColumns,
-                    ...listSubscriptionsColumns.slice(profileIdx + 1)
-                ];
-            } else {
-                columns = [...listSubscriptionsColumns, ...dynamicColumns];
-            }
-
-            if ((hasDeposit || hasQuota) && isBoardMember) {
-                columns.push({
-                    accessorKey: 'actions',
-                    header: 'Azioni',
-                    size: 100,
-                    enableSorting: false,
-                    enableColumnActions: false,
-                    Cell: ({row}) => {
-                        const sub = row.original;
-                        // Quota button logic
-                        const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
-                        // Cauzione button logic
-                        const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
-                        return (<>
-                            <IconButton
-                                title="Modifica Risposte Form"
-                                color="primary"
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    handleOpenEditAnswers(sub);
-                                }}
-                            >
-                                <EditNoteIcon/>
-                            </IconButton>
-                            {hasQuota && isBoardMember && (
-                                <IconButton
-                                    title="Rimborsa Quota"
-                                    color="secondary"
-                                    disabled={!canReimburseQuota}
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        setSingleSubToReimburseQuota(sub);
-                                        setReimburseQuotaModalOpen(true);
-                                    }}>
-                                    <EuroIcon/>
-                                </IconButton>
-                            )}
-                            {hasDeposit && isBoardMember && (
-                                <IconButton
-                                    title="Rimborsa Cauzione"
-                                    color="primary"
-                                    disabled={!canReimburseDeposit}
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        setSingleSubToReimburse(sub);
-                                        setReimburseDepositsModalOpen(true);
-                                    }}>
-                                    <AddCardIcon/>
-                                </IconButton>
-                            )}
-                        </>);
-                    },
-                });
-            } else {
-                // If not board member, still allow edit answers for own subscriptions (optional, adjust as needed)
-                columns.push({
-                    accessorKey: 'actions',
-                    header: 'Azioni',
-                    size: 100,
-                    enableSorting: false,
-                    enableColumnActions: false,
-                    Cell: ({row}) => {
-                        const sub = row.original;
-                        return (
-                            <IconButton
-                                title="Modifica Risposte Form"
-                                color="primary"
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    handleOpenEditAnswers(sub);
-                                }}
-                            >
-                                <EditNoteIcon/>
-                            </IconButton>
-                        );
-                    }
-                });
-            }
-
-            return {
-                listId: list.id,
-                listName: list.name,
-                capacity: list.capacity,
-                subscription_count: list.subscription_count,
-                subscriptions: listSubscriptions,
-                columns
-            };
-        });
-    }, [data, hasDeposit, hasQuota, isBoardMember]);
-
-    const lists = React.useMemo(() => {
-        return listConfigs.map(config => ({
-            ...config,
-            tableOptions: {
-                columns: config.columns,
-                data: config.subscriptions,
-                enablePagination: true,
-                enableRowSelection: true,
-                enableRowActions: false,
-                display: false,
-                initialState: {
-                    pagination: {
-                        pageSize: 10,
-                        pageIndex: 0,
-                    },
-                    columnVisibility: {id: false}
-                },
-                paginationDisplayMode: 'pages',
-                localization: MRT_Localization_IT,
-                renderEmptyRowsFallback: () => (
-                    <Box sx={{textAlign: 'center', p: 2}}>
-                        <Typography variant="body1">Nessuna iscrizione presente</Typography>
-                    </Box>
-                ),
-                muiTablePaginationProps: {
-                    labelRowsPerPage: 'Righe per pagina:'
-                },
-                renderTopToolbar: ({table}) => {
-                    const selectedRows = table.getSelectedRowModel().rows;
-                    const selectedCount = selectedRows.length;
-                    const listId = config.listId;
-                    const capacity = config.capacity;
-                    const subscription_count = config.subscription_count;
-                    const {isActive} = handleSubscriptionStatus();
-                    return (
-                        <Box sx={{display: 'flex', gap: 1, p: 2}}>
-                            {selectedCount === 0 && (<>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        startIcon={<PersonAddIcon/>}
-                                        disabled={!((capacity === 0 || subscription_count < capacity) && isActive)}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleOpenSubscriptionModal(listId);
-                                        }}>
-                                        ISCRIVI
-                                    </Button>
-                                </>
-                            )}
-                            {selectedCount >= 1 && (<>
-                                    <Button
-                                        variant="outlined"
-                                        color="primary"
-                                        onClick={() => handleMoveToList(selectedRows, listId)}
-                                        disabled={!canChangeSubscription}
-                                    >
-                                        Sposta in Altra Lista
-                                    </Button>
-                                    {false && (
-                                        <Button
-                                            variant="outlined"
-                                            color="secondary"
-                                            onClick={() => handleExportSelected(selectedRows)}>
-                                            Esporta
-                                        </Button>
-                                    )}
-                                </>
-                            )}
-                            {selectedCount === 1 && (<>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        onClick={() => handleEditSubscription(selectedRows[0].original.id)}
-                                        disabled={!canChangeSubscription}
-                                    >
-                                        Modifica Iscrizione
-                                    </Button>
-                                </>
-                            )}
-                            {hasDeposit && canChangeTransactions && selectedCount === 0 && isBoardMember && (
-                                <Button variant="contained"
-                                        color="success"
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            setSingleSubToReimburse(null);
-                                            setReimburseDepositsListId(config.listId);
-                                            setReimburseDepositsModalOpen(true);
-                                        }}
-                                        sx={{ml: 1}}
-                                >
-                                    Rimborsa Cauzioni
-                                </Button>
-                            )}
-                            {hasQuota && selectedCount === 0 && data.is_a_bando && isBoardMember && (
-                                <Button variant="contained"
-                                        color="info"
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            setPrintableLiberatorieListId(config.listId);
-                                            setPrintableLiberatorieModalOpen(true);
-                                        }}
-                                        sx={{ml: 1}}
-                                >
-                                    Stampa Liberatorie
-                                </Button>
-                            )}
-                        </Box>
-                    );
-                },
-            }
-        }));
-    }, [listConfigs, data, canChangeSubscription, canChangeTransactions, isBoardMember]);
-
-    const ListAccordions = React.memo(() => {
-        if (!lists || lists.length === 0) {
-            return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
-        }
-
-        return lists.map(listConfig => {
-            const {listId, listName, capacity, subscription_count, tableOptions} = listConfig;
-            const occupancyPercentage = capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
-            const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 60 ? 'warning' : 'success';
-            const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
-            const list = useMaterialReactTable(fixedTableOptions);
-
-            return (
-                <Box key={listId} sx={{mt: 2, border: '1px solid #ccc', borderRadius: 2, overflow: 'hidden'}}>
-                    <Box onClick={() => toggleCollapse(listId)}
-                         sx={{
-                             display: 'flex',
-                             alignItems: 'center',
-                             cursor: 'pointer',
-                             padding: 1,
-                             backgroundColor: '#f5f5f5'
-                         }}>
-                        <BallotIcon sx={{color: 'primary.main', mr: 2}}/>
-                        <Typography variant="h6" component="div" sx={{flexGrow: 1}}>{listName}</Typography>
-                        <Box sx={{width: '200px', mr: 2}}>
-                            <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
-                                <Typography variant="body2">{subscription_count}/{capacity}</Typography>
-                            </Box>
-                            <LinearProgress variant="determinate"
-                                            value={occupancyPercentage}
-                                            color={occupancyColor}
-                                            sx={{height: 8, borderRadius: 5}}/>
-                        </Box>
-                        <IconButton onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCollapse(listId);
-                        }}>
-                            {expandedAccordion.includes(listId) ? <ExpandLessIcon/> : <ExpandMoreIcon/>}
-                        </IconButton>
-                    </Box>
-                    <Collapse in={expandedAccordion.includes(listId)} timeout="auto" unmountOnExit>
-                        <Box sx={{p: 2}}> <MaterialReactTable table={list}/> </Box>
-                    </Collapse>
-                </Box>
-            );
-        });
-    });
-    ListAccordions.displayName = "ListAccordions";
-
-    // Handlers for actions
     const handleMoveToList = (selectedRows, listId) => {
-        //console.log("Moving selected rows to another list:", selectedRows);
         setSelectedRows(selectedRows);
         setSelectedList(listId);
         setMoveToListModalOpen(true);
     };
 
-    const handleCloseMoveToListModal = (success) => {
+    const handleOpenReimburseDeposits = (subscription, listId) => {
+        setSingleSubToReimburse(subscription);
+        setReimburseDepositsListId(listId);
+        setReimburseDepositsModalOpen(true);
+    };
+
+    const handleOpenReimburseQuota = (subscription) => {
+        setSingleSubToReimburseQuota(subscription);
+        setReimburseQuotaModalOpen(true);
+    };
+
+    const handleOpenPrintableLibetatorie = (listId) => {
+        setPrintableLiberatorieListId(listId);
+        setPrintableLiberatorieModalOpen(true);
+    };
+
+    const handleOpenEditAnswers = (subscription) => {
+        setEditAnswersSubscription(subscription);
+        setEditAnswersModalOpen(true);
+    }
+
+    // Add missing modal close handlers
+    const handleCloseMoveToListModal = (success, message) => {
         setMoveToListModalOpen(false);
         if (success) {
-            setPopup({message: "Spostamento effettuato con successo!", state: "success", id: Date.now()});
+            setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
-    }
+        setSelectedRows([]);
+        setSelectedList(null);
+    };
 
     const handleCloseRemburseDepositsModal = (success, message) => {
         setReimburseDepositsModalOpen(false);
-        setReimburseDepositsListId(null);
-        setSingleSubToReimburse(null);
         if (success) {
             setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
-    }
+        setReimburseDepositsListId(null);
+        setSingleSubToReimburse(null);
+    };
 
     const handleCloseReimburseQuotaModal = (success, message) => {
         setReimburseQuotaModalOpen(false);
-        setSingleSubToReimburseQuota(null);
         if (success) {
             setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
-    }
-
-    const handleCloseEditAnswersModal = (updated) => {
-        setEditAnswersModalOpen(false);
-        setEditAnswersSubscription(null);
-        if (updated) {
-            setPopup({message: "Risposte aggiornate con successo!", state: "success", id: Date.now()});
-            refreshEventData();
-        }
+        setSingleSubToReimburseQuota(null);
     };
 
-    const handleExportSelected = (selectedRows) => {
-        console.log("Exporting selected rows:", selectedRows);
-        // TODO: Implement export logic here
+    const handleCloseEditAnswersModal = (success, message) => {
+        setEditAnswersModalOpen(false);
+        if (success) {
+            setPopup({message: message, state: "success", id: Date.now()});
+            refreshEventData();
+        }
+        setEditAnswersSubscription(null);
     };
 
     return (
@@ -791,14 +346,49 @@ export default function Event() {
                                         </Box>
                                     </Grid>
                                     <Grid size={{xs: 12, md: 3}}>
-                                        <Box sx={{display: 'flex', alignItems: 'center'}}>
+                                        <Box sx={{display: 'flex', alignItems: 'center', flexWrap: 'wrap'}}>
                                             <Chip
                                                 label={data.is_a_bando ? "Evento a Bando" : "Evento non a Bando"}
                                                 color={data.is_a_bando ? "success" : "error"}
-                                                sx={{mr: 1}}
+                                                sx={{mr: 1, mb: 1}}
                                             />
                                             {data.is_allow_external && (
-                                                <Chip label="Iscrizione Esterni Consentita" color="success"/>
+                                                <Chip label="Iscrizione Esterni Consentita" color="success" sx={{mr: 1, mb: 1}}/>
+                                            )}
+                                            {/* Show if event has a form */}
+                                            {data.enable_form && (
+                                                <Chip
+                                                    icon={<EditIcon />}
+                                                    label="Form Iscrizioni Attivo"
+                                                    color="success"
+                                                    sx={{mr: 1, mb: 1}}
+                                                />
+                                            )}
+                                            {/* Show if form is programmed to open at a specific time */}
+                                            {data.enable_form && data.form_programmed_open_time && (() => {
+                                                const openTime = dayjs(data.form_programmed_open_time);
+                                                const now = dayjs();
+                                                const isOpen = now.isAfter(openTime) || now.isSame(openTime);
+                                                return (
+                                                    <Chip
+                                                        icon={<AccessTimeIcon />}
+                                                        label={
+                                                            "Apertura Form: " +
+                                                            openTime.format('DD/MM/YYYY HH:mm')
+                                                        }
+                                                        color={isOpen ? "success" : "warning"}
+                                                        sx={{mr: 1, mb: 1}}
+                                                    />
+                                                );
+                                            })()}
+                                            {/* Show if online payment is enabled */}
+                                            {data.enable_form  && (
+                                                <Chip
+                                                    icon={<PaymentIcon />}
+                                                    label={data.allow_online_payment ? "Pagamento Online Abilitato" : "Pagamento Online Disabilitato"}
+                                                    color={data.allow_online_payment ? "success" : "error"}
+                                                    sx={{mr: 1, mb: 1}}
+                                                />
                                             )}
                                         </Box>
                                     </Grid>
@@ -835,7 +425,19 @@ export default function Event() {
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{mt: 2}}>
                                             <Typography variant="h6" component="div" sx={{mb: 2}}>Liste</Typography>
-                                            <ListAccordions/>
+                                            <ListAccordions
+                                                data={data}
+                                                onOpenSubscriptionModal={handleOpenSubscriptionModal}
+                                                onEditSubscription={handleEditSubscription}
+                                                onMoveToList={handleMoveToList}
+                                                onOpenReimburseDeposits={handleOpenReimburseDeposits}
+                                                onOpenReimburseQuota={handleOpenReimburseQuota}
+                                                onOpenPrintableLibetatorie={handleOpenPrintableLibetatorie}
+                                                onOpenEditAnswers={handleOpenEditAnswers}
+                                                canChangeSubscription={canChangeSubscription}
+                                                canChangeTransactions={canChangeTransactions}
+                                                isBoardMember={isBoardMember}
+                                            />
                                         </Box>
                                     </Grid>
                                 </Grid>

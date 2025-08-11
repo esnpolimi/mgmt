@@ -36,16 +36,6 @@ profile_fields_schema = {
 #
 # Example: [{'name':'What are your allergies?', 'type':'t'},
 #           {'name':'Are you vegan?','type':'b', 'choices':['yes','no'] }]
-#
-# Additionally, there is the possibility of restricting the ability to view / edit by the office.
-#
-# Accessibility legend:
-#   0: office can view and edit
-#   1: office can view, cannot edit
-#   2: office cannot view nor edit
-#
-# Example: [{'name': 'Pagamento verificato', 'type':'b', 'choices':['Yes','No'], 'accessibility':0},
-#           {'name': 'Contattato via email','type':'b', 'choices':['Yes','No'], 'accessibility':2 }]
 unified_fields_schema = {
     "type": "array",
     "items": {
@@ -58,7 +48,6 @@ unified_fields_schema = {
                 "type": "array",
                 "items": {"type": "string"}
             },
-            # "accessibility": {"enum": [0, 1, 2]},
             "required": {"type": "boolean"}
         },
         "required": ["name", "type", "field_type"],
@@ -67,10 +56,6 @@ unified_fields_schema = {
                 "if": {"properties": {"type": {"enum": ["c", "m"]}}},
                 "then": {"required": ["choices"]}
             },
-            # {
-            #     "if": {"properties": {"field_type": {"const": "additional"}}},
-            #     "then": {"required": ["accessibility"]}
-            # }
             {
                 "if": {"properties": {"field_type": {"const": "form"}}},
                 "then": {"properties": {"required": {"type": "boolean"}}}
@@ -140,6 +125,12 @@ class Event(BaseEntity):
 
     # Indicates whether form is open
     form_open = models.BooleanField(default=False)
+
+    # Allow online payment for event form
+    allow_online_payment = models.BooleanField(default=False)
+
+    # Programmed open time for the form (optional)
+    form_programmed_open_time = models.DateTimeField(null=True, blank=True)
 
     # Required profile fields (i.e. name, surname, whatsapp number, email)
     profile_fields = models.JSONField(default=list, blank=True)
