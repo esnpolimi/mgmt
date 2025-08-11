@@ -16,6 +16,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import Popup from "../Popup";
 import {defaultErrorHandler, fetchCustom} from "../../api/api";
+import {profileDisplayNames} from '../../utils/displayAttributes';
 
 export default function EditAnswersModal({open, onClose, event, subscription}) {
     // Initialize with proper defaults and ensure all fields exist
@@ -263,7 +264,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                         {profileFields.map(field => (
                             <Grid size={{xs: 12, sm: 6}} key={field}>
                                 <TextField
-                                    label={field.charAt(0).toUpperCase() + field.slice(1)}
+                                    label={profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1))}
                                     value={profileData[field] || ''}
                                     onChange={e => handleProfileFieldChange(field, e.target.value)}
                                     fullWidth

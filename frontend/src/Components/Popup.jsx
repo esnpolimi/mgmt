@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import {createPortal} from 'react-dom';
 
 const popupStyle = {
     display: 'flex',
@@ -56,7 +57,7 @@ const Popup = ({message, state, duration = 4000}) => {
 
     if (!message) return null;
 
-    return (
+    const popupContent = (
         <div
             style={{
                 ...popupStyle,
@@ -86,6 +87,9 @@ const Popup = ({message, state, duration = 4000}) => {
             <span>{message}</span>
         </div>
     );
+
+    // Use portal to render at the top level of the DOM
+    return createPortal(popupContent, document.body);
 };
 
 

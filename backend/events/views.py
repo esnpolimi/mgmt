@@ -135,6 +135,7 @@ def event_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
 
             # Validation logic is handled in the serializer
+            print("Request data:", request.data)
             serializer = EventCreationSerializer(instance=event, data=request.data, partial=True)
 
             if serializer.is_valid():

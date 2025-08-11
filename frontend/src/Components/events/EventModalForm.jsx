@@ -12,23 +12,33 @@ import {
     Select,
     TextField,
     Tooltip,
-    Typography
+    Typography,
+    Switch,
+    FormGroup,
 } from '@mui/material';
 import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
-import {profileDisplayNames} from '../../utils/displayAttributes';
+import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
+import {AdapterDayjs} from "@mui/x-date-pickers/AdapterDayjs";
+import {DateTimePicker, LocalizationProvider} from "@mui/x-date-pickers";
+import dayjs from "dayjs";
 
-export default function FieldsTable({
-                                        profile_fields,
-                                        setProfileFields,
-                                        fields,
-                                        setFields,
-                                        excludedProfileFields = [],
-                                        formFieldsDisabled = false,
-                                        additionalFieldsDisabled = false,
-                                        hasSubscriptions = false,
-                                        isEdit = false,
-                                        originalAdditionalFields = []
-                                    }) {
+export default function EventModalForm({
+                                           profile_fields,
+                                           setProfileFields,
+                                           fields,
+                                           setFields,
+                                           excludedProfileFields = [],
+                                           formFieldsDisabled = false,
+                                           additionalFieldsDisabled = false,
+                                           hasSubscriptions = false,
+                                           isEdit = false,
+                                           originalAdditionalFields = [],
+                                           allow_online_payment = false,
+                                           setAllowOnlinePayment,
+                                           form_programmed_open_time = null,
+                                           setFormProgrammedOpenTime,
+                                           paymentAndOpenTimeDisabled: formOpenTimeDisabled = false,
+                                       }) {
 
     const formFields = fields.filter(field => field.field_type === 'form');
     const additionalFields = fields.filter(field => field.field_type === 'additional');
@@ -42,7 +52,6 @@ export default function FieldsTable({
             field_type: fieldType,
             choices: [],
             required: false,
-            // ...(fieldType === 'additional' && {accessibility: 0})
         };
         setFields([...fields, newField]);
     };
@@ -89,7 +98,7 @@ export default function FieldsTable({
     };
 
     // Validation: ensure all field names and choices are non-empty
-    FieldsTable.validateFields = () => {
+    EventModalForm.validateFields = () => {
         for (const field of fields) {
             if (!field.name || !field.name.trim()) {
                 setValidationError("Tutti i campi devono avere un nome.");
@@ -114,16 +123,58 @@ export default function FieldsTable({
 
     return (
         <Paper elevation={3} sx={{p: 2, my: 2, border: '1px solid #eee', background: '#fafbfc'}}>
+            <Typography variant="h5" gutterBottom>Impostazioni Form di Iscrizioni Online</Typography>
             {validationError && (
                 <Typography color="error" sx={{mb: 2}}>
                     {validationError}
                 </Typography>
             )}
-            {/* Profile Fields */}
+            {/* --- Abilita Form Iscrizioni extra options --- */}
+            <Box my={2}>
+                <Grid container spacing={2} sx={{mt: 2}}>
+                    <Grid size={{xs: 12, md: 4}}>
+                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                            <DateTimePicker
+                                label={eventNames.form_programmed_open_time}
+                                value={form_programmed_open_time ? dayjs(form_programmed_open_time) : null}
+                                onChange={val => setFormProgrammedOpenTime(val && val.isValid() ? val.toISOString() : null)}
+                                minDate={dayjs()}
+                                slotProps={{
+                                    textField: {
+                                        fullWidth: true,
+                                        required: true,
+                                    }
+                                }}
+                                disabled={formOpenTimeDisabled}
+                                required
+                            />
+                        </LocalizationProvider>
+                    </Grid>
+                    <Grid size={{xs: 12, md: 4}} sx={{ml:2}}>
+                        <FormControlLabel
+                            label="Consenti pagamenti online"
+                            control={
+                                <Switch
+                                    checked={!!allow_online_payment}
+                                    onChange={e => setAllowOnlinePayment(e.target.checked)}
+                                    name="allow_online_payment"
+                                    color="primary"
+                                    disabled={formFieldsDisabled}
+                                />
+                            }
+                        />
+                    </Grid>
+                </Grid>
+            </Box>
+            {/* --- End extra options --- */
+            }
+            {/* Profile Fields */
+            }
             <Box my={2}>
                 <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
-                    Campi richiesti e salvati per ogni iscrizione via form. {formFieldsDisabled ? "Non modificabili - evento con iscrizioni esistenti." : ""}
+                    Campi richiesti e salvati per ogni iscrizione via
+                    form. {formFieldsDisabled ? "Non modificabili - evento con iscrizioni esistenti." : ""}
                 </Typography>
                 <Select
                     multiple
@@ -148,7 +199,8 @@ export default function FieldsTable({
                 </Select>
             </Box>
 
-            {/* Form Fields */}
+            {/* Form Fields */
+            }
             <FieldSection
                 title="Campi Form"
                 fields={formFields}
@@ -160,13 +212,13 @@ export default function FieldsTable({
                 deleteChoice={deleteChoice}
                 disabled={formFieldsDisabled}
                 allFields={fields}
-                showAccessibility={false}
                 hasSubscriptions={hasSubscriptions}
                 isEdit={isEdit}
                 originalAdditionalFields={originalAdditionalFields}
             />
 
-            {/* Additional Fields */}
+            {/* Additional Fields */
+            }
             <FieldSection
                 title="Campi Aggiuntivi"
                 fields={additionalFields}
@@ -178,13 +230,13 @@ export default function FieldsTable({
                 deleteChoice={deleteChoice}
                 disabled={additionalFieldsDisabled}
                 allFields={fields}
-                showAccessibility={false}
                 hasSubscriptions={hasSubscriptions}
                 isEdit={isEdit}
                 originalAdditionalFields={originalAdditionalFields}
             />
         </Paper>
-    );
+    )
+        ;
 }
 
 function FieldSection({
@@ -198,7 +250,6 @@ function FieldSection({
                           deleteChoice,
                           disabled,
                           allFields,
-                          showAccessibility,
                           hasSubscriptions = false,
                           isEdit = false,
                           originalAdditionalFields = []
@@ -258,7 +309,6 @@ function FieldSection({
                                 deleteChoice={deleteChoice}
                                 disabled={disabled || isExistingAdditionalField}
                                 isExistingAdditionalField={isExistingAdditionalField}
-                                // showAccessibility={showAccessibility}
                             />
                         );
                     })
@@ -277,8 +327,6 @@ function FieldRow({
                       updateChoice,
                       deleteChoice,
                       disabled,
-                      isExistingAdditionalField = false
-    // showAccessibility
                   }) {
     const typeOptions = [
         {value: 't', label: 'Testo'},
@@ -287,12 +335,6 @@ function FieldRow({
         {value: 'm', label: 'Scelta Multipla'},
         {value: 'b', label: 'Sì/No'}
     ];
-
-    /*const accessibilityOptions = [
-        {value: 0, label: 'Visualizza e Modifica'},
-        {value: 1, label: 'Solo Visualizza'},
-        {value: 2, label: 'Nascosto'}
-    ];*/
 
     const needsChoices = ['c', 'm'].includes(field.type);
     const isFormField = field.field_type === 'form';
