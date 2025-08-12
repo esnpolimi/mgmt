@@ -245,7 +245,9 @@ def verify_email_and_enable_profile(request, uid, token):
             if profile.is_esner:
                 return Response({'error': 'Link di verifica non valido o scaduto.'}, status=400)
             else:
-                return Response({'error': 'Invalid or expired verification link. Please contact us at informatica@esnpolimi.it'}, status=400)
+                return Response(
+                    {'error': 'Invalid or expired verification link. Please contact us at informatica@esnpolimi.it'},
+                    status=400)
 
         if profile.email_is_verified:
             if profile.is_esner:
@@ -453,7 +455,7 @@ def search_profiles(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def profile_subscriptions(request, pk):
+def profile_subscriptions(_, pk):
     """
     Returns all subscriptions for a given profile, with event and list info.
     """
@@ -465,3 +467,21 @@ def profile_subscriptions(request, pk):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+def check_erasmus_email(request):
+    """
+    Public endpoint to check if an email belongs to an Erasmus profile.
+    """
+    email = request.data.get('email', '').strip().lower()
+    if not email:
+        return Response({'error': 'Email required.'}, status=400)
+    exists = Profile.objects.filter(email__iexact=email, is_esner=False, enabled=True, email_is_verified=True).exists()
+    # Return profile data to allow automatic field filling in the form
+    if exists:
+        profile = Profile.objects.get(email__iexact=email, is_esner=False, enabled=True, email_is_verified=True)
+        serializer = ProfileDetailViewSerializer(profile)
+        return Response(serializer.data, status=200)
+    else:
+        return Response(None, status=200)

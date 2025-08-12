@@ -10,5 +10,6 @@ urlpatterns = [
     path('profile_subscriptions/<str:pk>/', views.profile_subscriptions),  # subscriptions for profile
     path('document/', views.document_creation),  # creates a new document
     path('document/<str:pk>/', views.document_detail),
-    path('profiles/search/', views.search_profiles)  # search for profiles by name, surname, or email
+    path('profiles/search/', views.search_profiles),  # search for profiles by name, surname, or email
+    path('check_erasmus_email/', views.check_erasmus_email),  # public: check if email belongs to an Erasmus
 ]

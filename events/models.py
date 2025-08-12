@@ -123,9 +123,6 @@ class Event(BaseEntity):
     # Indicates whether a form is required for the event
     enable_form = models.BooleanField(default=False)
 
-    # Indicates whether form is open
-    form_open = models.BooleanField(default=False)
-
     # Allow online payment for event form
     allow_online_payment = models.BooleanField(default=False)
 
@@ -157,6 +154,17 @@ class Event(BaseEntity):
         return [f for f in self.fields if f.get('field_type') == 'additional']
 
     @property
+    def is_form_open(self):
+        """
+        Returns True if the event form is enabled and (if programmed open time is set) the current time is after it.
+        """
+        if not self.enable_form:
+            return False
+        if self.form_programmed_open_time:
+            return timezone.now() >= self.form_programmed_open_time
+        return True
+
+    @property
     def status(self):
         now = timezone.now()
         if self.subscription_start_date and self.subscription_end_date:
@@ -178,6 +186,8 @@ class Event(BaseEntity):
                 return "closed"
         else:
             return "open"
+
+
 
 
 class EventOrganizer(BaseEntity):
