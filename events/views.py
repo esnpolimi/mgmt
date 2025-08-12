@@ -27,7 +27,8 @@ from events.models import Event, Subscription
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
-    EventWithSubscriptionsSerializer, SubscriptionSerializer, PrintableLiberatoriaSerializer, LiberatoriaProfileSerializer
+    EventWithSubscriptionsSerializer, SubscriptionSerializer, PrintableLiberatoriaSerializer,
+    LiberatoriaProfileSerializer
 )
 from treasury.models import Transaction
 
@@ -98,6 +99,7 @@ def events_list(request):
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
+
 # Endpoint to create event
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -116,6 +118,7 @@ def event_creation(request):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
 
 # Endpoint to edit/view/delete event in detail
 @api_view(['GET', 'PATCH', 'DELETE'])
@@ -189,7 +192,8 @@ def subscription_create(request):
             return Response({'error': "Il nominativo esterno è già iscritto all'evento"}, status=400)
         if not profile and not external_name:
             if event.is_allow_external:
-                return Response({'error': "Devi inserire un nominativo esterno se non selezioni un profilo."}, status=400)
+                return Response({'error': "Devi inserire un nominativo esterno se non selezioni un profilo."},
+                                status=400)
             else:
                 return Response({'error': "Seleziona un profilo per l'iscrizione."}, status=400)
 
@@ -224,19 +228,22 @@ def subscription_create(request):
                     subscription=subscription,
                     executor=request.user,
                     amount=Decimal(subscription.event.cost),
-                    description=f"Quota {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
+                    description=f"Quota {sub_name} - {subscription.event.name}" + (
+                        f" - {subscription.notes}" if subscription.notes else "")
                 )
                 t.save()
 
             # Cauzione transaction
-            if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
+            if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(
+                    subscription.event.deposit) > 0:
                 t_cauzione = Transaction(
                     type=Transaction.TransactionType.CAUZIONE,
                     account_id=account_id,
                     subscription=subscription,
                     executor=request.user,
                     amount=Decimal(subscription.event.deposit),
-                    description=f"Cauzione {sub_name} - {subscription.event.name}" + (f" - {subscription.notes}" if subscription.notes else "")
+                    description=f"Cauzione {sub_name} - {subscription.event.name}" + (
+                        f" - {subscription.notes}" if subscription.notes else "")
                 )
                 t_cauzione.save()
             return Response(serializer.data, status=200)
@@ -251,6 +258,7 @@ def subscription_create(request):
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
+
 # Endpoint to edit/view/delete subscription in detail
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
@@ -259,8 +267,10 @@ def subscription_detail(request, pk):
         sub = Subscription.objects.get(pk=pk)
 
         # Check if quota or cauzione is reimbursed
-        quota_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
-        cauzione_reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+        quota_reimbursed = Transaction.objects.filter(subscription=sub,
+                                                      type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
+        cauzione_reimbursed = Transaction.objects.filter(subscription=sub,
+                                                         type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
 
         if request.method == 'GET':
             if not get_action_permissions(request, 'subscription_detail_GET'):
@@ -283,7 +293,8 @@ def subscription_detail(request, pk):
             if not get_action_permissions(request, 'subscription_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
             if quota_reimbursed or cauzione_reimbursed:
-                return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'}, status=400)
+                return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'},
+                                status=400)
             if request.user.has_perm('events.change_subscription'):
                 serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
                 if not serializer.is_valid():
@@ -300,8 +311,10 @@ def subscription_detail(request, pk):
                     status_cauzione = request.data.get('status_cauzione', 'pending')
 
                     # Quota transaction
-                    quota_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.SUBSCRIPTION).first()
-                    cauzione_tx = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.CAUZIONE).first()
+                    quota_tx = Transaction.objects.filter(subscription=subscription,
+                                                          type=Transaction.TransactionType.SUBSCRIPTION).first()
+                    cauzione_tx = Transaction.objects.filter(subscription=subscription,
+                                                             type=Transaction.TransactionType.CAUZIONE).first()
 
                     # --- QUOTA ---
                     if status_quota == 'paid' and account_id:
@@ -333,7 +346,8 @@ def subscription_detail(request, pk):
                         quota_tx.delete()
 
                     # --- CAUZIONE ---
-                    if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(subscription.event.deposit) > 0:
+                    if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(
+                            subscription.event.deposit) > 0:
                         if not cauzione_tx:
                             t_cauzione = Transaction(
                                 type=Transaction.TransactionType.CAUZIONE,
@@ -368,7 +382,8 @@ def subscription_detail(request, pk):
             if not get_action_permissions(request, 'subscription_detail_DELETE'):
                 return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
             if quota_reimbursed or cauzione_reimbursed:
-                return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'}, status=400)
+                return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'},
+                                status=400)
             if request.user.has_perm('events.delete_subscription'):
                 related_transactions = Transaction.objects.filter(
                     subscription=sub,
@@ -418,7 +433,9 @@ def move_subscriptions(request):
         # Check if moving the subscriptions would exceed the target list's capacity
         current_count = Subscription.objects.filter(list=target_list).count()
         if target_list.capacity > 0 and current_count + len(subscription_ids) > target_list.capacity:
-            return Response({'error': "Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione"}, status=400)
+            return Response(
+                {'error': "Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione"},
+                status=400)
 
         # Fetch the subscriptions to be moved
         subscriptions = Subscription.objects.filter(id__in=subscription_ids)
@@ -434,8 +451,6 @@ def move_subscriptions(request):
         logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 
 
 @api_view(['POST'])
@@ -594,3 +609,30 @@ def printable_liberatorie(request, event_id):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['GET'])
+def event_form_view(_, event_id):
+    """
+    Public endpoint to retrieve event form configuration for the event form page.
+    """
+    try:
+        event = Event.objects.get(pk=event_id)
+        if not event.enable_form:
+            return Response({'error': 'Form not enabled for this event.'}, status=404)
+        # Return only the minimal info needed for the form page
+        return Response({
+            'id': event.id,
+            'status': event.status,
+            'name': event.name,
+            'date': event.date,
+            'cost': event.cost,
+            'deposit': event.deposit,
+            'profile_fields': event.profile_fields,
+            'form_fields': event.form_fields,
+            'is_form_open': event.is_form_open,
+            'form_programmed_open_time': event.form_programmed_open_time,
+            'allow_online_payment': event.allow_online_payment,
+        }, status=200)
+    except Event.DoesNotExist:
+        return Response({'error': "Event not found"}, status=404)
