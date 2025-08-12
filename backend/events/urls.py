@@ -26,4 +26,7 @@ urlpatterns = [
 
     # Endpoint to generate liberatorie PDF
     path('generate_liberatorie_pdf/', views.generate_liberatorie_pdf),
+
+    # Public endpoint to retrieve event form configuration
+    path('event/<str:event_id>/form/', views.event_form_view),
 ]

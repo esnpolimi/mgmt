@@ -27,6 +27,7 @@ import EditAnswersModal from "../../Components/events/EditAnswersModal";
 import ListAccordions from "../../Components/events/ListAccordions";
 import PaymentIcon from '@mui/icons-material/Payment';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 
 export default function Event() {
@@ -228,6 +229,14 @@ export default function Event() {
         setEditAnswersSubscription(null);
     };
 
+    // Add handler for copying form link
+    const handleCopyFormLink = () => {
+        const url = window.location.origin + `/event/${data.id}/formlogin/`;
+        navigator.clipboard.writeText(url).then(() => {
+            setPopup({message: "Link del form copiato!", state: "success", id: Date.now()});
+        });
+    };
+
     return (
         <Box>
             <Sidebar/>
@@ -353,16 +362,26 @@ export default function Event() {
                                                 sx={{mr: 1, mb: 1}}
                                             />
                                             {data.is_allow_external && (
-                                                <Chip label="Iscrizione Esterni Consentita" color="success" sx={{mr: 1, mb: 1}}/>
+                                                <Chip label="Iscrizione Esterni Consentita" color="success"
+                                                      sx={{mr: 1, mb: 1}}/>
                                             )}
                                             {/* Show if event has a form */}
                                             {data.enable_form && (
-                                                <Chip
-                                                    icon={<EditIcon />}
-                                                    label="Form Iscrizioni Attivo"
-                                                    color="success"
-                                                    sx={{mr: 1, mb: 1}}
-                                                />
+                                                <Box sx={{display: 'flex', alignItems: 'center', mr: 1, mb: 1}}>
+                                                    <Chip
+                                                        icon={<EditIcon/>}
+                                                        label="Form Iscrizioni Attivo"
+                                                        color="success"
+                                                        sx={{mr: 1}}
+                                                        deleteIcon={
+                                                            <ContentCopyIcon
+                                                                sx={{cursor: 'pointer'}}
+                                                                titleAccess="Copia Link"
+                                                            />
+                                                        }
+                                                        onDelete={handleCopyFormLink}
+                                                    />
+                                                </Box>
                                             )}
                                             {/* Show if form is programmed to open at a specific time */}
                                             {data.enable_form && data.form_programmed_open_time && (() => {
@@ -371,7 +390,7 @@ export default function Event() {
                                                 const isOpen = now.isAfter(openTime) || now.isSame(openTime);
                                                 return (
                                                     <Chip
-                                                        icon={<AccessTimeIcon />}
+                                                        icon={<AccessTimeIcon/>}
                                                         label={
                                                             "Apertura Form: " +
                                                             openTime.format('DD/MM/YYYY HH:mm')
@@ -382,9 +401,9 @@ export default function Event() {
                                                 );
                                             })()}
                                             {/* Show if online payment is enabled */}
-                                            {data.enable_form  && (
+                                            {data.enable_form && (
                                                 <Chip
-                                                    icon={<PaymentIcon />}
+                                                    icon={<PaymentIcon/>}
                                                     label={data.allow_online_payment ? "Pagamento Online Abilitato" : "Pagamento Online Disabilitato"}
                                                     color={data.allow_online_payment ? "success" : "error"}
                                                     sx={{mr: 1, mb: 1}}

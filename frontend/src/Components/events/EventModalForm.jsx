@@ -13,8 +13,7 @@ import {
     TextField,
     Tooltip,
     Typography,
-    Switch,
-    FormGroup,
+    Switch
 } from '@mui/material';
 import {Add as AddIcon, Delete as DeleteIcon} from '@mui/icons-material';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
@@ -149,6 +148,9 @@ export default function EventModalForm({
                                 required
                             />
                         </LocalizationProvider>
+                        <Typography  variant="body2" color="text.secondary" sx={{mt: 1}}>
+                            Per chiudere il form, agire sul campo di fine iscrizioni.
+                        </Typography>
                     </Grid>
                     <Grid size={{xs: 12, md: 4}} sx={{ml:2}}>
                         <FormControlLabel
