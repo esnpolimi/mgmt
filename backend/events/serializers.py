@@ -302,8 +302,6 @@ class EventDetailSerializer(serializers.ModelSerializer):
     organizers = EventOrganizerSerializer(many=True, read_only=True)
     profile_fields = serializers.ListField(read_only=True)
     fields = serializers.ListField(read_only=True)
-    form_fields = serializers.SerializerMethodField()
-    additional_fields = serializers.SerializerMethodField()
     available_profile_fields = serializers.SerializerMethodField(read_only=True)
     allow_online_payment = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
@@ -314,17 +312,9 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'form_fields', 'additional_fields',
+            'profile_fields', 'fields',
             'allow_online_payment', 'form_programmed_open_time'
         ]
-
-    @staticmethod
-    def get_form_fields(obj):
-        return obj.form_fields
-
-    @staticmethod
-    def get_additional_fields(obj):
-        return obj.additional_fields
 
 
 # Serializer to create subscription from form
@@ -533,8 +523,6 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     profile_fields = serializers.ListField(read_only=True)
     fields = serializers.ListField(read_only=True)
     enable_form = serializers.BooleanField(read_only=True)
-    form_fields = serializers.SerializerMethodField()
-    additional_fields = serializers.SerializerMethodField()
     allow_online_payment = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
 
@@ -543,15 +531,9 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'enable_form', 'form_fields', 'additional_fields',
+            'profile_fields', 'fields', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time'
         ]
-
-    def get_form_fields(self, obj):
-        return obj.form_fields
-
-    def get_additional_fields(self, obj):
-        return obj.additional_fields
 
 
 class LiberatoriaProfileSerializer(serializers.ModelSerializer):
@@ -647,4 +629,3 @@ class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
             type=Transaction.TransactionType.SUBSCRIPTION
         ).order_by('created_at').first()
         return transaction.account.name if transaction and transaction.account else None
-
