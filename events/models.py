@@ -247,6 +247,7 @@ class Subscription(BaseEntity):
     profile_data = models.JSONField(blank=True, default=dict)
     form_data = models.JSONField(blank=True, default=dict)
     additional_data = models.JSONField(blank=True, default=dict)
+    form_notes = models.TextField(blank=True, null=True)
 
     class Meta:
         constraints = [

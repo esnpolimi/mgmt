@@ -20,7 +20,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from events.models import Event, Subscription, EventList
+from events.models import Event, Subscription, EventList, validate_field_data
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from events.models import Event, Subscription
@@ -30,6 +30,7 @@ from events.serializers import (
     EventWithSubscriptionsSerializer, SubscriptionSerializer, PrintableLiberatoriaSerializer,
     LiberatoriaProfileSerializer
 )
+from profiles.models import Profile
 from treasury.models import Transaction
 
 logger = logging.getLogger(__name__)
@@ -636,3 +637,68 @@ def event_form_view(_, event_id):
         }, status=200)
     except Event.DoesNotExist:
         return Response({'error': "Event not found"}, status=404)
+
+
+@api_view(['POST'])
+def event_form_submit(request, event_id):
+    """
+    Public endpoint to submit event form and profile data.
+    Expects: {
+        "profile_data": {...},
+        "form_data": {...},
+        "form_notes": "...",  # optional
+    }
+    """
+    try:
+        event = Event.objects.get(pk=event_id)
+        profile_data = request.data.get("profile_data", {})
+        form_data = request.data.get("form_data", {})
+        form_notes = request.data.get("form_notes", "")
+        print("Profile data:", profile_data)
+
+        if not profile_data.get('email'):
+            return Response({"error": "Missing email"}, status=400)
+
+        try:
+            profile = Profile.objects.get(email=profile_data.get('email'))
+        except Profile.DoesNotExist:
+            return Response({"error": "Profile not found"}, status=404)
+
+        # Check for duplicate subscription
+        if Subscription.objects.filter(profile=profile, event=event).exists():
+            return Response({"error": "Already subscribed to this event"}, status=400)
+
+        # Validate form/profile data
+        errors = []
+        errors += event.form_fields and validate_field_data(event.fields, form_data, 'form') or []
+        errors += event.profile_fields and [
+            f for f in event.profile_fields if f not in profile_data or profile_data[f] in [None, ""]
+        ]
+        if errors:
+            return Response({"error": "Validation error", "fields": errors}, status=400)
+
+        # Find the list
+        try:
+            event_lists = EventList.objects.filter(event=event)
+            if not event_lists.exists():
+                return Response({"error": "No active lists for this event"}, status=400)
+            # Use the first active list for simplicity, or implement your own logic to choose the right one
+            event_list = event_lists.first()
+        except EventList.DoesNotExist:
+            return Response({"error": "List not found"}, status=404)
+
+        # Create subscription
+        sub = Subscription.objects.create(
+            profile=profile,
+            event=event,
+            list=event_list,
+            profile_data=profile_data,
+            form_data=form_data,
+            form_notes=form_notes,
+            created_by_form=True
+        )
+        return Response({"success": True, "subscription_id": sub.id}, status=200)
+    except Exception as e:
+        logging.error(str(e))
+        return Response({"error": str(e)}, status=500)
+
