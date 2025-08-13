@@ -17,4 +17,5 @@ urlpatterns = [
     path('reimburse_deposits/', views.reimburse_deposits),
     path('reimbursable_deposits/', views.reimbursable_deposits),
     path('reimburse_quota/', views.reimburse_quota),
+    path('esncard_exists/', views.esncard_exists),
 ]

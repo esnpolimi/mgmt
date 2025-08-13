@@ -357,6 +357,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     form_data = serializers.DictField(read_only=True)
     additional_data = serializers.DictField(read_only=True)
     profile_data = serializers.DictField(read_only=True)
+    form_notes = serializers.CharField(read_only=True)
 
     class Meta:
         model = Subscription
@@ -373,7 +374,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'is_external',
             'form_data',
             'additional_data',
-            'profile_data'
+            'profile_data',
+            'form_notes'
         ]
 
     def create(self, validated_data):
