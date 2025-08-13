@@ -657,3 +657,22 @@ def reimburse_quota(request):
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+# Endpoint to check if an ESNcard number exists
+@api_view(['GET'])
+def esncard_exists(request):
+    """
+    Check if an ESNcard number exists and is valid.
+    GET param: number
+    Returns: { "exists": true/false }
+    """
+    number = request.GET.get('number', '').strip()
+    exists = False
+    if number:
+        card = ESNcard.objects.filter(number=number).first()
+        if card and card.is_valid:
+            exists = True
+        else:
+            exists = False
+    return Response({'exists': exists})

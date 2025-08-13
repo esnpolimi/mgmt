@@ -7,8 +7,8 @@ import {
     LinearProgress,
     Typography,
     Collapse,
-    TextField,
-    InputAdornment
+    FormControlLabel,
+    Switch
 } from '@mui/material';
 import {
     PersonAdd as PersonAddIcon,
@@ -18,8 +18,7 @@ import {
     OpenInNew as OpenInNewIcon,
     ExpandMore as ExpandMoreIcon,
     ExpandLess as ExpandLessIcon,
-    EditNote as EditNoteIcon,
-    Search as SearchIcon
+    EditNote as EditNoteIcon
 } from '@mui/icons-material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
@@ -67,6 +66,10 @@ export default memo(function ListAccordions({
         return {isActive};
     };
 
+    // Toggles for showing/hiding columns
+    const [showFormColumns, setShowFormColumns] = useState(true);
+    const [showAdditionalColumns, setShowAdditionalColumns] = useState(true);
+
     const listConfigs = useMemo(() => {
         if (!data?.lists) return [];
 
@@ -103,41 +106,80 @@ export default memo(function ListAccordions({
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
 
-            // ...existing dynamic columns logic...
+            // --- Dynamic columns ---
             let dynamicColumns = [];
 
-            if (Array.isArray(data.profile_fields)) {
+            // Profile fields (orange)
+            if (Array.isArray(data.profile_fields) && showFormColumns) {
                 dynamicColumns = dynamicColumns.concat(
                     data.profile_fields.map(field => ({
                         accessorKey: `profile_field_${field}`,
                         header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
                         size: 120,
-                        Cell: ({row}) => getProfileFieldValue(row.original, field)
+                        Cell: ({row}) => getProfileFieldValue(row.original, field),
+                        muiTableHeadCellProps: {
+                            sx: {color: 'orange'}
+                        }
                     }))
                 );
             }
 
-            if (Array.isArray(data.form_fields)) {
-                dynamicColumns = dynamicColumns.concat(
-                    data.form_fields.map((field, idx) => ({
-                        accessorKey: `form_field_${idx}`,
-                        header: field.name,
-                        size: 180,
-                        Cell: ({row}) => getFormFieldValue(row.original, field)
-                    }))
-                );
-            }
+            // Split fields into form and additional
+            const formFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'form') : [];
+            const additionalFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'additional') : [];
 
-            if (Array.isArray(data.additional_fields)) {
-                dynamicColumns = dynamicColumns.concat(
-                    data.additional_fields.map((field, idx) => ({
-                        accessorKey: `additional_field_${idx}`,
-                        header: field.name,
-                        size: 180,
-                        Cell: ({row}) => getAdditionalFieldValue(row.original, field)
-                    }))
-                );
-            }
+            // Form fields (orange)
+            let formFieldColumns = showFormColumns ? formFields.map((field, idx) => ({
+                accessorKey: `form_field_${idx}`,
+                header: field.name,
+                size: 180,
+                Cell: ({row}) => {
+                    const sub = row.original;
+                    const val = sub.form_data?.[field.name];
+                    if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
+                    if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
+                    return val ?? '';
+                },
+                muiTableHeadCellProps: {
+                    sx: {color: 'orange'}
+                }
+            })) : [];
+
+            // Form notes (orange)
+            const formNotesColumn = showFormColumns ? {
+                accessorKey: 'form_notes',
+                header: 'Note Form',
+                size: 180,
+                Cell: ({row}) => row.original.form_notes || '',
+                muiTableHeadCellProps: {
+                    sx: {color: 'orange'}
+                }
+            } : null;
+
+            // Additional fields (magenta)
+            let additionalFieldColumns = showAdditionalColumns ? additionalFields.map((field, idx) => ({
+                accessorKey: `additional_field_${idx}`,
+                header: field.name,
+                size: 180,
+                Cell: ({row}) => {
+                    const sub = row.original;
+                    const val = sub.additional_data?.[field.name];
+                    if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
+                    if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
+                    return val ?? '';
+                },
+                muiTableHeadCellProps: {
+                    sx: {color: 'mediumvioletred'}
+                }
+            })) : [];
+
+            // Order: profile fields, form fields, form notes, additional fields
+            dynamicColumns = [
+                ...dynamicColumns,
+                ...formFieldColumns,
+                ...(formNotesColumn ? [formNotesColumn] : []),
+                ...additionalFieldColumns
+            ];
 
             const listSubscriptionsColumns = [
                 // ...existing columns...
@@ -325,16 +367,50 @@ export default memo(function ListAccordions({
                 });
             }
 
+            // Add a caption and toggles for form/aspect columns
+            const formAspectCaption = (
+                <Box sx={{mb: 1, display: 'flex', alignItems: 'center', gap: 2}}>
+                    <Box>
+
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={showFormColumns}
+                                    onChange={(_, checked) => setShowFormColumns(checked)}
+                                    color="warning"
+                                />
+                            }
+                            label="Colonne form Erasmus"
+                            sx={{ml: 1}}
+                        />
+                    </Box>
+                    <Box>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={showAdditionalColumns}
+                                    onChange={(_, checked) => setShowAdditionalColumns(checked)}
+                                    color="secondary"
+                                />
+                            }
+                            label="Colonne form ESNers"
+                            sx={{ml: 1}}
+                        />
+                    </Box>
+                </Box>
+            );
+
             return {
                 listId: list.id,
                 listName: list.name,
                 capacity: list.capacity,
                 subscription_count: list.subscription_count,
                 subscriptions: listSubscriptions,
-                columns
+                columns,
+                formAspectCaption
             };
         });
-    }, [data, hasDeposit, hasQuota, isBoardMember, onOpenEditAnswers, onOpenReimburseQuota, onOpenReimburseDeposits]);
+    }, [data, hasDeposit, hasQuota, isBoardMember, onOpenEditAnswers, onOpenReimburseQuota, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns]);
 
     const lists = useMemo(() => {
         return listConfigs.map(config => ({
@@ -454,7 +530,7 @@ export default memo(function ListAccordions({
     }
 
     return lists.map(listConfig => {
-        const {listId, listName, capacity, subscription_count, tableOptions} = listConfig;
+        const {listId, listName, capacity, subscription_count, tableOptions, formAspectCaption} = listConfig;
         const occupancyPercentage = capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
         const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 60 ? 'warning' : 'success';
         const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
@@ -489,7 +565,10 @@ export default memo(function ListAccordions({
                     </IconButton>
                 </Box>
                 <Collapse in={expandedAccordion.includes(listId)} timeout="auto" unmountOnExit>
-                    <Box sx={{p: 2}}> <MaterialReactTable table={list}/> </Box>
+                    <Box sx={{p: 2}}>
+                        {formAspectCaption}
+                        <MaterialReactTable table={list}/>
+                    </Box>
                 </Collapse>
             </Box>
         );
