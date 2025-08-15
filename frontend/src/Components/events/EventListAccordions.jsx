@@ -25,7 +25,7 @@ import {MRT_Localization_IT} from "material-react-table/locales/it";
 import dayjs from "dayjs";
 import {profileDisplayNames} from '../../utils/displayAttributes';
 
-export default memo(function ListAccordions({
+export default memo(function EventListAccordions({
                                                 data,
                                                 onOpenSubscriptionModal,
                                                 onEditSubscription,
@@ -85,22 +85,6 @@ export default memo(function ListAccordions({
                 return sub.profile[field];
             }
             return '';
-        };
-
-        const getFormFieldValue = (sub, field) => {
-            if (!sub.form_data) return '';
-            const val = sub.form_data[field.name];
-            if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
-            if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
-            return val ?? '';
-        };
-
-        const getAdditionalFieldValue = (sub, field) => {
-            if (!sub.additional_data) return '';
-            const val = sub.additional_data[field.name];
-            if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
-            if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
-            return val ?? '';
         };
 
         return data.lists.map(list => {
@@ -531,6 +515,14 @@ export default memo(function ListAccordions({
 
     return lists.map(listConfig => {
         const {listId, listName, capacity, subscription_count, tableOptions, formAspectCaption} = listConfig;
+        // Add ML/WL label
+        const listObj = data.lists?.find(l => l.id === listId);
+        let listLabel = null;
+        if (listObj?.is_main_list) {
+            listLabel = <Chip label="Main List" color="primary" size="small" sx={{ml: 1}} />;
+        } else if (listObj?.is_waiting_list) {
+            listLabel = <Chip label="Waiting List" color="warning" size="small" sx={{ml: 1}} />;
+        }
         const occupancyPercentage = capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
         const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 60 ? 'warning' : 'success';
         const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
@@ -547,7 +539,10 @@ export default memo(function ListAccordions({
                          backgroundColor: '#f5f5f5'
                      }}>
                     <BallotIcon sx={{color: 'primary.main', mr: 2}}/>
-                    <Typography variant="h6" component="div" sx={{flexGrow: 1}}>{listName}</Typography>
+                    <Typography variant="h6" component="div" sx={{flexGrow: 1, display: 'flex', alignItems: 'center'}}>
+                        {listName}
+                        {listLabel}
+                    </Typography>
                     <Box sx={{width: '200px', mr: 2}}>
                         <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
                             <Typography variant="body2">{subscription_count}/{capacity}</Typography>

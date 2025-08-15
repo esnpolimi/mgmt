@@ -12,7 +12,6 @@ import {
     FormControlLabel,
     Switch
 } from '@mui/material';
-import {Checkbox, Select, MenuItem, Paper, Chip} from '@mui/material';
 import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -26,8 +25,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import StatusBanner from "../StatusBanner";
-import {profileDisplayNames} from '../../utils/displayAttributes';
 import EventModalForm from './EventModalForm';
+import {Radio, RadioGroup, FormControl, FormLabel} from '@mui/material';
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
@@ -115,6 +114,11 @@ export default function EventModal({open, event, isEdit, onClose}) {
         } else {
             setData({...data, subscription_start_date: date});
         }
+
+        // If form opening time exists and is now before or equal to start date, update it
+        if (formProgrammedOpenTime && dayjs(date).isAfter(dayjs(formProgrammedOpenTime))) {
+            setFormProgrammedOpenTime(dayjs(date).add(1, 'hour').toISOString());
+        }
     };
 
     const handleSubscriptionEndChange = (date) => {
@@ -150,7 +154,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
             lists: rest.lists.map(t => ({
                 id: t.id || null,
                 name: t.name,
-                capacity: Math.floor(Number(t.capacity))
+                capacity: Math.floor(Number(t.capacity)),
+                is_main_list: !!t.is_main_list,
+                is_waiting_list: !!t.is_waiting_list
             })),
             is_a_bando: !!rest.is_a_bando,
             is_allow_external: !!rest.is_allow_external,
@@ -194,6 +200,34 @@ export default function EventModal({open, event, isEdit, onClose}) {
         setData({
             ...data,
             lists: data.lists.filter((_, i) => i !== index),
+        });
+    };
+
+    const handleListTypeChange = (index, type) => {
+        setData(prev => {
+            const updatedLists = prev.lists.map((list, i) => {
+                if (type === 'main') {
+                    // Set ML only for selected index, clear ML from others, keep WL unchanged
+                    return {
+                        ...list,
+                        is_main_list: i === index,
+                        is_waiting_list: list.is_waiting_list
+                    };
+                } else if (type === 'waiting') {
+                    // Set WL only for selected index, clear WL from others, keep ML unchanged
+                    return {
+                        ...list,
+                        is_main_list: list.is_main_list,
+                        is_waiting_list: i === index
+                    };
+                } else {
+                    // Set both to false for selected index, keep others unchanged
+                    return i === index
+                        ? { ...list, is_main_list: false, is_waiting_list: false }
+                        : list;
+                }
+            });
+            return { ...prev, lists: updatedLists };
         });
     };
 
@@ -525,8 +559,43 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     helperText={errors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
                                 />
                             </Grid>
-                            <Grid size={{xs: 2}}><IconButton
-                                onClick={() => handleDeleteList(index)}><DeleteIcon/></IconButton></Grid>
+                            <Grid>
+                                <FormControl component="fieldset">
+                                    <FormLabel component="legend" sx={{fontSize: '0.9rem'}}>Tipo</FormLabel>
+                                    <RadioGroup
+                                        row
+                                        value={
+                                            list.is_main_list
+                                                ? 'main'
+                                                : list.is_waiting_list
+                                                    ? 'waiting'
+                                                    : 'none'
+                                        }
+                                        onChange={(e) => handleListTypeChange(index, e.target.value)}
+                                    >
+                                        <FormControlLabel
+                                            value="main"
+                                            control={<Radio />}
+                                            label="Main List"
+                                            disabled={data.lists.some((l, i) => l.is_main_list && i !== index)}
+                                        />
+                                        <FormControlLabel
+                                            value="waiting"
+                                            control={<Radio />}
+                                            label="Waiting List"
+                                            disabled={data.lists.some((l, i) => l.is_waiting_list && i !== index)}
+                                        />
+                                        <FormControlLabel
+                                            value="none"
+                                            control={<Radio />}
+                                            label="Altro"
+                                        />
+                                    </RadioGroup>
+                                </FormControl>
+                            </Grid>
+                            <Grid size={{xs: 2}}>
+                                <IconButton onClick={() => handleDeleteList(index)}><DeleteIcon/></IconButton>
+                            </Grid>
                         </Grid>
                     ))}
 

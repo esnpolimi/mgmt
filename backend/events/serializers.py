@@ -60,10 +60,12 @@ class ModelCleanSerializerMixin:
 # Serializers for EventList
 class EventListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False, allow_null=True)  # Accept null for new lists
+    is_main_list = serializers.BooleanField(required=False, default=False)
+    is_waiting_list = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = EventList
-        fields = ['id', 'name', 'capacity', 'display_order', 'subscription_count']
+        fields = ['id', 'name', 'capacity', 'display_order', 'subscription_count', 'is_main_list', 'is_waiting_list']
 
 
 # Serializers for Event
@@ -119,6 +121,16 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         lists_data = validated_data.pop('lists', [])
         organizers = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
+
+        # Enforce only one ML/WL per event
+        main_lists = [l for l in lists_data if l.get('is_main_list')]
+        waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
+        if len(main_lists) > 1:
+            raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
+        if len(waiting_lists) > 1:
+            raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
+        if len(main_lists) != 1:
+            raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
 
         # Create event with the remaining data
         event = Event.objects.create(**validated_data)
@@ -241,6 +253,16 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Handle lists separately
         if lists_data is not None:
+            # Validate ML/WL constraints before processing
+            main_lists = [l for l in lists_data if l.get('is_main_list')]
+            waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
+            if len(main_lists) > 1:
+                raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
+            if len(waiting_lists) > 1:
+                raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
+            if len(main_lists) != 1:
+                raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
+
             # Get all existing lists for this event
             existing_lists = {lst.id: lst for lst in instance.lists.all()}
             provided_list_ids = set()
@@ -250,6 +272,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 list_name = list_data.get('name', '').strip()
                 list_capacity = list_data.get('capacity', 0)
                 list_display_order = list_data.get('display_order', 0)
+                is_main_list = list_data.get('is_main_list', False)
+                is_waiting_list = list_data.get('is_waiting_list', False)
 
                 if list_id:  # Existing list
                     list_id = int(list_id)
@@ -261,6 +285,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                         existing_list.name = list_name
                         existing_list.capacity = list_capacity
                         existing_list.display_order = list_display_order
+                        existing_list.is_main_list = is_main_list
+                        existing_list.is_waiting_list = is_waiting_list
                         existing_list.save()
                 else:  # New list (no ID or empty ID)
                     if list_name:  # Only create if name is provided
@@ -272,7 +298,9 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                                 event=instance,
                                 name=list_name,
                                 capacity=list_capacity,
-                                display_order=list_display_order
+                                display_order=list_display_order,
+                                is_main_list=is_main_list,
+                                is_waiting_list=is_waiting_list
                             )
 
             # Remove lists that are no longer provided (only if they have no subscriptions)

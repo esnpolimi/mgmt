@@ -291,9 +291,10 @@ export default function EventForm() {
             },
             auth: false,
             onSuccess: (data) => {
-                // handle success, e.g. navigate or show confirmation
-                console.log("Form submitted:", data);
-                navigate(`/event/${eventData.id}/formsuccess`);
+                // Show assigned list info
+                console.log("Form submitted successfully:", data);
+                setAssignedList(data.assigned_list || "");
+                navigate(`/event/${eventData.id}/formsuccess`, {state: {assignedList: data.assigned_list}});
             },
             onError: async (err) => {
                 // If backend returns missing fields, show as missingFields alert
@@ -305,13 +306,20 @@ export default function EventForm() {
                     // Try to parse error message from response body
                     try {
                         const data = await err.json();
-                        setBackendError("Error: " + data?.error || "Submission failed");
+                        if (data?.error) {
+                            setBackendError("Error: " + data.error);
+                        } else {
+                            setBackendError("");
+                        }
                     } catch {
                         setBackendError("Submission failed");
                     }
                     setShowMissingAlert(false);
+                } else if (err?.error) {
+                    setBackendError("Error: " + err.error);
+                    setShowMissingAlert(false);
                 } else {
-                    setBackendError("Error: " + err?.error || "Submission failed");
+                    setBackendError("");
                     setShowMissingAlert(false);
                 }
                 scrollToTop();
@@ -698,7 +706,7 @@ export default function EventForm() {
                                         return null;
                                 }
                             })}
-                    </Paper>
+                        </Paper>
                     )}
                     <Divider sx={{mb: 3}}/>
                     {/* Always show form_notes textbox at the end */}
