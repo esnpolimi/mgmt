@@ -24,7 +24,7 @@ import AddCardIcon from '@mui/icons-material/AddCard';
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {useAuth} from "../../Context/AuthContext";
 import EditAnswersModal from "../../Components/events/EditAnswersModal";
-import ListAccordions from "../../Components/events/ListAccordions";
+import EventListAccordions from "../../Components/events/EventListAccordions";
 import PaymentIcon from '@mui/icons-material/Payment';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -148,7 +148,7 @@ export default function Event() {
         };
     };
 
-    // Handlers for ListAccordions component
+    // Handlers for EventListAccordions component
     const handleOpenSubscriptionModal = (listId) => {
         setSelectedList(listId);
         setSubscription(null);
@@ -444,7 +444,7 @@ export default function Event() {
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{mt: 2}}>
                                             <Typography variant="h6" component="div" sx={{mb: 2}}>Liste</Typography>
-                                            <ListAccordions
+                                            <EventListAccordions
                                                 data={data}
                                                 onOpenSubscriptionModal={handleOpenSubscriptionModal}
                                                 onEditSubscription={handleEditSubscription}

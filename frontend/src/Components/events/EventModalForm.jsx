@@ -37,6 +37,7 @@ export default function EventModalForm({
                                            form_programmed_open_time = null,
                                            setFormProgrammedOpenTime,
                                            paymentAndOpenTimeDisabled: formOpenTimeDisabled = false,
+                                           subscription_start_date = null,
                                        }) {
 
     const formFields = fields.filter(field => field.field_type === 'form');
@@ -136,8 +137,16 @@ export default function EventModalForm({
                             <DateTimePicker
                                 label={eventNames.form_programmed_open_time}
                                 value={form_programmed_open_time ? dayjs(form_programmed_open_time) : null}
-                                onChange={val => setFormProgrammedOpenTime(val && val.isValid() ? val.toISOString() : null)}
-                                minDate={dayjs()}
+                                onChange={val => {
+                                    const newValue = val && val.isValid() ? val.toISOString() : null;
+                                    // Ensure it's after subscription start date
+                                    if (newValue && subscription_start_date && dayjs(newValue).isBefore(dayjs(subscription_start_date))) {
+                                        setFormProgrammedOpenTime(dayjs(subscription_start_date).add(1, 'hour').toISOString());
+                                    } else {
+                                        setFormProgrammedOpenTime(newValue);
+                                    }
+                                }}
+                                minDate={subscription_start_date ? dayjs(subscription_start_date).add(1, 'minute') : dayjs()}
                                 slotProps={{
                                     textField: {
                                         fullWidth: true,
@@ -148,7 +157,7 @@ export default function EventModalForm({
                                 required
                             />
                         </LocalizationProvider>
-                        <Typography  variant="body2" color="text.secondary" sx={{mt: 1}}>
+                        <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
                             Per chiudere il form, agire sul campo di fine iscrizioni.
                         </Typography>
                     </Grid>

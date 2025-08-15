@@ -30,6 +30,9 @@ urlpatterns = [
     # Public endpoint to retrieve event form configuration
     path('event/<str:event_id>/form/', views.event_form_view),
 
+    # Public endpoint to check event form status (full/available)
+    path('event/<str:event_id>/formstatus/', views.event_form_status),
+
     # Public endpoint to submit event form
     path('event/<str:event_id>/formsubmit/', views.event_form_submit),
 ]
