@@ -145,6 +145,13 @@ class Event(BaseEntity):
         if self.fields is not None:
             validate(instance=self.fields, schema=unified_fields_schema)
 
+        # Validate that form_programmed_open_time is after subscription_start_date
+        if (self.form_programmed_open_time and self.subscription_start_date and
+            self.form_programmed_open_time <= self.subscription_start_date):
+            raise ValidationError({
+                'form_programmed_open_time': 'Form opening time must be after subscription start date.'
+            })
+
     @property
     def form_fields(self):
         return [f for f in self.fields if f.get('field_type') == 'form']
@@ -188,8 +195,6 @@ class Event(BaseEntity):
             return "open"
 
 
-
-
 class EventOrganizer(BaseEntity):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='organizers')
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='organized_events')
@@ -217,9 +222,29 @@ class EventList(BaseEntity):
     # Display order in the UI
     display_order = models.PositiveIntegerField(default=0)
 
+    # Indicates if this is the main list or a waiting list, or neither
+    is_main_list = models.BooleanField(default=False)
+    is_waiting_list = models.BooleanField(default=False)
+
     class Meta:
         unique_together = ('event', 'name')
         ordering = ['display_order', 'id']
+
+    def clean(self):
+        super().clean()
+        # Only one main list and one waiting list per event
+        if self.is_main_list:
+            qs = EventList.objects.filter(event=self.event, is_main_list=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            if qs.exists():
+                raise ValidationError("Only one Main List is allowed per event.")
+        if self.is_waiting_list:
+            qs = EventList.objects.filter(event=self.event, is_waiting_list=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            if qs.exists():
+                raise ValidationError("Only one Waiting List is allowed per event.")
 
     def __str__(self):
         return f"{self.name} ({self.event.name})"
