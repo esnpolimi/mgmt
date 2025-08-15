@@ -639,6 +639,45 @@ def event_form_view(_, event_id):
         return Response({'error': "Event not found"}, status=404)
 
 
+@api_view(['GET'])
+def event_form_status(_, event_id):
+    """
+    Public endpoint to check if the event is full (both ML and WL full).
+    Returns: { "full": true/false, "message": "...", "main_list_full": true/false, "waiting_list_full": true/false }
+    """
+    try:
+        event = Event.objects.get(pk=event_id)
+        event_lists = EventList.objects.filter(event=event)
+        main_list = event_lists.filter(is_main_list=True).first()
+        waiting_list = event_lists.filter(is_waiting_list=True).first()
+
+        def is_full(lst):
+            if not lst:
+                return True
+            if lst.capacity == 0:
+                return False
+            return lst.subscriptions.count() >= lst.capacity
+
+        main_list_full = is_full(main_list)
+        waiting_list_full = is_full(waiting_list)
+
+        message = ""
+        if main_list_full and waiting_list and waiting_list_full:
+            message = "Main List and Waiting List are both full."
+        elif main_list_full and waiting_list:
+            message = "Main List is full. You may be assigned to the Waiting List if places will be available."
+        # If main list is full but no waiting list exists, don't show any message here
+        # The frontend will handle showing that subscriptions are not possible
+
+        return Response({
+            "main_list_full": main_list_full,
+            "waiting_list_full": waiting_list_full,
+            "message": message
+        }, status=200)
+    except Event.DoesNotExist:
+        return Response({"error": "Event not found"}, status=404)
+
+
 @api_view(['POST'])
 def event_form_submit(request, event_id):
     """
@@ -678,27 +717,41 @@ def event_form_submit(request, event_id):
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
         # Find the list
-        try:
-            event_lists = EventList.objects.filter(event=event)
-            if not event_lists.exists():
-                return Response({"error": "No active lists for this event"}, status=400)
-            # Use the first active list for simplicity, or implement your own logic to choose the right one
-            event_list = event_lists.first()
-        except EventList.DoesNotExist:
-            return Response({"error": "List not found"}, status=404)
+        event_lists = EventList.objects.filter(event=event)
+        main_list = event_lists.filter(is_main_list=True).first()
+        waiting_list = event_lists.filter(is_waiting_list=True).first()
+
+        def has_space(lst):
+            if not lst:
+                return False
+            if lst.capacity == 0:
+                return True
+            return lst.subscriptions.count() < lst.capacity
+
+        if has_space(main_list):
+            assigned_list = main_list
+            assigned_label = "Main List"
+        elif has_space(waiting_list):
+            assigned_list = waiting_list
+            assigned_label = "Waiting List"
+        else:
+            return Response({"error": "No available list for subscription. All lists are full."}, status=400)
 
         # Create subscription
         sub = Subscription.objects.create(
             profile=profile,
             event=event,
-            list=event_list,
+            list=assigned_list,
             profile_data=profile_data,
             form_data=form_data,
             form_notes=form_notes,
             created_by_form=True
         )
-        return Response({"success": True, "subscription_id": sub.id}, status=200)
+        return Response({
+            "success": True,
+            "subscription_id": sub.id,
+            "assigned_list": assigned_label
+        }, status=200)
     except Exception as e:
         logging.error(str(e))
         return Response({"error": str(e)}, status=500)
-
