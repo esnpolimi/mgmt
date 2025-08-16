@@ -87,14 +87,29 @@ class EventOrganizerSerializer(serializers.ModelSerializer):
         return f"{obj.profile.name} {obj.profile.surname}"
 
 
+# Canonical order for profile fields (same as frontend)
+CANONICAL_PROFILE_ORDER = [
+    'name', 'surname', 'birthdate', 'email', 'latest_esncard', 'country', 'domicile',
+    'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
+    'latest_document', 'course', 'matricola_expiration', 'person_code', 'matricola_number'
+]
+
+def order_profile_fields(fields):
+    """Order profile fields according to canonical order, preserving only those present."""
+    return [f for f in CANONICAL_PROFILE_ORDER if f in fields]
+
 class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerializer):
     lists = EventListSerializer(many=True, required=False)
-    organizers = serializers.PrimaryKeyRelatedField(
-        queryset=Profile.objects.all(),
-        many=True,
+
+    # Accept organizers as flexible JSON list:
+    # - New format: [{ "profile": <id>, "is_lead": true/false, "role": "..." }, ...]
+    # - Legacy format: [<id>, <id>, ...]
+    organizers = serializers.ListField(
+        child=serializers.JSONField(),
         required=False,
         write_only=True
     )
+    # Keep legacy single lead_organizer for backward-compat
     lead_organizer = serializers.PrimaryKeyRelatedField(
         queryset=Profile.objects.all(),
         required=False,
@@ -116,21 +131,68 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'allow_online_payment', 'form_programmed_open_time'
         ]
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # Ensure global ordering of profile_fields
+        if 'profile_fields' in attrs:
+            attrs['profile_fields'] = order_profile_fields(attrs['profile_fields'])
+        # Validate lists constraints early so the frontend gets a 400 with details
+        lists_data = attrs.get('lists', None)
+        if lists_data is not None:
+            main_lists = [l for l in lists_data if l.get('is_main_list')]
+            waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
+            if len(main_lists) > 1:
+                raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
+            if len(waiting_lists) > 1:
+                raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
+            if len(main_lists) != 1:
+                raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
+        return attrs
+
+    @staticmethod
+    def _parse_organizers_input(organizers_data, lead_organizer):
+        """
+        Returns a list of dicts: [{ 'profile': Profile instance, 'is_lead': bool, 'role': str|None }, ...]
+        Accepts both new (dicts) and legacy (ints) formats. Also merges legacy lead_organizer if provided.
+        """
+        parsed = []
+        seen = set()
+
+        def add_item(profile_id, is_lead=False, role=None):
+            if profile_id in seen:
+                # if already present and is_lead True, upgrade to lead
+                for item in parsed:
+                    if item['profile'].id == profile_id and is_lead and not item['is_lead']:
+                        item['is_lead'] = True
+                return
+            try:
+                prof = Profile.objects.get(pk=profile_id)
+            except Profile.DoesNotExist:
+                raise serializers.ValidationError({'organizers': f'Invalid profile id {profile_id}'})
+            parsed.append({'profile': prof, 'is_lead': bool(is_lead), 'role': role})
+            seen.add(profile_id)
+
+        for entry in organizers_data or []:
+            if isinstance(entry, int):
+                add_item(entry, is_lead=False)
+            elif isinstance(entry, dict):
+                pid = entry.get('profile')
+                if pid is None:
+                    raise serializers.ValidationError({'organizers': 'Organizer entry missing "profile" id'})
+                add_item(pid, is_lead=entry.get('is_lead', False), role=entry.get('role'))
+            else:
+                raise serializers.ValidationError({'organizers': 'Invalid organizer entry type'})
+
+        if lead_organizer:
+            add_item(lead_organizer.id, is_lead=True)
+
+        return parsed
+
     def create(self, validated_data):
         # Pop related fields that need special handling
         lists_data = validated_data.pop('lists', [])
-        organizers = validated_data.pop('organizers', [])
+        organizers_data = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
-
-        # Enforce only one ML/WL per event
-        main_lists = [l for l in lists_data if l.get('is_main_list')]
-        waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
-        if len(main_lists) > 1:
-            raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
-        if len(waiting_lists) > 1:
-            raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
-        if len(main_lists) != 1:
-            raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
 
         # Create event with the remaining data
         event = Event.objects.create(**validated_data)
@@ -139,20 +201,66 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         for list_data in lists_data:
             EventList.objects.create(event=event, **list_data)
 
-        # Create organizers
-        for profile in organizers:
-            EventOrganizer.objects.create(event=event, profile=profile, is_lead=False)
-
-        # Add lead organizer if specified
-        if lead_organizer:
-            EventOrganizer.objects.create(event=event, profile=lead_organizer, is_lead=True)
+        # Create organizers (supports multiple leaders)
+        parsed_orgs = self._parse_organizers_input(organizers_data, lead_organizer)
+        for item in parsed_orgs:
+            EventOrganizer.objects.create(
+                event=event,
+                profile=item['profile'],
+                is_lead=item['is_lead'],
+                role=item.get('role')
+            )
 
         return event
 
+    def _user_can_edit(self, event):
+        """
+        Allow edits to:
+        - users with events.change_event permission (always needed)
+        - superusers
+        - members of Board-like groups
+        - event organizers
+        """
+        user = self.context.get('user')
+        if not user:
+            print("No user found in context, denying edit")
+            return False
+
+        # print("Debug for the 4 checks in _user_can_edit:")
+        # print(f"User can change event permission: {user.has_perm('events.change_event')}, is_authenticated: {user.is_authenticated}, is_superuser: {user.is_superuser}, groups: {[group.name for group in user.groups.all()]}")
+        try:
+            # Direct permission check (needed for any edit)
+            if not user.has_perm('events.change_event'):
+                return False
+
+            if getattr(user, 'is_superuser', False):
+                return True
+
+            # Flexible group name match
+            if user.groups.filter(name__in=['Board', 'Board Members', 'BoardMember']).exists():
+                return True
+
+            profile = getattr(user, 'profile', None)
+            profile_id = getattr(profile, 'id', None)
+            if profile_id is None:
+                return False
+
+            return event.organizers.filter(profile_id=profile_id).exists()
+        except Exception:
+            # Any unexpected error in checks => deny gracefully instead of 500
+            return False
+
     def update(self, instance, validated_data):
+        # Authorization check
+        print("Debugging update with instance:", instance)
+        print("Debugging update with validated_data:", validated_data)
+        print("User:", self.context.get('user'))
+        if not self._user_can_edit(instance):
+            raise serializers.ValidationError("Non sei autorizzato a modificare questo evento")
+
         # Remove relationship fields that need special handling
         lists_data = validated_data.pop('lists', None)
-        organizers = validated_data.pop('organizers', None)
+        organizers_data = validated_data.pop('organizers', None)
         lead_organizer = validated_data.pop('lead_organizer', None)
 
         # Check if event has subscriptions for validation
@@ -248,21 +356,10 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         # Update the instance with the remaining data
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
         instance.save()
 
         # Handle lists separately
         if lists_data is not None:
-            # Validate ML/WL constraints before processing
-            main_lists = [l for l in lists_data if l.get('is_main_list')]
-            waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
-            if len(main_lists) > 1:
-                raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
-            if len(waiting_lists) > 1:
-                raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
-            if len(main_lists) != 1:
-                raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
-
             # Get all existing lists for this event
             existing_lists = {lst.id: lst for lst in instance.lists.all()}
             provided_list_ids = set()
@@ -312,15 +409,23 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                     list_to_remove.delete()
 
         # Handle organizers
-        if organizers is not None:
-            instance.organizers.filter(is_lead=False).delete()
-            for profile in organizers:
-                EventOrganizer.objects.create(event=instance, profile=profile, is_lead=False)
-
-        # Handle lead organizer
-        if lead_organizer is not None:
-            instance.organizers.filter(is_lead=True).delete()
-            EventOrganizer.objects.create(event=instance, profile=lead_organizer, is_lead=True)
+        if organizers_data is not None:
+            # Full replace with provided list (supports multiple leaders)
+            instance.organizers.all().delete()
+            parsed_orgs = self._parse_organizers_input(organizers_data, None)
+            for item in parsed_orgs:
+                EventOrganizer.objects.create(
+                    event=instance,
+                    profile=item['profile'],
+                    is_lead=item['is_lead'],
+                    role=item.get('role')
+                )
+        elif lead_organizer is not None:
+            # Legacy behavior: set provided one as leader, keep others
+            # ensure relation exists
+            org, _ = EventOrganizer.objects.get_or_create(event=instance, profile=lead_organizer)
+            org.is_lead = True
+            org.save()
 
         return instance
 
@@ -343,6 +448,13 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'profile_fields', 'fields',
             'allow_online_payment', 'form_programmed_open_time'
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Ensure global ordering of profile_fields in output
+        if 'profile_fields' in data:
+            data['profile_fields'] = order_profile_fields(data['profile_fields'])
+        return data
 
 
 # Serializer to create subscription from form
@@ -565,6 +677,13 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'allow_online_payment', 'form_programmed_open_time'
         ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Ensure global ordering of profile_fields in output
+        if 'profile_fields' in data:
+            data['profile_fields'] = order_profile_fields(data['profile_fields'])
+        return data
+
 
 class LiberatoriaProfileSerializer(serializers.ModelSerializer):
     address = serializers.CharField(source='domicile')
@@ -659,3 +778,11 @@ class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
             type=Transaction.TransactionType.SUBSCRIPTION
         ).order_by('created_at').first()
         return transaction.account.name if transaction and transaction.account else None
+
+
+class OrganizedEventSerializer(serializers.Serializer):
+    event_id = serializers.IntegerField()
+    event_name = serializers.CharField()
+    event_date = serializers.DateField()
+    is_lead = serializers.BooleanField()
+
