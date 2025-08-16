@@ -70,6 +70,17 @@ export default memo(function EventListAccordions({
     const [showFormColumns, setShowFormColumns] = useState(true);
     const [showAdditionalColumns, setShowAdditionalColumns] = useState(true);
 
+    // Canonical order for profile fields (same as frontend event form)
+    const canonicalProfileOrder = [
+        "name", "surname", "birthdate", "email", "latest_esncard", "country", "domicile",
+        "phone_prefix", "phone_number", "whatsapp_prefix", "whatsapp_number",
+        "latest_document", "course", "matricola_expiration", "person_code", "matricola_number"
+    ];
+
+    function orderProfileFields(fields) {
+        return canonicalProfileOrder.filter(f => fields.includes(f));
+    }
+
     const listConfigs = useMemo(() => {
         if (!data?.lists) return [];
 
@@ -94,19 +105,21 @@ export default memo(function EventListAccordions({
             let dynamicColumns = [];
 
             // Profile fields (orange)
+            let orderedProfileFields = [];
             if (Array.isArray(data.profile_fields) && showFormColumns) {
-                dynamicColumns = dynamicColumns.concat(
-                    data.profile_fields.map(field => ({
-                        accessorKey: `profile_field_${field}`,
-                        header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
-                        size: 120,
-                        Cell: ({row}) => getProfileFieldValue(row.original, field),
-                        muiTableHeadCellProps: {
-                            sx: {color: 'orange'}
-                        }
-                    }))
-                );
+                orderedProfileFields = orderProfileFields(data.profile_fields);
             }
+            dynamicColumns = dynamicColumns.concat(
+                orderedProfileFields.map(field => ({
+                    accessorKey: `profile_field_${field}`,
+                    header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
+                    size: 120,
+                    Cell: ({row}) => getProfileFieldValue(row.original, field),
+                    muiTableHeadCellProps: {
+                        sx: {color: 'orange'}
+                    }
+                }))
+            );
 
             // Split fields into form and additional
             const formFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'form') : [];

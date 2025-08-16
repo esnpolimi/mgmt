@@ -139,8 +139,12 @@ def event_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
 
             # Validation logic is handled in the serializer
-            print("Request data:", request.data)
-            serializer = EventCreationSerializer(instance=event, data=request.data, partial=True)
+            serializer = EventCreationSerializer(
+                instance=event,
+                data=request.data,
+                partial=True,
+                context={'user': request.user}
+            )
 
             if serializer.is_valid():
                 serializer.save()
@@ -726,7 +730,7 @@ def event_form_submit(request, event_id):
                 return False
             if lst.capacity == 0:
                 return True
-            return lst.subscriptions.count() < lst.capacity
+            return lst.subscription_count < lst.capacity
 
         if has_space(main_list):
             assigned_list = main_list
@@ -755,3 +759,6 @@ def event_form_submit(request, event_id):
     except Exception as e:
         logging.error(str(e))
         return Response({"error": str(e)}, status=500)
+
+
+

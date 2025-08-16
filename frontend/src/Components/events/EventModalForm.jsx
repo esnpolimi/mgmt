@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
     Box,
     Button,
@@ -44,6 +44,16 @@ export default function EventModalForm({
     const additionalFields = fields.filter(field => field.field_type === 'additional');
 
     const [validationError, setValidationError] = useState('');
+    const isFormEnabled = !!form_programmed_open_time;
+
+    // Ensure 'email' is always present when form is enabled
+    useEffect(() => {
+        if (!isFormEnabled) return;
+        const current = Array.isArray(profile_fields) ? profile_fields : [];
+        if (!current.includes('email')) {
+            setProfileFields([...current, 'email']);
+        }
+    }, [isFormEnabled, profile_fields, setProfileFields]);
 
     const addField = (fieldType) => {
         const newField = {
@@ -59,12 +69,13 @@ export default function EventModalForm({
     const updateField = (index, updates) => {
         const updatedFields = [...fields];
         let newField = {...updatedFields[index], ...updates};
-        // If type is changed and is not 'c' or 'm', remove choices
-        if (
-            Object.prototype.hasOwnProperty.call(updates, 'type') &&
-            !['c', 'm'].includes(updates.type)
-        ) {
-            delete newField.choices;
+        // Ensure choices exists when switching to choice types
+        if (Object.prototype.hasOwnProperty.call(updates, 'type')) {
+            if (['c', 'm'].includes(updates.type)) {
+                if (!Array.isArray(newField.choices)) newField.choices = [''];
+            } else {
+                delete newField.choices;
+            }
         }
         updatedFields[index] = newField;
         setFields(updatedFields);
@@ -97,23 +108,44 @@ export default function EventModalForm({
         setFields(updatedFields);
     };
 
+    // Helper: trim names/options and drop empty options
+    const normalizeFieldsForValidation = (arr) => {
+        return arr.map(f => {
+            const name = (f.name || '').trim();
+            if (['c', 'm'].includes(f.type)) {
+                const raw = Array.isArray(f.choices) ? f.choices : [];
+                const cleanedChoices = raw.map(c => (c || '').trim()).filter(Boolean);
+                return {...f, name, choices: cleanedChoices};
+            }
+            return {...f, name};
+        });
+    };
+
     // Validation: ensure all field names and choices are non-empty
     EventModalForm.validateFields = () => {
-        for (const field of fields) {
-            if (!field.name || !field.name.trim()) {
-                setValidationError("Tutti i campi devono avere un nome.");
+        // Enforce email in anagrafica if form is enabled
+        if (isFormEnabled) {
+            const pf = Array.isArray(profile_fields) ? profile_fields : [];
+            if (!pf.includes('email')) {
+                setValidationError("Email obbligatoria nei Dati Anagrafici quando il form è abilitato.");
+                return false;
+            }
+        }
+
+        const cleaned = normalizeFieldsForValidation(fields);
+        // Persist cleaned values so stray empty options don’t keep failing
+        setFields(cleaned);
+
+        for (let i = 0; i < cleaned.length; i++) {
+            const field = cleaned[i];
+            if (!field.name) {
+                setValidationError(`Tutti i campi devono avere un nome (manca il nome al campo #${i + 1}).`);
                 return false;
             }
             if (['c', 'm'].includes(field.type)) {
                 if (!Array.isArray(field.choices) || field.choices.length === 0) {
-                    setValidationError("Tutti i campi a scelta devono avere almeno un'opzione.");
+                    setValidationError(`Il campo "${field.name}" deve avere almeno un'opzione valida.`);
                     return false;
-                }
-                for (const choice of field.choices) {
-                    if (!choice || !choice.trim()) {
-                        setValidationError("Tutte le opzioni devono avere un nome.");
-                        return false;
-                    }
                 }
             }
         }
@@ -185,13 +217,17 @@ export default function EventModalForm({
                 <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
                     Campi richiesti e salvati per ogni iscrizione via
-                    form. {formFieldsDisabled ? "Non modificabili - evento con iscrizioni esistenti." : ""}
+                    form. {formFieldsDisabled ? "Campi non modificabili (iscrizioni presenti)." : ""}
                 </Typography>
                 <Select
                     multiple
                     variant="outlined"
-                    value={Array.isArray(profile_fields) ? profile_fields : []}
-                    onChange={e => setProfileFields(e.target.value)}
+                    value={orderProfileFields(Array.isArray(profile_fields) ? profile_fields : [])}
+                    onChange={e => {
+                        const next = e.target.value || [];
+                        const ensured = isFormEnabled ? Array.from(new Set([...next, 'email'])) : next;
+                        setProfileFields(orderProfileFields(ensured));
+                    }}
                     disabled={formFieldsDisabled}
                     renderValue={(selected) => (
                         <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 0.5}}>
@@ -205,7 +241,9 @@ export default function EventModalForm({
                     {Object.entries(profileDisplayNames)
                         .filter(([k]) => !excludedProfileFields.includes(k) && k !== 'id' && k !== 'group')
                         .map(([k, v]) => (
-                            <MenuItem key={k} value={k}>{v}</MenuItem>
+                            <MenuItem key={k} value={k} disabled={isFormEnabled && k === 'email'}>
+                                {v}
+                            </MenuItem>
                         ))}
                 </Select>
             </Box>
@@ -268,12 +306,12 @@ function FieldSection({
     // Add a description for each section
     let description = "";
     if (title === "Campi Form") {
-        description = "Campi richiesti e salvati per ogni iscrizione via form.";
+        description = "Campi richiesti e salvati per ogni iscrizione via form (NB: il campo Note Aggiuntive è presente di default).";
         if (isEdit && hasSubscriptions) {
-            description += " Non modificabili - evento con iscrizioni esistenti.";
+            description += " Campi non modificabili (iscrizioni presenti).";
         }
     } else if (title === "Campi Aggiuntivi") {
-        description = "Campi visibili e modificabili solo da ESNers.";
+        description = "Campi form visibili e modificabili solo da ESNers.";
         if (isEdit && hasSubscriptions) {
             description += " Puoi aggiungere nuovi campi ma non modificare quelli esistenti.";
         }
@@ -426,6 +464,8 @@ function FieldRow({
                                         size="small"
                                         sx={{mr: 1, width: 400}}
                                         disabled={disabled}
+                                        placeholder={`Opzione ${cIdx + 1}`}
+                                        required
                                     />
                                 </Grid>
                                 <Grid size={{xs: 12, sm: 1}}>
@@ -454,4 +494,15 @@ function FieldRow({
             )}
         </Box>
     );
+}
+
+// Canonical order for profile fields (same as frontend event form)
+const canonicalProfileOrder = [
+    "name", "surname", "birthdate", "email", "latest_esncard", "country", "domicile",
+    "phone_prefix", "phone_number", "whatsapp_prefix", "whatsapp_number",
+    "latest_document", "course", "matricola_expiration", "person_code", "matricola_number"
+];
+
+function orderProfileFields(fields) {
+    return canonicalProfileOrder.filter(f => fields.includes(f));
 }

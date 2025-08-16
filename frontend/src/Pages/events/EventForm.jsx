@@ -52,10 +52,10 @@ export default function EventForm() {
         //console.log(eventData);
         if (!eventData.id && !profileData.email) {
             navigate(`/event/${id}/formlogin`);
-        } else if (profileFields.includes("latest_esncard") && !value) {
-            handleEsncardNumberChange(profileData.latest_esncard?.number || "");
+        } else if (profileFields.includes("latest_esncard") && profileData.latest_esncard?.number) {
+            handleEsncardNumberChange(profileData.latest_esncard.number);
         }
-    }, [eventData, id, navigate]);
+    }, [eventData, id, navigate, profileFields, profileData]);
 
 
     // Define the canonical order for profile fields (same as ErasmusForm)
@@ -390,23 +390,73 @@ export default function EventForm() {
                     </Grid>
                 </Paper>
                 <Box component="form" onSubmit={handleSubmit} sx={{mt: 3, width: '100%'}}>
-                    {profileFields.length > 0 && (
-                        <Paper elevation={3} sx={{p: 2, mb: 3}}>
-                            <Typography variant="h6" gutterBottom>
-                                Profile Data
-                            </Typography>
-                            <Grid container spacing={2} sx={{mt: 2}}>
-                                {canonicalProfileOrder
-                                    .filter(field => profileFields.includes(field))
-                                    .map(field => {
-                                        const type = profileFieldType(field);
+                    {profileFields.length > 0 && (<>
+                            <Paper elevation={3} sx={{p: 2, mb: 3}}>
+                                <Typography variant="h6" gutterBottom>
+                                    Profile Data
+                                </Typography>
+                                <Grid container spacing={2} sx={{mt: 2}}>
+                                    {canonicalProfileOrder
+                                        .filter(field => profileFields.includes(field))
+                                        .map(field => {
+                                            const type = profileFieldType(field);
 
-                                        // ESNcard field with check and checkbox
-                                        if (field === "latest_esncard") {
-                                            // If user checks "no ESNcard", show checkbox only
-                                            if (noEsncard) {
+                                            // ESNcard field with check and checkbox
+                                            if (field === "latest_esncard") {
+                                                // If user checks "no ESNcard", show checkbox only
+                                                if (noEsncard) {
+                                                    return (
+                                                        <Grid size={{xs: 12}} key="no-esncard">
+                                                            <FormControlLabel
+                                                                control={
+                                                                    <Checkbox
+                                                                        checked={noEsncard}
+                                                                        onChange={e => setNoEsncard(e.target.checked)}
+                                                                    />
+                                                                }
+                                                                label="I don't have an ESNcard yet (you can buy one at our ESN offices)"
+                                                            />
+                                                        </Grid>
+                                                    );
+                                                }
+                                                // Otherwise, show ESNcard number field, then check/cross, then checkbox
                                                 return (
-                                                    <Grid size={{xs: 12}} key="no-esncard">
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <TextField
+                                                            label="ESNcard Number"
+                                                            value={profileValues.latest_esncard?.number || ""}
+                                                            onChange={e => handleEsncardNumberChange(e.target.value)}
+                                                            fullWidth
+                                                            required={!noEsncard}
+                                                            disabled={noEsncard}
+                                                        />
+                                                        {/* ESNcard check/cross below the field */}
+                                                        <Box sx={{mt: 1}}>
+                                                            {checkingEsncard ? (
+                                                                <Typography variant="body2"
+                                                                            color="text.secondary">Checking...</Typography>
+                                                            ) : esncardExists === true ? (
+                                                                <Box sx={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    color: 'success.main'
+                                                                }}>
+                                                                    <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
+                                                                    <Typography variant="body2">ESNcard
+                                                                        exists</Typography>
+                                                                </Box>
+                                                            ) : esncardExists === false ? (
+                                                                <Box sx={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    color: 'error.main'
+                                                                }}>
+                                                                    <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
+                                                                    <Typography variant="body2">ESNcard not
+                                                                        found</Typography>
+                                                                </Box>
+                                                            ) : null}
+                                                        </Box>
                                                         <FormControlLabel
                                                             control={
                                                                 <Checkbox
@@ -415,300 +465,256 @@ export default function EventForm() {
                                                                 />
                                                             }
                                                             label="I don't have an ESNcard yet (you can buy one at our ESN offices)"
+                                                            sx={{mt: 1}}
                                                         />
                                                     </Grid>
                                                 );
                                             }
-                                            // Otherwise, show ESNcard number field, then check/cross, then checkbox
-                                            return (
-                                                <Grid size={{xs: 12}} key={field}>
-                                                    <TextField
-                                                        label="ESNcard Number"
-                                                        value={profileValues.latest_esncard?.number || ""}
-                                                        onChange={e => handleEsncardNumberChange(e.target.value)}
-                                                        fullWidth
-                                                        required={!noEsncard}
-                                                        disabled={noEsncard}
-                                                    />
-                                                    {/* ESNcard check/cross below the field */}
-                                                    <Box sx={{mt: 1}}>
-                                                        {checkingEsncard ? (
-                                                            <Typography variant="body2"
-                                                                        color="text.secondary">Checking...</Typography>
-                                                        ) : esncardExists === true ? (
-                                                            <Box sx={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                color: 'success.main'
-                                                            }}>
-                                                                <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
-                                                                <Typography variant="body2">ESNcard exists</Typography>
-                                                            </Box>
-                                                        ) : esncardExists === false ? (
-                                                            <Box sx={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                color: 'error.main'
-                                                            }}>
-                                                                <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
-                                                                <Typography variant="body2">ESNcard not
-                                                                    found</Typography>
-                                                            </Box>
-                                                        ) : null}
-                                                    </Box>
-                                                    <FormControlLabel
-                                                        control={
-                                                            <Checkbox
-                                                                checked={noEsncard}
-                                                                onChange={e => setNoEsncard(e.target.checked)}
-                                                            />
-                                                        }
-                                                        label="I don't have an ESNcard yet (you can buy one at our ESN offices)"
-                                                        sx={{mt: 1}}
-                                                    />
-                                                </Grid>
-                                            );
-                                        }
 
-                                        if (field === "latest_document" && profileValues[field] && typeof profileValues[field] === "object") {
-                                            return (
-                                                <Grid size={{xs: 12}} key={field}>
-                                                    <TextField
-                                                        label="Document Number"
-                                                        value={profileValues[field].number || ""}
-                                                        fullWidth
-                                                        required
-                                                    />
-                                                </Grid>
-                                            );
-                                        }
-
-                                        if (type === "date") {
-                                            return (
-                                                <Grid size={{xs: 12}} key={field}>
-                                                    <LocalizationProvider dateAdapter={AdapterDayjs}
-                                                                          adapterLocale='en-gb'>
-                                                        <DatePicker
-                                                            label={profileFieldLabel(field)}
-                                                            value={profileValues[field] ? dayjs(profileValues[field]) : null}
-                                                            onChange={date => handleProfileChange(field, date)}
-                                                            slotProps={{
-                                                                textField: {
-                                                                    fullWidth: true,
-                                                                    required: true,
-                                                                    disabled: field === "email"
-                                                                }
-                                                            }}
-                                                            maxDate={field === "birthdate" ? dayjs() : undefined}
+                                            if (field === "latest_document" && profileValues[field] && typeof profileValues[field] === "object") {
+                                                return (
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <TextField
+                                                            label="Document Number"
+                                                            value={profileValues[field].number || ""}
+                                                            fullWidth
+                                                            required
                                                         />
-                                                    </LocalizationProvider>
-                                                </Grid>
-                                            );
-                                        }
-                                        if (type === "number") {
+                                                    </Grid>
+                                                );
+                                            }
+
+                                            if (type === "date") {
+                                                return (
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <LocalizationProvider dateAdapter={AdapterDayjs}
+                                                                              adapterLocale='en-gb'>
+                                                            <DatePicker
+                                                                label={profileFieldLabel(field)}
+                                                                value={profileValues[field] ? dayjs(profileValues[field]) : null}
+                                                                onChange={date => handleProfileChange(field, date)}
+                                                                slotProps={{
+                                                                    textField: {
+                                                                        fullWidth: true,
+                                                                        required: true,
+                                                                        disabled: field === "email"
+                                                                    }
+                                                                }}
+                                                                maxDate={field === "birthdate" ? dayjs() : undefined}
+                                                            />
+                                                        </LocalizationProvider>
+                                                    </Grid>
+                                                );
+                                            }
+                                            if (type === "number") {
+                                                return (
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <TextField
+                                                            label={profileFieldLabel(field)}
+                                                            type="number"
+                                                            value={profileValues[field] || ""}
+                                                            onChange={e => handleProfileChange(field, e.target.value)}
+                                                            fullWidth
+                                                            required
+                                                            disabled={field === "email"}
+                                                            slotProps={{htmlInput: {step: "0.01"}}}
+                                                        />
+                                                    </Grid>
+                                                );
+                                            }
+                                            if (type === "select_country") {
+                                                return (
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <FormControl fullWidth required>
+                                                            <InputLabel id={`${field}-label`}>Home University
+                                                                Country</InputLabel>
+                                                            <Select
+                                                                labelId={`${field}-label`}
+                                                                variant="outlined"
+                                                                value={profileValues[field] || ""}
+                                                                onChange={e => handleProfileChange(field, e.target.value)}
+                                                                label="Home University Country"
+                                                                disabled={field === "email"}
+                                                            >
+                                                                {countryCodes.map((country) => (
+                                                                    <MenuItem key={country.code} value={country.code}>
+                                                                        {country.name}
+                                                                    </MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+                                                    </Grid>
+                                                );
+                                            }
+                                            if (type === "select_course") {
+                                                return (
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <FormControl fullWidth required>
+                                                            <InputLabel id={`${field}-label`}>Field of
+                                                                Study</InputLabel>
+                                                            <Select
+                                                                labelId={`${field}-label`}
+                                                                variant="outlined"
+                                                                value={profileValues[field] || ""}
+                                                                onChange={e => handleProfileChange(field, e.target.value)}
+                                                                label="Field of Study"
+                                                                disabled={field === "email"}
+                                                            >
+                                                                {courseChoices.map(choice => (
+                                                                    <MenuItem key={choice.value} value={choice.value}>
+                                                                        {choice.label}
+                                                                    </MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+                                                    </Grid>
+                                                );
+                                            }
+                                            if (type === "select_prefix") {
+                                                return (
+                                                    <Grid size={{xs: 12}} key={field}>
+                                                        <FormControl fullWidth required>
+                                                            <InputLabel
+                                                                id={`${field}-label`}>{field === 'phone_prefix' ? 'Phone Prefix' : 'WhatsApp Prefix'}</InputLabel>
+                                                            <Select
+                                                                labelId={`${field}-label`}
+                                                                variant="outlined"
+                                                                value={profileValues[field] || ""}
+                                                                onChange={e => handleProfileChange(field, e.target.value)}
+                                                                label={field === 'phone_prefix' ? 'Phone Prefix' : 'WhatsApp Prefix'}
+                                                                disabled={field === "email"}
+                                                            >
+                                                                {countryCodes.map((country) => (
+                                                                    <MenuItem key={country.code} value={country.dial}>
+                                                                        {country.dial} ({country.name})
+                                                                    </MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+                                                    </Grid>
+                                                );
+                                            }
+                                            // Default: text field
                                             return (
                                                 <Grid size={{xs: 12}} key={field}>
                                                     <TextField
                                                         label={profileFieldLabel(field)}
-                                                        type="number"
                                                         value={profileValues[field] || ""}
                                                         onChange={e => handleProfileChange(field, e.target.value)}
                                                         fullWidth
                                                         required
                                                         disabled={field === "email"}
-                                                        slotProps={{htmlInput: {step: "0.01"}}}
                                                     />
                                                 </Grid>
                                             );
-                                        }
-                                        if (type === "select_country") {
-                                            return (
-                                                <Grid size={{xs: 12}} key={field}>
-                                                    <FormControl fullWidth required>
-                                                        <InputLabel id={`${field}-label`}>Home University
-                                                            Country</InputLabel>
-                                                        <Select
-                                                            labelId={`${field}-label`}
-                                                            variant="outlined"
-                                                            value={profileValues[field] || ""}
-                                                            onChange={e => handleProfileChange(field, e.target.value)}
-                                                            label="Home University Country"
-                                                            disabled={field === "email"}
-                                                        >
-                                                            {countryCodes.map((country) => (
-                                                                <MenuItem key={country.code} value={country.code}>
-                                                                    {country.name}
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                </Grid>
-                                            );
-                                        }
-                                        if (type === "select_course") {
-                                            return (
-                                                <Grid size={{xs: 12}} key={field}>
-                                                    <FormControl fullWidth required>
-                                                        <InputLabel id={`${field}-label`}>Field of Study</InputLabel>
-                                                        <Select
-                                                            labelId={`${field}-label`}
-                                                            variant="outlined"
-                                                            value={profileValues[field] || ""}
-                                                            onChange={e => handleProfileChange(field, e.target.value)}
-                                                            label="Field of Study"
-                                                            disabled={field === "email"}
-                                                        >
-                                                            {courseChoices.map(choice => (
-                                                                <MenuItem key={choice.value} value={choice.value}>
-                                                                    {choice.label}
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                </Grid>
-                                            );
-                                        }
-                                        if (type === "select_prefix") {
-                                            return (
-                                                <Grid size={{xs: 12}} key={field}>
-                                                    <FormControl fullWidth required>
-                                                        <InputLabel
-                                                            id={`${field}-label`}>{field === 'phone_prefix' ? 'Phone Prefix' : 'WhatsApp Prefix'}</InputLabel>
-                                                        <Select
-                                                            labelId={`${field}-label`}
-                                                            variant="outlined"
-                                                            value={profileValues[field] || ""}
-                                                            onChange={e => handleProfileChange(field, e.target.value)}
-                                                            label={field === 'phone_prefix' ? 'Phone Prefix' : 'WhatsApp Prefix'}
-                                                            disabled={field === "email"}
-                                                        >
-                                                            {countryCodes.map((country) => (
-                                                                <MenuItem key={country.code} value={country.dial}>
-                                                                    {country.dial} ({country.name})
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                </Grid>
-                                            );
-                                        }
-                                        // Default: text field
-                                        return (
-                                            <Grid size={{xs: 12}} key={field}>
-                                                <TextField
-                                                    label={profileFieldLabel(field)}
-                                                    value={profileValues[field] || ""}
-                                                    onChange={e => handleProfileChange(field, e.target.value)}
-                                                    fullWidth
-                                                    required
-                                                    disabled={field === "email"}
-                                                />
-                                            </Grid>
-                                        );
-                                    })}
-                            </Grid>
-                        </Paper>
+                                        })}
+                                </Grid>
+                            </Paper>
+
+                            <Divider sx={{mb: 3}}/>
+                        </>
                     )}
-                    <Divider sx={{mb: 3}}/>
-                    {formFields.length > 0 && (
-                        <Paper elevation={3} sx={{p: 2, mb: 3}}>
-                            <Typography variant="h6" gutterBottom>
-                                Event Form Data
-                            </Typography>
-                            {formFields.map(field => {
-                                switch (field.type) {
-                                    case "t":
-                                        return (
-                                            <TextField
-                                                key={field.name}
-                                                label={field.name}
-                                                required={field.required}
-                                                fullWidth
-                                                margin="normal"
-                                                value={formValues[field.name] || ""}
-                                                onChange={e => handleChange(field.name, e.target.value)}
-                                            />
-                                        );
-                                    case "n":
-                                        return (
-                                            <TextField
-                                                key={field.name}
-                                                label={field.name}
-                                                required={field.required}
-                                                fullWidth
-                                                margin="normal"
-                                                type="number"
-                                                value={formValues[field.name] || ""}
-                                                onChange={e => handleChange(field.name, e.target.value)}
-                                                slotProps={{htmlInput: {step: "0.01"}}}
-                                            />
-                                        );
-                                    case "c":
-                                        return (
-                                            <FormControl key={field.name} required={field.required} margin="normal"
-                                                         fullWidth>
-                                                <FormLabel>{field.name}</FormLabel>
-                                                <RadioGroup
+                    {formFields.length > 0 && (<>
+                            <Paper elevation={3} sx={{p: 2, mb: 3}}>
+                                <Typography variant="h6" gutterBottom>
+                                    Event Form Data
+                                </Typography>
+                                {formFields.map(field => {
+                                    switch (field.type) {
+                                        case "t":
+                                            return (
+                                                <TextField
+                                                    key={field.name}
+                                                    label={field.name}
+                                                    required={field.required}
+                                                    fullWidth
+                                                    margin="normal"
                                                     value={formValues[field.name] || ""}
                                                     onChange={e => handleChange(field.name, e.target.value)}
-                                                >
-                                                    {field.choices?.map(choice => (
-                                                        <FormControlLabel
-                                                            key={choice}
-                                                            value={choice}
-                                                            control={<Radio/>}
-                                                            label={choice}
-                                                        />
-                                                    ))}
-                                                </RadioGroup>
-                                            </FormControl>
-                                        );
-                                    case "m":
-                                        return (
-                                            <FormControl key={field.name} required={field.required} margin="normal"
-                                                         fullWidth>
-                                                <FormLabel>{field.name}</FormLabel>
-                                                <FormGroup>
-                                                    {field.choices?.map(choice => (
-                                                        <FormControlLabel
-                                                            key={choice}
-                                                            control={
-                                                                <Checkbox
-                                                                    checked={formValues[field.name]?.includes(choice) || false}
-                                                                    onChange={() => handleCheckboxChange(field.name, choice)}
-                                                                />
-                                                            }
-                                                            label={choice}
-                                                        />
-                                                    ))}
-                                                </FormGroup>
-                                                {field.required && (
-                                                    <FormHelperText>Select one option at least</FormHelperText>
-                                                )}
-                                            </FormControl>
-                                        );
-                                    case "b":
-                                        return (
-                                            <FormControl key={field.name} required={field.required} margin="normal"
-                                                         fullWidth>
-                                                <FormLabel>{field.name}</FormLabel>
-                                                <RadioGroup
-                                                    row
-                                                    value={formValues[field.name] === true ? "yes" : formValues[field.name] === false ? "no" : ""}
-                                                    onChange={e => handleChange(field.name, e.target.value === "yes")}
-                                                >
-                                                    <FormControlLabel value="yes" control={<Radio/>} label="Yes"/>
-                                                    <FormControlLabel value="no" control={<Radio/>} label="No"/>
-                                                </RadioGroup>
-                                            </FormControl>
-                                        );
-                                    default:
-                                        return null;
-                                }
-                            })}
-                        </Paper>
+                                                />
+                                            );
+                                        case "n":
+                                            return (
+                                                <TextField
+                                                    key={field.name}
+                                                    label={field.name}
+                                                    required={field.required}
+                                                    fullWidth
+                                                    margin="normal"
+                                                    type="number"
+                                                    value={formValues[field.name] || ""}
+                                                    onChange={e => handleChange(field.name, e.target.value)}
+                                                    slotProps={{htmlInput: {step: "0.01"}}}
+                                                />
+                                            );
+                                        case "c":
+                                            return (
+                                                <FormControl key={field.name} required={field.required} margin="normal"
+                                                             fullWidth>
+                                                    <FormLabel>{field.name}</FormLabel>
+                                                    <RadioGroup
+                                                        value={formValues[field.name] || ""}
+                                                        onChange={e => handleChange(field.name, e.target.value)}
+                                                    >
+                                                        {field.choices?.map(choice => (
+                                                            <FormControlLabel
+                                                                key={choice}
+                                                                value={choice}
+                                                                control={<Radio/>}
+                                                                label={choice}
+                                                            />
+                                                        ))}
+                                                    </RadioGroup>
+                                                </FormControl>
+                                            );
+                                        case "m":
+                                            return (
+                                                <FormControl key={field.name} required={field.required} margin="normal"
+                                                             fullWidth>
+                                                    <FormLabel>{field.name}</FormLabel>
+                                                    <FormGroup>
+                                                        {field.choices?.map(choice => (
+                                                            <FormControlLabel
+                                                                key={choice}
+                                                                control={
+                                                                    <Checkbox
+                                                                        checked={formValues[field.name]?.includes(choice) || false}
+                                                                        onChange={() => handleCheckboxChange(field.name, choice)}
+                                                                    />
+                                                                }
+                                                                label={choice}
+                                                            />
+                                                        ))}
+                                                    </FormGroup>
+                                                    {field.required && (
+                                                        <FormHelperText>Select one option at least</FormHelperText>
+                                                    )}
+                                                </FormControl>
+                                            );
+                                        case "b":
+                                            return (
+                                                <FormControl key={field.name} required={field.required} margin="normal"
+                                                             fullWidth>
+                                                    <FormLabel>{field.name}</FormLabel>
+                                                    <RadioGroup
+                                                        row
+                                                        value={formValues[field.name] === true ? "yes" : formValues[field.name] === false ? "no" : ""}
+                                                        onChange={e => handleChange(field.name, e.target.value === "yes")}
+                                                    >
+                                                        <FormControlLabel value="yes" control={<Radio/>} label="Yes"/>
+                                                        <FormControlLabel value="no" control={<Radio/>} label="No"/>
+                                                    </RadioGroup>
+                                                </FormControl>
+                                            );
+                                        default:
+                                            return null;
+                                    }
+                                })}
+                            </Paper>
+
+                            <Divider sx={{mb: 3}}/>
+                        </>
                     )}
-                    <Divider sx={{mb: 3}}/>
                     {/* Always show form_notes textbox at the end */}
                     <Paper elevation={3} sx={{p: 2, mb: 3}}>
                         <Typography variant="h6" gutterBottom>
