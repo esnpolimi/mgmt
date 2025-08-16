@@ -147,7 +147,7 @@ class Event(BaseEntity):
 
         # Validate that form_programmed_open_time is after subscription_start_date
         if (self.form_programmed_open_time and self.subscription_start_date and
-            self.form_programmed_open_time <= self.subscription_start_date):
+                self.form_programmed_open_time <= self.subscription_start_date):
             raise ValidationError({
                 'form_programmed_open_time': 'Form opening time must be after subscription start date.'
             })
@@ -205,7 +205,7 @@ class EventOrganizer(BaseEntity):
 
     class Meta:
         unique_together = ('event', 'profile')
-        ordering = ['is_lead', 'id']
+        ordering = ['-is_lead', 'id']  # leaders first
 
     def __str__(self):
         return f"{self.profile} - {self.event}"
@@ -327,3 +327,14 @@ class Subscription(BaseEntity):
 
     def __str__(self):
         return f"{self.profile} - {self.event} ({self.list.name})"
+
+
+CANONICAL_PROFILE_ORDER = [
+    'name', 'surname', 'birthdate', 'email', 'latest_esncard', 'country', 'domicile',
+    'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
+    'latest_document', 'course', 'matricola_expiration', 'person_code', 'matricola_number'
+]
+
+
+def order_profile_fields(fields):
+    return [f for f in CANONICAL_PROFILE_ORDER if f in fields]

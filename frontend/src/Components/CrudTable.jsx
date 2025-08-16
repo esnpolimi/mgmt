@@ -87,7 +87,7 @@ export default function CrudTable({cols, initialData, title, onSave, onDelete, o
             ({table}) => {
                 return (
                     <Box sx={{display: 'flex', alignItems: 'center', width: '100%'}}>
-                        <Box sx={{ml: 3}}>
+                        <Box sx={{ml: 1}}>
                             <h3>{title}</h3>
                             <h5>{editText}</h5>
                         </Box>

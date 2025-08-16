@@ -27,6 +27,7 @@ import ConfirmDialog from "../ConfirmDialog";
 import StatusBanner from "../StatusBanner";
 import EventModalForm from './EventModalForm';
 import {Radio, RadioGroup, FormControl, FormLabel} from '@mui/material';
+import ProfileSearch from '../ProfileSearch';
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const [isLoading, setLoading] = useState(true);
@@ -51,12 +52,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
         is_a_bando: false,
         is_allow_external: false,
         enable_form: false,
-        profile_fields: ['name', 'surname'],
+        profile_fields: ['name', 'surname', 'email', 'whatsapp_prefix', 'whatsapp_number'], // default profile fields
         fields: [ // unified fields of form fields and additional columns
-            {field_type: 'form', name: 'What are your allergies?', type: 't'},
-            {field_type: 'form', name: 'Vegetarian?', type: 'c', choices: ['yes', 'no']},
-            {field_type: 'additional', name: 'Note', type: 't'},
+            {field_type: 'form', name: 'What are your allergies?', type: 't', required: true},
+            {field_type: 'form', name: 'Vegetarian?', type: 'b', required: true},
+            {field_type: 'additional', name: 'Verificato', type: 'b'},
         ],
+        organizers: [],
     });
 
     const [errors, setErrors] = React.useState({
@@ -80,6 +82,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 profile_fields: Array.isArray(event.profile_fields) ? event.profile_fields : ['name', 'surname'],
                 fields: Array.isArray(event.fields) ? event.fields : [],
                 enable_form: Boolean(event.enable_form),
+                organizers: Array.isArray(event.organizers)
+                    ? event.organizers.map(o => ({
+                        profile: o.profile,
+                        profile_name: o.profile_name,
+                        is_lead: !!o.is_lead
+                    }))
+                    : []
             };
             setData(eventData);
             setHasSubscriptions(event.subscriptions && event.subscriptions.length > 0);
@@ -114,7 +123,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         } else {
             setData({...data, subscription_start_date: date});
         }
-
+        
         // If form opening time exists and is now before or equal to start date, update it
         if (formProgrammedOpenTime && dayjs(date).isAfter(dayjs(formProgrammedOpenTime))) {
             setFormProgrammedOpenTime(dayjs(date).add(1, 'hour').toISOString());
@@ -163,6 +172,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
             fields: rest.fields ?? [],
             allow_online_payment: allowOnlinePayment,
             form_programmed_open_time: formProgrammedOpenTime || null,
+            organizers: (rest.organizers || []).map(o => ({
+                profile: o.profile,
+                is_lead: !!o.is_lead
+            })),
         })
     }
 
@@ -364,6 +377,46 @@ export default function EventModal({open, event, isEdit, onClose}) {
         setFormProgrammedOpenTime(data.form_programmed_open_time || '');
     }, [data]);
 
+    // Organizers UI state and handlers
+    const [newOrganizer, setNewOrganizer] = useState(null);
+
+    // removed handleAddOrganizer; add on-select behavior instead
+    const handleOrganizerSelect = (_, val) => {
+        if (!val) {
+            setNewOrganizer(null);
+            return;
+        }
+        setData(prev => {
+            const exists = prev.organizers?.some(o => o.profile === val.id);
+            if (exists) return prev;
+            const name = `${val.name}${val.surname ? ` ${val.surname}` : ''}`;
+            return {
+                ...prev,
+                organizers: [...(prev.organizers || []), {profile: val.id, profile_name: name, is_lead: false}]
+            };
+        });
+        // clear selection in the autocomplete after adding
+        setNewOrganizer(null);
+    };
+
+    const handleToggleLeader = (idx) => (e) => {
+        const val = e.target.checked;
+        setData(prev => {
+            const arr = [...(prev.organizers || [])];
+            if (!arr[idx]) return prev;
+            arr[idx] = {...arr[idx], is_lead: val};
+            return {...prev, organizers: arr};
+        });
+    };
+
+    const handleRemoveOrganizer = (idx) => () => {
+        setData(prev => {
+            const arr = [...(prev.organizers || [])];
+            arr.splice(idx, 1);
+            return {...prev, organizers: arr};
+        });
+    };
+
     return (
         <Modal open={open} onClose={handleClose}>
             <Box sx={style} component="form" onSubmit={handleSubmit} noValidate={false}>
@@ -447,7 +500,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Grid size={{xs: 12, md: 4}}>
                         </Grid>
 
-                        <Grid size={{xs: 12, md: 4}}>
+                        <Grid size={{xs: 12, md: 3}}>
                             <Tooltip
                                 title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <span>
@@ -467,7 +520,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 </span>
                             </Tooltip>
                         </Grid>
-                        <Grid size={{xs: 12, md: 4}}>
+                        <Grid size={{xs: 12, md: 3}}>
                             <Tooltip
                                 title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
                                 <span>
@@ -527,6 +580,62 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
                     </Grid>
                     {/* --- End toggles section --- */}
+
+                    {/* --- Organizzatori section --- */}
+                    <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2, mb: 1}}>
+                        <Typography variant="h6">Organizzatori</Typography>
+                        {/* removed AddIcon button beside title */}
+                    </Grid>
+
+                    <Grid container spacing={2} alignItems="center" sx={{mt: 1}}>
+                        <Grid size={{xs: 12, md: 4}}>
+                            <ProfileSearch
+                                value={newOrganizer}
+                                onChange={handleOrganizerSelect}
+                                label="Cerca ESNer"
+                                esner_only={true}
+                                valid_only={true}
+                            />
+                        </Grid>
+                    </Grid>
+
+                    {(data.organizers && data.organizers.length > 0) && (
+                        <Grid container spacing={2} sx={{mt: 1}}>
+                            {data.organizers.map((org, idx) => (
+                                <Grid size={{xs: 6}} key={`${org.profile}-${idx}`}>
+                                    <Box
+                                        sx={{
+                                            border: '1px solid',
+                                            borderColor: 'divider',
+                                            borderRadius: 1,
+                                            p: 1.5,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 2,
+                                            justifyContent: 'space-between'
+                                        }}
+                                    >
+                                        <Typography sx={{flex: 1}}>{org.profile_name || `ID ${org.profile}`}</Typography>
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    checked={!!org.is_lead}
+                                                    onChange={handleToggleLeader(idx)}
+                                                    color="primary"
+                                                />
+                                            }
+                                            label="Leader"
+                                            sx={{mr: 1}}
+                                        />
+                                        <IconButton onClick={handleRemoveOrganizer(idx)} title="Rimuovi">
+                                            <DeleteIcon/>
+                                        </IconButton>
+                                    </Box>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    )}
+                    {/* --- End Organizzatori section --- */}
 
                     <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
                         <Typography variant="h6">Liste</Typography>

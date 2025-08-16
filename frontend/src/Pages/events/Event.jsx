@@ -5,6 +5,7 @@ import {Box, Button, Card, CardContent, Chip, Divider, IconButton, Typography, G
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import DescriptionIcon from '@mui/icons-material/Description';
+import Groups2Icon from '@mui/icons-material/Groups2';
 import EuroIcon from '@mui/icons-material/Euro';
 import AdjustIcon from '@mui/icons-material/Adjust';
 import Loader from "../../Components/Loader";
@@ -28,6 +29,7 @@ import EventListAccordions from "../../Components/events/EventListAccordions";
 import PaymentIcon from '@mui/icons-material/Payment';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import StarIcon from '@mui/icons-material/Star';
 
 
 export default function Event() {
@@ -237,6 +239,11 @@ export default function Event() {
         });
     };
 
+    // Derive edit permission: organizers OR Board (explicit change_event permission always needed)
+    const currentProfileId = user?.profile?.id ?? user?.profile_id ?? user?.id;
+    const isOrganizer = Array.isArray(data?.organizers) && data.organizers.some(o => o.profile === currentProfileId);
+    const canEditEvent = Boolean(canChangeEvent && (isBoardMember || isOrganizer));
+
     return (
         <Box>
             <Sidebar/>
@@ -424,6 +431,37 @@ export default function Event() {
                                             />
                                         </div>
                                     </Grid>
+
+                                    {/* --- Organizzatori section (clickable chips) --- */}
+                                    <Grid size={{xs: 12}}>
+                                        <Divider sx={{my: 1}}/>
+                                        <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
+                                            <Groups2Icon sx={{color: 'primary.main', mr: 1}}/>
+                                            <Typography variant="h6" component="div">Organizzatori</Typography>
+                                        </Box>
+                                        {Array.isArray(data.organizers) && data.organizers.length > 0 ? (
+                                            <Box sx={{display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1}}>
+                                                {data.organizers.map((o) => (
+                                                    <Chip
+                                                        key={`${o.profile}-${o.is_lead ? 'lead' : 'org'}`}
+                                                        icon={o.is_lead ? <StarIcon/> : undefined}
+                                                        label={o.profile_name || `ID ${o.profile}`}
+                                                        color={o.is_lead ? 'primary' : 'default'}
+                                                        variant={o.is_lead ? 'filled' : 'outlined'}
+                                                        clickable
+                                                        onClick={() => window.open(`/profile/${o.profile}/`, '_blank')}
+                                                        title="Apri pagina profilo"
+                                                    />
+                                                ))}
+                                            </Box>
+                                        ) : (
+                                            <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
+                                                Nessun organizzatore registrato
+                                            </Typography>
+                                        )}
+                                    </Grid>
+                                    {/* --- End Organizzatori section --- */}
+
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>
                                         <Box sx={{display: 'flex', alignItems: 'center', mt: 2}}>
@@ -435,10 +473,15 @@ export default function Event() {
                                             variant="contained"
                                             color="primary"
                                             onClick={handleOpenEventModal}
-                                            disabled={!canChangeEvent}
+                                            disabled={!canEditEvent}
                                         >
                                             Modifica Evento
                                         </Button>
+                                        {!canEditEvent && (
+                                            <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
+                                                Solo gli Organizzatori dell'evento e i Board Members possono modificare questo evento.
+                                            </Typography>
+                                        )}
                                     </Grid>
                                     <Grid size={{xs: 12}}>
                                         <Divider sx={{my: 1}}/>

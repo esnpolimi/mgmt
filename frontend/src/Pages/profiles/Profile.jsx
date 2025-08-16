@@ -1,5 +1,21 @@
-import {Box, Button, Card, FormControl, InputLabel, MenuItem, Select, TextField, Toolbar, Typography, Grid, IconButton} from "@mui/material";
-import {useEffect, useMemo, useState} from 'react';
+import {
+    Box,
+    Button,
+    Card,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Select,
+    TextField,
+    Toolbar,
+    Typography,
+    Grid,
+    IconButton,
+    Collapse,
+    Chip, Divider,
+    Tooltip
+} from "@mui/material";
+import React, {useEffect, useMemo, useState} from 'react';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -22,6 +38,13 @@ import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RefreshIcon from "@mui/icons-material/Refresh";
+import StarIcon from "@mui/icons-material/Star";
+import DocumentScannerIcon from '@mui/icons-material/DocumentScanner';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import EventIcon from '@mui/icons-material/Event';
+import EditIcon from "@mui/icons-material/Edit";
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -44,6 +67,9 @@ export default function Profile() {
     const [subscriptionEvent, setSubscriptionEvent] = useState(null);
     const [eventSelectorModalOpen, setEventSelectorModalOpen] = useState(false);
     const [subscriptions, setSubscriptions] = useState([]); // For MRT_Table
+    const [organizedEvents, setOrganizedEvents] = useState([]);
+    const [showSubscriptions, setShowSubscriptions] = useState(false);
+    const [showOrganizedEvents, setShowOrganizedEvents] = useState(false);
     const navigate = useNavigate();
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
@@ -139,6 +165,7 @@ export default function Profile() {
                 setProfileType(data.is_esner ? "ESNer" : "Erasmus");
                 fetchSubscriptions();
                 fetchGroups();
+                if (data.is_esner) fetchOrganizedEvents();
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setLoading(false)
@@ -156,6 +183,13 @@ export default function Profile() {
         fetchCustom("GET", "/groups/", {
             onSuccess: (data) => setGroups(data),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+        });
+    };
+
+    const fetchOrganizedEvents = () => {
+        fetchCustom("GET", `/profile_events/${id}/`, {
+            onSuccess: (data) => setOrganizedEvents(data),
+            onError: () => setOrganizedEvents([]),
         });
     };
 
@@ -220,7 +254,11 @@ export default function Profile() {
                 setPopup({message: "ESNcard aggiornata con successo!", state: "success", id: Date.now()});
                 refreshProfileData();
             },
-            onError: (responseOrError) => setPopup({message: "Errore nell'aggiornamento ESNcard: " + responseOrError.message, state: "error", id: Date.now()}),
+            onError: (responseOrError) => setPopup({
+                message: "Errore nell'aggiornamento ESNcard: " + responseOrError.message,
+                state: "error",
+                id: Date.now()
+            }),
             onFinally: () => setSaving(false)
         });
     }
@@ -534,6 +572,49 @@ export default function Profile() {
         return cols;
     }, [subscriptions, navigate, showQuotaColumn, showCauzioneColumn]);
 
+    // Columns for organized events table
+    const organizedEventsColumns = [
+        {
+            accessorKey: 'event_name',
+            header: 'Evento',
+            Cell: ({row}) => (
+                <Button
+                    variant="text"
+                    color="primary"
+                    sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                    endIcon={<OpenInNewIcon fontSize="small"/>}
+                    onClick={() => window.open(`/event/${row.original.event_id}`, '_blank', 'noopener,noreferrer')}
+                >
+                    {row.original.event_name}
+                </Button>
+            ),
+        },
+        {
+            accessorKey: 'event_date',
+            header: 'Data Evento',
+            Cell: ({cell}) => {
+                const date = cell.getValue();
+                if (!date) return '';
+                const d = new Date(date);
+                return d.toLocaleDateString('it-IT', {day: '2-digit', month: '2-digit', year: 'numeric'});
+            }
+        },
+        {
+            accessorKey: 'is_lead',
+            header: 'Ruolo',
+            Cell: ({cell}) => {
+                const isLead = cell.getValue();
+                return (
+                    <Chip
+                        label={isLead ? 'Responsabile Sezione' : 'Responsabile Evento'}
+                        color={isLead ? 'primary' : 'default'}
+                        icon={isLead ? <StarIcon/> : null}
+                    />
+                );
+            }
+        }
+    ];
+
     const subscriptionsTable = useMaterialReactTable({
         columns: subscriptionsColumns,
         data: subscriptions,
@@ -544,6 +625,20 @@ export default function Profile() {
         enableSorting: false,
         initialState: {showColumnFilters: false, showGlobalFilter: false},
         paginationDisplayMode: 'default',
+        muiTableBodyRowProps: {hover: false},
+        localization: MRT_Localization_IT,
+    });
+
+    // Table for organized events (no pagination)
+    const organizedEventsTable = useMaterialReactTable({
+        columns: organizedEventsColumns,
+        data: organizedEvents,
+        enablePagination: false,
+        enableSorting: false,
+        enableColumnActions: false,
+        enableColumnFilters: false,
+        enableGlobalFilter: false,
+        initialState: {showColumnFilters: false, showGlobalFilter: false},
         muiTableBodyRowProps: {hover: false},
         localization: MRT_Localization_IT,
     });
@@ -571,18 +666,32 @@ export default function Profile() {
                             <Grid container spacing={2}>
                                 {/* --- Personal Information Section --- */}
                                 <Grid container size={{xs: 12}} alignItems="center">
-                                    <Person/>
+                                    <Person sx={{color: 'primary.main'}}/>
                                     <Typography variant="h6" sx={{m: 0}}>Informazioni Personali</Typography>
                                     <Grid sx={{marginLeft: 'auto'}}>
-                                        <EditButton
-                                            onEdit={() => toggleEdit(true)}
-                                            onCancel={() => {
-                                                toggleEdit(false);
-                                                setUpdatedData(data);
-                                            }}
-                                            saving={saving}
-                                            onSave={handleSave}/>
-
+                                        <Tooltip title="Modifica Profilo" arrow>
+                                            <Box
+                                                sx={{
+                                                    display: 'inline-flex',
+                                                    '& .MuiButton-root, & .MuiIconButton-root': { color: 'primary.main' },
+                                                    '& .MuiButton-contained': {
+                                                        backgroundColor: 'primary.main',
+                                                        color: 'primary.contrastText'
+                                                    },
+                                                    '& .MuiButton-contained:hover': { backgroundColor: 'primary.dark' }
+                                                }}
+                                            >
+                                                <EditButton
+                                                    onEdit={() => toggleEdit(true)}
+                                                    onCancel={() => {
+                                                        toggleEdit(false);
+                                                        setUpdatedData(data);
+                                                    }}
+                                                    saving={saving}
+                                                    onSave={handleSave}
+                                                />
+                                            </Box>
+                                        </Tooltip>
                                     </Grid>
                                 </Grid>
                                 {!shouldHideField('name') && (
@@ -722,7 +831,8 @@ export default function Profile() {
                                     <Grid size={{xs: 12}} container spacing={2}>
                                         <Grid size={{xs: 12, md: 1}}>
                                             <FormControl fullWidth required>
-                                                <InputLabel id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
+                                                <InputLabel
+                                                    id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
                                                 <Select
                                                     variant="outlined"
                                                     labelId="whatsapp-prefix-label"
@@ -758,7 +868,7 @@ export default function Profile() {
                                 )}
                                 {/* --- Polimi fields --- */}
                                 <Grid container size={{xs: 12}} sx={{mt: 2}} alignItems="center">
-                                    <School/>
+                                    <School sx={{color: 'primary.main'}}/>
                                     <Typography variant="h6" sx={{m: 0}}>Dati Studente</Typography>
                                 </Grid>
                                 {!shouldHideField('person_code') && (
@@ -825,7 +935,7 @@ export default function Profile() {
                                 )}
                                 {!shouldHideField('group') && (
                                     <Grid container alignItems="center" spacing={1} sx={{width: '100%', mt: 2}}>
-                                        <Group/>
+                                        <Group sx={{color: 'primary.main', mr: 1}}/>
                                         <Grid size={{xs: 12, md: 2}}>
                                             <FormControl fullWidth required>
                                                 <InputLabel id="group-label">{names.group}</InputLabel>
@@ -843,7 +953,8 @@ export default function Profile() {
                                                     slotProps={{input: {readOnly: readOnly.group}}}
                                                     sx={{backgroundColor: readOnly.group ? 'grey.200' : 'white'}}>
                                                     <MenuItem value=""><em>None</em></MenuItem>
-                                                    {groups.map((group) => (<MenuItem key={group.name} value={group.name}>{group.name}</MenuItem>))}
+                                                    {groups.map((group) => (<MenuItem key={group.name}
+                                                                                      value={group.name}>{group.name}</MenuItem>))}
                                                 </Select>
                                             </FormControl>
                                         </Grid>
@@ -851,9 +962,12 @@ export default function Profile() {
                                 )}
                             </Grid>
                         </Card>
-                        <Card sx={{p: 1, mt: 2, mb: 2, minHeight: '80px', display: 'flex', alignItems: 'center'}}>
+                        <Card sx={{p: 1, mt: 2, minHeight: '80px', display: 'flex', alignItems: 'center'}}>
                             <Toolbar sx={{justifyContent: 'space-between', width: '100%', p: 0}}>
-                                <Typography variant="h6">Azioni</Typography>
+                                <Box sx={{display: 'flex', alignItems: 'center'}}>
+                                    <EditIcon sx={{color: 'primary.main', mr: 2}}/>
+                                    <Typography variant="h6">Azioni</Typography>
+                                </Box>
                                 <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
                                     Iscrivi ad Evento
                                 </Button>
@@ -884,38 +998,105 @@ export default function Profile() {
                                 profileName={`${profile.name} ${profile.surname}`}
                             />
                         )}
-                        <Grid container sx={{width: '100%', mb: 5}} spacing={2}>
+                        <Divider variant="middle" sx={{my: 3}}/>
+
+                        {/* --- Documents and ESNcards Section --- */}
+                        <Grid container sx={{width: '100%'}} spacing={2}>
                             <Grid size={{xs: 12, md: 6}}>
-                                <CrudTable
-                                    cols={document_columns}
-                                    canCreate={user.permissions.includes('add_document')}
-                                    canEdit={user.permissions.includes('change_document')}
-                                    canDelete={user.permissions.includes('delete_document')}
-                                    onCreate={createDocument}
-                                    onSave={saveDocument}
-                                    onDelete={deleteDocument}
-                                    initialData={data.documents}
-                                    title={'Documenti'}
-                                    sortColumn={'expiration'}/>
-                            </Grid>
-                            <Grid size={{xs: 12, md: 6}}>
-                                <CrudTable
-                                    cols={esncard_columns}
-                                    canCreate={user.permissions.includes('add_esncard')}
-                                    onCreate={handleOpenESNcardModal}
-                                    createText={!profile.latest_esncard ? "Rilascia" : (profile.latest_esncard.is_valid ? "Card Smarrita" : "Rinnova")}
-                                    canEdit={user.permissions.includes('change_esncard')}
-                                    onSave={saveESNcard}
-                                    initialData={data.esncards}
-                                    title={'ESNcards'}
-                                    sortColumn={'expiration'}/>
-                            </Grid>
-                            <Grid size={{xs: 12}}>
-                                <Card sx={{p: 2, mt: 2}}>
-                                    <Typography variant="h5" sx={{mb: 2}}>Iscrizioni</Typography>
-                                    <MRT_Table table={subscriptionsTable}/>
+                                <Card sx={{p: 2}}>
+                                    <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
+                                        <DocumentScannerIcon sx={{color: 'primary.main', mr: 2}}/>
+                                        <Typography variant="h5" sx={{flexGrow: 1}}>Documenti</Typography>
+                                    </Box>
+                                    <CrudTable
+                                        cols={document_columns}
+                                        canCreate={user.permissions.includes('add_document')}
+                                        canEdit={user.permissions.includes('change_document')}
+                                        canDelete={user.permissions.includes('delete_document')}
+                                        onCreate={createDocument}
+                                        onSave={saveDocument}
+                                        onDelete={deleteDocument}
+                                        initialData={data.documents}
+                                        title={null}
+                                        sortColumn={'expiration'}/>
                                 </Card>
                             </Grid>
+                            <Grid size={{xs: 12, md: 6}}>
+                                <Card sx={{p: 2}}>
+                                    <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
+                                        <CreditCardIcon sx={{color: 'primary.main', mr: 2}}/>
+                                        <Typography variant="h5" sx={{flexGrow: 1}}>ESNcards</Typography>
+                                    </Box>
+                                    <CrudTable
+                                        cols={esncard_columns}
+                                        canCreate={user.permissions.includes('add_esncard')}
+                                        onCreate={handleOpenESNcardModal}
+                                        createText={!profile.latest_esncard ? "Rilascia" : (profile.latest_esncard.is_valid ? "Card Smarrita" : "Rinnova")}
+                                        canEdit={user.permissions.includes('change_esncard')}
+                                        onSave={saveESNcard}
+                                        initialData={data.esncards}
+                                        title={null}
+                                        sortColumn={'expiration'}/>
+                                </Card>
+                            </Grid>
+
+                            <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1}}/></Grid>
+
+                            {/* --- Subscriptions and Organized Events Section --- */}
+                            <Grid size={{xs: 12}}>
+                                <Card sx={{p: 2}}>
+                                    <Box
+                                        sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
+                                        onClick={() => setShowSubscriptions(v => !v)}
+                                    >
+                                        <ListAltIcon sx={{color: 'primary.main'}}/>
+                                        <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Iscrizioni</Typography>
+                                        <IconButton size="small" aria-label="toggle iscrizioni"
+                                                    onClick={() => setShowSubscriptions(v => !v)}>
+                                            <ExpandMoreIcon
+                                                sx={{
+                                                    transform: showSubscriptions ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                    transition: 'transform 0.2s'
+                                                }}
+                                            />
+                                        </IconButton>
+                                    </Box>
+                                    <Collapse in={showSubscriptions} timeout="auto" unmountOnExit>
+                                        <Box sx={{mt: 1}}>
+                                            <MRT_Table table={subscriptionsTable}/>
+                                        </Box>
+                                    </Collapse>
+                                </Card>
+                            </Grid>
+                            {profileType === "ESNer" && (<>
+                                    <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1}}/></Grid>
+                                    <Grid size={{xs: 12}} sx={{mb: 5}}>
+                                        <Card sx={{p: 2}}>
+                                            <Box
+                                                sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
+                                                onClick={() => setShowOrganizedEvents(v => !v)}
+                                            >
+                                                <EventIcon sx={{color: 'primary.main'}}/>
+                                                <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Eventi Organizzati</Typography>
+                                                <IconButton size="small" aria-label="toggle eventi organizzati"
+                                                            onClick={() => setShowOrganizedEvents(v => !v)}>
+                                                    <ExpandMoreIcon
+                                                        sx={{
+                                                            transform: showOrganizedEvents ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                            transition: 'transform 0.2s'
+                                                        }}
+                                                    />
+                                                </IconButton>
+                                            </Box>
+                                            <Collapse in={showOrganizedEvents} timeout="auto" unmountOnExit>
+                                                <Box sx={{mt: 1}}>
+                                                    <MRT_Table table={organizedEventsTable}/>
+                                                </Box>
+                                            </Collapse>
+                                        </Card>
+                                    </Grid>
+                                </>
+                            )}
                         </Grid>
                         {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </Box>
