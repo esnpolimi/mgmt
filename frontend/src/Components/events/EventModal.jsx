@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import React, {useEffect, useState, useCallback, useMemo} from 'react';
 import {
     Modal,
     Box,
@@ -30,6 +30,387 @@ import {Radio, RadioGroup, FormControl, FormLabel} from '@mui/material';
 import ProfileSearch from '../ProfileSearch';
 
 export default function EventModal({open, event, isEdit, onClose}) {
+
+    /* General event information block, at the top of the modal */
+    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef, errorsRef}) {
+        
+        // Local state for UI only (fast typing, no parent re-render)
+        const [localData, setLocalData] = useState(dataRef.current);
+        const [localErrors, setLocalErrors] = useState(errorsRef.current);
+
+        // Update ref and local state on input change
+        const handleInputChange = (event) => {
+            const {name, value, type, checked} = event.target;
+            const newData = {
+                ...localData,
+                [name]: type === 'checkbox' ? checked : value,
+            };
+            setLocalData(newData);
+            dataRef.current = newData;
+        };
+
+        const handleEventDateChange = (date) => {
+            const newData = {...localData, date};
+            setLocalData(newData);
+            dataRef.current = newData;
+        };
+
+        const handleSubscriptionStartChange = (date) => {
+            let newData;
+            if (localData.subscription_end_date && dayjs(date).isAfter(dayjs(localData.subscription_end_date))) {
+                newData = {
+                    ...localData,
+                    subscription_start_date: date,
+                    subscription_end_date: dayjs(date).add(1, 'day'),
+                };
+            } else {
+                newData = {...localData, subscription_start_date: date};
+            }
+            setLocalData(newData);
+            dataRef.current = newData;
+        };
+
+        const handleSubscriptionEndChange = (date) => {
+            let newDate = date;
+            if (date) {
+                const startDateTime = dayjs(localData.subscription_start_date);
+                const endDateTime = dayjs(date);
+                const now = dayjs();
+                if (endDateTime.isBefore(startDateTime)) {
+                    newDate = startDateTime;
+                } else if (endDateTime.isBefore(now)) {
+                    newDate = now;
+                }
+            }
+            const newData = {...localData, subscription_end_date: newDate};
+            setLocalData(newData);
+            dataRef.current = newData;
+        };
+
+        // Example error update (add similar logic for validation)
+        const setFieldError = (field, errorArr) => {
+            const newErrors = {...localErrors, [field]: errorArr};
+            setLocalErrors(newErrors);
+            errorsRef.current = newErrors;
+        };
+
+        return (
+            <Box>
+                <Grid container spacing={2} sx={{mt: 4}}>
+                    <Grid size={{xs: 12, md: 6}}>
+                        <TextField
+                            fullWidth
+                            label={eventNames.name}
+                            name="name"
+                            value={localData.name}
+                            onChange={handleInputChange}
+                            required
+                            //error={errors.name[0]}
+                        />
+                    </Grid>
+                    <Grid size={{xs: 12, md: 6}}>
+                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                            <DatePicker
+                                label={eventNames.date}
+                                value={localData.date}
+                                onChange={handleEventDateChange}
+                                slotProps={{textField: {variant: 'outlined'}}}
+                                required
+                                //error={errors.date[0]}
+                            />
+                        </LocalizationProvider>
+                    </Grid>
+                    <Grid size={{xs: 12, md: 4}}>
+                        <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                            <span>
+                                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                    <DateTimePicker
+                                        label={eventNames.subscription_start_date}
+                                        value={localData.subscription_start_date || null}
+                                        onChange={handleSubscriptionStartChange}
+                                        minDate={isEdit ? null : dayjs()}
+                                        slotProps={{
+                                            textField: {
+                                                fullWidth: true,
+                                                required: true,
+                                            }
+                                        }}
+                                        disabled={isEdit && hasSubscriptions}
+                                        required
+                                        //error={errors.subscription_start_date[0]}
+                                    />
+                                </LocalizationProvider>
+                            </span>
+                        </Tooltip>
+                    </Grid>
+                    <Grid size={{xs: 12, md: 4}}>
+                        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                            <DateTimePicker
+                                label={eventNames.subscription_end_date}
+                                value={localData.subscription_end_date || null}
+                                onChange={handleSubscriptionEndChange}
+                                minDate={dayjs().isAfter(localData.subscription_start_date) ? dayjs() : localData.subscription_start_date || dayjs()}
+                                slotProps={{textField: {fullWidth: true, required: true}}}
+                                required
+                                //error={errors.subscription_end_date[0]}
+                            />
+                        </LocalizationProvider>
+                    </Grid>
+                    <Grid size={{xs: 12, md: 4}} />
+                    <Grid size={{xs: 12, md: 3}}>
+                        <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                            <span>
+                                <TextField
+                                    fullWidth
+                                    label={eventNames.cost + " (decimali con punto)"}
+                                    name="cost"
+                                    type="number"
+                                    slotProps={{htmlInput: {min: "0", step: "0.01"}}}
+                                    value={localData.cost ?? ""}
+                                    onChange={handleInputChange}
+                                    placeholder="Inserisci 0 se gratuito"
+                                    required
+                                    //error={errors.cost[0]}
+                                    disabled={isEdit && hasSubscriptions}
+                                />
+                            </span>
+                        </Tooltip>
+                    </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <Tooltip title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
+                            <span>
+                                <TextField
+                                    fullWidth
+                                    label={eventNames.deposit + " (decimali con punto)"}
+                                    name="deposit"
+                                    type="number"
+                                    slotProps={{htmlInput: {min: "0", step: "0.01"}}}
+                                    value={localData.deposit ?? ""}
+                                    onChange={handleInputChange}
+                                    //error={errors.deposit && errors.deposit[0]}
+                                    disabled={isEdit && hasSubscriptions}
+                                />
+                            </span>
+                        </Tooltip>
+                    </Grid>
+                </Grid>
+                <Grid container spacing={2} sx={{mt: 2, mb: 2}}>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Fee variabile"
+                            control={
+                                <Switch
+                                    checked={!!localData.is_variable_fee}
+                                    onChange={handleInputChange}
+                                    name="is_variable_fee"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Evento A Bando"
+                            control={
+                                <Switch
+                                    checked={!!localData.is_a_bando}
+                                    onChange={handleInputChange}
+                                    name="is_a_bando"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Consenti iscrizione esterni"
+                            control={
+                                <Switch
+                                    checked={!!localData.is_allow_external}
+                                    onChange={handleInputChange}
+                                    name="is_allow_external"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
+                </Grid>
+            </Box>
+        );
+    };
+
+    /* Event description block */
+    const Description = function Description ({dataRef}){
+
+        const [desc, setDesc] = useState(dataRef.current.desc)
+
+        return(
+            <Grid size={{xs: 12}} data-color-mode="light" sx={{mt: 2}}>
+                <Typography variant="h6" component="div" sx={{mb: 1}}>{eventNames.description}</Typography>
+                <CustomEditor
+                    value={desc}
+                    onChange={(value) => {
+                        setDesc(value)
+                        dataRef.current.desc = value
+                    }}
+                />
+            </Grid>
+        )
+    }
+
+    /* Event organizers block */
+    const Organizers = function Organizers({dataRef}) {
+
+        const [localData, setLocalData] = useState(dataRef.current)
+        const [selectedProfile, setSelectedProfile] = useState(null)
+
+        const handleOrganizerSelect = function (_, val){
+            
+            if(val === undefined || val === null){
+                setSelectedProfile(null)
+                return
+            }
+
+            //Check if already exists
+            const exists = localData.organizers?.some(o => o.profile === val.id);
+
+            if(!exists){
+                const name = `${val.name}${val.surname ? ` ${val.surname}` : ''}`;
+
+                //Update local state
+                setLocalData(prev => ({
+                    ...prev,
+                    organizers: [...(prev.organizers || []), {profile: val.id, profile_name: name, is_lead: false}]
+                }));
+
+                // Update the ref as well
+                dataRef.current.organizers = [...(localData.organizers || []), {profile: val.id, profile_name: name, is_lead: false}];
+            }
+
+            setSelectedProfile(null);
+        }
+
+        const handleRemoveOrganizer = function (idx){
+
+            //Update local state
+            setLocalData(prev => {
+                const arr = [...(prev.organizers || [])];
+                arr.splice(idx, 1);
+                return {...prev, organizers: arr};
+            });
+
+            // Update the ref as well
+            dataRef.current.organizers = [...(localData.organizers || [])].filter((_, i) => i !== idx);
+        }
+
+        const handleToggleLeader = (idx, e) => {
+            const val = e.target.checked;
+
+            // Update local state
+            setLocalData(prev => {
+                const arr = [...(prev.organizers || [])];
+                if (!arr[idx]) return prev;
+                arr[idx] = {...arr[idx], is_lead: val};
+                return {...prev, organizers: arr};
+            });
+
+            // Update the ref as well
+            dataRef.current.organizers = [...(localData.organizers || [])].map((org, i) => 
+                i === idx ? {...org, is_lead: val} : org
+            );
+        };
+
+
+        return (
+            <Box>
+
+                <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2, mb: 1}}>
+                        <Typography variant="h6">Organizzatori</Typography>
+                        {/* removed AddIcon button beside title */}
+                </Grid>
+
+                <Grid container spacing={2} alignItems="center" sx={{mt: 1}}>
+                    <Grid size={{xs: 12, md: 4}}>
+                        <ProfileSearch
+                            //value={newOrganizer}
+                            onChange={handleOrganizerSelect}
+                            value={selectedProfile}
+                            label="Cerca ESNer"
+                            esner_only={true}
+                            valid_only={true}
+                        />
+                    </Grid>
+                </Grid>
+
+                {(localData.organizers && localData.organizers.length > 0) && (
+                        <Grid container spacing={2} sx={{mt: 1}}>
+                            {localData.organizers.map((org, idx) => (
+                                <Grid size={{xs: 6}} key={`${org.profile}-${idx}`}>
+                                    <Box
+                                        sx={{
+                                            border: '1px solid',
+                                            borderColor: 'divider',
+                                            borderRadius: 1,
+                                            p: 1.5,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 2,
+                                            justifyContent: 'space-between'
+                                        }}
+                                    >
+                                        <Typography sx={{flex: 1}}>{org.profile_name || `ID ${org.profile}`}</Typography>
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    checked={!!org.is_lead}
+                                                    onChange={(e) => handleToggleLeader(idx, e)}
+                                                    color="primary"
+                                                />
+                                            }
+                                            label="Leader"
+                                            sx={{mr: 1}}
+                                        />
+                                        <IconButton onClick={() => handleRemoveOrganizer(idx)} title="Rimuovi">
+                                            <DeleteIcon/>
+                                        </IconButton>
+                                    </Box>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    )}
+            </Box>
+        )         
+    }
+
+    /* Data ref (persistent data) */
+    const dataRef = React.useRef({
+            name: 'Test',
+            date: dayjs(),
+            cost: '',
+            deposit: '',
+            desc: '',
+            subscription_start_date: dayjs().hour(12).minute(0),
+            subscription_end_date: dayjs().hour(24).minute(0),
+            is_a_bando: false,
+            is_allow_external: false,
+            is_variable_fee: false,
+            organizers: [],
+    })
+
+    /* Errors ref (persistent errors) */
+    const errorsRef = React.useRef({
+        name: [false, ''],
+        date: [false, ''],
+        description: [false, ''],
+        cost: [false, ''],
+        deposit: [false, ''],
+        subscription_start_date: [false, ''],
+        subscription_end_date: [false, ''],
+        lists: [false, ''],
+        listItems: []
+    });
+
+
     const [isLoading, setLoading] = useState(true);
     const title = isEdit ? 'Modifica Evento - ' + event.name : 'Crea Evento';
     const [statusMessage, setStatusMessage] = useState(null);
@@ -109,42 +490,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     };
 
     const handleEventDateChange = (date) => {
-        setData({...data, date: date});
-    };
-
-    const handleSubscriptionStartChange = (date) => {
-        // If end date exists and is now before start date, update it
-        if (data.subscription_end_date && dayjs(date).isAfter(dayjs(data.subscription_end_date))) {
-            setData({
-                ...data,
-                subscription_start_date: date,
-                subscription_end_date: dayjs(date).add(1, 'day'),
-            });
-        } else {
-            setData({...data, subscription_start_date: date});
-        }
-        
-        // If form opening time exists and is now before or equal to start date, update it
-        if (formProgrammedOpenTime && dayjs(date).isAfter(dayjs(formProgrammedOpenTime))) {
-            setFormProgrammedOpenTime(dayjs(date).add(1, 'hour').toISOString());
-        }
-    };
-
-    const handleSubscriptionEndChange = (date) => {
-        // Only allow dates and times after start date and time and current time
-        if (date) {
-            const startDateTime = dayjs(data.subscription_start_date);
-            const endDateTime = dayjs(date);
-            const now = dayjs();
-
-            // End date should not be before start date or current time
-            if (endDateTime.isBefore(startDateTime)) {
-                date = startDateTime;
-            } else if (endDateTime.isBefore(now)) {
-                date = now;
-            }
-        }
-        setData({...data, subscription_end_date: date});
+            setData({...data, event_date: date});
     };
 
 
@@ -436,207 +782,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Typography>
                         </Box>
                     )}
-
-                    <Grid container spacing={2} sx={{mt: 4}}>
-                        <Grid size={{xs: 12, md: 6}}>
-                            <TextField
-                                fullWidth
-                                label={eventNames.name}
-                                name="name"
-                                value={data.name}
-                                onChange={handleInputChange}
-                                required
-                                error={errors.name[0]}
-                            />
-                        </Grid>
-                        <Grid size={{xs: 12, md: 6}}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                <DatePicker
-                                    label={eventNames.date}
-                                    value={data.date}
-                                    onChange={handleEventDateChange}
-                                    slotProps={{textField: {variant: 'outlined'}}}
-                                    required
-                                    error={errors.date[0]}/>
-                            </LocalizationProvider>
-                        </Grid>
-                        <Grid size={{xs: 12, md: 4}}>
-                            <Tooltip
-                                title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <span>
-                                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                        <DateTimePicker
-                                            label={eventNames.subscription_start_date}
-                                            value={data.subscription_start_date || null}
-                                            onChange={handleSubscriptionStartChange}
-                                            minDate={isEdit ? null : dayjs()}
-                                            slotProps={{
-                                                textField: {
-                                                    fullWidth: true,
-                                                    required: true,
-                                                }
-                                            }}
-                                            disabled={isEdit && hasSubscriptions}
-                                            required
-                                            error={errors.subscription_start_date[0]}
-                                        />
-                                    </LocalizationProvider>
-                                </span>
-                            </Tooltip>
-                        </Grid>
-                        <Grid size={{xs: 12, md: 4}}>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                                <DateTimePicker
-                                    label={eventNames.subscription_end_date}
-                                    value={data.subscription_end_date || null}
-                                    onChange={handleSubscriptionEndChange}
-                                    minDate={dayjs().isAfter(data.subscription_start_date) ? dayjs() : data.subscription_start_date || dayjs()}
-                                    slotProps={{textField: {fullWidth: true, required: true}}}
-                                    required
-                                    error={errors.subscription_start_date[0]}
-                                />
-                            </LocalizationProvider>
-                        </Grid>
-                        <Grid size={{xs: 12, md: 4}}>
-                        </Grid>
-
-                        <Grid size={{xs: 12, md: 3}}>
-                            <Tooltip
-                                title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <span>
-                                    <TextField
-                                        fullWidth
-                                        label={eventNames.cost + " (decimali con punto)"}
-                                        name="cost"
-                                        type="number"
-                                        slotProps={{htmlInput: {min: "0", step: "0.01"}}}
-                                        value={data.cost ?? ""}
-                                        onChange={handleInputChange}
-                                        placeholder="Inserisci 0 se gratuito"
-                                        required
-                                        error={errors.cost[0]}
-                                        disabled={isEdit && hasSubscriptions}
-                                    />
-                                </span>
-                            </Tooltip>
-                        </Grid>
-                        <Grid size={{xs: 12, md: 3}}>
-                            <Tooltip
-                                title={isEdit && hasSubscriptions ? "Non modificabile con iscrizioni esistenti" : ""}>
-                                <span>
-                                    <TextField
-                                        fullWidth
-                                        label={eventNames.deposit + " (decimali con punto)"}
-                                        name="deposit"
-                                        type="number"
-                                        slotProps={{htmlInput: {min: "0", step: "0.01"}}}
-                                        value={data.deposit ?? ""}
-                                        onChange={handleInputChange}
-                                        error={errors.deposit && errors.deposit[0]}
-                                        disabled={isEdit && hasSubscriptions}
-                                    />
-                                </span>
-                            </Tooltip>
-                        </Grid>
-                    </Grid>
-
-                    <Grid size={{xs: 12}} data-color-mode="light" sx={{mt: 2}}>
-                        <Typography variant="h6" component="div" sx={{mb: 1}}>{eventNames.description}</Typography>
-                        <CustomEditor
-                            value={data.description}
-                            onChange={(value) => {
-                                setData(prev => ({...prev, description: value}));
-                            }}
-                        />
-                    </Grid>
-
-                    {/* --- Move all toggles here --- */}
-                    <Grid container spacing={2} sx={{mt: 2, mb: 2}}>
-                        <Grid size={{xs: 12, md: 3}}>
-                            <FormControlLabel
-                                label="Evento A Bando"
-                                control={
-                                    <Switch
-                                        checked={!!data.is_a_bando}
-                                        onChange={handleInputChange}
-                                        name="is_a_bando"
-                                        color="primary"
-                                    />
-                                }
-                            />
-                        </Grid>
-                        <Grid size={{xs: 12, md: 3}}>
-                            <FormControlLabel
-                                label="Consenti iscrizione esterni"
-                                control={
-                                    <Switch
-                                        checked={!!data.is_allow_external}
-                                        onChange={handleInputChange}
-                                        name="is_allow_external"
-                                        color="primary"
-                                    />
-                                }
-                            />
-                        </Grid>
-                    </Grid>
-                    {/* --- End toggles section --- */}
-
-                    {/* --- Organizzatori section --- */}
-                    <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2, mb: 1}}>
-                        <Typography variant="h6">Organizzatori</Typography>
-                        {/* removed AddIcon button beside title */}
-                    </Grid>
-
-                    <Grid container spacing={2} alignItems="center" sx={{mt: 1}}>
-                        <Grid size={{xs: 12, md: 4}}>
-                            <ProfileSearch
-                                value={newOrganizer}
-                                onChange={handleOrganizerSelect}
-                                label="Cerca ESNer"
-                                esner_only={true}
-                                valid_only={true}
-                            />
-                        </Grid>
-                    </Grid>
-
-                    {(data.organizers && data.organizers.length > 0) && (
-                        <Grid container spacing={2} sx={{mt: 1}}>
-                            {data.organizers.map((org, idx) => (
-                                <Grid size={{xs: 6}} key={`${org.profile}-${idx}`}>
-                                    <Box
-                                        sx={{
-                                            border: '1px solid',
-                                            borderColor: 'divider',
-                                            borderRadius: 1,
-                                            p: 1.5,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 2,
-                                            justifyContent: 'space-between'
-                                        }}
-                                    >
-                                        <Typography sx={{flex: 1}}>{org.profile_name || `ID ${org.profile}`}</Typography>
-                                        <FormControlLabel
-                                            control={
-                                                <Switch
-                                                    checked={!!org.is_lead}
-                                                    onChange={handleToggleLeader(idx)}
-                                                    color="primary"
-                                                />
-                                            }
-                                            label="Leader"
-                                            sx={{mr: 1}}
-                                        />
-                                        <IconButton onClick={handleRemoveOrganizer(idx)} title="Rimuovi">
-                                            <DeleteIcon/>
-                                        </IconButton>
-                                    </Box>
-                                </Grid>
-                            ))}
-                        </Grid>
-                    )}
-                    {/* --- End Organizzatori section --- */}
-
+                    <GeneralInfoBlock dataRef={dataRef} errorsRef={errorsRef} hasSubscriptions={false} isEdit={true} />
+                    <Description dataRef={dataRef} />
+                    <Organizers dataRef={dataRef} />
+                    
                     <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
                         <Typography variant="h6">Liste</Typography>
                         <IconButton title="Aggiungi Lista" onClick={handleAddList} sx={{ml: -2}}><AddIcon/></IconButton>
