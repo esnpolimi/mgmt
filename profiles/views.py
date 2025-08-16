@@ -17,8 +17,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 from django.core.paginator import InvalidPage
 
-from events.models import Subscription
-from events.serializers import SubscriptionSerializer
+from events.models import Subscription, EventOrganizer
+from events.serializers import SubscriptionSerializer, OrganizedEventSerializer
 from profiles.models import Profile, Document
 from profiles.serializers import DocumentCreateSerializer, DocumentEditSerializer, ProfileFullEditSerializer
 from profiles.serializers import ProfileListViewSerializer, ProfileCreateSerializer, ProfileDetailViewSerializer
@@ -485,3 +485,23 @@ def check_erasmus_email(request):
         return Response(serializer.data, status=200)
     else:
         return Response(None, status=200)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def profile_organized_events(_, pk):
+    """
+    Returns a list of events organized by the profile (for ESNers).
+    """
+    organizers = EventOrganizer.objects.filter(profile_id=pk).select_related('event')
+    data = [
+        {
+            'event_id': org.event.id,
+            'event_name': org.event.name,
+            'event_date': org.event.date,
+            'is_lead': org.is_lead
+        }
+        for org in organizers
+    ]
+    serializer = OrganizedEventSerializer(data, many=True)
+    return Response(serializer.data)
