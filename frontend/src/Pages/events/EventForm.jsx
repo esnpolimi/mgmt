@@ -744,7 +744,7 @@ export default function EventForm() {
                         />
                     </Paper>
                     <Button type="submit" variant="contained" color="primary" fullWidth>
-                        {eventData.allow_online_payment ? "Proceed to Checkout" : "Submit"}
+                        {eventData.allow_online_payment ? "Proceed to Checkout (Work In Progress)" : "Submit (Work In Progress)"}
                     </Button>
                 </Box>
             </Box>
