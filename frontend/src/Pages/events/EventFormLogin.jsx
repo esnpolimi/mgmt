@@ -14,6 +14,7 @@ export default function EventFormLogin() {
     const [fetching, setFetching] = useState(true);
     const [fetchError, setFetchError] = useState(null);
     const [formStatus, setFormStatus] = useState(null);
+    const [emailError, setEmailError] = useState('');
     const navigate = useNavigate();
     const {id} = useParams();
 
@@ -43,16 +44,30 @@ export default function EventFormLogin() {
         });
     }, [id]);
 
+    // Email format validator
+    const isValidEmail = (email) => {
+        // Simple regex for email validation
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
     // Handler for login/continue
     const handleContinue = () => {
-        setIsLoading(true);
         setStatusMessage(null);
+        setEmailError('');
+        if (!isValidEmail(email)) {
+            setEmailError('Please enter a valid email address.');
+            return;
+        }
+        setIsLoading(true);
         fetchCustom("POST", "/check_erasmus_email/", {
             body: {email},
             auth: false,
             onSuccess: (data) => {
                 if (data && Object.keys(data).length > 0) {
                     navigate(`/event/${id}/form`, {state: {profileData: data, eventData}});
+                } else if (eventData?.is_allow_external) {
+                    // External allowed: proceed with just the typed email
+                    navigate(`/event/${id}/form`, {state: {profileData: {email}, eventData}});
                 } else {
                     setStatusMessage({
                         message: "This email does not belong to a registered Erasmus user.",
@@ -62,7 +77,12 @@ export default function EventFormLogin() {
                 setIsLoading(false);
             },
             onError: () => {
-                setStatusMessage({message: "Error checking email. Please try again.", state: "error"});
+                if (eventData?.is_allow_external) {
+                    // External allowed: proceed even if backend lookup fails
+                    navigate(`/event/${id}/form`, {state: {profileData: {email}, eventData}});
+                } else {
+                    setStatusMessage({message: "Error checking email. Please try again.", state: "error"});
+                }
                 setIsLoading(false);
             }
         });
@@ -185,7 +205,7 @@ export default function EventFormLogin() {
         warningMsg = formStatus.message;
     }
 
-    // Form is open: show email login
+    // Form is open: show email login (will be auto-skipped for externals by the effect above)
     return (
         <Container component="main" maxWidth="xs">
             <CssBaseline/>
@@ -211,14 +231,19 @@ export default function EventFormLogin() {
                         required
                         fullWidth
                         id="email"
-                        label="Email used for ESN registration"
+                        label={eventData.is_allow_external ? "Your email or the one used for ESN registration" : "Email used for ESN registration"}
                         name="email"
                         autoComplete="email"
                         type="email"
                         autoFocus
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                            setEmail(e.target.value);
+                            setEmailError('');
+                        }}
                         onKeyDown={(e) => e.key === 'Enter' && handleContinue()}
+                        error={!!emailError}
+                        helperText={emailError}
                     />
                     <Button
                         fullWidth

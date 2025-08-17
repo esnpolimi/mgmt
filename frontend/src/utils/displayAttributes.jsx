@@ -31,8 +31,11 @@ export const eventDisplayNames = {
     status: 'Stato Iscrizioni',
     list_name: 'Nome Lista',
     list_capacity: 'Capacità Lista',
+    lists_capacity: 'Capacità Liste',
     allow_online_payment: 'Consenti Pagamenti Online',
+    form: 'Stato Form',
     form_programmed_open_time: 'Orario Apertura Form',
+
 };
 
 export const accountDisplayNames = {

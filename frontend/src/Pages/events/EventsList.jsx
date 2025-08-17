@@ -1,5 +1,18 @@
 import {useEffect, useState, useMemo, useRef} from 'react';
-import {Box, Typography, Chip, Button, Grid, OutlinedInput, IconButton, FormControl, InputLabel, Select, MenuItem} from '@mui/material';
+import {
+    Box,
+    Typography,
+    Chip,
+    Button,
+    Grid,
+    OutlinedInput,
+    IconButton,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    LinearProgress
+} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import Sidebar from '../../Components/Sidebar.jsx'
 import EventIcon from '@mui/icons-material/Event';
@@ -19,7 +32,9 @@ import itLocale from 'date-fns/locale/it';
 import FestivalIcon from '@mui/icons-material/Festival';
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {useAuth} from "../../Context/AuthContext";
+import 'dayjs/locale/it';
 
+dayjs.locale('it');
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
     {value: 'open', label: 'Aperte'},
@@ -89,18 +104,32 @@ export default function EventsList() {
                 </Box>
             ),
         },
-        {accessorKey: 'date', header: names.date, size: 150},
+        {
+            accessorKey: 'date',
+            header: names.date,
+            size: 150,
+            Cell: ({cell}) => (
+                <Box component="span" fontStyle="italic">
+                    {dayjs(cell.getValue()).format('D MMM YYYY')}
+                </Box>
+            ),
+        },
         {
             accessorKey: 'cost',
             header: names.cost,
-            size: 150,
-            Cell: ({cell}) => (
-                <Box>
-                    {cell.getValue() !== null ? (
-                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
-                        <Chip label="N/A" color="warning"/>)}
-                </Box>
-            ),
+            size: 180,
+            Cell: ({row, cell}) => {
+                const cost = cell.getValue();
+                const deposit = row.original?.deposit ?? 0;
+                return (
+                    <Box sx={{display: 'flex', gap: 0.5, flexWrap: 'wrap'}}>
+                        {cost ? (<Chip label={`€${cost}`} color="primary" size="small"/>) :
+                            (<Chip label="Gratis" color="success" size="small"/>)
+                        }
+                        {deposit > 0 && (<Chip label={`+ €${deposit}`} color="warning" size="small"/>)}
+                    </Box>
+                );
+            },
         },
         {
             accessorKey: 'is_a_bando',
@@ -117,7 +146,7 @@ export default function EventsList() {
         {
             accessorKey: 'is_allow_external',
             header: 'Iscrizione Esterni',
-            size: 100,
+            size: 120,
             Cell: ({cell}) => (
                 <Chip
                     label={cell.getValue() ? "Sì" : "Solo ESNers/Erasmus"}
@@ -129,7 +158,7 @@ export default function EventsList() {
         {
             accessorKey: 'status',
             header: names.status,
-            size: 150,
+            size: 100,
             Cell: ({row}) => {
                 let status = row.original.status || '';
                 let color;
@@ -151,6 +180,67 @@ export default function EventsList() {
                         status = "Stato sconosciuto";
                 }
                 return <Chip label={status} color={color}/>;
+            },
+        },
+        {
+            accessorKey: 'form_open',
+            header: names.form,
+            size: 100,
+            Cell: ({row}) => {
+                const enableForm = row.original?.enable_form;
+                if (!enableForm) {
+                    return <Chip label="N/D" variant="outlined"/>;
+                }
+                const t = row.original?.form_programmed_open_time
+                    ? dayjs(row.original.form_programmed_open_time)
+                    : null;
+                const now = dayjs();
+                const isOpen = !t || now.isAfter(t) || now.isSame(t);
+                return (
+                    <Chip
+                        label={isOpen ? "Aperto" : "Chiuso"}
+                        color={isOpen ? "success" : "error"}
+                    />
+                );
+            },
+        },
+        {
+            accessorKey: 'lists_capacity',
+            header: names.lists_capacity,
+            size: 40,
+            Cell: ({row}) => {
+                const lists = row.original?.lists_capacity || row.original?.lists || [];
+                const main = lists.find(l => l.is_main_list);
+                const wait = lists.find(l => l.is_waiting_list);
+
+                const renderBar = (label, list) => {
+                    if (!list) return null;
+                    const capacity = list.capacity ?? 0;
+                    const count = list.subscription_count ?? 0;
+                    const percentage = capacity > 0 ? Math.min(100, Math.round((count / capacity) * 100)) : 0;
+                    const color = percentage >= 90 ? 'error' : percentage >= 60 ? 'warning' : 'success';
+                    return (
+                        <Box key={label} sx={{mb: 0.5}}>
+                            <LinearProgress
+                                variant="determinate"
+                                title={label === 'Main' ? 'Main List (' + count + '/' + capacity + ')' : 'Waiting List (' + count + '/' + capacity + ')'}
+                                value={percentage}
+                                color={color}
+                                sx={{height: 8, borderRadius: 5}}
+                            />
+                        </Box>
+                    );
+                };
+
+                return (
+                    <Box sx={{minWidth: 20, maxWidth: 60}}>
+                        {renderBar('Main', main)}
+                        {renderBar('Waiting', wait)}
+                        {!main && !wait && (
+                            <Typography variant="caption" color="text.secondary">N/D</Typography>
+                        )}
+                    </Box>
+                );
             },
         },
         {
@@ -179,8 +269,8 @@ export default function EventsList() {
         enableStickyHeader: true,
         enableStickyFooter: true,
         enableColumnFilters: false, // Disabled cause it only allows to search in the current page
-        enableColumnOrdering: true,
-        enableGrouping: true,
+        enableColumnOrdering: false,
+        enableGrouping: false,
         enableColumnPinning: true,
         enableFacetedValues: true,
         enableRowActions: false,

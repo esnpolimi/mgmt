@@ -1,16 +1,30 @@
+import json
+import os
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 from treasury.models import Transaction
-from treasury.serializers import TransactionViewSerializer
-import os
-import json
 
 COUNTRY_CODES_PATH = os.path.join(os.path.dirname(__file__), '../utils/countryCodes.json')
 with open(COUNTRY_CODES_PATH, encoding='utf-8') as f:
     COUNTRY_CODES = json.load(f)
+
 CODE_TO_NAME = {entry['code']: entry['name'] for entry in COUNTRY_CODES}
+
+# Canonical order for profile fields (same as frontend)
+CANONICAL_PROFILE_ORDER = [
+    'name', 'surname', 'birthdate', 'email', 'latest_esncard', 'country', 'domicile',
+    'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
+    'latest_document', 'course', 'matricola_expiration', 'person_code', 'matricola_number'
+]
+
+
+def order_profile_fields(fields):
+    """Order profile fields according to canonical order, preserving only those present."""
+    return [f for f in CANONICAL_PROFILE_ORDER if f in fields]
 
 
 # A reusable mixin that calls the model's clean()
@@ -70,9 +84,22 @@ class EventListSerializer(serializers.ModelSerializer):
 
 # Serializers for Event
 class EventsListSerializer(serializers.ModelSerializer):
+    lists_capacity = serializers.SerializerMethodField()
+    enable_form = serializers.BooleanField(read_only=True)
+    form_programmed_open_time = serializers.DateTimeField(read_only=True)
+
     class Meta:
         model = Event
-        fields = ['id', 'name', 'date', 'cost', 'status', 'is_a_bando', 'is_allow_external']
+        fields = [
+            'id', 'name', 'date', 'cost', 'deposit', 'status',
+            'is_a_bando', 'is_allow_external',
+            'lists_capacity', 'enable_form', 'form_programmed_open_time'
+        ]
+
+    @staticmethod
+    def get_lists_capacity(obj):
+        qs = obj.lists.all().order_by('display_order', 'id')
+        return EventListSerializer(qs, many=True).data
 
 
 class EventOrganizerSerializer(serializers.ModelSerializer):
@@ -86,17 +113,6 @@ class EventOrganizerSerializer(serializers.ModelSerializer):
     def get_profile_name(obj):
         return f"{obj.profile.name} {obj.profile.surname}"
 
-
-# Canonical order for profile fields (same as frontend)
-CANONICAL_PROFILE_ORDER = [
-    'name', 'surname', 'birthdate', 'email', 'latest_esncard', 'country', 'domicile',
-    'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
-    'latest_document', 'course', 'matricola_expiration', 'person_code', 'matricola_number'
-]
-
-def order_profile_fields(fields):
-    """Order profile fields according to canonical order, preserving only those present."""
-    return [f for f in CANONICAL_PROFILE_ORDER if f in fields]
 
 class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerializer):
     lists = EventListSerializer(many=True, required=False)
@@ -216,23 +232,16 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     def _user_can_edit(self, event):
         """
         Allow edits to:
-        - users with events.change_event permission (always needed)
         - superusers
         - members of Board-like groups
         - event organizers
+        - otherwise, users with events.change_event permission
         """
         user = self.context.get('user')
         if not user:
-            print("No user found in context, denying edit")
             return False
 
-        # print("Debug for the 4 checks in _user_can_edit:")
-        # print(f"User can change event permission: {user.has_perm('events.change_event')}, is_authenticated: {user.is_authenticated}, is_superuser: {user.is_superuser}, groups: {[group.name for group in user.groups.all()]}")
         try:
-            # Direct permission check (needed for any edit)
-            if not user.has_perm('events.change_event'):
-                return False
-
             if getattr(user, 'is_superuser', False):
                 return True
 
@@ -242,19 +251,17 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
             profile = getattr(user, 'profile', None)
             profile_id = getattr(profile, 'id', None)
-            if profile_id is None:
-                return False
+            if profile_id and event.organizers.filter(profile_id=profile_id).exists():
+                return True
 
-            return event.organizers.filter(profile_id=profile_id).exists()
+            # Fallback: explicit permission
+            return user.has_perm('events.change_event')
         except Exception:
             # Any unexpected error in checks => deny gracefully instead of 500
             return False
 
     def update(self, instance, validated_data):
         # Authorization check
-        print("Debugging update with instance:", instance)
-        print("Debugging update with validated_data:", validated_data)
-        print("User:", self.context.get('user'))
         if not self._user_can_edit(instance):
             raise serializers.ValidationError("Non sei autorizzato a modificare questo evento")
 
@@ -462,14 +469,18 @@ class FormSubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.Mo
     # look up Profile by email slug
     profile = serializers.SlugRelatedField(
         queryset=Profile.objects.all(),
-        slug_field='email'
+        slug_field='email',
+        required=False,
+        allow_null=True
     )
     additional_data = serializers.DictField(required=False, default=dict)
     profile_data = serializers.DictField(required=False, default=dict)
+    external_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    form_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'profile_data']
+        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'profile_data', 'external_name', 'form_notes']
 
     def create(self, validated_data):
         validated_data['additional_data'] = validated_data.get('additional_data', {})
@@ -602,15 +613,19 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
                   'external_name', 'form_data', 'additional_data', 'profile_data']
 
     def validate(self, attrs):
-        profile = attrs.get('profile')
         event = attrs.get('event')
+        email = self.initial_data.get('email', '').strip()
+        profile = attrs.get('profile', None)
         external_name = attrs.get('external_name', '').strip() if attrs.get('external_name') else ''
 
-        if not profile and not external_name:
-            if event and hasattr(event, 'is_allow_external') and event.is_allow_external:
-                raise serializers.ValidationError("Devi inserire un nominativo esterno se non selezioni un profilo.")
+        # If profile not found and event allows externals, use email as external_name
+        if not profile and event and getattr(event, 'is_allow_external', False):
+            if email:
+                attrs['external_name'] = email
             else:
-                raise serializers.ValidationError("Seleziona un profilo per l'iscrizione.")
+                raise serializers.ValidationError("Email is required for external subscription.")
+        elif not profile:
+            raise serializers.ValidationError("Profile not found for this email and event does not allow externals.")
 
         if profile and Subscription.objects.filter(profile=profile, event=event).exists():
             raise serializers.ValidationError("This profile is already registered for this event")
@@ -785,4 +800,3 @@ class OrganizedEventSerializer(serializers.Serializer):
     event_name = serializers.CharField()
     event_date = serializers.DateField()
     is_lead = serializers.BooleanField()
-
