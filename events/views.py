@@ -19,6 +19,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.core.validators import validate_email
 
 from events.models import Event, Subscription, EventList, validate_field_data
 from django.utils import timezone
@@ -638,6 +639,7 @@ def event_form_view(_, event_id):
             'is_form_open': event.is_form_open,
             'form_programmed_open_time': event.form_programmed_open_time,
             'allow_online_payment': event.allow_online_payment,
+            'is_allow_external': event.is_allow_external,
         }, status=200)
     except Event.DoesNotExist:
         return Response({'error': "Event not found"}, status=404)
@@ -697,26 +699,50 @@ def event_form_submit(request, event_id):
         profile_data = request.data.get("profile_data", {})
         form_data = request.data.get("form_data", {})
         form_notes = request.data.get("form_notes", "")
+        email = (request.data.get("email") or profile_data.get("email") or "").strip()
         print("Profile data:", profile_data)
 
-        if not profile_data.get('email'):
+        if not email:
             return Response({"error": "Missing email"}, status=400)
-
         try:
-            profile = Profile.objects.get(email=profile_data.get('email'))
-        except Profile.DoesNotExist:
-            return Response({"error": "Profile not found"}, status=404)
+            validate_email(email)
+        except Exception:
+            return Response({"error": "Invalid email format"}, status=400)
 
-        # Check for duplicate subscription
-        if Subscription.objects.filter(profile=profile, event=event).exists():
+        # Try to resolve profile; allow externals if enabled
+        profile = None
+        external_name = None
+        try:
+            profile = Profile.objects.get(email=email)
+        except Profile.DoesNotExist:
+            if event.is_allow_external:
+                external_name = profile_data.get('name', '').strip() + ' ' + profile_data.get('surname', '').strip()
+            else:
+                return Response({"error": "Profile not found"}, status=404)
+
+        # Duplicate checks
+        if profile and Subscription.objects.filter(profile=profile, event=event).exists():
             return Response({"error": "Already subscribed to this event"}, status=400)
+        if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
+            return Response({"error": "Already subscribed to this event as external"}, status=400)
+
+        # Ensure profile_data.email is set to the used email
+        if 'email' not in profile_data or not profile_data.get('email'):
+            profile_data['email'] = email
 
         # Validate form/profile data
         errors = []
+        # Form fields
         errors += event.form_fields and validate_field_data(event.fields, form_data, 'form') or []
-        errors += event.profile_fields and [
-            f for f in event.profile_fields if f not in profile_data or profile_data[f] in [None, ""]
-        ]
+
+        # Profile fields: for externals, skip ESNcard requirement
+        if event.profile_fields:
+            for f in event.profile_fields:
+                if external_name and f == 'latest_esncard':
+                    continue  # ESNcard not mandatory for externals
+                if f not in profile_data or profile_data[f] in [None, ""]:
+                    errors.append(f"Missing required field: {f}")
+
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
@@ -741,9 +767,10 @@ def event_form_submit(request, event_id):
         else:
             return Response({"error": "No available list for subscription. All lists are full."}, status=400)
 
-        # Create subscription
+        # Create subscription (external if profile is None)
         sub = Subscription.objects.create(
             profile=profile,
+            external_name=external_name,
             event=event,
             list=assigned_list,
             profile_data=profile_data,
@@ -756,9 +783,8 @@ def event_form_submit(request, event_id):
             "subscription_id": sub.id,
             "assigned_list": assigned_label
         }, status=200)
+    except Event.DoesNotExist:
+        return Response({"error": "Event not found"}, status=404)
     except Exception as e:
         logging.error(str(e))
         return Response({"error": str(e)}, status=500)
-
-
-
