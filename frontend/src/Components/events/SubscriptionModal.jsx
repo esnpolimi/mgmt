@@ -1,5 +1,19 @@
 import {useEffect, useMemo, useState} from "react";
-import {Button, Box, Divider, FormControl, InputLabel, MenuItem, Modal, Select, Typography, TextField, FormHelperText, CircularProgress, Alert} from "@mui/material";
+import {
+    Button,
+    Box,
+    Divider,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Modal,
+    Select,
+    Typography,
+    TextField,
+    FormHelperText,
+    CircularProgress,
+    Alert
+} from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {defaultErrorHandler, fetchCustom} from "../../api/api";
@@ -9,7 +23,16 @@ import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
 import Popup from "../Popup";
 
-export default function SubscriptionModal({open, onClose, event, listId, subscription, isEdit, profileId, profileName}) {
+export default function SubscriptionModal({
+                                              open,
+                                              onClose,
+                                              event,
+                                              listId,
+                                              subscription,
+                                              isEdit,
+                                              profileId,
+                                              profileName
+                                          }) {
     const [isLoading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState([]);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
@@ -31,7 +54,10 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         status_cauzione: subscription?.status_cauzione || 'pending'
     });
 
-    const [errors, setErrors] = useState({
+    const [profileHasEsncard, setProfileHasEsncard] = useState(null);
+
+    // Reusable empty errors shape
+    const emptyErrors = {
         account_id: [false, ''],
         account_name: [false, ''],
         profile_id: [false, ''],
@@ -41,13 +67,26 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         list_id: [false, ''],
         list_name: [false, ''],
         notes: [false, ''],
-    });
+    };
+
+// State and reset helper
+    const [errors, setErrors] = useState(emptyErrors);
+    const resetErrors = () => ({...emptyErrors});
+
+    const toAmount = (v) => Math.max(0, Number.parseFloat(v) || 0);
+    const getQuotaImport = () => toAmount(event?.cost);
+    const getCauzioneImport = () => toAmount(event?.deposit);
+
 
     const fieldsToValidate = useMemo(() => {
         let arr = [];
         if (!data.profile_id && !data.external_name) {
             if (event.is_allow_external) {
-                arr.push({field: 'external_name', value: data.external_name, message: "Inserire un nominativo esterno"});
+                arr.push({
+                    field: 'external_name',
+                    value: data.external_name,
+                    message: "Inserire un nominativo esterno"
+                });
             } else {
                 arr.push({field: 'profile_id', value: data.profile_id, message: "Selezionare un Profilo"});
             }
@@ -90,18 +129,6 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
         });
     }
 
-    const resetErrors = () => {
-        const resetObj = {};
-        Object.keys(errors).forEach(key => {
-            resetObj[key] = [false, ''];
-        });
-        setErrors(resetObj);
-        return resetObj;
-    };
-
-    const getQuotaImport = () => Number(event.cost || 0);
-    const getCauzioneImport = () => Number(event.deposit || 0);
-
     // Helper to compute total import
     const getTotalImport = () => {
         let total = 0;
@@ -121,7 +148,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
 
     // Helper to show confirm dialog message for payment changes
     const getConfirmMessage = () => {
-        const {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending} = getStatusChanges();
+        const {
+            quotaChangedToPaid,
+            quotaChangedToPending,
+            cauzioneChangedToPaid,
+            cauzioneChangedToPending
+        } = getStatusChanges();
         const accountObj = accounts.find(acc => acc.id === data.account_id);
         const accountName = accountObj ? accountObj.name : 'N/A';
 
@@ -167,7 +199,12 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
             return;
         }
 
-        const {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending} = getStatusChanges();
+        const {
+            quotaChangedToPaid,
+            quotaChangedToPending,
+            cauzioneChangedToPaid,
+            cauzioneChangedToPending
+        } = getStatusChanges();
         const accountChanged = isEdit && subscription?.account_id !== data.account_id;
 
         if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending || accountChanged) {
@@ -262,7 +299,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                     {/* Show warning if reimbursed */}
                     {isReimbursed && (
                         <Alert severity="warning" sx={{mb: 2}}>
-                            Attenzione: la quota o la cauzione sono state rimborsate. Non è possibile efettuare modifiche.
+                            Attenzione: la quota o la cauzione sono state rimborsate. Non è possibile efettuare
+                            modifiche.
                         </Alert>
                     )}
                     <Typography variant="subtitle1" gutterBottom>
@@ -272,41 +310,76 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                         <b>Lista:</b> {data.list_name}
                     </Typography>
                     <Grid container spacing={2} direction="column">
-                        {!event.is_allow_external && (
+                        {event.is_allow_external ? (
+                            <>
+                                {!data.external_name && (
+                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                        <ProfileSearch
+                                            value={data.profile_id ? {
+                                                id: data.profile_id,
+                                                name: data.profile_name
+                                            } : null}
+                                            onChange={(ev, newValue) => {
+                                                setData({
+                                                    ...data,
+                                                    profile_id: newValue?.id || '',
+                                                    profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
+                                                    external_name: ''
+                                                });
+                                                setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
+                                            }}
+                                            error={errors.profile_id && errors.profile_id[0]}
+                                            helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
+                                            label="Cerca profilo"
+                                            required={!data.external_name}
+                                            disabled={isEdit || !!profileId || isReimbursed}
+                                        />
+                                    </Grid>
+                                )}
+                                {!data.profile_id && (
+                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                        <TextField
+                                            label="Nominativo Esterno"
+                                            name="external_name"
+                                            value={data.external_name}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                setData(d => ({
+                                                    ...d,
+                                                    external_name: v,
+                                                    profile_id: v ? '' : d.profile_id, // ensure exclusivity
+                                                    profile_name: v ? '' : d.profile_name
+                                                }));
+                                                if (v) setProfileHasEsncard(null);
+                                            }}
+                                            fullWidth
+                                            required={!data.profile_id}
+                                            error={errors.external_name && errors.external_name[0]}
+                                            helperText={errors.external_name && errors.external_name[1]}
+                                            disabled={isReimbursed}
+                                        />
+                                    </Grid>
+                                )}
+                            </>
+                        ) : (
                             <Grid size={{xs: 12}} sx={{mt: 2}}>
                                 <ProfileSearch
-                                    value={data.profile_id ? {
-                                        id: data.profile_id,
-                                        name: data.profile_name
-                                    } : null}
-                                    onChange={(event, newValue) => {
+                                    value={data.profile_id ? {id: data.profile_id, name: data.profile_name} : null}
+                                    onChange={(ev, newValue) => {
                                         setData({
                                             ...data,
                                             profile_id: newValue?.id,
                                             profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
                                             external_name: ''
                                         });
+                                        // derive ESNcard presence from the selected option (no extra API call)
+                                        setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
                                     }}
                                     error={errors.profile_id && errors.profile_id[0]}
                                     helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
                                     label={isEdit ? data.profile_name : "Cerca profilo"}
                                     required={!event.is_allow_external}
                                     disabled={isEdit || !!profileId || isReimbursed}
-                                />
-                            </Grid>
-                        )}
-                        {event.is_allow_external && !data.profile_id && (
-                            <Grid size={{xs: 12}} sx={{mt: 2}}>
-                                <TextField
-                                    label="Nominativo Esterno"
-                                    name="external_name"
-                                    value={data.external_name}
-                                    onChange={handleChange}
-                                    fullWidth
-                                    required
-                                    error={errors.external_name && errors.external_name[0]}
-                                    helperText={errors.external_name && errors.external_name[1]}
-                                    disabled={isReimbursed}
                                 />
                             </Grid>
                         )}
@@ -415,7 +488,8 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                                                 </MenuItem>
                                             ))}
                                         </Select>
-                                        {errors.account_id && errors.account_id[0] && <FormHelperText>{errors.account_id[1]}</FormHelperText>}
+                                        {errors.account_id && errors.account_id[0] &&
+                                            <FormHelperText>{errors.account_id[1]}</FormHelperText>}
                                     </FormControl>
                                 </Grid>
                             </>
@@ -431,6 +505,15 @@ export default function SubscriptionModal({open, onClose, event, listId, subscri
                             />
                         </Grid>
                     </Grid>
+
+                    {/* Alert: profile without ESNcard when externals are not allowed */}
+                    {!event.is_allow_external && data.profile_id && profileHasEsncard === false && (
+                        <Alert severity="error" sx={{mt: 2}}>
+                            Attenzione! Il profilo selezionato non ha una ESNcard attiva. Contatta gli organizzatori per
+                            verificare la situazione.
+                        </Alert>
+                    )}
+
                     <Button variant="contained"
                             fullWidth
                             sx={{

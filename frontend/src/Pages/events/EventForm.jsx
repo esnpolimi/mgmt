@@ -50,9 +50,17 @@ export default function EventForm() {
     useEffect(() => {
         //console.log(profileData);
         //console.log(eventData);
-        if (!eventData.id && !profileData.email) {
+        // If no event data at all, go to login (we need event context)
+        if (!eventData.id) {
             navigate(`/event/${id}/formlogin`);
-        } else if (profileFields.includes("latest_esncard") && profileData.latest_esncard?.number) {
+            return;
+        }
+        // If externals are not allowed and there is no profile email, go to login
+        if (!eventData.is_allow_external && !profileData.email) {
+            navigate(`/event/${id}/formlogin`);
+            return;
+        }
+        if (profileFields.includes("latest_esncard") && profileData.latest_esncard?.number) {
             handleEsncardNumberChange(profileData.latest_esncard.number);
         }
     }, [eventData, id, navigate, profileFields, profileData]);
@@ -131,6 +139,8 @@ export default function EventForm() {
     // Helper to check if a profile field is filled
     const isProfileFieldFilled = (field) => {
         if (field === "latest_esncard") {
+            // If externals are allowed, ESNcard is not mandatory
+            if (eventData.is_allow_external) return true;
             if (noEsncard) return true;
             return !!(profileValues.latest_esncard && profileValues.latest_esncard.number && profileValues.latest_esncard.number !== "");
         }
@@ -269,7 +279,8 @@ export default function EventForm() {
 
         // Prepare profile data: only send number for latest_esncard and latest_document
         let profileToSubmit = {...profileValues};
-        if (noEsncard) {
+        if (noEsncard || eventData.is_allow_external) {
+            // Treat ESNcard as optional when externals are allowed
             profileToSubmit.latest_esncard = "0";
         } else if (profileToSubmit.latest_esncard && typeof profileToSubmit.latest_esncard === "object") {
             profileToSubmit.latest_esncard = profileToSubmit.latest_esncard.number || "";
@@ -284,7 +295,8 @@ export default function EventForm() {
         // Submit to backend
         fetchCustom("POST", `/event/${eventData.id}/formsubmit/`, {
             body: {
-                email: profileData.email,
+                // Use logged in email if present, otherwise the typed email (for externals)
+                email: eventData.is_allow_external ? profileValues.email || profileData.email || "" : profileData.email || profileValues.email || "",
                 profile_data: profileToSubmit,
                 form_data: formValues,
                 form_notes: formNotes
@@ -427,7 +439,7 @@ export default function EventForm() {
                                                             value={profileValues.latest_esncard?.number || ""}
                                                             onChange={e => handleEsncardNumberChange(e.target.value)}
                                                             fullWidth
-                                                            required={!noEsncard}
+                                                            required={!noEsncard && !eventData.is_allow_external}
                                                             disabled={noEsncard}
                                                         />
                                                         {/* ESNcard check/cross below the field */}

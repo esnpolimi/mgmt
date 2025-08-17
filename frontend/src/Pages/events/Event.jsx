@@ -242,7 +242,10 @@ export default function Event() {
     // Derive edit permission: organizers OR Board (explicit change_event permission always needed)
     const currentProfileId = user?.profile?.id ?? user?.profile_id ?? user?.id;
     const isOrganizer = Array.isArray(data?.organizers) && data.organizers.some(o => o.profile === currentProfileId);
-    const canEditEvent = Boolean(canChangeEvent && (isBoardMember || isOrganizer));
+    // Widen permissions: Board or Organizer can edit even without explicit change_event
+    const canEditEvent = Boolean(canChangeEvent || isBoardMember || isOrganizer);
+    // Widen subscription permissions: Board or Organizer can manage subs even without explicit permission
+    const canManageSubscriptions = Boolean(canChangeSubscription || isBoardMember || isOrganizer);
 
     return (
         <Box>
@@ -496,7 +499,7 @@ export default function Event() {
                                                 onOpenReimburseQuota={handleOpenReimburseQuota}
                                                 onOpenPrintableLibetatorie={handleOpenPrintableLibetatorie}
                                                 onOpenEditAnswers={handleOpenEditAnswers}
-                                                canChangeSubscription={canChangeSubscription}
+                                                canChangeSubscription={canManageSubscriptions}
                                                 canChangeTransactions={canChangeTransactions}
                                                 isBoardMember={isBoardMember}
                                             />
