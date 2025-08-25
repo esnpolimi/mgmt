@@ -1,6 +1,8 @@
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 
+console.log(">>> VITE CONFIG LOADED <<<");
+
 export default defineConfig({
     base: '/',
     plugins: [react()],
@@ -9,6 +11,7 @@ export default defineConfig({
         open: false, // Opens the browser automatically. Set to false (avoid errors when containerized in docker)
         host: true, // needed for docker
         watch: {usePolling: true}, // needed for hot reload when using docker
+        minify: false, // to avoid issues with production builds
     },
     build: {
         outDir: "build",
