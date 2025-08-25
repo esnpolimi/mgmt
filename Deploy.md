@@ -26,12 +26,15 @@ cd mgmt.esnpolimi.it
 ./gitpull_xxxxxend.sh
 
 # Eventually, reinstall django dependencies
-cd backend
+source /home/fazucrdl/virtualenv/mgmt.esnpolimi.it/3.11/bin/activate && cd /home/fazucrdl/mgmt.esnpolimi.it/backend
 pip install -r requirements.txt
 
 # Eventually, make and apply migrations (if models have changed)
 python manage.py makemigrations
 python manage.py migrate
+# if problems arise:
+# python manage.py migrate events 0009 --fake     
+# python manage.py migrate treasury 0010 --fake
 
 # Collect static files
 python manage.py collectstatic --noinput
