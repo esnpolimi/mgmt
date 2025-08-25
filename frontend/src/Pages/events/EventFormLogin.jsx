@@ -64,10 +64,10 @@ export default function EventFormLogin() {
             auth: false,
             onSuccess: (data) => {
                 if (data && Object.keys(data).length > 0) {
-                    navigate(`/event/${id}/form`, {state: {profileData: data, eventData}});
+                    // Only keep email (no full profile data handling anymore)
+                    navigate(`/event/${id}/form`, {state: {email, eventData}});
                 } else if (eventData?.is_allow_external) {
-                    // External allowed: proceed with just the typed email
-                    navigate(`/event/${id}/form`, {state: {profileData: {email}, eventData}});
+                    navigate(`/event/${id}/form`, {state: {email, eventData}});
                 } else {
                     setStatusMessage({
                         message: "This email does not belong to a registered Erasmus user.",
@@ -78,8 +78,7 @@ export default function EventFormLogin() {
             },
             onError: () => {
                 if (eventData?.is_allow_external) {
-                    // External allowed: proceed even if backend lookup fails
-                    navigate(`/event/${id}/form`, {state: {profileData: {email}, eventData}});
+                    navigate(`/event/${id}/form`, {state: {email, eventData}});
                 } else {
                     setStatusMessage({message: "Error checking email. Please try again.", state: "error"});
                 }

@@ -16,13 +16,11 @@ import CloseIcon from '@mui/icons-material/Close';
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import Popup from "../Popup";
 import {defaultErrorHandler, fetchCustom} from "../../api/api";
-import {profileDisplayNames} from '../../utils/displayAttributes';
 
 export default function EditAnswersModal({open, onClose, event, subscription}) {
     // Initialize with proper defaults and ensure all fields exist
     const [formData, setFormData] = useState({});
     const [additionalData, setAdditionalData] = useState({});
-    const [profileData, setProfileData] = useState({});
     const [saving, setSaving] = useState(false);
     const [popup, setPopup] = useState(null);
 
@@ -61,22 +59,10 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                 }
             });
 
-            // Initialize profile data
-            const initialProfileData = {};
-            const profileFields = event?.profile_fields || [];
-            profileFields.forEach(field => {
-                // First try profile_data, then fallback to direct subscription field, then profile object
-                initialProfileData[field] = subscription.profile_data?.[field] || subscription[field] || subscription.profile?.[field] || '';
-            });
-
             setFormData(initialFormData);
             setAdditionalData(initialAdditionalData);
-            setProfileData(initialProfileData);
         }
     }, [open, event, subscription]);
-
-    // Profile fields are now editable
-    const profileFields = event?.profile_fields || [];
 
     // Helper to render a field input for form/additional fields
     const renderFieldInput = (field, value, onChange, isAdditional = false) => {
@@ -163,11 +149,6 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
         setAdditionalData(prev => ({...prev, [field.name]: value}));
     };
 
-    // Handler for profile fields
-    const handleProfileFieldChange = (field, value) => {
-        setProfileData(prev => ({...prev, [field]: value}));
-    };
-
     // Prepare data for PATCH: convert types as needed for backend validation
     const prepareDataForPatch = () => {
         const cleanedFormData = {};
@@ -213,23 +194,21 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
 
         return {
             form_data: cleanedFormData,
-            additional_data: cleanedAdditionalData,
-            profile_data: profileData
+            additional_data: cleanedAdditionalData
         };
     };
 
     // Save handler
     const handleSave = () => {
         setSaving(true);
-        const {form_data, additional_data, profile_data} = prepareDataForPatch();
+        const {form_data, additional_data} = prepareDataForPatch();
 
-        console.log('Sending data:', {form_data, additional_data, profile_data}); // Debug log
+        console.log('Sending data:', {form_data, additional_data}); // Debug log
 
         fetchCustom("PATCH", `/subscription/${subscription.id}/`, {
             body: {
                 form_data,
-                additional_data,
-                profile_data
+                additional_data
             },
             onSuccess: () => {
                 setSaving(false);
@@ -258,22 +237,6 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                     <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                 </Box>
                 <Typography variant="h4" component="h2" align="center" gutterBottom>Modifica Risposte Form</Typography>
-                <Box sx={{mb: 2}}>
-                    <Typography variant="subtitle1" sx={{my: 1}}><b>Dati anagrafici</b></Typography>
-                    <Grid container spacing={1}>
-                        {profileFields.map(field => (
-                            <Grid size={{xs: 12, sm: 6}} key={field}>
-                                <TextField
-                                    label={profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1))}
-                                    value={profileData[field] || ''}
-                                    onChange={e => handleProfileFieldChange(field, e.target.value)}
-                                    fullWidth
-                                    size="small"
-                                />
-                            </Grid>
-                        ))}
-                    </Grid>
-                </Box>
                 {formFields && formFields.length > 0 && (
                     <Box sx={{mb: 2}}>
                         <Typography variant="subtitle1" sx={{mb: 1}}><b>Risposte Form</b></Typography>

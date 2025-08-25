@@ -69,6 +69,7 @@ export default memo(function EventListAccordions({
     // Toggles for showing/hiding columns
     const [showFormColumns, setShowFormColumns] = useState(true);
     const [showAdditionalColumns, setShowAdditionalColumns] = useState(true);
+    const [showProfileColumns, setShowProfileColumns] = useState(true); // NEW
 
     // Canonical order for profile fields (same as frontend event form)
     const canonicalProfileOrder = [
@@ -84,15 +85,9 @@ export default memo(function EventListAccordions({
     const listConfigs = useMemo(() => {
         if (!data?.lists) return [];
 
-        // ...existing helper functions...
         const getProfileFieldValue = (sub, field) => {
-            if (sub.profile_data && sub.profile_data[field] !== undefined && sub.profile_data[field] !== null) {
-                return sub.profile_data[field];
-            }
-            if (sub[field] !== undefined && sub[field] !== null) {
-                return sub[field];
-            }
-            if (sub.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
+            // Values now fetched live via nested sub.profile (no stored snapshot)
+            if (sub?.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
                 return sub.profile[field];
             }
             return '';
@@ -104,28 +99,30 @@ export default memo(function EventListAccordions({
             // --- Dynamic columns ---
             let dynamicColumns = [];
 
-            // Profile fields (orange)
+            // Profile fields (now blue headers, display-only, toggleable)
             let orderedProfileFields = [];
-            if (Array.isArray(data.profile_fields) && showFormColumns) {
+            if (Array.isArray(data.profile_fields)) {
                 orderedProfileFields = orderProfileFields(data.profile_fields);
             }
-            dynamicColumns = dynamicColumns.concat(
-                orderedProfileFields.map(field => ({
-                    accessorKey: `profile_field_${field}`,
-                    header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
-                    size: 120,
-                    Cell: ({row}) => getProfileFieldValue(row.original, field),
-                    muiTableHeadCellProps: {
-                        sx: {color: 'orange'}
-                    }
-                }))
-            );
+            if (showProfileColumns) { // NEW
+                dynamicColumns = dynamicColumns.concat(
+                    orderedProfileFields.map(field => ({
+                        accessorKey: `profile_field_${field}`,
+                        header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
+                        size: 120,
+                        Cell: ({row}) => getProfileFieldValue(row.original, field),
+                        muiTableHeadCellProps: {
+                            sx: {color: 'primary.main'}
+                        }
+                    }))
+                );
+            }
 
             // Split fields into form and additional
             const formFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'form') : [];
             const additionalFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'additional') : [];
 
-            // Form fields (orange)
+            // Form fields (still orange)
             let formFieldColumns = showFormColumns ? formFields.map((field, idx) => ({
                 accessorKey: `form_field_${idx}`,
                 header: field.name,
@@ -137,9 +134,7 @@ export default memo(function EventListAccordions({
                     if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
                     return val ?? '';
                 },
-                muiTableHeadCellProps: {
-                    sx: {color: 'orange'}
-                }
+                muiTableHeadCellProps: { sx: {color: 'orange'} }
             })) : [];
 
             // Form notes (orange)
@@ -148,12 +143,10 @@ export default memo(function EventListAccordions({
                 header: 'Note Form',
                 size: 180,
                 Cell: ({row}) => row.original.form_notes || '',
-                muiTableHeadCellProps: {
-                    sx: {color: 'orange'}
-                }
+                muiTableHeadCellProps: { sx: {color: 'orange'} }
             } : null;
 
-            // Additional fields (magenta)
+            // Additional fields (keep magenta / purple)
             let additionalFieldColumns = showAdditionalColumns ? additionalFields.map((field, idx) => ({
                 accessorKey: `additional_field_${idx}`,
                 header: field.name,
@@ -165,9 +158,7 @@ export default memo(function EventListAccordions({
                     if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
                     return val ?? '';
                 },
-                muiTableHeadCellProps: {
-                    sx: {color: 'mediumvioletred'}
-                }
+                muiTableHeadCellProps: { sx: {color: 'mediumvioletred'} }
             })) : [];
 
             // Order: profile fields, form fields, form notes, additional fields
@@ -188,7 +179,7 @@ export default memo(function EventListAccordions({
                 {
                     accessorKey: 'profile_name',
                     header: 'Profilo',
-                    size: 150,
+                    size: 50,
                     Cell: ({row}) => {
                         const sub = row.original;
                         if (sub.external_name) {
@@ -201,7 +192,7 @@ export default memo(function EventListAccordions({
                                         sx={{textTransform: 'none', padding: 0, minWidth: 0}}
                                         endIcon={<OpenInNewIcon fontSize="small"/>}
                                         onClick={() => window.open(`/profile/${sub.profile_id}`, '_blank', 'noopener,noreferrer')}>
-                                    {sub.profile_name}
+                                    Apri
                                 </Button>
                             </span>
                         );
@@ -366,9 +357,21 @@ export default memo(function EventListAccordions({
 
             // Add a caption and toggles for form/aspect columns
             const formAspectCaption = (
-                <Box sx={{mb: 1, display: 'flex', alignItems: 'center', gap: 2}}>
+                <Box sx={{mb: 1, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap'}}>
                     <Box>
-
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={showProfileColumns}
+                                    onChange={(_, checked) => setShowProfileColumns(checked)}
+                                    color="primary"
+                                />
+                            }
+                            label="Colonne Profilo"
+                            sx={{ml: 1}}
+                        />
+                    </Box>
+                    <Box>
                         <FormControlLabel
                             control={
                                 <Switch
@@ -377,7 +380,7 @@ export default memo(function EventListAccordions({
                                     color="warning"
                                 />
                             }
-                            label="Colonne form Erasmus"
+                            label="Colonne Form"
                             sx={{ml: 1}}
                         />
                     </Box>
@@ -390,7 +393,7 @@ export default memo(function EventListAccordions({
                                     color="secondary"
                                 />
                             }
-                            label="Colonne form ESNers"
+                            label="Colonne Aggiuntive"
                             sx={{ml: 1}}
                         />
                     </Box>
@@ -407,7 +410,7 @@ export default memo(function EventListAccordions({
                 formAspectCaption
             };
         });
-    }, [data, hasDeposit, hasQuota, isBoardMember, onOpenEditAnswers, onOpenReimburseQuota, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns]);
+    }, [data, hasDeposit, hasQuota, isBoardMember, onOpenEditAnswers, onOpenReimburseQuota, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns, showProfileColumns]);
 
     const lists = useMemo(() => {
         return listConfigs.map(config => ({
