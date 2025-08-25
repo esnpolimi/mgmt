@@ -621,12 +621,12 @@ def printable_liberatorie(request, event_id):
 def event_form_view(_, event_id):
     """
     Public endpoint to retrieve event form configuration for the event form page.
+    (Profile columns removed: profile data no longer handled client-side.)
     """
     try:
         event = Event.objects.get(pk=event_id)
         if not event.enable_form:
             return Response({'error': 'Form not enabled for this event.'}, status=404)
-        # Return only the minimal info needed for the form page
         return Response({
             'id': event.id,
             'status': event.status,
@@ -634,7 +634,6 @@ def event_form_view(_, event_id):
             'date': event.date,
             'cost': event.cost,
             'deposit': event.deposit,
-            'profile_fields': event.profile_fields,
             'form_fields': event.form_fields,
             'is_form_open': event.is_form_open,
             'form_programmed_open_time': event.form_programmed_open_time,
@@ -687,20 +686,23 @@ def event_form_status(_, event_id):
 @api_view(['POST'])
 def event_form_submit(request, event_id):
     """
-    Public endpoint to submit event form and profile data.
-    Expects: {
-        "profile_data": {...},
+    Public endpoint to submit event form.
+    Expects JSON:
+      {
+        "email": "...",
         "form_data": {...},
-        "form_notes": "...",  # optional
-    }
+        "form_notes": "..."
+      }
+    Behavior:
+      - If email matches a Profile, subscription is tied to that profile.
+      - Otherwise, if externals allowed, creates an external subscription (external_name = name + surname).
+      - Validates only event form fields (no profile data anymore).
     """
     try:
         event = Event.objects.get(pk=event_id)
-        profile_data = request.data.get("profile_data", {})
-        form_data = request.data.get("form_data", {})
-        form_notes = request.data.get("form_notes", "")
-        email = (request.data.get("email") or profile_data.get("email") or "").strip()
-        print("Profile data:", profile_data)
+        form_data = request.data.get("form_data", {}) or {}
+        form_notes = request.data.get("form_notes", "") or ""
+        email = (request.data.get("email") or "").strip()
 
         if not email:
             return Response({"error": "Missing email"}, status=400)
@@ -709,14 +711,14 @@ def event_form_submit(request, event_id):
         except Exception:
             return Response({"error": "Invalid email format"}, status=400)
 
-        # Try to resolve profile; allow externals if enabled
         profile = None
         external_name = None
         try:
             profile = Profile.objects.get(email=email)
         except Profile.DoesNotExist:
             if event.is_allow_external:
-                external_name = profile_data.get('name', '').strip() + ' ' + profile_data.get('surname', '').strip()
+                # No profile data collected anymore, use name + surname as external label
+                external_name = form_data.get('name', '').strip() + ' ' + form_data.get('surname', '').strip()
             else:
                 return Response({"error": "Profile not found"}, status=404)
 
@@ -726,27 +728,12 @@ def event_form_submit(request, event_id):
         if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
             return Response({"error": "Already subscribed to this event as external"}, status=400)
 
-        # Ensure profile_data.email is set to the used email
-        if 'email' not in profile_data or not profile_data.get('email'):
-            profile_data['email'] = email
-
-        # Validate form/profile data
-        errors = []
-        # Form fields
-        errors += event.form_fields and validate_field_data(event.fields, form_data, 'form') or []
-
-        # Profile fields: for externals, skip ESNcard requirement
-        if event.profile_fields:
-            for f in event.profile_fields:
-                if external_name and f == 'latest_esncard':
-                    continue  # ESNcard not mandatory for externals
-                if f not in profile_data or profile_data[f] in [None, ""]:
-                    errors.append(f"Missing required field: {f}")
-
+        # Validate only form field data
+        errors = validate_field_data(event.fields, form_data, 'form')
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
-        # Find the list
+        # Determine target list (main, else waiting)
         event_lists = EventList.objects.filter(event=event)
         main_list = event_lists.filter(is_main_list=True).first()
         waiting_list = event_lists.filter(is_waiting_list=True).first()
@@ -767,13 +754,11 @@ def event_form_submit(request, event_id):
         else:
             return Response({"error": "No available list for subscription. All lists are full."}, status=400)
 
-        # Create subscription (external if profile is None)
         sub = Subscription.objects.create(
             profile=profile,
             external_name=external_name,
             event=event,
             list=assigned_list,
-            profile_data=profile_data,
             form_data=form_data,
             form_notes=form_notes,
             created_by_form=True
