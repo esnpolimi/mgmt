@@ -275,10 +275,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Prevent editing certain fields if there are subscriptions
         if has_subscriptions:
-            # Only restrict form-related fields and profile_fields
-            # Allow modification of additional fields in the unified fields
-            # Allow always form_programmed_open_time
-            restricted_fields = ['profile_fields', 'enable_form']
+            # Only restrict form-related fields (enable_form)
+            restricted_fields = ['enable_form']
             for field in restricted_fields:
                 if field in validated_data:
                     validated_data.pop(field)
@@ -292,13 +290,13 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 new_additional_fields = [f for f in new_fields if f.get('field_type') == 'additional']
 
                 # Only keep truly new additional fields (not existing ones being modified)
-                truly_new_additional = []
                 existing_additional_names = {f.get('name') for f in existing_additional_fields}
-
+                truly_new_additional = []
                 for new_field in new_additional_fields:
                     if new_field.get('name') not in existing_additional_names:
                         truly_new_additional.append(new_field)
 
+                # Do not allow editing/removing existing additional fields
                 validated_data['fields'] = existing_form_fields + existing_additional_fields + truly_new_additional
 
         # Validate subscription start date hasn't changed
@@ -474,17 +472,27 @@ class FormSubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.Mo
         allow_null=True
     )
     additional_data = serializers.DictField(required=False, default=dict)
-    profile_data = serializers.DictField(required=False, default=dict)
     external_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     form_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'profile_data', 'external_name', 'form_notes']
+        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'external_name', 'form_notes']
 
     def create(self, validated_data):
         validated_data['additional_data'] = validated_data.get('additional_data', {})
         return super().create(validated_data)
+
+
+# Inline profile serializer exposing only the allowed profile fields (safe, read-only)
+class SubscriptionProfileInlineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = [
+            'name', 'surname', 'email', 'phone_prefix', 'phone_number', 'whatsapp_prefix',
+            'whatsapp_number', 'country', 'birthdate', 'matricola_number', 'matricola_expiration',
+            'course', 'person_code', 'domicile'
+        ]
 
 
 # Serializers for Subscription
@@ -507,8 +515,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     is_external = serializers.SerializerMethodField()
     form_data = serializers.DictField(read_only=True)
     additional_data = serializers.DictField(read_only=True)
-    profile_data = serializers.DictField(read_only=True)
     form_notes = serializers.CharField(read_only=True)
+    profile = SubscriptionProfileInlineSerializer(read_only=True)  # NEW inline data for columns
 
     class Meta:
         model = Subscription
@@ -525,8 +533,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'is_external',
             'form_data',
             'additional_data',
-            'profile_data',
-            'form_notes'
+            'form_notes',
+            'profile',  # NEW
         ]
 
     def create(self, validated_data):
@@ -605,12 +613,11 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
-    profile_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione',
-                  'external_name', 'form_data', 'additional_data', 'profile_data']
+                  'external_name', 'form_data', 'additional_data']
 
     def validate(self, attrs):
         event = attrs.get('event')
@@ -646,12 +653,11 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
-    profile_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione', 'external_name',
-                  'form_data', 'additional_data', 'profile_data']
+                  'form_data', 'additional_data']
 
     def validate(self, attrs):
         self.account_id = attrs.get('account_id', self.instance and getattr(self.instance, 'account_id', None))
@@ -661,14 +667,6 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         return attrs
 
     def update(self, instance, validated_data):
-        # Ensure profile_data is properly handled
-        if 'profile_data' in validated_data:
-            # Update profile_data while preserving existing data
-            current_profile_data = instance.profile_data or {}
-            new_profile_data = validated_data.get('profile_data', {})
-            # Merge the data - new values override existing ones
-            merged_profile_data = {**current_profile_data, **new_profile_data}
-            validated_data['profile_data'] = merged_profile_data
 
         return super().update(instance, validated_data)
 

@@ -129,7 +129,7 @@ class Event(BaseEntity):
     # Programmed open time for the form (optional)
     form_programmed_open_time = models.DateTimeField(null=True, blank=True)
 
-    # Required profile fields (i.e. name, surname, whatsapp number, email)
+    # Profile fields columns (i.e. name, surname, email) to be shown in the event list tables
     profile_fields = models.JSONField(default=list, blank=True)
 
     # Unified fields (replaces form_fields and additional_fields)
@@ -269,7 +269,6 @@ class Subscription(BaseEntity):
     enable_refund = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
     created_by_form = models.BooleanField(default=False)
-    profile_data = models.JSONField(blank=True, default=dict)
     form_data = models.JSONField(blank=True, default=dict)
     additional_data = models.JSONField(blank=True, default=dict)
     form_notes = models.TextField(blank=True, null=True)
@@ -281,31 +280,6 @@ class Subscription(BaseEntity):
                 name='unique_profile_event_combination'
             )
         ]
-
-    def save(self, *args, **kwargs):
-        # On creation, if profile is set and profile_data is empty, copy only requested fields from profile
-        if self.profile and self._state.adding and not self.profile_data:
-            requested_fields = self.event.profile_fields if self.event and self.event.profile_fields else []
-            data = {}
-            for field in requested_fields:
-                value = getattr(self.profile, field, None)
-                # Convert date fields to isoformat if not None
-                if value is not None and field in ['birthdate', 'matricola_expiration']:
-                    value = value.isoformat()
-                data[field] = value
-            self.profile_data = data
-        super().save(*args, **kwargs)
-
-    def populate_profile_data_from_profile(self):
-        """Force copy only requested profile fields from profile (overwrite)."""
-        if self.profile and self.event and self.event.profile_fields:
-            data = {}
-            for field in self.event.profile_fields:
-                value = getattr(self.profile, field, None)
-                if value is not None and field in ['birthdate', 'matricola_expiration']:
-                    value = value.isoformat()
-                data[field] = value
-            self.profile_data = data
 
     def clean(self):
         super().clean()
