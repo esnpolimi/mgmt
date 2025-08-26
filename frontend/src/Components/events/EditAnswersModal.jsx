@@ -39,6 +39,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                 } else if (field.type === 'n') {
                     initialFormData[field.name] = existingValue ?? '';
                 } else {
+                    // include new types 'd','e','p' treated as string
                     initialFormData[field.name] = existingValue ?? '';
                 }
             });
@@ -66,9 +67,11 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
 
     // Helper to render a field input for form/additional fields
     const renderFieldInput = (field, value, onChange, isAdditional = false) => {
-
         switch (field.type) {
             case 't':
+            case 'd': // date stored as string
+            case 'e': // esncard number
+            case 'p': // phone "+prefix number"
                 return (
                     <TextField
                         fullWidth
@@ -168,8 +171,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
             } else if (field.type === 'b') {
                 // For boolean: convert to boolean
                 cleanedFormData[field.name] = Boolean(val);
-            } else if (field.type === 't' || field.type === 'c') {
-                // For text and choice: ensure it's a string
+            } else if (['t','c','d','e','p'].includes(field.type)) {
                 cleanedFormData[field.name] = val || '';
             }
         });
@@ -187,7 +189,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                 cleanedAdditionalData[field.name] = Array.isArray(val) ? val : [];
             } else if (field.type === 'b') {
                 cleanedAdditionalData[field.name] = Boolean(val);
-            } else if (field.type === 't' || field.type === 'c') {
+            } else if (['t','c','d','e','p'].includes(field.type)) {
                 cleanedAdditionalData[field.name] = val || '';
             }
         });
@@ -232,7 +234,16 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
 
     return (
         <Modal open={open} onClose={() => onClose(false)}>
-            <Box sx={{...style, minWidth: 800, maxWidth: 1000}}>
+            <Box
+                sx={{
+                    ...style,
+                    maxWidth: 1200,
+                    minWidth: {xs: '0', md: 1000},
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    p: {xs: 2, sm: 3}
+                }}
+            >
                  <Box sx={{display: 'flex', justifyContent: 'flex-end'}}>
                     <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
                 </Box>
@@ -240,9 +251,9 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                 {formFields && formFields.length > 0 && (
                     <Box sx={{mb: 2}}>
                         <Typography variant="subtitle1" sx={{mb: 1}}><b>Risposte Form</b></Typography>
-                        <Grid container spacing={1}>
+                        <Grid container spacing={2}>
                             {formFields.map((field, idx) => (
-                                <Grid size={{xs: 12}} key={idx}>
+                                <Grid key={idx} size={{xs: 12, sm: 6, md: 4}}>
                                     <Typography variant="body2" sx={{mb: 0.5}}>{field.name}</Typography>
                                     {renderFieldInput(field, formData[field.name], handleFormFieldChange)}
                                 </Grid>
@@ -253,9 +264,9 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                 {additionalFields && additionalFields.length > 0 && (
                     <Box sx={{mb: 2}}>
                         <Typography variant="subtitle1" sx={{mb: 1}}><b>Campi aggiuntivi</b></Typography>
-                        <Grid container spacing={1}>
+                        <Grid container spacing={2}>
                             {additionalFields.map((field, idx) => (
-                                <Grid size={{xs: 12}} key={idx}>
+                                <Grid key={idx} size={{xs: 12, sm: 6, md: 4}}>
                                     <Typography variant="body2" sx={{mb: 0.5}}>{field.name}</Typography>
                                     {renderFieldInput(field, additionalData[field.name], handleAdditionalFieldChange, true)}
                                 </Grid>
@@ -263,14 +274,18 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                         </Grid>
                     </Box>
                 )}
-                <Box sx={{display: 'flex', gap: 2, mt: 2}}>
-                    <Button variant="contained" color="primary" onClick={handleSave} disabled={saving}>
-                        Salva
-                    </Button>
-                    <Button variant="outlined" onClick={() => onClose(false)} disabled={saving}>
-                        Annulla
-                    </Button>
-                </Box>
+                <Grid container spacing={2} sx={{mt: 2}}>
+                    <Grid size={{xs: 12, sm: 6, md: 3}}>
+                        <Button fullWidth variant="contained" color="primary" onClick={handleSave} disabled={saving}>
+                            Salva
+                        </Button>
+                    </Grid>
+                    <Grid size={{xs: 12, sm: 6, md: 3}}>
+                        <Button fullWidth variant="outlined" onClick={() => onClose(false)} disabled={saving}>
+                            Annulla
+                        </Button>
+                    </Grid>
+                </Grid>
                 {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>
         </Modal>

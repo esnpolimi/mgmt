@@ -64,10 +64,11 @@ export default function EventFormLogin() {
             auth: false,
             onSuccess: (data) => {
                 if (data && Object.keys(data).length > 0) {
-                    // Only keep email (no full profile data handling anymore)
-                    navigate(`/event/${id}/form`, {state: {email, eventData}});
-                } else if (eventData?.is_allow_external) {
-                    navigate(`/event/${id}/form`, {state: {email, eventData}});
+                    // Extract possible ESNcard number fields
+                    const esncardNumber = data?.esncard_number || '';
+                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber}});
+                // } else if (eventData?.is_allow_external) {
+                //     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
                 } else {
                     setStatusMessage({
                         message: "This email does not belong to a registered Erasmus user.",
@@ -78,7 +79,7 @@ export default function EventFormLogin() {
             },
             onError: () => {
                 if (eventData?.is_allow_external) {
-                    navigate(`/event/${id}/form`, {state: {email, eventData}});
+                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
                 } else {
                     setStatusMessage({message: "Error checking email. Please try again.", state: "error"});
                 }
