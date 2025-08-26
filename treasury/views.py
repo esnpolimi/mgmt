@@ -660,6 +660,7 @@ def reimburse_quota(request):
 
 
 # Endpoint to check if an ESNcard number exists
+'''
 @api_view(['GET'])
 def esncard_exists(request):
     """
@@ -676,3 +677,4 @@ def esncard_exists(request):
         else:
             exists = False
     return Response({'exists': exists})
+'''
