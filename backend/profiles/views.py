@@ -481,8 +481,12 @@ def check_erasmus_email(request):
     # Return profile data to allow automatic field filling in the form
     if exists:
         profile = Profile.objects.get(email__iexact=email, is_esner=False, enabled=True, email_is_verified=True)
-        serializer = ProfileDetailViewSerializer(profile)
-        return Response(serializer.data, status=200)
+        res = {
+            'id': profile.id,
+            'email': profile.email,
+            'esncard_number': profile.latest_esncard.number if profile.latest_esncard else '',
+        }
+        return Response(res, status=200)
     else:
         return Response(None, status=200)
 

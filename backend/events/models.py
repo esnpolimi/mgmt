@@ -33,16 +33,19 @@ profile_fields_schema = {
 #  'c': choice, risposta singola
 #  'm': multiple choice, risposta multipla
 #  'b': boolean, risposta yes/no
+#  'd': date (DD-MM-YYYY)
+#  'e': esncard number (string)
+#  'p': phone (stored as single string e.g. "+39 3375619379")
 #
 # Example: [{'name':'What are your allergies?', 'type':'t'},
-#           {'name':'Are you vegan?','type':'b', 'choices':['yes','no'] }]
+#           {'name':'Are you vegan?','type':'m', 'choices':['yes','no','maybe'] }]
 unified_fields_schema = {
     "type": "array",
     "items": {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["t", "n", "c", "m", "b"]},
+            "type": {"enum": ["t", "n", "c", "m", "b", "d", "e", "p"]},
             "field_type": {"enum": ["form", "additional"]},
             "choices": {
                 "type": "array",
@@ -99,6 +102,15 @@ def validate_field_data(field_config, data_dict, field_type_filter=None):
                             f'Invalid value "{val}" for field "{field_name}" - must be one of {field.get("choices", [])}')
         elif field_type == 'b' and not isinstance(value, bool):
             errors.append(f'Invalid data type for field "{field_name}" - expected boolean')
+        elif field_type in ('d', 'e', 'p'):
+            # Accept only strings
+            if not isinstance(value, str):
+                errors.append(f'Invalid data type for field "{field_name}" - expected string')
+            elif field_type == 'd':
+                # Basic date format sanity (DD-MM-YYYY)
+                from re import match
+                if not match(r'^\d{2}-\d{2}-\d{4}', value):
+                    errors.append(f'Invalid date format for field "{field_name}" (expected DD-MM-YYYY)')
     valid_field_names = [f['name'] for f in relevant_fields]
     for provided_field in data_dict.keys():
         if provided_field not in valid_field_names:
@@ -270,8 +282,8 @@ class Subscription(BaseEntity):
     notes = models.TextField(blank=True, null=True)
     created_by_form = models.BooleanField(default=False)
     form_data = models.JSONField(blank=True, default=dict)
-    additional_data = models.JSONField(blank=True, default=dict)
     form_notes = models.TextField(blank=True, null=True)
+    additional_data = models.JSONField(blank=True, default=dict)
 
     class Meta:
         constraints = [

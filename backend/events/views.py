@@ -761,6 +761,7 @@ def event_form_submit(request, event_id):
             list=assigned_list,
             form_data=form_data,
             form_notes=form_notes,
+            additional_data={},
             created_by_form=True
         )
         return Response({

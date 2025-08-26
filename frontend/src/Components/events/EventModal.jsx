@@ -463,7 +463,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 </Grid>
 
                 {localData.lists.map((list, index) => (
-                    <Grid container spacing={2} alignItems="center" sx={{mt: 2}} key={index}>
+                    <Grid container spacing={2} alignItems="center" sx={{mt: 1}} key={index}>
                         <Grid>
                             <TextField
                                 label={eventNames.list_name}
@@ -553,8 +553,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
             <Box my={2}>
                 <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
-                    Dati già in database e visualizzati nelle liste.<br/>
-                    Per dati aggiornati, richiederli tra i campi del Form di Iscrizione.
+                    Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell'organizzazione.<br/>
+                    I dati sono presi dal profilo Erasmus! Richiedi dati aggiornati tra i campi del Form di Iscrizione.
                 </Typography>
                 <Select
                     multiple
@@ -608,7 +608,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
             {value: 'n', label: 'Numero'},
             {value: 'c', label: 'Scelta Singola'},
             {value: 'm', label: 'Scelta Multipla'},
-            {value: 'b', label: 'Sì/No'}
+            {value: 'b', label: 'Sì/No'},
+            {value: 'd', label: 'Data'},
+            {value: 'e', label: 'ESNcard'},
+            {value: 'p', label: 'Telefono'}
         ];
 
         const needsChoices = ['c', 'm'].includes(field.type);
@@ -890,7 +893,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         return (
             <FieldSection
                 title={"Campi aggiuntivi"}
-                description={"Campi visibili solo a ESNers per aiutare nell'organizzazione, visualizzati nelle liste come colonne."}
+                description={"Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell'organizzazione."}
                 fields={localData.fields.filter((field) => field.field_type === "additional")}
                 onAdd={onAdd}
                 onDelete={onDelete}
@@ -1408,14 +1411,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Box>
                         )}
 
-                        <GeneralInfoBlock dataRef={dataRef} errorsRef={errorsRef} hasSubscriptions={isEdit && hasSubscriptions}
+                        <GeneralInfoBlock dataRef={dataRef} errorsRef={errorsRef}
+                                          hasSubscriptions={isEdit && hasSubscriptions}
                                           isEdit={isEdit}/>
                         <Description dataRef={dataRef}/>
                         <Organizers dataRef={dataRef}/>
                         <Lists dataRef={dataRef} errorsRef={errorsRef}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
-                        <FormBlock dataRef={dataRef} errorsRef={errorsRef} hasSubscriptions={hasSubscriptions} isEdit={isEdit}/>
+                        <FormBlock dataRef={dataRef} errorsRef={errorsRef} hasSubscriptions={hasSubscriptions}
+                                   isEdit={isEdit}/>
 
                         <Box mt={2} sx={{display: 'flex', gap: 2}}>
                             <Button variant="contained" color="primary" type="submit" disabled={submitting}>

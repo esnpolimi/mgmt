@@ -15,7 +15,8 @@ import {
     FormHelperText,
     Paper,
     Grid,
-    Alert
+    Alert,
+    MenuItem
 } from "@mui/material";
 import {useLocation, useParams, useNavigate} from "react-router-dom";
 import logo from "../../assets/esnpolimi-logo.png";
@@ -26,6 +27,12 @@ import {
     AddCard as AddCardIcon, // added import
 } from "@mui/icons-material";
 import {fetchCustom} from "../../api/api";
+import {LocalizationProvider, DatePicker} from "@mui/x-date-pickers";
+import {AdapterDayjs} from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+dayjs.extend(customParseFormat);
+import countryCodes from "../../data/countryCodes.json";
 
 export default function EventForm() {
     const {id} = useParams();
@@ -33,6 +40,7 @@ export default function EventForm() {
     const navigate = useNavigate();
     const eventData = location.state?.eventData || {};
     const userEmail = location.state?.email || ""; // email passed from login
+    const profileEsncardNumber = location.state?.esncardNumber || ""; // ESNcard from profile if available
     const formFields = eventData.form_fields || [];
 
     // Redirect if missing essentials
@@ -43,13 +51,18 @@ export default function EventForm() {
         }
         if (!userEmail && !eventData.is_allow_external) {
             navigate(`/event/${id}/formlogin`);
-            return;
+
         }
     }, [eventData, id, navigate, userEmail]);
 
     // Initialize form state
     const [formValues, setFormValues] = useState(() =>
-        Object.fromEntries(formFields.map(f => [f.name, f.type === "m" ? [] : (f.type === "b" ? null : "")]))
+        Object.fromEntries(formFields.map(f => {
+            if (f.type === "m") return [f.name, []];
+            if (f.type === "b") return [f.name, null];
+            if (f.type === "e" && profileEsncardNumber) return [f.name, profileEsncardNumber]; // pre-fill ESNcard
+            return [f.name, ""];
+        }))
     );
 
     const handleChange = (field, value) => {
@@ -80,6 +93,10 @@ export default function EventForm() {
         }
         if (fieldObj.type === "b") {
             return typeof formValues[field] === "boolean";
+        }
+        if (fieldObj.type === "e" && !profileEsncardNumber) {
+            // No ESNcard returned; field is intentionally disabled & considered filled
+            return true;
         }
         return formValues[field] !== undefined && formValues[field] !== null && formValues[field] !== "";
     };
@@ -135,7 +152,23 @@ export default function EventForm() {
     const formatDate = (dt) => {
         if (!dt) return '-';
         const d = new Date(dt);
-        return d.toLocaleDateString('en-GB');
+        return d.toLocaleDateString('it-IT');
+    };
+
+
+
+    // Helper to split / join phone (stored as single string)
+    const parsePhone = (val) => {
+        if (!val) return {prefix: '', number: ''};
+        const parts = val.trim().split(/\s+/);
+        if (parts[0].startsWith('+')) {
+            return {prefix: parts[0], number: parts.slice(1).join(' ')};
+        }
+        return {prefix: '', number: val};
+    };
+    const setPhoneValue = (fieldName, prefix, number) => {
+        const combined = prefix ? (number ? `${prefix} ${number}` : prefix) : number;
+        handleChange(fieldName, combined);
     };
 
     return (
@@ -297,6 +330,110 @@ export default function EventForm() {
                                                 </RadioGroup>
                                             </FormControl>
                                         );
+                                    case "d":
+                                        return (
+                                            <LocalizationProvider key={field.name} dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                                <DatePicker
+                                                    label={field.name}
+                                                    format="DD-MM-YYYY"
+                                                    value={
+                                                        formValues[field.name]
+                                                            ? dayjs(formValues[field.name], "DD-MM-YYYY")
+                                                            : null
+                                                    }
+                                                    onChange={val =>
+                                                        handleChange(
+                                                            field.name,
+                                                            val && val.isValid() ? val.format('DD-MM-YYYY') : ''
+                                                        )
+                                                    }
+                                                    slotProps={{
+                                                        textField: {
+                                                            fullWidth: true,
+                                                            margin: "normal",
+                                                            required: field.required
+                                                        }
+                                                    }}
+                                                />
+                                            </LocalizationProvider>
+                                        );
+                                    case "e": {
+                                        const locked = !!profileEsncardNumber;
+                                        if (locked) {
+                                            return (
+                                                <Box key={field.name} sx={{mt:2}}>
+                                                    <TextField
+                                                        label={field.name}
+                                                        fullWidth
+                                                        margin="normal"
+                                                        value={formValues[field.name] || ""}
+                                                        disabled
+                                                        required={field.required}
+                                                    />
+                                                    <Typography variant="caption" sx={{display:'block', ml:1}}>
+                                                        ESNcard retrieved from your profile
+                                                    </Typography>
+                                                </Box>
+                                            );
+                                        }
+                                        // No ESNcard available: user cannot fill it, must type manually in notes
+                                        return (
+                                            <Box key={field.name} sx={{mt:1}}>
+                                                <TextField
+                                                    label={field.name}
+                                                    fullWidth
+                                                    margin="normal"
+                                                    value=""
+                                                    disabled
+                                                />
+                                                <Typography variant="caption" sx={{display:'block', ml:1, color:'error.main'}}>
+                                                    {eventData.is_allow_external
+                                                        ? 'No ESNcard found, type it manually in the Notes below (not strictly needed)'
+                                                        : 'No ESNcard found, type it manually in the Notes below or buy one before the day of the event at our ESN offices'}
+                                                </Typography>
+                                            </Box>
+                                        );
+                                    }
+                                    case "p": {
+                                        const {prefix, number} = parsePhone(formValues[field.name]);
+                                        // Build unique dial code entries (first occurrence keeps the country name)
+                                        const dialEntries = [];
+                                        const seen = new Set();
+                                        countryCodes.forEach(c => {
+                                            if (c.dial && !seen.has(c.dial)) {
+                                                seen.add(c.dial);
+                                                dialEntries.push(c);
+                                            }
+                                        });
+                                        return (
+                                            <Box key={field.name} sx={{mt:2}}>
+                                                <Typography variant="subtitle2" sx={{mb:2}}>{field.name}{field.required && ' *'}</Typography>
+                                                <Box sx={{display:'flex', gap:1}}>
+                                                    <TextField
+                                                        select
+                                                        label="Prefix"
+                                                        value={prefix}
+                                                        onChange={e => setPhoneValue(field.name, e.target.value, number)}
+                                                        sx={{width:140}}
+                                                        required={field.required}
+                                                    >
+                                                        {dialEntries.map(entry => (
+                                                            <MenuItem key={entry.dial} value={entry.dial}>
+                                                                {entry.dial}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </TextField>
+                                                    <TextField
+                                                        label="Number"
+                                                        value={number}
+                                                        onChange={e => setPhoneValue(field.name, prefix, e.target.value)}
+                                                        fullWidth
+                                                        required={field.required}
+                                                    />
+                                                </Box>
+                                            </Box>
+                                        );
+                                    }
                                     default:
                                         return null;
                                 }
