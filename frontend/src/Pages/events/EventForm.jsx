@@ -18,6 +18,7 @@ import {
     Alert,
     MenuItem
 } from "@mui/material";
+import {CircularProgress} from "@mui/material";
 import {useLocation, useParams, useNavigate} from "react-router-dom";
 import logo from "../../assets/esnpolimi-logo.png";
 import {useState, useEffect} from "react";
@@ -31,6 +32,7 @@ import {LocalizationProvider, DatePicker} from "@mui/x-date-pickers";
 import {AdapterDayjs} from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
+
 dayjs.extend(customParseFormat);
 import countryCodes from "../../data/countryCodes.json";
 
@@ -105,6 +107,7 @@ export default function EventForm() {
 
     // Notes
     const [formNotes, setFormNotes] = useState("");
+    const [submitLoading, setSubmitLoading] = useState(false);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -121,7 +124,7 @@ export default function EventForm() {
         }
         setShowMissingAlert(false);
         setBackendError("");
-
+        setSubmitLoading(true);
         fetchCustom("POST", `/event/${eventData.id}/formsubmit/`, {
             body: {
                 email: userEmail,
@@ -130,22 +133,63 @@ export default function EventForm() {
             },
             auth: false,
             onSuccess: (data) => {
-                navigate(`/event/${eventData.id}/formsuccess`, {state: {assignedList: data.assigned_list}});
+                if (data.payment_error) {
+                    const offlineMsg = "Online payment currently unavailable. Your subscription is recorded; please contact us for payment.";
+                    navigate(`/event/${eventData.id}/formresult`, {
+                        state: {
+                            subscriptionId: data.subscription_id,
+                            assignedList: data.assigned_list,
+                            noPayment: true,
+                            paymentError: true,
+                            paymentErrorMessage: offlineMsg
+                        }
+                    });
+                    return;
+                }
+                if (data.payment_required && data.checkout_id) {
+                    navigate(`/event/${eventData.id}/pay`, {
+                        state: {
+                            subscriptionId: data.subscription_id,
+                            assignedList: data.assigned_list,
+                            checkoutId: data.checkout_id
+                        }
+                    });
+                    return;
+                }
+                navigate(`/event/${eventData.id}/formresult`, {
+                    state: {
+                        subscriptionId: data.subscription_id,
+                        assignedList: data.assigned_list,
+                        noPayment: true
+                    }
+                });
             },
             onError: async (err) => {
-                if (err?.fields && Array.isArray(err.fields)) {
-                    setMissingFields(err.fields);
+                // Try to get a parsed body
+                let body = err;
+                if (typeof err.json === 'function') {
+                    try {
+                        body = await err.json();
+                    } catch (_) {
+                    }
+                }
+                const fields = body?.fields;
+                const errorMsg =
+                    body?.error ||
+                    body?.detail ||
+                    (Array.isArray(fields) ? 'Missing required fields' : 'Submission failed');
+
+                if (Array.isArray(fields)) {
+                    setMissingFields(fields);
                     setShowMissingAlert(true);
-                    setBackendError("");
-                } else if (err?.error) {
-                    setBackendError("Error: " + err.error);
-                    setShowMissingAlert(false);
+                    setBackendError('');
                 } else {
-                    setBackendError("Submission failed");
+                    setBackendError('Error: ' + errorMsg);
                     setShowMissingAlert(false);
                 }
                 scrollToTop();
-            }
+            },
+            onFinally: () => setSubmitLoading(false)
         });
     };
 
@@ -154,7 +198,6 @@ export default function EventForm() {
         const d = new Date(dt);
         return d.toLocaleDateString('it-IT');
     };
-
 
 
     // Helper to split / join phone (stored as single string)
@@ -270,7 +313,8 @@ export default function EventForm() {
                                         );
                                     case "c":
                                         return (
-                                            <FormControl key={field.name} required={field.required} margin="normal" fullWidth>
+                                            <FormControl key={field.name} required={field.required} margin="normal"
+                                                         fullWidth>
                                                 <FormLabel>{field.name}</FormLabel>
                                                 <RadioGroup
                                                     value={formValues[field.name] || ""}
@@ -289,7 +333,8 @@ export default function EventForm() {
                                         );
                                     case "m":
                                         return (
-                                            <FormControl key={field.name} required={field.required} margin="normal" fullWidth>
+                                            <FormControl key={field.name} required={field.required} margin="normal"
+                                                         fullWidth>
                                                 <FormLabel>{field.name}</FormLabel>
                                                 <FormGroup>
                                                     {field.choices?.map(choice => (
@@ -312,7 +357,8 @@ export default function EventForm() {
                                         );
                                     case "b":
                                         return (
-                                            <FormControl key={field.name} required={field.required} margin="normal" fullWidth>
+                                            <FormControl key={field.name} required={field.required} margin="normal"
+                                                         fullWidth>
                                                 <FormLabel>{field.name}</FormLabel>
                                                 <RadioGroup
                                                     row
@@ -332,7 +378,8 @@ export default function EventForm() {
                                         );
                                     case "d":
                                         return (
-                                            <LocalizationProvider key={field.name} dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                                            <LocalizationProvider key={field.name} dateAdapter={AdapterDayjs}
+                                                                  adapterLocale='en-gb'>
                                                 <DatePicker
                                                     label={field.name}
                                                     format="DD-MM-YYYY"
@@ -361,7 +408,7 @@ export default function EventForm() {
                                         const locked = !!profileEsncardNumber;
                                         if (locked) {
                                             return (
-                                                <Box key={field.name} sx={{mt:2}}>
+                                                <Box key={field.name} sx={{mt: 2}}>
                                                     <TextField
                                                         label={field.name}
                                                         fullWidth
@@ -370,7 +417,7 @@ export default function EventForm() {
                                                         disabled
                                                         required={field.required}
                                                     />
-                                                    <Typography variant="caption" sx={{display:'block', ml:1}}>
+                                                    <Typography variant="caption" sx={{display: 'block', ml: 1}}>
                                                         ESNcard retrieved from your profile
                                                     </Typography>
                                                 </Box>
@@ -378,7 +425,7 @@ export default function EventForm() {
                                         }
                                         // No ESNcard available: user cannot fill it, must type manually in notes
                                         return (
-                                            <Box key={field.name} sx={{mt:1}}>
+                                            <Box key={field.name} sx={{mt: 1}}>
                                                 <TextField
                                                     label={field.name}
                                                     fullWidth
@@ -386,7 +433,8 @@ export default function EventForm() {
                                                     value=""
                                                     disabled
                                                 />
-                                                <Typography variant="caption" sx={{display:'block', ml:1, color:'error.main'}}>
+                                                <Typography variant="caption"
+                                                            sx={{display: 'block', ml: 1, color: 'error.main'}}>
                                                     {eventData.is_allow_external
                                                         ? 'No ESNcard found, type it manually in the Notes below (not strictly needed)'
                                                         : 'No ESNcard found, type it manually in the Notes below or buy one before the day of the event at our ESN offices'}
@@ -406,15 +454,16 @@ export default function EventForm() {
                                             }
                                         });
                                         return (
-                                            <Box key={field.name} sx={{mt:2}}>
-                                                <Typography variant="subtitle2" sx={{mb:2}}>{field.name}{field.required && ' *'}</Typography>
-                                                <Box sx={{display:'flex', gap:1}}>
+                                            <Box key={field.name} sx={{mt: 2}}>
+                                                <Typography variant="subtitle2"
+                                                            sx={{mb: 2}}>{field.name}{field.required && ' *'}</Typography>
+                                                <Box sx={{display: 'flex', gap: 1}}>
                                                     <TextField
                                                         select
                                                         label="Prefix"
                                                         value={prefix}
                                                         onChange={e => setPhoneValue(field.name, e.target.value, number)}
-                                                        sx={{width:140}}
+                                                        sx={{width: 140}}
                                                         required={field.required}
                                                     >
                                                         {dialEntries.map(entry => (
@@ -455,8 +504,19 @@ export default function EventForm() {
                             margin="normal"
                         />
                     </Paper>
-                    <Button type="submit" variant="contained" color="primary" fullWidth>
-                        {eventData.allow_online_payment ? "Proceed to Checkout (Work In Progress)" : "Submit (Work In Progress)"}
+                    <Button
+                        type="submit"
+                        variant="contained"
+                        color="primary"
+                        fullWidth
+                        disabled={submitLoading}
+                        startIcon={submitLoading ? <CircularProgress size={18}/> : null}
+                    >
+                        {submitLoading
+                            ? "Processing..."
+                            : (eventData.allow_online_payment && (Number(eventData.cost) + Number(eventData.deposit)) > 0
+                                ? "Proceed to Payment"
+                                : "Submit (no payment required)")}
                     </Button>
                 </Box>
             </Box>

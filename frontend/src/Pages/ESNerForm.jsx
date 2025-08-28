@@ -201,7 +201,10 @@ export default function ESNerForm() {
 
         setFormErrors(newErrors);
         setCheckboxErrors(newCheckboxErrors);
-        if (!valid) setStatusMessage({message: "Errore nella compilazione del form, controlla i campi evidenziati.", state: "error"});
+        if (!valid) setStatusMessage({
+            message: "Errore nella compilazione del form, controlla i campi evidenziati.",
+            state: "error"
+        });
         return valid;
     };
 
@@ -295,18 +298,19 @@ export default function ESNerForm() {
                 setSubmitted(true);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj)).then();
+                const cloned = responseOrError?.clone?.();
+                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj));
                 setFormErrors(initialFormErrors);
-                // Try to extract field errors if available
-                if (responseOrError?.json) {
-                    responseOrError.json().then(data => {
-                        const newErrors = {...formErrors};
+                if (cloned) {
+                    cloned.json().then(data => {
+                        const newErrors = {...initialFormErrors};
                         Object.entries(data).forEach(([field, message]) => {
-                            if (newErrors[field]) newErrors[field] = [true, message];
+                            if (newErrors[field]) newErrors[field] = [true, Array.isArray(message) ? message.join(', ') : message];
                         });
                         setFormErrors(newErrors);
                     });
                 }
+                scrollUp();
             },
             onFinally: () => setIsLoading(false)
         });
@@ -328,7 +332,8 @@ export default function ESNerForm() {
                     Controlla la tua email per ulteriori istruzioni.
                 </Typography>
                 <Typography variant="body2" align="center" sx={{mt: 2}}>
-                    In caso non avessi ricevuto nulla, controlla la cartella spam o contattaci all&apos;indirizzo <Link href="mailto: informatica@esnpolimi.it">informatica@esnpolimi.it</Link>
+                    In caso non avessi ricevuto nulla, controlla la cartella spam o contattaci all&apos;indirizzo <Link
+                    href="mailto: informatica@esnpolimi.it">informatica@esnpolimi.it</Link>
                 </Typography>
                 <Link href="/login" underline="always" sx={{mt: 3}}>
                     Torna al Login
@@ -338,7 +343,8 @@ export default function ESNerForm() {
     }
 
     return (
-        <Box component="form" noValidate sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}} onSubmit={handleSubmit}>
+        <Box component="form" noValidate sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
+             onSubmit={handleSubmit}>
             <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi - Registrazione ESNer</Typography>
 
             {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
@@ -408,7 +414,11 @@ export default function ESNerForm() {
                         helperText={formErrors.email_confirm[1]}/>
                     <Box sx={{mt: 1}}>
                         {formData.email_confirm && (
-                            <Typography variant="caption" sx={{display: 'flex', alignItems: 'center', color: formData.email === formData.email_confirm ? 'green' : 'grey'}}>
+                            <Typography variant="caption" sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: formData.email === formData.email_confirm ? 'green' : 'grey'
+                            }}>
                                 {formData.email === formData.email_confirm
                                     ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
                                     : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
@@ -449,8 +459,14 @@ export default function ESNerForm() {
                             {passwordRequirements.map((req, idx) => {
                                 const passed = req.test(formData.password);
                                 return (
-                                    <li key={idx} style={{color: passed ? 'green' : 'grey', display: 'flex', alignItems: 'center', mb: 2}}>
-                                        {passed ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/> : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>}
+                                    <li key={idx} style={{
+                                        color: passed ? 'green' : 'grey',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        mb: 2
+                                    }}>
+                                        {passed ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/> :
+                                            <CloseIcon fontSize="small" sx={{mr: 0.5}}/>}
                                         <span>{req.label}</span>
                                     </li>
                                 );
@@ -480,7 +496,11 @@ export default function ESNerForm() {
                     )}
                     <Box sx={{mt: 1}}>
                         {formData.password_confirm && (
-                            <Typography variant="caption" sx={{display: 'flex', alignItems: 'center', color: formData.password === formData.password_confirm ? 'green' : 'grey'}}>
+                            <Typography variant="caption" sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: formData.password === formData.password_confirm ? 'green' : 'grey'
+                            }}>
                                 {formData.password === formData.password_confirm
                                     ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
                                     : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
@@ -688,7 +708,8 @@ export default function ESNerForm() {
                         label={
                             <span>
                                 Dichiaro di accettare tutti i termini indicati nello{' '}
-                                <Link href={links.regulation} target="_blank" rel="noopener noreferrer" underline="always">
+                                <Link href={links.regulation} target="_blank" rel="noopener noreferrer"
+                                      underline="always">
                                     Regolamento Interno
                                 </Link>
                                 {' '}e tutte le successive modifiche e integrazioni

@@ -1,11 +1,16 @@
 import logging
+import time
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 
+import requests
 import sentry_sdk
 from babel.dates import format_date
+from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
+from django.core.mail import send_mail
+from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
@@ -19,12 +24,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.core.validators import validate_email
 
-from events.models import Event, Subscription, EventList, validate_field_data
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from events.models import Event, Subscription
+from events.models import EventList, validate_field_data
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
@@ -32,11 +34,12 @@ from events.serializers import (
     LiberatoriaProfileSerializer
 )
 from profiles.models import Profile
-from treasury.models import Transaction
+from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
 
 
+# -- Helper functions -- #
 def get_action_permissions(request, action, default_perm=None):
     """
     Returns True if the user has the required permission for the action.
@@ -67,6 +70,200 @@ def get_action_permissions(request, action, default_perm=None):
     return True  # If no specific permission, allow
 
 
+def _subscription_recipient_email(subscription):
+    if subscription.profile and getattr(subscription.profile, 'email', None):
+        return subscription.profile.email
+    ad = subscription.additional_data or {}
+    return ad.get('form_email')
+
+
+def _send_email(subject, html_content, to_email):
+    if not to_email:
+        return False
+    try:
+        send_mail(
+            subject=subject,
+            message='',
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[to_email],
+            fail_silently=False,
+            html_message=html_content
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"Email send failed ({subject}) -> {to_email}: {e}")
+        return False
+
+
+def _send_form_subscription_email(subscription, assigned_label, payment_required):
+    # Only for form-created subscriptions; send once
+    if not getattr(subscription, 'created_by_form', False):
+        return
+    ad = subscription.additional_data or {}
+    if ad.get('subscription_confirmation_email_sent'):
+        return
+    recipient = _subscription_recipient_email(subscription)
+    if not recipient:
+        return
+
+    event = subscription.event
+    waiting = 'wait' in assigned_label.lower()
+
+    subject = f"{event.name} - Subscription received"
+
+    html_parts = [
+        "<html><body style='font-family:Arial,Helvetica,sans-serif;'>",
+        "<p>We received your subscription!</p>",
+        f"<p><b>Assigned list:</b> {assigned_label}</p>"
+    ]
+    if waiting:
+        html_parts.append(
+            "<p style='color:#b06500'>You are on the Waiting List. We will contact you if a spot becomes available.</p>")
+    if payment_required:
+        if event.allow_online_payment:
+            html_parts.append(
+                "<p>Payment is required. If you already paid online you will soon get a separate payment confirmation email.</p>")
+        else:
+            html_parts.append(
+                "<p>Payment is required. Follow ESN Polimi instructions; a confirmation email will follow once registered.</p>")
+    else:
+        html_parts.append("<p>No payment is required for this event.</p>")
+    html_parts.append("<p>Thank you,<br/>ESN Politecnico Milano</p></body></html>")
+    html_content = "".join(html_parts)
+
+    if _send_email(subject, html_content, recipient):
+        ad['subscription_confirmation_email_sent'] = True
+        subscription.additional_data = ad
+        subscription.save(update_fields=['additional_data'])
+
+
+def _send_payment_confirmation_email(subscription):
+    # Only for form-created subscriptions; send once when payment actually recorded
+    if not getattr(subscription, 'created_by_form', False):
+        return
+    ad = subscription.additional_data or {}
+    if ad.get('payment_confirmation_email_sent'):
+        return
+
+    event = subscription.event
+    cost = Decimal(event.cost or 0)
+    deposit = Decimal(event.deposit or 0)
+    payment_required = (cost > 0) or (deposit > 0)
+    if not payment_required:
+        return  # Nothing to confirm
+
+    quota_tx = Transaction.objects.filter(subscription=subscription,
+                                          type=Transaction.TransactionType.SUBSCRIPTION).exists()
+    deposit_tx = Transaction.objects.filter(subscription=subscription,
+                                            type=Transaction.TransactionType.CAUZIONE).exists()
+
+    # Conditions:
+    # - If cost > 0 -> require quota transaction
+    # - Else if cost == 0 and deposit > 0 -> require deposit transaction
+    if cost > 0 and not quota_tx:
+        return
+    if cost == 0 and deposit > 0 and not deposit_tx:
+        return
+
+    recipient = _subscription_recipient_email(subscription)
+    if not recipient:
+        return
+
+    paid_parts = []
+    if quota_tx and cost > 0:
+        paid_parts.append(f"fee ({cost} EUR)")
+    if deposit_tx and deposit > 0:
+        paid_parts.append(f"deposit ({deposit} EUR)")
+    paid_label = " and ".join(paid_parts) if paid_parts else "payment"
+
+    subject = f"{event.name} - Payment confirmed"
+
+    html_content = (
+        "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
+        f"<p>We have registered your <b>{paid_label}</b>.</p>"
+        "<p>Thank you,<br/>ESN Politecnico Milano</p>"
+        "</body></html>"
+    )
+
+    if _send_email(subject, html_content, recipient):
+        ad['payment_confirmation_email_sent'] = True
+        subscription.additional_data = ad
+        subscription.save(update_fields=['additional_data'])
+
+
+def _upsert_transaction(*, subscription, tx_type, account_id, amount, description, executor):
+    """
+    Create or (if account changed) recreate a transaction of given type.
+    Idempotent if same account & amount.
+    """
+    if amount is None or amount <= 0:
+        return None
+    existing = Transaction.objects.filter(subscription=subscription, type=tx_type).first()
+    if existing:
+        # If same account & amount keep it
+        if (account_id and existing.account_id != account_id) or (amount and existing.amount != amount):
+            existing.delete()
+        else:
+            return existing
+    return Transaction.objects.create(
+        type=tx_type,
+        account_id=account_id,
+        subscription=subscription,
+        executor=executor,  # may be None (now nullable)
+        amount=amount,
+        description=description
+    )
+
+
+def _remove_transaction(subscription, tx_type):
+    """
+    Delete a transaction of given type if exists.
+    """
+    Transaction.objects.filter(subscription=subscription, type=tx_type).delete()
+
+
+def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, executor, allow_delete=True):
+    """
+    Apply payment statuses for quota & deposit using unified logic.
+    quota_status / deposit_status: 'paid' | other (delete if allow_delete)
+    Guaranteed: subscription is a saved instance (has .pk).
+    """
+    event_obj = subscription.event
+    quota_amount = Decimal(event_obj.cost or 0)
+    deposit_amount = Decimal(event_obj.deposit or 0)
+
+    # Quota
+    if quota_status == 'paid' and quota_amount > 0 and account_id:
+        _upsert_transaction(
+            subscription=subscription,
+            tx_type=Transaction.TransactionType.SUBSCRIPTION,
+            account_id=account_id,
+            amount=quota_amount,
+            description=f"Quota {event_obj.name} (sub #{subscription.pk})",
+            executor=executor
+        )
+    elif allow_delete:
+        _remove_transaction(subscription, Transaction.TransactionType.SUBSCRIPTION)
+
+    # Deposit
+    if deposit_status == 'paid' and deposit_amount > 0 and account_id:
+        _upsert_transaction(
+            subscription=subscription,
+            tx_type=Transaction.TransactionType.CAUZIONE,
+            account_id=account_id,
+            amount=deposit_amount,
+            description=f"Cauzione {event_obj.name} (sub #{subscription.pk})",
+            executor=executor
+        )
+    elif allow_delete:
+        _remove_transaction(subscription, Transaction.TransactionType.CAUZIONE)
+
+    _send_payment_confirmation_email(subscription)
+
+
+# --------------------------------------------------------------------------------------
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def events_list(request):
@@ -82,7 +279,7 @@ def events_list(request):
         if status_param:
             status_list = [s.strip() for s in status_param.split(',') if s.strip()]
             if status_list:
-                events = [e for e in events if e.status in status_list]
+                events = events.filter(status__in=status_list)  # optimized: keep queryset
 
         date_from = request.GET.get('dateFrom')
         if date_from:
@@ -204,54 +401,23 @@ def subscription_create(request):
                 return Response({'error': "Seleziona un profilo per l'iscrizione."}, status=400)
 
         serializer = SubscriptionCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-
+        serializer.is_valid(raise_exception=True)
         with transaction.atomic():
-            subscription_data = {key: value for key, value in serializer.validated_data.items()}
-            subscription = Subscription(**subscription_data)
-            subscription.clean()
             subscription = serializer.save()
-
-            # Only create transactions if status_quota/cauzione are 'paid'
             status_quota = request.data.get('status_quota', 'pending')
             status_cauzione = request.data.get('status_cauzione', 'pending')
-            account_id = serializer.account
-
-            # Prepare name for description (profile or external)
-            if subscription.profile:
-                sub_name = f"{subscription.profile.name} {subscription.profile.surname}"
-            elif subscription.external_name:
-                sub_name = subscription.external_name
-            else:
-                sub_name = "Esterno"
-
-            # Quota transaction
-            if status_quota == 'paid' and account_id:
-                t = Transaction(
-                    type=Transaction.TransactionType.SUBSCRIPTION,
-                    account_id=account_id,
-                    subscription=subscription,
-                    executor=request.user,
-                    amount=Decimal(subscription.event.cost),
-                    description=f"Quota {sub_name} - {subscription.event.name}" + (
-                        f" - {subscription.notes}" if subscription.notes else "")
-                )
-                t.save()
-
-            # Cauzione transaction
-            if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(
-                    subscription.event.deposit) > 0:
-                t_cauzione = Transaction(
-                    type=Transaction.TransactionType.CAUZIONE,
-                    account_id=account_id,
-                    subscription=subscription,
-                    executor=request.user,
-                    amount=Decimal(subscription.event.deposit),
-                    description=f"Cauzione {sub_name} - {subscription.event.name}" + (
-                        f" - {subscription.notes}" if subscription.notes else "")
-                )
-                t_cauzione.save()
+            account_id = (request.data.get('account_id')
+                          or request.data.get('account')
+                          or getattr(serializer, 'account', None)
+                          or getattr(serializer, 'account_id', None))
+            _handle_payment_status(
+                subscription=subscription,
+                account_id=account_id,
+                quota_status=status_quota,
+                deposit_status=status_cauzione,
+                executor=request.user,
+                allow_delete=False
+            )
             return Response(serializer.data, status=200)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
@@ -289,11 +455,11 @@ def subscription_detail(request, pk):
             # if user is  organizer, allow full modification of the subscription
             if request.user.profile.id in sub.event.organizers:
                 serializer = SubscriptionOfficeEditSerializer(instance=sub, data=request.data, partial=True)
-            
+
             # if not, check that they have permissions
             elif request.user.has_perm('events.change_subscription'):
                 serializer = SubscriptionOfficeEditSerializer(instance=sub, data=request.data, partial=True)
-            
+
             # otherwise return permission denied
             else:'''
             if not get_action_permissions(request, 'subscription_detail_PATCH'):
@@ -302,84 +468,29 @@ def subscription_detail(request, pk):
                 return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'},
                                 status=400)
             if request.user.has_perm('events.change_subscription'):
-                serializer = SubscriptionUpdateSerializer(instance=sub, data=request.data, partial=True)
-                if not serializer.is_valid():
-                    return Response(serializer.errors, status=400)
-
+                # --- Sanitize nullable statuses ---
+                mutable_data = request.data.copy()
+                if mutable_data.get('status_quota', None) is None:
+                    mutable_data['status_quota'] = sub.status_quota or 'pending'
+                if mutable_data.get('status_cauzione', None) is None:
+                    mutable_data['status_cauzione'] = sub.status_cauzione or 'pending'
+                serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
+                serializer.is_valid(raise_exception=True)
                 with transaction.atomic():
-                    for attr, value in serializer.validated_data.items():
-                        setattr(sub, attr, value)
-                    sub.clean()
-                    subscription = serializer.save()
-
-                    account_id = serializer.account_id
-                    status_quota = request.data.get('status_quota', 'pending')
-                    status_cauzione = request.data.get('status_cauzione', 'pending')
-
-                    # Quota transaction
-                    quota_tx = Transaction.objects.filter(subscription=subscription,
-                                                          type=Transaction.TransactionType.SUBSCRIPTION).first()
-                    cauzione_tx = Transaction.objects.filter(subscription=subscription,
-                                                             type=Transaction.TransactionType.CAUZIONE).first()
-
-                    # --- QUOTA ---
-                    if status_quota == 'paid' and account_id:
-                        if not quota_tx:
-                            # Create transaction if not exists
-                            t = Transaction(
-                                type=Transaction.TransactionType.SUBSCRIPTION,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=Decimal(subscription.event.cost),
-                                description=f"Pagamento per {subscription.event.name}"
-                            )
-                            t.save()
-                        elif quota_tx.account_id != account_id:
-                            # Move transaction to new account
-                            quota_amount = Decimal(subscription.event.cost)
-                            quota_tx.delete()
-                            t = Transaction(
-                                type=Transaction.TransactionType.SUBSCRIPTION,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=quota_amount,
-                                description=f"Pagamento per {subscription.event.name} (spostato da altra cassa)"
-                            )
-                            t.save()
-                    elif status_quota != 'paid' and quota_tx:
-                        quota_tx.delete()
-
-                    # --- CAUZIONE ---
-                    if status_cauzione == 'paid' and account_id and subscription.event.deposit and Decimal(
-                            subscription.event.deposit) > 0:
-                        if not cauzione_tx:
-                            t_cauzione = Transaction(
-                                type=Transaction.TransactionType.CAUZIONE,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=Decimal(subscription.event.deposit),
-                                description=f"Cauzione per {subscription.event.name}"
-                            )
-                            t_cauzione.save()
-                        elif cauzione_tx.account_id != account_id:
-                            # Move transaction to new account
-                            cauzione_amount = Decimal(subscription.event.deposit)
-                            cauzione_tx.delete()
-                            t_cauzione = Transaction(
-                                type=Transaction.TransactionType.CAUZIONE,
-                                account_id=account_id,
-                                subscription=subscription,
-                                executor=request.user,
-                                amount=cauzione_amount,
-                                description=f"Cauzione per {subscription.event.name} (spostata da altra cassa)"
-                            )
-                            t_cauzione.save()
-                    elif status_cauzione != 'paid' and cauzione_tx:
-                        cauzione_tx.delete()
-
+                    updated_sub = serializer.save()
+                    account_id = (mutable_data.get('account_id')
+                                  or mutable_data.get('account')
+                                  or getattr(serializer, 'account_id', None))
+                    status_quota = mutable_data.get('status_quota', 'pending')
+                    status_cauzione = mutable_data.get('status_cauzione', 'pending')
+                    _handle_payment_status(
+                        subscription=updated_sub,
+                        account_id=account_id,
+                        quota_status=status_quota,
+                        deposit_status=status_cauzione,
+                        executor=request.user,
+                        allow_delete=True
+                    )
                 return Response(serializer.data, status=200)
             else:
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
@@ -617,6 +728,214 @@ def printable_liberatorie(request, event_id):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
+# --- SumUp helpers ---
+_SUMUP_TOKEN_CACHE = {"token": None, "expires_at": 0}
+
+
+# NOTE (SumUp / Cloudflare debug):
+# You may see in the browser devtools a POST like:
+# https://api.sumup.com/cdn-cgi/challenge-platform/...  (status: (canceled) / NS_BINDING_ABORTED)
+# This is a Cloudflare anti‑bot / challenge script injected by SumUp.
+# The browser marks it aborted when the iframe/widget finishes or unloads early.
+# It is NOT an application error and requires no backend handling.
+# Safe to ignore; it does not affect payment confirmation logic (_process_sumup_checkout / webhook).
+def get_sumup_access_token():
+    """
+    Cached SumUp access token (simple in-memory cache).
+    """
+    now = time.time()
+    if _SUMUP_TOKEN_CACHE["token"] and _SUMUP_TOKEN_CACHE["expires_at"] > now + 30:
+        return _SUMUP_TOKEN_CACHE["token"]
+
+    r = requests.post(
+        "https://api.sumup.com/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": settings.SUMUP_CLIENT_ID,
+            "client_secret": settings.SUMUP_CLIENT_SECRET,
+            "scope": "payments",
+        },
+        timeout=15,
+    )
+    r.raise_for_status()
+    token_data = r.json()
+    access_token = token_data["access_token"]
+    expires_in = token_data.get("expires_in", 300)
+    _SUMUP_TOKEN_CACHE["token"] = access_token
+    _SUMUP_TOKEN_CACHE["expires_at"] = now + expires_in
+    return access_token
+
+
+def create_sumup_checkout(subscription, total_amount, currency="EUR"):
+    """
+    Create checkout (widget flow only). No return/cancel URLs, no hosted redirect.
+    """
+
+    def _sumup_destination_fields():
+        """
+        Prefer merchant_code if configured, else fallback to pay_to_email.
+        Raises if neither is set to avoid INVALID pay_to_email or merchant_code errors.
+        """
+        merchant_code = settings.SUMUP_MERCHANT_CODE
+        pay_to_email = settings.SUMUP_PAY_TO_EMAIL
+        if merchant_code:
+            return {"merchant_code": merchant_code}
+        if pay_to_email:
+            return {"pay_to_email": pay_to_email}
+        raise RuntimeError("SumUp not configured: set SUMUP_MERCHANT_CODE or SUMUP_PAY_TO_EMAIL")
+
+    def _sumup_headers():
+        access_token = get_sumup_access_token()  # fetch dynamically
+        return {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+    payload = {
+        "checkout_reference": str(subscription.pk),
+        "amount": float(total_amount),
+        "currency": currency,
+        "description": f"Subscription {subscription.event.name} #{subscription.pk}",
+    }
+    payload.update(_sumup_destination_fields())
+    headers = _sumup_headers()
+    r = requests.post("https://api.sumup.com/v0.1/checkouts", json=payload, headers=headers, timeout=15)
+    if r.status_code >= 300:
+        raise RuntimeError(f"SumUp error {r.status_code}: {r.text}")
+    data = r.json()
+    checkout_id = data.get("id") or data.get("checkout_reference")
+    if not checkout_id:
+        raise RuntimeError("SumUp response missing checkout id")
+    return checkout_id, None  # second value retained for backward compatibility
+
+
+def _ensure_sumup_transactions(subscription):
+    """
+    Idempotently create quota/deposit if paid remotely. Uses unified helpers.
+    """
+    try:
+        event_obj = subscription.event
+        cost = Decimal(event_obj.cost or 0)
+        deposit = Decimal(event_obj.deposit or 0)
+        if cost <= 0 and deposit <= 0:
+            return
+
+        # Account selection (SumUp)
+        account = Account.objects.filter(name="SumUp").first()
+
+        # Apply statuses = paid (do not delete existing if already present)
+        _handle_payment_status(
+            subscription=subscription,
+            account_id=account.id,
+            quota_status='paid' if cost > 0 else 'pending',
+            deposit_status='paid' if deposit > 0 else 'pending',
+            executor=None,
+            allow_delete=False
+        )
+    except Exception as e:
+        logger.error(f"Failed _ensure_sumup_transactions for sub {subscription.pk}: {e}")
+
+
+def _process_sumup_checkout(subscription, card_token):
+    """
+    Lightweight, idempotent confirmation.
+      - Always GET first.
+      - If already PAID/FAILED/CANCELED -> act & return.
+      - If still open/pending and a card_token is supplied (rare race) -> single PUT then confirm.
+      - If no token and still pending -> return PENDING (webhook / later retry can finalize).
+    """
+    if not subscription.sumup_checkout_id:
+        return 'ERROR', {'error': 'Missing checkout id'}
+    checkout_id = subscription.sumup_checkout_id
+    try:
+        access_token = get_sumup_access_token()
+
+        def fetch():
+            r = requests.get(
+                f"https://api.sumup.com/v0.1/checkouts/{checkout_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=12
+            )
+            if r.status_code != 200:
+                print(f"[SUMUP] Fetch {checkout_id} status={r.status_code}")
+                logger.debug(f"[SUMUP] Fetch {checkout_id} status={r.status_code}")
+                return None, r.status_code
+            return r.json(), 200
+
+        def interpret(data):
+            rs = (data.get("status") or "").upper()
+            txs = data.get("transactions") or []
+            success = rs == 'PAID' or any((t.get('status') or '').upper() == 'SUCCESSFUL' for t in txs)
+            failed = rs in ('FAILED', 'CANCELED')
+            return rs, success, failed, txs
+
+        # First fetch
+        data, code = fetch()
+        if data:
+            rs, success, failed, txs = interpret(data)
+            if success:
+                successful_tx = next((t for t in txs if (t.get("status") or "").upper() == "SUCCESSFUL"), None)
+                if successful_tx and not subscription.sumup_transaction_id:
+                    subscription.sumup_transaction_id = successful_tx.get("id")
+                    subscription.save(update_fields=["sumup_transaction_id"])
+                _ensure_sumup_transactions(subscription)
+                return 'PAID', {'status': rs, 'transaction_id': subscription.sumup_transaction_id}
+            if failed:
+                ad = subscription.additional_data or {}
+                if not ad.get('payment_failed'):
+                    ad['payment_failed'] = True
+                    subscription.additional_data = ad
+                    subscription.save(update_fields=['additional_data'])
+                return rs, {'status': rs}
+            # Still open -> maybe proceed to PUT if token present
+        else:
+            rs = None
+
+        if card_token:
+            put_payload = {"payment_type": "card", "card": {"token": card_token}}
+            r_put = requests.put(
+                f"https://api.sumup.com/v0.1/checkouts/{checkout_id}",
+                json=put_payload,
+                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                timeout=25
+            )
+            if r_put.status_code not in (200, 202, 409):
+                return 'ERROR', {"error": f"Process response {r_put.status_code}"}
+            # 409 means already processed by widget; continue
+
+            time.sleep(0.4)  # short settle
+            data2, _ = fetch()
+            if data2:
+                rs2, success2, failed2, txs2 = interpret(data2)
+                if success2:
+                    successful_tx = next((t for t in txs2 if (t.get("status") or "").upper() == "SUCCESSFUL"), None)
+                    if successful_tx and not subscription.sumup_transaction_id:
+                        subscription.sumup_transaction_id = successful_tx.get("id")
+                        subscription.save(update_fields=["sumup_transaction_id"])
+                    _ensure_sumup_transactions(subscription)
+                    return 'PAID', {'status': rs2, 'transaction_id': subscription.sumup_transaction_id}
+                if failed2:
+                    ad = subscription.additional_data or {}
+                    if not ad.get('payment_failed'):
+                        ad['payment_failed'] = True
+                        subscription.additional_data = ad
+                        subscription.save(update_fields=['additional_data'])
+                    return rs2, {'status': rs2}
+                return 'PENDING', {'status': rs2}
+            return 'PENDING', {'status': 'UNKNOWN_AFTER_PUT'}
+
+        # No token supplied & still pending
+        return 'PENDING', {'status': rs or 'PENDING'}
+
+    except Exception as e:
+        print(f"[SUMUP] Exception in _process_sumup_checkout: {e}")
+        logger.error(f"[SUMUP] Exception in _process_sumup_checkout: {e}")
+        return 'ERROR', {"error": str(e)}
+
+
+# --- End SumUp helpers ---
+
+# --- Form and Payment views ---
 @api_view(['GET'])
 def event_form_view(_, event_id):
     """
@@ -761,16 +1080,183 @@ def event_form_submit(request, event_id):
             list=assigned_list,
             form_data=form_data,
             form_notes=form_notes,
-            additional_data={},
+            additional_data={'form_email': email},
             created_by_form=True
         )
+
+        # --- SumUp integration (widget-only) ---
+        payment_error = None
+        total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0'))
+
+        if event.allow_online_payment and total_cost > 0:
+            try:
+                checkout_id, _ = create_sumup_checkout(sub, total_cost, currency="EUR")
+                sub.sumup_checkout_id = checkout_id
+                sub.save(update_fields=['sumup_checkout_id'])
+            except Exception as e:
+                payment_error = "online_payment_unavailable"
+                print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
+                logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
+
+        payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error) or total_cost > 0
+
+        _send_form_subscription_email(sub, assigned_label, payment_required)
+
         return Response({
             "success": True,
-            "subscription_id": sub.id,
-            "assigned_list": assigned_label
+            "subscription_id": sub.pk,
+            "assigned_list": assigned_label,
+            "payment_required": bool(event.allow_online_payment and total_cost > 0 and not payment_error),
+            "checkout_id": sub.sumup_checkout_id,
+            "payment_error": payment_error
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
     except Exception as e:
+        print(f"[ERROR] Event form submit error: {str(e)}")
         logging.error(str(e))
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def subscription_payment_status(_, pk):
+    """
+    Simplified: derive status from local transactions / flags only (no remote sync each call).
+    """
+    try:
+        sub = Subscription.objects.select_related('event').get(pk=pk)
+    except Subscription.DoesNotExist:
+        return Response({"error": "Subscription not found"}, status=404)
+
+    from treasury.models import Transaction as T
+    cost_needed = bool(sub.event.cost and Decimal(sub.event.cost) > 0)
+    dep_needed = bool(sub.event.deposit and Decimal(sub.event.deposit) > 0)
+
+    quota_paid = cost_needed and T.objects.filter(subscription=sub, type=T.TransactionType.SUBSCRIPTION).exists()
+    dep_paid = dep_needed and T.objects.filter(subscription=sub, type=T.TransactionType.CAUZIONE).exists()
+
+    quota_status = 'paid' if quota_paid else ('pending' if cost_needed else 'n/a')
+    deposit_status = 'paid' if dep_paid else ('pending' if dep_needed else 'n/a')
+
+    if sub.additional_data.get('payment_failed'):
+        overall = 'failed'
+    elif not cost_needed and not dep_needed:
+        overall = 'none'
+    elif (not cost_needed or quota_paid) and (not dep_needed or dep_paid):
+        overall = 'paid'
+    elif sub.sumup_checkout_id:
+        overall = 'pending'
+    else:
+        overall = 'none'
+
+    return Response({
+        "subscription_id": sub.pk,
+        "overall_status": overall,
+        "quota_status": quota_status,
+        "deposit_status": deposit_status,
+        "sumup_checkout_id": sub.sumup_checkout_id,
+        "sumup_transaction_id": sub.sumup_transaction_id,
+    }, status=200)
+
+
+@api_view(['POST'])
+def subscription_process_payment(request, pk):
+    """
+    Finalize/confirm SumUp payment.
+    Token is OPTIONAL (widget usually already charged). If omitted we just confirm & create transactions.
+    """
+    try:
+        sub = Subscription.objects.select_related('event').get(pk=pk)
+    except Subscription.DoesNotExist:
+        return Response({"error": "Subscription not found"}, status=404)
+
+    payload = request.data or {}
+    widget_payload = payload.get('widget_payload') or {}
+
+    candidates = [
+        payload.get('token'),
+        widget_payload.get('token'),
+        widget_payload.get('id'),
+        widget_payload.get('payment_token'),
+    ]
+    pi = widget_payload.get('paymentInstrument') or widget_payload.get('payment_instrument')
+    if isinstance(pi, dict):
+        candidates.append(pi.get('token') or pi.get('id'))
+    card_obj = widget_payload.get('card')
+    if isinstance(card_obj, dict):
+        candidates.append(card_obj.get('token') or card_obj.get('id'))
+    token = next((c for c in candidates if isinstance(c, str) and c.strip()), None)
+
+    # Proceed even if token is None
+    status_flag, remote = _process_sumup_checkout(sub, token)
+
+    if status_flag == 'PAID':
+        _ensure_sumup_transactions(sub)
+
+    return Response(
+        {"status": status_flag, **remote},
+        status=200 if status_flag not in ['ERROR'] else 500
+    )
+
+
+@api_view(["POST"])
+def sumup_webhook(request):
+    """
+    Public webhook endpoint called by SumUp.
+    Expected JSON may include: { "id": "...", "event_type": "...", "checkout_id": "...", ... }
+    We fetch the checkout status once to confirm payment and then create local transactions.
+    Always return 200 to acknowledge.
+    """
+    data = request.data or {}
+    checkout_id = data.get("checkout_id") or data.get("id") or data.get("checkout")
+    if not checkout_id:
+        return Response({"status": "ignored", "reason": "missing_checkout_id"}, status=200)
+
+    sub = Subscription.objects.filter(sumup_checkout_id=checkout_id).first()
+    if not sub:
+        return Response({"status": "ignored", "reason": "unknown_subscription"}, status=200)
+
+    # If already has both transactions assume processed
+    already_paid = Transaction.objects.filter(
+        subscription=sub,
+        type=Transaction.TransactionType.SUBSCRIPTION
+    ).exists() or Transaction.objects.filter(
+        subscription=sub,
+        type=Transaction.TransactionType.CAUZIONE
+    ).exists()
+
+    try:
+        access_token = get_sumup_access_token()
+        r = requests.get(
+            f"https://api.sumup.com/v0.1/checkouts/{checkout_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=12
+        )
+        if r.status_code != 200:
+            logger.warning(f"Webhook fetch failed {r.status_code} for checkout {checkout_id}")
+            return Response({"status": "pending", "reason": "fetch_failed"}, status=200)
+        payload = r.json()
+        remote_status = (payload.get("status") or "").upper()
+        txs = payload.get("transactions") or []
+        success = remote_status == "PAID" or any((t.get("status") or "").upper() == "SUCCESSFUL" for t in txs)
+        failed = remote_status in ("FAILED", "CANCELED")
+
+        if success and not already_paid:
+            # capture transaction id (first successful)
+            successful_tx = next((t for t in txs if (t.get("status") or "").upper() == "SUCCESSFUL"), None)
+            if successful_tx and not sub.sumup_transaction_id:
+                sub.sumup_transaction_id = successful_tx.get("id")
+                sub.save(update_fields=["sumup_transaction_id"])
+            _ensure_sumup_transactions(sub)
+            return Response({"status": "paid"}, status=200)
+        if failed:
+            ad = sub.additional_data or {}
+            if not ad.get("payment_failed"):
+                ad["payment_failed"] = True
+                sub.additional_data = ad
+                sub.save(update_fields=["additional_data"])
+            return Response({"status": "failed", "remote_status": remote_status}, status=200)
+        return Response({"status": "pending", "remote_status": remote_status}, status=200)
+    except Exception as e:
+        logger.error(f"Webhook exception for checkout {checkout_id}: {e}")
+        return Response({"status": "error", "detail": str(e)}, status=200)

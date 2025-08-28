@@ -585,4 +585,3 @@ export default memo(function EventListAccordions({
         );
     });
 });
-

@@ -35,4 +35,13 @@ urlpatterns = [
 
     # Public endpoint to submit event form
     path('event/<str:event_id>/formsubmit/', views.event_form_submit),
+
+    # Endpoint to check subscription payment status
+    path('subscription/<str:pk>/status/', views.subscription_payment_status),
+
+    # Public webhook endpoint for SumUp
+    path('sumup/webhook/', views.sumup_webhook),
+
+    # Endpoint to process subscription payment
+    path('subscription/<str:pk>/process_payment/', views.subscription_process_payment),
 ]
