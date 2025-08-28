@@ -270,7 +270,7 @@ class SubscriptionStatus(models.TextChoices):
     PENDING = 'pending', 'Pending'
     PAID = 'paid', 'Paid'
     REIMBURSED = 'reimbursed', 'Reimbursed'
-    CANCELLED = 'cancelled', 'Cancelled'
+    FAILED = 'failed', 'Failed'
 
 
 class Subscription(BaseEntity):
@@ -284,6 +284,10 @@ class Subscription(BaseEntity):
     form_data = models.JSONField(blank=True, default=dict)
     form_notes = models.TextField(blank=True, null=True)
     additional_data = models.JSONField(blank=True, default=dict)
+
+    # --- SumUp integration fields ---
+    sumup_checkout_id = models.CharField(max_length=255, blank=True, null=True)
+    sumup_transaction_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         constraints = [

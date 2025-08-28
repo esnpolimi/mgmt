@@ -87,7 +87,7 @@ class Transaction(BaseEntity):
     type = models.CharField(max_length=30, choices=TransactionType.choices, default=TransactionType.DEPOSIT)
     subscription = models.ForeignKey('events.Subscription', null=True, blank=True, on_delete=models.SET_NULL)
     esncard = models.ForeignKey(ESNcard, null=True, blank=True, on_delete=models.SET_NULL)
-    executor = models.ForeignKey('users.User', on_delete=models.CASCADE)
+    executor = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True)
     account = models.ForeignKey('Account', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=9, decimal_places=2)
     description = models.CharField(max_length=256)

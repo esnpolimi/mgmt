@@ -100,8 +100,15 @@ export default function SubscriptionModal({
     const [submitLoading, setSubmitLoading] = useState(false);
 
     useEffect(() => {
-        if (isEdit) {
-            setData(subscription)
+        if (isEdit && subscription) {
+            // NEW normalization for null/undefined
+            setData(d => ({
+                ...d,
+                ...subscription,
+                account_id: subscription.account_id || '',
+                external_name: subscription.external_name || '',
+                notes: subscription.notes || ''
+            }));
         } else {
             if (profileId) {
                 setData(d => ({
@@ -120,7 +127,7 @@ export default function SubscriptionModal({
         }
         setLoading(false);
         fetchAccounts();
-    }, [isEdit, profileId, profileName, event])
+    }, [isEdit, subscription, profileId, profileName, event])
 
     const fetchAccounts = () => {
         fetchCustom("GET", "/accounts/", {
@@ -230,15 +237,16 @@ export default function SubscriptionModal({
     const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitLoading(true);
+        const accountId = data.account_id ? data.account_id : (originalAccountId || null);
         fetchCustom(isEdit ? "PATCH" : "POST", `/subscription/${isEdit ? data.id + '/' : ''}`, {
             body: {
                 profile: data.profile_id || null,
                 event: event.id,
                 list: data.list_id,
-                account_id: data.account_id || originalAccountId,
+                account_id: accountId,
                 notes: data.notes,
-                status_quota: data.status_quota,
-                status_cauzione: data.status_cauzione,
+                status_quota: data.status_quota || 'pending',
+                status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
                 external_name: data.external_name || undefined
             },
             onSuccess: () => onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!'),
