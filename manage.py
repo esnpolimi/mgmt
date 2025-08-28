@@ -6,7 +6,7 @@ import sys
 
 # Set a default DJANGO_ENV to "dev" if not already set
 DJANGO_ENV = os.getenv("DJANGO_ENV", "dev")
-
+os.environ.setdefault("DJANGO_ENV", DJANGO_ENV)
 # Dynamically load the appropriate settings file
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", f"backend.settings.{DJANGO_ENV}")
 

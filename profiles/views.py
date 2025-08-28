@@ -3,7 +3,7 @@ import sentry_sdk
 
 from django.conf import settings
 from django.contrib.auth.models import Group
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
 from django.utils.encoding import force_bytes
@@ -171,7 +171,6 @@ def initiate_profile_creation(request):
                 subject = "Verifica email per ESN Polimi"
                 from_email = settings.DEFAULT_FROM_EMAIL
                 to_email = [profile.email]
-                text_content = f"Clicca sul seguente link per verificare la tua email: {verification_link}"
                 html_content = f"""
                 <html>
                 <body>
@@ -190,7 +189,6 @@ def initiate_profile_creation(request):
                 subject = "Email verification for ESN Polimi"
                 from_email = settings.DEFAULT_FROM_EMAIL
                 to_email = [profile.email]
-                text_content = f"Click the following link to verify your email: {verification_link}"
                 html_content = f"""
                 <html>
                 <body>
@@ -207,10 +205,15 @@ def initiate_profile_creation(request):
                 error_message = "Error sending email: "
 
             try:
-                email = EmailMultiAlternatives(subject, text_content, from_email, to_email)
-                email.attach_alternative(html_content, "text/html")
-                email.send(fail_silently=False)
-
+                # Plain HTML email (empty text fallback)
+                send_mail(
+                    subject=subject,
+                    message='',
+                    from_email=from_email,
+                    recipient_list=to_email,
+                    html_message=html_content,
+                    fail_silently=False
+                )
                 logger.info(f"Email sent to {profile.email}")
             except Exception as e:
                 logger.info(f"Email error: {str(e)}")
@@ -477,10 +480,10 @@ def check_erasmus_email(request):
     email = request.data.get('email', '').strip().lower()
     if not email:
         return Response({'error': 'Email required.'}, status=400)
-    exists = Profile.objects.filter(email__iexact=email, is_esner=False, enabled=True, email_is_verified=True).exists()
+    exists = Profile.objects.filter(email__iexact=email, enabled=True, email_is_verified=True).exists()  # Removed is_esner=False
     # Return profile data to allow automatic field filling in the form
     if exists:
-        profile = Profile.objects.get(email__iexact=email, is_esner=False, enabled=True, email_is_verified=True)
+        profile = Profile.objects.get(email__iexact=email, enabled=True, email_is_verified=True)  # Removed is_esner=False
         res = {
             'id': profile.id,
             'email': profile.email,

@@ -517,6 +517,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     additional_data = serializers.DictField(read_only=True)
     form_notes = serializers.CharField(read_only=True)
     profile = SubscriptionProfileInlineSerializer(read_only=True)  # NEW inline data for columns
+    sumup_checkout_id = serializers.CharField(read_only=True)
+    sumup_transaction_id = serializers.CharField(read_only=True)
 
     class Meta:
         model = Subscription
@@ -534,7 +536,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'form_data',
             'additional_data',
             'form_notes',
-            'profile',  # NEW
+            'profile',
+            'sumup_checkout_id',
+            'sumup_transaction_id',
         ]
 
     def create(self, validated_data):
