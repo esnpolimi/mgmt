@@ -135,6 +135,8 @@ def initiate_profile_creation(request):
                 profile_data = profile_serializer.validated_data.copy()
                 profile_data['enabled'] = False
                 profile_data['email_is_verified'] = False
+                if is_esner:
+                    profile_data['matricola_expiration'] = None  # Null for ESNers
                 profile = Profile.objects.create(**profile_data)
 
                 # Create document (disabled until email verification) and create it
