@@ -76,11 +76,20 @@ class TransactionViewSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_executor(obj):
-        return {
-            "id": obj.executor.profile.id,
-            "email": obj.executor.profile.email,
-            "name": f"{obj.executor.profile.name} {obj.executor.profile.surname}"
-        }
+        if obj.executor and getattr(obj.executor, 'profile', None):
+            return {
+                "id": obj.executor.profile.id,
+                "email": obj.executor.profile.email,
+                "name": f"{obj.executor.profile.name} {obj.executor.profile.surname}"
+            }
+        elif obj.executor:
+            # Fallback if profile missing
+            return {
+                "id": None,
+                "email": getattr(obj.executor, 'email', ''),
+                "name": 'Pagamento Onlinee'
+            }
+        return None
 
     @staticmethod
     def get_account(obj):
