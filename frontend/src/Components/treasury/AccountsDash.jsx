@@ -7,8 +7,10 @@ import Loader from '../Loader';
 import {Box, Chip, IconButton, Typography} from "@mui/material";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import StoreIcon from "@mui/icons-material/Store";
+import Popup from "../Popup";
 
 export default function AccountsDash() {
+    const [popup, setPopup] = useState(null);
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
@@ -16,7 +18,7 @@ export default function AccountsDash() {
         setLoading(true);
         fetchCustom("GET", '/accounts/', {
             onSuccess: (data) => setData(data),
-            onError: (err) => defaultErrorHandler(err, setLoading),
+            onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)
         });
     };
@@ -78,6 +80,7 @@ export default function AccountsDash() {
                 </IconButton>
             </Box>
             {isLoading ? <Loader/> : <MRT_Table table={table}/>}
+            {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
         </Box>
     );
 }

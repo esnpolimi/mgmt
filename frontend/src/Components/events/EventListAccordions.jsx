@@ -69,7 +69,7 @@ export default memo(function EventListAccordions({
     // Toggles for showing/hiding columns
     const [showFormColumns, setShowFormColumns] = useState(true);
     const [showAdditionalColumns, setShowAdditionalColumns] = useState(true);
-    const [showProfileColumns, setShowProfileColumns] = useState(true); // NEW
+    const [showProfileColumns, setShowProfileColumns] = useState(true);
 
     // Canonical order for profile fields (same as frontend event form)
     const canonicalProfileOrder = [
@@ -86,9 +86,13 @@ export default memo(function EventListAccordions({
         if (!data?.lists) return [];
 
         const getProfileFieldValue = (sub, field) => {
-            // Values now fetched live via nested sub.profile (no stored snapshot)
+            // If internal profile, use live profile value
             if (sub?.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
                 return sub.profile[field];
+            }
+            // External (no profile) -> expose stored email
+            if (field === 'email') {
+                return sub?.additional_data?.form_email || '';
             }
             return '';
         };
@@ -104,12 +108,12 @@ export default memo(function EventListAccordions({
             if (Array.isArray(data.profile_fields)) {
                 orderedProfileFields = orderProfileFields(data.profile_fields);
             }
-            if (showProfileColumns) { // NEW
+            if (showProfileColumns) {
                 dynamicColumns = dynamicColumns.concat(
                     orderedProfileFields.map(field => ({
                         accessorKey: `profile_field_${field}`,
                         header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
-                        size: 120,
+                        size: 50,
                         Cell: ({row}) => getProfileFieldValue(row.original, field),
                         muiTableHeadCellProps: {
                             sx: {color: 'primary.main'}
@@ -126,7 +130,7 @@ export default memo(function EventListAccordions({
             let formFieldColumns = showFormColumns ? formFields.map((field, idx) => ({
                 accessorKey: `form_field_${idx}`,
                 header: field.name,
-                size: 180,
+                size: 50,
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.form_data?.[field.name];
@@ -141,7 +145,7 @@ export default memo(function EventListAccordions({
             const formNotesColumn = showFormColumns ? {
                 accessorKey: 'form_notes',
                 header: 'Note Form',
-                size: 180,
+                size: 50,
                 Cell: ({row}) => row.original.form_notes || '',
                 muiTableHeadCellProps: { sx: {color: 'orange'} }
             } : null;
@@ -150,7 +154,7 @@ export default memo(function EventListAccordions({
             let additionalFieldColumns = showAdditionalColumns ? additionalFields.map((field, idx) => ({
                 accessorKey: `additional_field_${idx}`,
                 header: field.name,
-                size: 180,
+                size: 50,
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.additional_data?.[field.name];
@@ -201,7 +205,7 @@ export default memo(function EventListAccordions({
                 hasQuota && {
                     accessorKey: 'status_quota',
                     header: 'Stato Quota',
-                    size: 120,
+                    size: 50,
                     Cell: ({cell}) => {
                         const status = cell.getValue();
                         let color, label;
@@ -210,7 +214,7 @@ export default memo(function EventListAccordions({
                             label = 'In attesa';
                         } else if (status === 'paid') {
                             color = 'success';
-                            label = 'Pagata';
+                            label = 'Pagata ('+ (cell.row.original.account_name || '-') + ')';
                         } else if (status === 'reimbursed') {
                             color = 'warning';
                             label = 'Rimborsata';
@@ -224,7 +228,7 @@ export default memo(function EventListAccordions({
                 hasDeposit && {
                     accessorKey: 'status_cauzione',
                     header: 'Stato Cauzione',
-                    size: 120,
+                    size: 50,
                     Cell: ({cell}) => {
                         const status = cell.getValue();
                         let label, color;
@@ -232,7 +236,7 @@ export default memo(function EventListAccordions({
                             label = 'In attesa';
                             color = 'error';
                         } else if (status === 'paid') {
-                            label = 'Pagata';
+                            label = 'Pagata ('+ (cell.row.original.account_name || '-') + ')';
                             color = 'success';
                         } else if (status === 'reimbursed') {
                             label = 'Rimborsata';
@@ -247,7 +251,7 @@ export default memo(function EventListAccordions({
                 data.is_allow_external && {
                     accessorKey: 'is_external',
                     header: 'Esterno',
-                    size: 80,
+                    size: 50,
                     Cell: ({row}) => {
                         const sub = row.original;
                         const isExternal = !!sub.external_name;
@@ -263,7 +267,7 @@ export default memo(function EventListAccordions({
                 {
                     accessorKey: 'notes',
                     header: 'Note',
-                    size: 150,
+                    size: 50,
                 },
             ].filter(Boolean);
 
@@ -334,7 +338,7 @@ export default memo(function EventListAccordions({
                 columns.push({
                     accessorKey: 'actions',
                     header: 'Azioni',
-                    size: 100,
+                    size: 120,
                     enableSorting: false,
                     enableColumnActions: false,
                     Cell: ({row}) => {

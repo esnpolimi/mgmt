@@ -122,17 +122,25 @@ export default function TransactionsList() {
         },
         {
             accessorKey: 'executor.name', header: names.executor, size: 150,
-            Cell: ({row}) => (
-                <span>
-                    <Button variant="text"
+            Cell: ({row}) => {
+                const exec = row.original.executor;
+                if (!exec) return <span style={{color: '#777'}}>Pagamento Online</span>;
+                return (
+                    <span>
+                        <Button
+                            variant="text"
                             color="primary"
                             sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                            endIcon={<OpenInNewIcon fontSize="small"/>}
-                            onClick={() => window.open(`/profile/${row.original.executor.id}`, '_blank', 'noopener,noreferrer')}>
-                        {row.original.executor.name}
-                    </Button>
-                </span>
-            )
+                            endIcon={exec.id ? <OpenInNewIcon fontSize="small"/> : null}
+                            onClick={() => {
+                                if (exec.id) window.open(`/profile/${exec.id}`, '_blank', 'noopener,noreferrer');
+                            }}
+                        >
+                            {exec.name || exec.email || 'N/A'}
+                        </Button>
+                    </span>
+                );
+            }
         },
         {
             accessorKey: 'account.name',

@@ -673,12 +673,12 @@ export default function Profile() {
                                             <Box
                                                 sx={{
                                                     display: 'inline-flex',
-                                                    '& .MuiButton-root, & .MuiIconButton-root': { color: 'primary.main' },
+                                                    '& .MuiButton-root, & .MuiIconButton-root': {color: 'primary.main'},
                                                     '& .MuiButton-contained': {
                                                         backgroundColor: 'primary.main',
                                                         color: 'primary.contrastText'
                                                     },
-                                                    '& .MuiButton-contained:hover': { backgroundColor: 'primary.dark' }
+                                                    '& .MuiButton-contained:hover': {backgroundColor: 'primary.dark'}
                                                 }}
                                             >
                                                 <EditButton
@@ -1043,7 +1043,7 @@ export default function Profile() {
                             <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1}}/></Grid>
 
                             {/* --- Subscriptions and Organized Events Section --- */}
-                            <Grid size={{xs: 12}}>
+                            <Grid size={{xs: 12}} sx={{mb: 5}}>
                                 <Card sx={{p: 2}}>
                                     <Box
                                         sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
@@ -1069,15 +1069,22 @@ export default function Profile() {
                                 </Card>
                             </Grid>
                             {profileType === "ESNer" && (<>
-                                    <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1}}/></Grid>
-                                    <Grid size={{xs: 12}} sx={{mb: 5}}>
+                                    <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1, mt:-5}}/></Grid>
+                                    <Grid size={{xs: 12}} sx={{mb: 5, mt:-5}}>
                                         <Card sx={{p: 2}}>
                                             <Box
-                                                sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
+                                                sx={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 1,
+                                                    cursor: 'pointer',
+                                                    py: 0.5
+                                                }}
                                                 onClick={() => setShowOrganizedEvents(v => !v)}
                                             >
                                                 <EventIcon sx={{color: 'primary.main'}}/>
-                                                <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Eventi Organizzati</Typography>
+                                                <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Eventi
+                                                    Organizzati</Typography>
                                                 <IconButton size="small" aria-label="toggle eventi organizzati"
                                                             onClick={() => setShowOrganizedEvents(v => !v)}>
                                                     <ExpandMoreIcon
