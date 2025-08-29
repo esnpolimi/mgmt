@@ -17,7 +17,8 @@ from events.models import Subscription, Event
 from profiles.models import Profile
 from treasury.models import Account, ESNcard, Settings, ReimbursementRequest
 from treasury.models import Transaction
-from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
+from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, \
+    AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer
 from users.models import User
 
@@ -189,8 +190,10 @@ def transactions_list(request):
             transactions = transactions.filter(
                 Q(account__name__icontains=search) |
                 Q(description__icontains=search) |
-                Q(executor__profile__name__icontains=search) |
-                Q(executor__profile__surname__icontains=search)
+                (Q(executor__isnull=False) & (
+                        Q(executor__profile__name__icontains=search) |
+                        Q(executor__profile__surname__icontains=search)
+                ))
             )
         # Filtering by account (multi)
         account_ids = request.GET.getlist('account')
@@ -214,7 +217,9 @@ def transactions_list(request):
                 limit = int(limit)
                 transactions = transactions[:limit]
                 serializer = TransactionViewSerializer(transactions, many=True)
-                return Response({'results': serializer.data, 'count': transactions.count() if hasattr(transactions, 'count') else len(transactions)})
+                return Response({'results': serializer.data,
+                                 'count': transactions.count() if hasattr(transactions, 'count') else len(
+                                     transactions)})
             except ValueError:
                 return Response({'error': 'Parametro limit non valido.'}, status=400)
         paginator = PageNumberPagination()
@@ -244,15 +249,20 @@ def transaction_detail(request, pk):
             if not get_action_permissions('transaction_detail_patch', request.user):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
-            executor = request.data.get('executor')
-            try:
-                executor_user = User.objects.get(profile__id=int(executor))
-            except (ValueError, User.DoesNotExist):
-                try:
-                    executor_user = User.objects.get(profile__email=executor)
-                except User.DoesNotExist:
-                    return Response({'error': 'Invalid executor information'}, status=400)
-            request.data['executor'] = executor_user.pk
+            # Executor handling: optional & nullable
+            executor_raw = request.data.get('executor', '__not_provided__')
+            executor_pk = transaction_obj.executor_id  # default: keep existing
+            if executor_raw != '__not_provided__':
+                if executor_raw in [None, '', 'null']:
+                    executor_pk = None  # clear executor
+                else:
+                    try:
+                        executor_pk = User.objects.get(profile__id=int(executor_raw)).pk
+                    except (ValueError, User.DoesNotExist):
+                        try:
+                            executor_pk = User.objects.get(profile__email=executor_raw).pk
+                        except User.DoesNotExist:
+                            return Response({'error': 'Invalid executor information'}, status=400)
 
             with transaction.atomic():
                 try:
@@ -261,7 +271,7 @@ def transaction_detail(request, pk):
                         t = Transaction(
                             type=transaction_obj.type,
                             account_id=request.data['account'],
-                            executor_id=request.data['executor'],
+                            executor_id=executor_pk,
                             amount=float(request.data['amount']),
                             description=request.data.get('description', ''),
                             esncard=transaction_obj.esncard,
@@ -270,7 +280,7 @@ def transaction_detail(request, pk):
                         t.save()
                     else:
                         transaction_obj.amount = float(request.data['amount'])
-                        transaction_obj.executor_id = request.data['executor']
+                        transaction_obj.executor_id = executor_pk
                         transaction_obj.description = request.data.get('description', '')
                         transaction_obj.save()
                 except ValueError as ve:
@@ -415,7 +425,8 @@ def reimbursement_request_detail(request, pk):
             if request.user.has_perm('treasury.change_reimbursementrequest'):
                 allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
                 data = {k: v for k, v in request.data.items() if k in allowed_fields}
-                serializer = ReimbursementRequestSerializer(instance, data=data, partial=True, context={'request': request})
+                serializer = ReimbursementRequestSerializer(instance, data=data, partial=True,
+                                                            context={'request': request})
                 if serializer.is_valid():
                     try:
                         serializer.save()
@@ -468,7 +479,8 @@ def reimbursement_requests_list(request):
                 limit = int(limit)
                 requests = requests[:limit]
                 serializer = ReimbursementRequestViewSerializer(requests, many=True)
-                return Response({'results': serializer.data, 'count': requests.count() if hasattr(requests, 'count') else len(requests)})
+                return Response({'results': serializer.data,
+                                 'count': requests.count() if hasattr(requests, 'count') else len(requests)})
             except ValueError:
                 return Response({'error': 'Parametro limit non valido.'}, status=400)
         paginator = PageNumberPagination()
@@ -514,9 +526,11 @@ def reimburse_deposits(request):
             account_locked = Account.objects.select_for_update().get(pk=account.pk)
             created = []
             for sub in subscriptions:
-                if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists():
+                if Transaction.objects.filter(subscription=sub,
+                                              type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists():
                     continue
-                cauzione_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
+                cauzione_tx = Transaction.objects.filter(subscription=sub,
+                                                         type=Transaction.TransactionType.CAUZIONE).first()
                 if not cauzione_tx:
                     # Fix: handle external subscriptions gracefully
                     sub_name = None
@@ -576,7 +590,8 @@ def reimbursable_deposits(request):
         result = []
         for sub in subs:
             deposit_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
-            reimbursed = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+            reimbursed = Transaction.objects.filter(subscription=sub,
+                                                    type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
             if deposit_tx and not reimbursed:
                 result.append({
                     "id": sub.id,
@@ -618,7 +633,8 @@ def reimburse_quota(request):
         if not event.cost or float(event.cost) <= 0:
             return Response({'error': 'L\'evento è gratuito, nessuna quota da rimborsare.'}, status=400)
         if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).exists():
-            return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'}, status=400)
+            return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'},
+                            status=400)
 
         # Check if already reimbursed
         if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():

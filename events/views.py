@@ -125,10 +125,11 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
                 "<p>Payment is required. If you already paid online you will soon get a separate payment confirmation email.</p>")
         else:
             html_parts.append(
-                "<p>Payment is required. Follow ESN Polimi instructions; a confirmation email will follow once registered.</p>")
+                "<p>Payment is required. Follow the instructions sent on our channels.<br/>"
+                "A confirmation email will follow once the payment has been received.</p>")
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
-    html_parts.append("<p>Thank you,<br/>ESN Politecnico Milano</p></body></html>")
+    html_parts.append("<p>Thank you!<br/><br/>ESN Politecnico Milano</p></body></html>")
     html_content = "".join(html_parts)
 
     if _send_email(subject, html_content, recipient):
@@ -231,6 +232,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
     event_obj = subscription.event
     quota_amount = Decimal(event_obj.cost or 0)
     deposit_amount = Decimal(event_obj.deposit or 0)
+    payer = subscription.profile.name + " " + subscription.profile.surname if subscription.profile else subscription.external_name
 
     # Quota
     if quota_status == 'paid' and quota_amount > 0 and account_id:
@@ -239,7 +241,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
             tx_type=Transaction.TransactionType.SUBSCRIPTION,
             account_id=account_id,
             amount=quota_amount,
-            description=f"Quota {event_obj.name} (sub #{subscription.pk})",
+            description=f"Quota {payer} - {event_obj.name}",
             executor=executor
         )
     elif allow_delete:
@@ -252,7 +254,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
             tx_type=Transaction.TransactionType.CAUZIONE,
             account_id=account_id,
             amount=deposit_amount,
-            description=f"Cauzione {event_obj.name} (sub #{subscription.pk})",
+            description=f"Cauzione {payer} - {event_obj.name}",
             executor=executor
         )
     elif allow_delete:
@@ -277,9 +279,10 @@ def events_list(request):
 
         status_param = request.GET.get('status', '').strip()
         if status_param:
-            status_list = [s.strip() for s in status_param.split(',') if s.strip()]
-            if status_list:
-                events = events.filter(status__in=status_list)  # optimized: keep queryset
+            status_set = {s.strip() for s in status_param.split(',') if s.strip()}
+            if status_set:
+                matching_ids = [e.id for e in events if e.status in status_set]
+                events = events.filter(id__in=matching_ids)
 
         date_from = request.GET.get('dateFrom')
         if date_from:
@@ -287,7 +290,7 @@ def events_list(request):
         date_to = request.GET.get('dateTo')
         if date_to:
             events = events.filter(date__lte=parse_datetime(date_to) + timedelta(days=1))
-        # --- End new filters ---
+
         paginator = PageNumberPagination()
         paginator.page_size_query_param = 'page_size'
         page = paginator.paginate_queryset(events, request=request)
@@ -1260,3 +1263,4 @@ def sumup_webhook(request):
     except Exception as e:
         logger.error(f"Webhook exception for checkout {checkout_id}: {e}")
         return Response({"status": "error", "detail": str(e)}, status=200)
+
