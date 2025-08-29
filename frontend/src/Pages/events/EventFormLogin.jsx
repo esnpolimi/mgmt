@@ -67,8 +67,8 @@ export default function EventFormLogin() {
                     // Extract possible ESNcard number fields
                     const esncardNumber = data?.esncard_number || '';
                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber}});
-                // } else if (eventData?.is_allow_external) {
-                //     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
+                } else if (eventData?.is_allow_external) {
+                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
                 } else {
                     setStatusMessage({
                         message: "This email does not belong to a registered Erasmus user.",

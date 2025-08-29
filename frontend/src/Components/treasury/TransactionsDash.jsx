@@ -1,15 +1,17 @@
 import {useEffect, useState, useMemo} from 'react';
 import {MRT_Table, useMaterialReactTable} from 'material-react-table';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
-import {fetchCustom} from '../../api/api';
+import {defaultErrorHandler, fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import Loader from '../Loader';
 import {Box, Chip, IconButton, Typography} from "@mui/material";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
 import ReceiptIcon from "@mui/icons-material/Receipt";
+import Popup from "../Popup";
 
 export default function TransactionsDash({limit = 3}) {
+    const [popup, setPopup] = useState(null);
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
@@ -17,7 +19,10 @@ export default function TransactionsDash({limit = 3}) {
         setLoading(true);
         fetchCustom("GET", `/transactions/?limit=${limit}`, {
             onSuccess: (data) => setData(data.results || []),
-            onError: () => setData([]),
+            onError: (err) => {
+                setData([]);
+                defaultErrorHandler(err, setPopup);
+            },
             onFinally: () => setLoading(false)
         });
     };
@@ -55,7 +60,16 @@ export default function TransactionsDash({limit = 3}) {
                 );
             }
         },
-        {accessorKey: 'executor.name', header: names.executor, size: 150},
+        {
+            accessorKey: 'executor.name',
+            header: names.executor,
+            size: 150,
+            Cell: ({cell}) => (
+                <Box component="span" fontWeight="bold">
+                    {cell.getValue() || "Pagamento Online"}
+                </Box>
+            ),
+        },
         {
             accessorKey: 'account.name',
             header: names.account,
@@ -112,6 +126,7 @@ export default function TransactionsDash({limit = 3}) {
                 </IconButton>
             </Box>
             {isLoading ? <Loader/> : <MRT_Table table={table}/>}
+            {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
         </Box>
     );
 }

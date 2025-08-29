@@ -189,7 +189,7 @@ export default function EventsList() {
             Cell: ({row}) => {
                 const enableForm = row.original?.enable_form;
                 if (!enableForm) {
-                    return <Chip label="N/D" variant="outlined"/>;
+                    return <Chip label="Assente" variant="outlined"/>;
                 }
                 const t = row.original?.form_programmed_open_time
                     ? dayjs(row.original.form_programmed_open_time)

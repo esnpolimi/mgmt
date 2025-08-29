@@ -39,9 +39,10 @@ urlpatterns = [
     # Endpoint to check subscription payment status
     path('subscription/<str:pk>/status/', views.subscription_payment_status),
 
+    # Endpoint to process subscription payment
+    path('subscription/<str:pk>/process_payment/', views.subscription_process_payment),
+
     # Public webhook endpoint for SumUp
     path('sumup/webhook/', views.sumup_webhook),
 
-    # Endpoint to process subscription payment
-    path('subscription/<str:pk>/process_payment/', views.subscription_process_payment),
 ]

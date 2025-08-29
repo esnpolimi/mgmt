@@ -6,6 +6,7 @@ import Loader from '../Loader';
 import {Box, Chip, IconButton, Typography} from "@mui/material";
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import Popup from "../Popup";
 
 const PAYMENT_CONFIGS = {
     cash: {label: "Contanti", color: 'success'},
@@ -14,6 +15,7 @@ const PAYMENT_CONFIGS = {
 };
 
 export default function ReimbursementRequestsDash({limit = 3}) {
+    const [popup, setPopup] = useState(null);
     const [data, setData] = useState([]);
     const [isLoading, setLoading] = useState(true);
 
@@ -21,7 +23,7 @@ export default function ReimbursementRequestsDash({limit = 3}) {
         setLoading(true);
         fetchCustom("GET", `/reimbursement_requests/?limit=${limit}`, {
             onSuccess: (data) => setData(data.results || []),
-            onError: (err) => defaultErrorHandler(err, setLoading),
+            onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)
         });
     };
@@ -118,6 +120,7 @@ export default function ReimbursementRequestsDash({limit = 3}) {
                 </IconButton>
             </Box>
             {isLoading ? <Loader/> : <MRT_Table table={table}/>}
+            {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
         </Box>
     );
 }
