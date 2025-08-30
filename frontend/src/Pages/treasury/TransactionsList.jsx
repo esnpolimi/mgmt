@@ -7,7 +7,7 @@ import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from 'material-react-table/locales/it';
 import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import {useNavigate} from "react-router-dom";
+import {useNavigate, useParams} from "react-router-dom";
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import itLocale from 'date-fns/locale/it';
@@ -33,6 +33,7 @@ const transactionTypes = [
 ];
 
 export default function TransactionsList() {
+    const eventId = parseInt(useParams().id, 10) || null;
     const [isLoading, setLoading] = useState(true);
     const [transactions, setTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
@@ -53,10 +54,21 @@ export default function TransactionsList() {
     const [search, setSearch] = useState('');
     const [appliedSearch, setAppliedSearch] = useState('');
     const searchInputRef = useRef(null);
+    const [eventData, setEventData] = useState(null);
+    const [isExporting, setIsExporting] = useState(false);
+
+    useEffect(() => {
+        if (eventId) {
+            fetchCustom('GET', `/event/${eventId}/`, {
+                onSuccess: (data) => setEventData(data),
+                onError: (err) => {setEventData(null); defaultErrorHandler(err, setPopup);},
+            });
+        }
+    }, [eventId]);
 
     useEffect(() => {
         refreshTransactionsData();
-    }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch]);
+    }, [pagination.pageIndex, pagination.pageSize, filters, appliedSearch, eventId]);
 
     const refreshTransactionsData = () => {
         setLoading(true);
@@ -72,6 +84,7 @@ export default function TransactionsList() {
             params.append('dateFrom', filters.dateFrom.toISOString());
         if (filters.dateTo)
             params.append('dateTo', filters.dateTo.toISOString());
+        if (eventId) params.append('event', eventId);
 
         // Transactions
         fetchCustom('GET', `/transactions/?${params.toString()}`, {
@@ -197,6 +210,75 @@ export default function TransactionsList() {
         }
     ], []);
 
+    const handleExport = () => {
+        setIsExporting(true);
+
+        const params = new URLSearchParams();
+        if (appliedSearch) params.append('search', appliedSearch);
+        if (filters.account.length) filters.account.forEach(a => params.append('account', a));
+        if (filters.type.length) filters.type.forEach(t => params.append('type', t));
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom.toISOString());
+        if (filters.dateTo) params.append('dateTo', filters.dateTo.toISOString());
+        if (eventId) params.append('event', eventId);
+
+        const url = `/transactions_export/?${params.toString()}`;
+
+        fetchCustom('GET', url, {
+            auth: true,
+            onSuccess: async (response) => {
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/vnd.openxmlformats-officedocument')) {
+                    if (contentType.includes('application/json')) {
+                        try {
+                            const json = await response.json();
+                            setPopup({
+                                message: `Errore esportazione: ${json.error || 'Risposta inattesa.'}`,
+                                state: 'error',
+                                id: Date.now()
+                            });
+                            return;
+                        } catch (_) {}
+                    } else if (contentType.includes('text/html')) {
+                        setPopup({message: 'Rotta backend non trovata (HTML ricevuto).', state: 'error', id: Date.now()});
+                        return;
+                    }
+                    setPopup({message: 'Tipo contenuto inatteso.', state: 'error', id: Date.now()});
+                    return;
+                }
+                const blob = await response.blob();
+                let filename = null;
+                const cd = response.headers.get('content-disposition') || '';
+                if (cd) {
+                    const matchStar = cd.match(/filename\*=UTF-8''([^;]+)/i);
+                    const matchPlain = cd.match(/filename="([^"]+)"/i);
+                    if (matchStar) {
+                        try { filename = decodeURIComponent(matchStar[1]); } catch { filename = matchStar[1]; }
+                    } else if (matchPlain) filename = matchPlain[1];
+                }
+                if (!filename) {
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('it-IT').replace(/[\/\\]+/g, '-');
+                    const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}).replace(/[:]+/g, '-');
+                    const base = eventData?.name
+                        ? `Evento_${eventData.name.replace(/[^\w\-]+/g, '_')}`
+                        : 'Transazioni';
+                    filename = `Bilancio_${base}_${dateStr}_${timeStr}.xlsx`;
+                }
+                const dlUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = dlUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(dlUrl);
+                setPopup({message: 'Esportazione completata.', state: 'success', id: Date.now()});
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setIsExporting(false),
+        });
+    };
+
     const table = useMaterialReactTable({
         columns,
         data: transactions,
@@ -242,6 +324,14 @@ export default function TransactionsList() {
                     }}
                 >
                     Deposita/Preleva
+                </Button>
+                <Button
+                    variant="outlined"
+                    sx={{ml: 2}}
+                    disabled={isExporting}
+                    onClick={handleExport}
+                >
+                    {isExporting ? 'Esportazione...' : 'Esporta Bilancio (Excel)'}
                 </Button>
             </Box>
         ),
@@ -312,6 +402,8 @@ export default function TransactionsList() {
             {transactionAddOpen &&
                 <TransactionAdd
                     open={transactionAddOpen}
+                    eventId={eventId}
+                    eventName={eventData?.name}
                     onClose={(success) => {
                         setTransactionAddOpen(false);
                         if (success) {
@@ -326,7 +418,9 @@ export default function TransactionsList() {
                     <IconButton onClick={() => navigate(-1)} sx={{mr: 2}}><ArrowBackIcon/></IconButton>
                     <Typography variant="h4" sx={{mr: 2}}>
                         <ReceiptIcon sx={{mr: 2}}/>
-                        Lista Transazioni
+                        {eventId && eventData
+                            ? `Lista Transazioni Evento "${eventData.name}" (${new Date(eventData.date).toLocaleDateString('it-IT')})`
+                            : 'Lista Transazioni'}
                     </Typography>
                     <Box sx={{flexGrow: 1}}/>
                     <IconButton onClick={refreshTransactionsData}

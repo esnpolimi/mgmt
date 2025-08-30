@@ -3,6 +3,7 @@ import Sidebar from '../../Components/Sidebar';
 import AccountsDash from '../../Components/treasury/AccountsDash';
 import ReceiptsDash from '../../Components/treasury/TransactionsDash';
 import ReimbursementRequestsDash from '../../Components/treasury/ReimbursementRequestsDash';
+import EventsDash from '../../Components/treasury/EventsDash';
 import {useNavigate} from 'react-router-dom';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 
@@ -31,7 +32,7 @@ export default function TreasuryDashboard() {
                             </Box>
                         </Paper>
                     </Grid>
-                    <Grid size={{xs: 12, md: 8}}>
+                    <Grid size={{xs: 12, md: 8}} sx={{mb: 5}}>
                         <Paper elevation={3} sx={{p: 2, mb: 3}}>
                             <ReceiptsDash limit={3}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
@@ -53,6 +54,9 @@ export default function TreasuryDashboard() {
                                     Gestisci Rimborsi
                                 </Button>
                             </Box>
+                        </Paper>
+                        <Paper elevation={3} sx={{p: 2, mt: 3}}>
+                            <EventsDash pageSize={3}/>
                         </Paper>
                     </Grid>
                 </Grid>

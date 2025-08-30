@@ -62,13 +62,14 @@ class ESNcardSerializer(serializers.ModelSerializer):
 class TransactionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type']
+        fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type', 'event_reference_manual']
 
 
 # Serializer to view transactions
 class TransactionViewSerializer(serializers.ModelSerializer):
     executor = serializers.SerializerMethodField()
     account = serializers.SerializerMethodField()
+    event_reference_manual = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
@@ -97,6 +98,10 @@ class TransactionViewSerializer(serializers.ModelSerializer):
             "id": obj.account.id,
             "name": f"{obj.account.name}"
         }
+
+    @staticmethod
+    def get_event_reference_manual(obj):
+        return obj.event_reference_manual.id if obj.event_reference_manual else None
 
 
 class AccountDetailedViewSerializer(serializers.ModelSerializer):
@@ -156,7 +161,8 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ReimbursementRequest
-        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'receiptFile', 'is_reimbursed', 'account']
+        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'receiptFile',
+                  'is_reimbursed', 'account']
         read_only_fields = ['id', 'user', 'created_at', 'receipt_link']
 
     @staticmethod
@@ -302,7 +308,8 @@ class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ReimbursementRequest
-        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'is_reimbursed', 'account']
+        fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'is_reimbursed',
+                  'account']
 
     @staticmethod
     def get_user(obj):
