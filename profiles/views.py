@@ -323,11 +323,11 @@ def profile_detail(request, pk):
                         except ExceptionGroup:
                             requester_group = None
 
-                        if current_group == "Aspiranti" and group_name == "Attivi":
+                        if current_group == "Aspiranti" and (group_name in ["Attivi", "Board"]):
                             if requester_group in ["Board"]:
                                 allowed = True
                             else:
-                                error_msg = "Solo membri Board possono promuovere Aspiranti ad Attivi."
+                                error_msg = "Solo membri Board possono promuovere Aspiranti ad Attivi/Board."
                         elif current_group == "Attivi" and group_name == "Board":
                             if requester_group == "Board":
                                 allowed = True

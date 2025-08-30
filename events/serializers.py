@@ -93,7 +93,8 @@ class EventsListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'date', 'cost', 'deposit', 'status',
             'is_a_bando', 'is_allow_external',
-            'lists_capacity', 'enable_form', 'form_programmed_open_time'
+            'lists_capacity', 'enable_form', 'form_programmed_open_time',
+            'is_refa_done',
         ]
 
     @staticmethod
@@ -451,7 +452,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields',
-            'allow_online_payment', 'form_programmed_open_time'
+            'allow_online_payment', 'form_programmed_open_time',
+            'is_refa_done'
         ]
 
     def to_representation(self, instance):
@@ -691,7 +693,8 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
-            'allow_online_payment', 'form_programmed_open_time'
+            'allow_online_payment', 'form_programmed_open_time',
+            'is_refa_done'
         ]
 
     def to_representation(self, instance):
