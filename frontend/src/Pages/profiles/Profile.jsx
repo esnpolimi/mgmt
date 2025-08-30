@@ -52,7 +52,7 @@ const profileFieldRules = {
 };
 
 export default function Profile() {
-    const {user} = useAuth();
+    const {user, logout} = useAuth();
     const {id} = useParams();
     const [saving, setSaving] = useState(false); /* true when making api call to save data */
     const [loading, setLoading] = useState(true);
@@ -405,9 +405,16 @@ export default function Profile() {
             birthdate: formatDateString(updatedData.birthdate),
             matricola_expiration: formatDateString(updatedData.matricola_expiration)
         };
+        const isCurrentUserProfile = user?.profile?.id === profile?.id;
+        const groupChanged = isCurrentUserProfile && updatedData.group !== data.group;
         fetchCustom("PATCH", `/profile/${profile.id.toString()}/`, {
             body,
             onSuccess: () => {
+                if (groupChanged) {
+                    logout();
+                    navigate('/login');
+                    return;
+                }
                 refreshProfileData();
                 resetErrors();
                 setPopup({message: "Profilo aggiornato con successo!", state: "success", id: Date.now()});

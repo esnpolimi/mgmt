@@ -32,9 +32,8 @@ pip install -r requirements.txt
 # Eventually, make and apply migrations (if models have changed)
 python manage.py makemigrations
 python manage.py migrate
-# if problems arise:
-# python manage.py migrate events 0009 --fake     
-# python manage.py migrate treasury 0010 --fake
+# if the tables have already been updated to the latest models' states, you can use the --fake option to mark the migrations as applied without actually running them, e.g.:
+# python manage.py migrate --fake     
 
 # Collect static files
 python manage.py collectstatic --noinput

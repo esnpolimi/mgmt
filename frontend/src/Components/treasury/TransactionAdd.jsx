@@ -7,7 +7,7 @@ import {useAuth} from "../../Context/AuthContext";
 import Popup from "../Popup";
 import CircularProgress from "@mui/material/CircularProgress";
 
-export default function TransactionAdd({open, onClose}) {
+export default function TransactionAdd({open, onClose, eventId = null, eventName = null}) {
     const {user} = useAuth();
     const [popup, setPopup] = useState(null);
     const [submitting, setSubmitting] = useState(false);
@@ -25,7 +25,7 @@ export default function TransactionAdd({open, onClose}) {
             setFormData({
                 amount: '',
                 type: 'deposit',
-                description: ''
+                description: `${eventId ? 'Transazione manuale - ' + eventName : ''}`
             });
             setSelectedAccount('');
             fetchCustom('GET', '/accounts/', {
@@ -44,7 +44,8 @@ export default function TransactionAdd({open, onClose}) {
                 amount: formData.type === 'deposit' ? Math.abs(formData.amount) : -Math.abs(formData.amount),
                 description: formData.description,
                 type: formData.type,
-                executor: user.profile.email
+                executor: user.profile.email,
+                event_reference_manual: eventId || null
             },
             onSuccess: () => onClose(true),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
@@ -61,6 +62,11 @@ export default function TransactionAdd({open, onClose}) {
                 <Typography variant="h5" gutterBottom align="center" sx={{mt: 2}}>
                     Transazione Manuale
                 </Typography>
+                {eventId && (
+                    <Typography variant="body1" sx={{mt: 1, fontWeight: 'bold'}}>
+                        Evento: <span style={{fontWeight: 'normal'}}>{eventName || `#${eventId}`}</span>
+                    </Typography>
+                )}
                 <Grid container spacing={2} sx={{mt: 2}}>
                     <Grid size={{xs: 12}}>
                         <FormControl fullWidth>
