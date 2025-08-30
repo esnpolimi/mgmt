@@ -92,6 +92,9 @@ class Transaction(BaseEntity):
     amount = models.DecimalField(max_digits=9, decimal_places=2)
     description = models.CharField(max_length=256)
 
+    # Reference to an Event for manual deposit/withdrawal operations
+    event_reference_manual = models.ForeignKey('events.Event', null=True, blank=True, on_delete=models.SET_NULL)
+
     def clean(self):
         # Validate fields based on transaction type
         if self.type == self.TransactionType.SUBSCRIPTION and not self.subscription:
@@ -111,6 +114,13 @@ class Transaction(BaseEntity):
                 raise ValueError("Le transazioni di Prelievo non devono avere un'Iscrizione o una ESNcard.")
         if self.account.status == "closed":
             raise PermissionDenied("La cassa è chiusa.")
+        if self.event_reference_manual:
+            # Only allowed for manual deposit / withdrawal
+            if self.type not in (self.TransactionType.DEPOSIT, self.TransactionType.WITHDRAWAL):
+                raise ValueError("event_reference_manual consentito solo per deposit o withdrawal.")
+            # Must remain a pure manual transaction (no subscription / esncard)
+            if self.subscription or self.esncard:
+                raise ValueError("Le transazioni manuali legate a un evento non devono avere iscrizioni o ESNcards associate.")
         # Ensure both are Decimal for arithmetic
         amount = Decimal(str(self.amount))
         balance = Decimal(str(self.account.balance))

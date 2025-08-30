@@ -141,6 +141,9 @@ class Event(BaseEntity):
     # Programmed open time for the form (optional)
     form_programmed_open_time = models.DateTimeField(null=True, blank=True)
 
+    # Rendiconto Finanziario (REFA) state
+    is_refa_done = models.BooleanField(default=False)
+
     # Profile fields columns (i.e. name, surname, email) to be shown in the event list tables
     profile_fields = models.JSONField(default=list, blank=True)
 

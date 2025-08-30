@@ -1,12 +1,15 @@
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
 from decimal import Decimal
 
 import sentry_sdk
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponse
 from django.utils.dateparse import parse_datetime
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
@@ -51,6 +54,41 @@ def get_action_permissions(action, user):
         return user_is_board(user)
     # Default: allow
     return True
+
+
+def apply_transaction_filters(qs, request):
+    """
+    Reuse filtering logic between list and export.
+    """
+    search = request.GET.get('search', '').strip()
+    if search:
+        qs = qs.filter(
+            Q(account__name__icontains=search) |
+            Q(description__icontains=search) |
+            (Q(executor__isnull=False) & (
+                    Q(executor__profile__name__icontains=search) |
+                    Q(executor__profile__surname__icontains=search)
+            ))
+        )
+    event_id = request.GET.get('event')
+    if event_id:
+        qs = qs.filter(
+            Q(subscription__event__id=event_id) |
+            Q(event_reference_manual__id=event_id)
+        )
+    account_ids = request.GET.getlist('account')
+    if account_ids:
+        qs = qs.filter(account__id__in=account_ids)
+    types = request.GET.getlist('type')
+    if types:
+        qs = qs.filter(type__in=types)
+    date_from = request.GET.get('dateFrom')
+    if date_from:
+        qs = qs.filter(created_at__gte=date_from)
+    date_to = request.GET.get('dateTo')
+    if date_to:
+        qs = qs.filter(created_at__lte=parse_datetime(date_to) + timedelta(days=1))
+    return qs
 
 
 # Endpoint for ESNcard emission.
@@ -133,7 +171,7 @@ def esncard_detail(request, pk):
 # Endpoint to retrieve ensncard fees
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def esncard_fees(request):
+def esncard_fees(_):
     try:
         # Get the settings and add fee information
         settings = Settings.get()
@@ -185,31 +223,7 @@ def transaction_add(request):
 def transactions_list(request):
     try:
         transactions = Transaction.objects.all().order_by('-created_at')
-        search = request.GET.get('search', '').strip()
-        if search:
-            transactions = transactions.filter(
-                Q(account__name__icontains=search) |
-                Q(description__icontains=search) |
-                (Q(executor__isnull=False) & (
-                        Q(executor__profile__name__icontains=search) |
-                        Q(executor__profile__surname__icontains=search)
-                ))
-            )
-        # Filtering by account (multi)
-        account_ids = request.GET.getlist('account')
-        if account_ids:
-            transactions = transactions.filter(account__id__in=account_ids)
-        # Filtering by type (multi)
-        types = request.GET.getlist('type')
-        if types:
-            transactions = transactions.filter(type__in=types)
-        # Filtering by dateFrom/dateTo
-        date_from = request.GET.get('dateFrom')
-        if date_from:
-            transactions = transactions.filter(created_at__gte=date_from)
-        date_to = request.GET.get('dateTo')
-        if date_to:
-            transactions = transactions.filter(created_at__lte=parse_datetime(date_to) + timedelta(days=1))
+        transactions = apply_transaction_filters(transactions, request)
         # Support limit param for dashboard
         limit = request.GET.get('limit')
         if limit:
@@ -594,7 +608,7 @@ def reimbursable_deposits(request):
                                                     type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
             if deposit_tx and not reimbursed:
                 result.append({
-                    "id": sub.id,
+                    "id": sub.pk,
                     "profile_id": sub.profile.id,
                     "profile_name": f"{sub.profile.name} {sub.profile.surname}",
                     "account_name": deposit_tx.account.name if deposit_tx.account else None
@@ -675,22 +689,82 @@ def reimburse_quota(request):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
-# Endpoint to check if an ESNcard number exists
-'''
 @api_view(['GET'])
-def esncard_exists(request):
+@permission_classes([IsAuthenticated])
+def transactions_export(request):
     """
-    Check if an ESNcard number exists and is valid.
-    GET param: number
-    Returns: { "exists": true/false }
+    Export filtered transactions (optionally for a specific event via ?event=<id>),
+    same filters as transactions_list. Single endpoint replacing previous event/global variants.
     """
-    number = request.GET.get('number', '').strip()
-    exists = False
-    if number:
-        card = ESNcard.objects.filter(number=number).first()
-        if card and card.is_valid:
-            exists = True
+    try:
+        txs = Transaction.objects.all().select_related('account', 'subscription__event').order_by('created_at')
+        txs = apply_transaction_filters(txs, request)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Bilancio"
+        headers = ["Esecuzione", "Commenti", "Importo", "Cassa"]
+        header_font = Font(bold=True)
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+
+        row_idx = 2
+        for t in txs:
+            # Base amount
+            amount = float(t.amount) if t.amount is not None else None
+            # Fallback for legacy ESNcard transactions with missing/zero amount
+            if t.type == Transaction.TransactionType.ESNCARD and (amount is None or amount == 0):
+                try:
+                    s = Settings.get()
+                    desc_lower = (t.description or "").lower()
+                    if "smarrita" in desc_lower:
+                        amount = float(s.esncard_lost_fee)
+                    else:  # emissione or rinnovo
+                        amount = float(s.esncard_release_fee)
+                except Exception as e:
+                    return Response({'error': 'Errore nel calcolo dell\'importo della transazione ESNcard: ' + str(e)},
+                                    status=500)
+
+            ws.cell(row=row_idx, column=1, value=t.created_at.strftime('%d/%m/%Y %H:%M'))
+            ws.cell(row=row_idx, column=2, value=t.description)
+            ws.cell(row=row_idx, column=3, value=amount).number_format = '#,##0.00 €'
+            ws.cell(row=row_idx, column=4, value=t.account.name if t.account else '')
+            row_idx += 1
+
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+
+        from io import BytesIO
+        stream = BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+
+        event_id = request.GET.get('event')
+        if event_id:
+            # Attempt to fetch event name for filename (ignore failures silently)
+            try:
+                ev = Event.objects.get(id=event_id)
+                base = f"Bilancio_Evento_{ev.name.replace(' ', '_')}"
+            except Event.DoesNotExist:
+                base = "Bilancio_Evento"
         else:
-            exists = False
-    return Response({'exists': exists})
-'''
+            base = "Bilancio_Transazioni"
+
+        filename = f"{base}_{datetime.now().strftime('%d%m%Y_%H%M%S')}.xlsx"
+        resp = HttpResponse(
+            stream.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
+        return resp
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
