@@ -44,6 +44,9 @@ export default function TreasuryDashboard() {
                                 </Button>
                             </Box>
                         </Paper>
+                        <Paper elevation={3} sx={{p: 2, mb: 3}}>
+                            <EventsDash pageSize={3}/>
+                        </Paper>
                         <Paper elevation={3} sx={{p: 2}}>
                             <ReimbursementRequestsDash limit={3}/>
                             <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: 2}}>
@@ -54,9 +57,6 @@ export default function TreasuryDashboard() {
                                     Gestisci Rimborsi
                                 </Button>
                             </Box>
-                        </Paper>
-                        <Paper elevation={3} sx={{p: 2, mt: 3}}>
-                            <EventsDash pageSize={3}/>
                         </Paper>
                     </Grid>
                 </Grid>
