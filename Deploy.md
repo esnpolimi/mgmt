@@ -33,10 +33,14 @@ pip install -r requirements.txt
 python manage.py makemigrations
 python manage.py migrate
 # if the tables have already been updated to the latest models' states, you can use the --fake option to mark the migrations as applied without actually running them, e.g.:
-# python manage.py migrate --fake     
+# python manage.py migrate --fake    
+
+# remember to restart the Python App fron cpanel's pane in case of migrations to apply! 
 
 # Collect static files
 python manage.py collectstatic --noinput
+
+python manage.py check
 ```
 
 Lastly, restart the backend service from the cPanel Python WEB APPLICATIONS console

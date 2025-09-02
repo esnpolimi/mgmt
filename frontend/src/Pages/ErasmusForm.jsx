@@ -4,6 +4,8 @@ import {LocalizationProvider, DatePicker} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Checkbox, FormControlLabel} from '@mui/material';
+import {ToggleButton, ToggleButtonGroup} from '@mui/material';
+import FormLabel from '@mui/material/FormLabel';
 import 'dayjs/locale/en-gb';
 import {green} from '@mui/material/colors';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -15,6 +17,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import LoginIcon from '@mui/icons-material/Login';
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import logo from '../assets/esnpolimi-logo.png';
 
 export default function ErasmusForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -61,31 +64,33 @@ export default function ErasmusForm() {
         document_expiration: dayjs(),
         matricola_number: '',
         matricola_expiration: dayjs(),
-        is_esner: false
+        is_esner: false,
+        mobility_semesters: 1
     });
 
     /*const [formData, setFormData] = React.useState({
         'name': 'Giampiero',
         'surname': 'Bassini',
-        'email': 'teopompil@gmail.com',
-        'email_confirm': 'teopompil@gmail.com',
+        'email': 'informatica@esnpolimi.it',
+        'email_confirm': 'informatica@esnpolimi.it',
         'birthdate': dayjs(),
         'password': '1Unoduetrequattro',
         'password_confirm': '1Unoduetrequattro',
         'country': 'IT',
         'phone_prefix': '+39',
-        'phone_number': '11111111',
+        'phone_number': '111111112',
         'whatsapp_prefix': '+39',
         'whatsapp_number': '',
         'person_code': '65432101',
         'domicile': 'via bassini 1, Milano',
         'course': 'Design',
         'document_type': 'ID Card',
-        'document_number': '324153gfd',
+        'document_number': '324153gfd3',
         'document_expiration': dayjs(),
-        'matricola_number': '653423',
+        'matricola_number': '653463',
         'matricola_expiration': dayjs(),
-        'is_esner': false
+        'is_esner': false,
+        mobility_semesters: 1
     });*/
 
     const initialFormErrors = {
@@ -222,8 +227,64 @@ export default function ErasmusForm() {
         }
     };
 
+    const handleSameNumberChange = (e) => {
+        setSameWAasPhone(e.target.checked);
+        if (e.target.checked) {
+            setFormData({
+                ...formData,
+                whatsapp_prefix: formData.phone_prefix,
+                whatsapp_number: formData.phone_number
+            });
+        }
+    };
+
+    // Compute exchange end date based on academic anchor dates (Feb 15, Jul 15)
+    const computeExchangeEndDate = (semesters) => {
+        const s = Number(semesters);
+        const anchorCount = Math.min(s, 3); // 3 or more -> third anchor
+        const now = dayjs();
+
+        // Pre-build anchor dates (Feb 15, Jul 15) for current and next 2 years
+        const anchors = [];
+        for (let y = now.year(); y <= now.year() + 2; y++) {
+            anchors.push(dayjs(`${y}-02-15`));
+            anchors.push(dayjs(`${y}-07-15`));
+        }
+
+        const futureAnchors = anchors
+            .filter(d => d.isAfter(now))
+            .sort((a, b) => a.valueOf() - b.valueOf());
+
+        return futureAnchors[anchorCount - 1] || futureAnchors[futureAnchors.length - 1];
+    };
+
+    const handleSemestersChange = (_e, value) => {
+        if (!value) return;
+        const semesters = value === 'more' ? 4 : value; // 4 for backend; logic caps at 3
+        const computed = computeExchangeEndDate(semesters);
+        setFormData(prev => ({
+            ...prev,
+            mobility_semesters: semesters,
+            matricola_expiration: computed
+        }));
+        setFormErrors(prev => ({...prev, matricola_expiration: [false, '']}));
+    };
+
+    // Initialize computed date if not yet aligned
+    React.useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            matricola_expiration: computeExchangeEndDate(prev.mobility_semesters || 1)
+        }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleSubmit = (e) => {
         e.preventDefault();
+        const computedEnd = computeExchangeEndDate(formData.mobility_semesters);
+        if (!formData.matricola_expiration || !dayjs(formData.matricola_expiration).isSame(computedEnd, 'day')) {
+            setFormData(prev => ({...prev, matricola_expiration: computedEnd}));
+        }
 
         if (!validateForm()) {
             scrollUp();
@@ -239,7 +300,7 @@ export default function ErasmusForm() {
             whatsapp_number: sameWAasPhone ? formData.phone_number : formData.whatsapp_number,
             birthdate: formatDateString(formData.birthdate),
             document_expiration: formatDateString(formData.document_expiration),
-            matricola_expiration: formatDateString(formData.matricola_expiration),
+            matricola_expiration: formatDateString(computedEnd),
         };
 
         fetchCustom("POST", '/profile/initiate-creation/', {
@@ -267,17 +328,6 @@ export default function ErasmusForm() {
         });
     }
 
-    const handleSameNumberChange = (e) => {
-        setSameWAasPhone(e.target.checked);
-        if (e.target.checked) {
-            setFormData({
-                ...formData,
-                whatsapp_prefix: formData.phone_prefix,
-                whatsapp_number: formData.phone_number
-            });
-        }
-    };
-
     if (isSubmitted) {
         return (
             <Box display="flex"
@@ -291,22 +341,42 @@ export default function ErasmusForm() {
                     Your response has been sent.
                 </Typography>
                 <Typography variant="subtitle1" align="center">
-                    Check your inbox to verify your e-mail.
+                    Check your inbox to verify your email.
                 </Typography>
                 <Typography variant="body2" align="center" sx={{mt: 2}}>
-                    In case you do not receive an email, please check your spam folder or contact us at <Link href="mailto: informatica@esnpolimi.it">informatica@esnpolimi.it</Link>
+                    In case you do not receive an email, please check your spam folder or contact us on our channels.
                 </Typography>
             </Box>
         );
     }
 
     return (
-        <Box component="form" noValidate sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}} onSubmit={handleSubmit}>
-            <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi Registration - International Student</Typography>
+        <Box component="form" noValidate sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
+             onSubmit={handleSubmit}>
+            <img
+                src={logo}
+                alt='ESN Polimi Logo'
+                style={{
+                    height: '20vh',
+                    marginBottom: "4px",
+                    display: 'block',
+                    marginLeft: 'auto',
+                    marginRight: 'auto'
+                }}
+            />
+            <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi Registration - International
+                Student</Typography>
 
             {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
-            <Typography variant="h5" align="center" gutterBottom sx={{my: 4}}>Personal Information</Typography>
+            <Typography variant="h5" align="center" gutterBottom sx={{my: 3}}>Personal Information</Typography>
+            <Typography
+                variant="caption"
+                align="right"
+                display="block"
+                sx={{mb: 1, color: 'text.secondary'}}>
+                * required field
+            </Typography>
             <Grid container spacing={3}>
                 <Grid size={{xs: 12, sm: 4}}>
                     <TextField
@@ -335,7 +405,7 @@ export default function ErasmusForm() {
                 <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
-                            label="Birthdate"
+                            label="Birthdate *"
                             value={formData.birthdate}
                             onChange={(date) => handleDateChange('birthdate', date)}
                             maxDate={dayjs()}
@@ -369,7 +439,11 @@ export default function ErasmusForm() {
                         helperText={formErrors.email_confirm[1]}/>
                     <Box sx={{mt: 1}}>
                         {formData.email_confirm && (
-                            <Typography variant="caption" sx={{display: 'flex', alignItems: 'center', color: formData.email === formData.email_confirm ? 'green' : 'grey'}}>
+                            <Typography variant="caption" sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: formData.email === formData.email_confirm ? 'green' : 'grey'
+                            }}>
                                 {formData.email === formData.email_confirm
                                     ? <CheckIcon fontSize="small" sx={{mr: 0.5}}/>
                                     : <CloseIcon fontSize="small" sx={{mr: 0.5}}/>
@@ -383,14 +457,14 @@ export default function ErasmusForm() {
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <FormControl fullWidth required>
-                        <InputLabel id="country-label">Home University Country</InputLabel>
+                        <InputLabel id="country-label">Nationality</InputLabel>
                         <Select
                             variant="outlined"
                             labelId="country-label"
                             name="country"
                             value={formData.country}
                             onChange={handleChange}
-                            label="Home University Country"
+                            label="Nationality"
                             error={formErrors.country[0]}>
                             {countryCodes.map((country) => (
                                 <MenuItem key={country.code} value={country.code}>
@@ -402,7 +476,7 @@ export default function ErasmusForm() {
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
-                        label="Home Domicile"
+                        label="Home Domicile Address"
                         variant="outlined"
                         name="domicile"
                         value={formData.domicile}
@@ -413,7 +487,7 @@ export default function ErasmusForm() {
                         helperText={formErrors.domicile[1]}/>
                 </Grid>
                 <Grid size={{xs: 4, sm: 2}}>
-                    <FormControl fullWidth>
+                    <FormControl fullWidth required>
                         <InputLabel id="phone-prefix-label">Prefix</InputLabel>
                         <Select
                             variant="outlined"
@@ -423,6 +497,7 @@ export default function ErasmusForm() {
                             value={formData.phone_prefix}
                             onChange={handleChange}
                             label="Prefix"
+                            required
                             renderValue={(value) => value}
                             error={formErrors.phone_prefix[0]}>
                             {countryCodes.map((country) => (
@@ -460,7 +535,7 @@ export default function ErasmusForm() {
                 </Grid>
                 {!sameWAasPhone && (<>
                     <Grid size={{xs: 4, sm: 2}}>
-                        <FormControl fullWidth>
+                        <FormControl fullWidth required>
                             <InputLabel id="whatsapp-prefix-label">Prefix</InputLabel>
                             <Select
                                 variant="outlined"
@@ -470,6 +545,7 @@ export default function ErasmusForm() {
                                 value={formData.whatsapp_prefix}
                                 onChange={handleChange}
                                 label="Prefix"
+                                required
                                 renderValue={(value) => value}
                                 error={formErrors.whatsapp_prefix[0]}>
                                 {countryCodes.map((country) => (
@@ -533,7 +609,7 @@ export default function ErasmusForm() {
                 <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
-                            label="Expiration Date"
+                            label="Expiration Date *"
                             value={formData.document_expiration}
                             onChange={(date) => handleDateChange('document_expiration', date)}
                             slotProps={{textField: {variant: 'outlined'}}}/>
@@ -560,14 +636,45 @@ export default function ErasmusForm() {
                         </Select>
                     </FormControl>
                 </Grid>
-                <Grid size={{xs: 12, sm: 6}}>
-                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
-                        <DatePicker
-                            label="Exchange End Date"
-                            value={formData.matricola_expiration}
-                            onChange={(date) => handleDateChange('matricola_expiration', date)}
-                            slotProps={{textField: {variant: 'outlined'}}}/>
-                    </LocalizationProvider>
+                {/* Compact semester selector aligned with Field of Study */}
+                <Grid size={{xs: 12, sm: 6}} sx={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                    <FormControl component="fieldset"
+                                 sx={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                        <FormLabel
+                            component="legend"
+                            sx={{
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                letterSpacing: '0.5px',
+                                textTransform: 'uppercase',
+                                color: 'text.secondary',
+                                mb: 0.5,
+                                textAlign: 'center',
+                                width: '100%'
+                            }}>
+                            Semesters of Mobility (including the current) *
+                        </FormLabel>
+                        <ToggleButtonGroup
+                            exclusive
+                            size="small"
+                            value={formData.mobility_semesters >= 4 ? 'more' : formData.mobility_semesters}
+                            onChange={handleSemestersChange}
+                            aria-label="mobility semesters"
+                            sx={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                width: '100%',
+                                '& .MuiToggleButton-root': {
+                                    px: 2,
+                                    py: 0.6,
+                                    fontSize: '0.8rem'
+                                }
+                            }}>
+                            <ToggleButton value={1}>1</ToggleButton>
+                            <ToggleButton value={2}>2</ToggleButton>
+                            <ToggleButton value="more">3+</ToggleButton>
+                        </ToggleButtonGroup>
+                    </FormControl>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
@@ -597,8 +704,10 @@ export default function ErasmusForm() {
                 </Grid>
                 <Grid size={{xs: 12}}>
                     <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
-                        You can find your Person Code and Matricola in the Polimi App under your profile section, or from the Online Services.
-                        <br/> In case the university has not provided you a Matricola yet, you can fill the field with 6 0s.
+                        You can find your Person Code and Matricola in the Polimi App under your profile section, or
+                        from the Online Services.
+                        <br/> In case the university has not provided you a Matricola yet, you can fill the field with 6
+                        0s.
                     </Typography>
                 </Grid>
             </Grid>
@@ -658,7 +767,8 @@ export default function ErasmusForm() {
                         label={
                             <span>
                                 I declare that I accept all the terms stated in the{' '}
-                                <Link href={links.regulation} target="_blank" rel="noopener noreferrer" underline="always">
+                                <Link href={links.regulation} target="_blank" rel="noopener noreferrer"
+                                      underline="always">
                                     Internal Rules
                                 </Link>
                                 {' '}and all subsequent changes and additions

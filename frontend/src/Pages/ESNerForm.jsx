@@ -17,6 +17,7 @@ import LoginIcon from '@mui/icons-material/Login';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import logo from '../assets/esnpolimi-logo.png';
 
 export default function ESNerForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
@@ -345,12 +346,29 @@ export default function ESNerForm() {
     return (
         <Box component="form" noValidate sx={{maxWidth: 800, margin: 'auto', mt: 5, mb: 5, px: 4}}
              onSubmit={handleSubmit}>
-            <Typography variant="h4" align="center" gutterBottom mb={5}>ESN Polimi - Registrazione ESNer</Typography>
+            <img
+                src={logo}
+                alt='ESN Polimi Logo'
+                style={{
+                    height: '20vh',
+                    marginBottom: "4px",
+                    display: 'block',
+                    marginLeft: 'auto',
+                    marginRight: 'auto'
+                }}
+            />
+            <Typography variant="h4" align="center" gutterBottom mb={5}>Registrazione ESN Polimi - ESNer</Typography>
 
             {statusMessage && (<StatusBanner message={statusMessage.message} state={statusMessage.state}/>)}
 
-            <Typography variant="h5" align="center" gutterBottom sx={{my: 4}}>Informazioni Personali</Typography>
-
+            <Typography variant="h5" align="center" gutterBottom sx={{my: 3}}>Informazioni Personali</Typography>
+            <Typography
+                variant="caption"
+                align="right"
+                display="block"
+                sx={{mb: 1, color: 'text.secondary'}}>
+                * campo obbligatorio
+            </Typography>
             <Grid container spacing={2}>
                 <Grid size={{xs: 12, sm: 4}}>
                     <TextField
@@ -379,7 +397,7 @@ export default function ESNerForm() {
                 <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
-                            label={names.birthdate}
+                            label={names.birthdate + ' *'}
                             value={formData.birthdate}
                             onChange={(date) => handleDateChange('birthdate', date)}
                             maxDate={dayjs()}
@@ -543,13 +561,14 @@ export default function ESNerForm() {
                         helperText={formErrors.domicile[1]}/>
                 </Grid>
                 <Grid size={{xs: 4, sm: 2}}>
-                    <FormControl fullWidth>
+                    <FormControl fullWidth required>
                         <InputLabel id="phone-prefix-label">{names.phone_prefix}</InputLabel>
                         <Select
                             variant="outlined"
                             labelId="phone-prefix-label"
                             id="phone-prefix"
                             name="phone_prefix"
+                            required
                             value={formData.phone_prefix}
                             onChange={handleChange}
                             label={names.phone_prefix}
@@ -615,7 +634,7 @@ export default function ESNerForm() {
                 <Grid size={{xs: 12, sm: 4}}>
                     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
                         <DatePicker
-                            label="Data di Scadenza"
+                            label="Data di Scadenza *"
                             value={formData.document_expiration}
                             onChange={(date) => handleDateChange('document_expiration', date)}
                             slotProps={{textField: {variant: 'outlined'}}}/>
