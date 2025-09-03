@@ -54,7 +54,36 @@ def get_action_permissions(action, user):
 @permission_classes([IsAuthenticated])
 def profile_list(request, is_esner):
     try:
-        profiles = Profile.objects.filter(is_esner=is_esner).order_by('-created_at')
+        profiles = Profile.objects.filter(is_esner=is_esner)
+        # Ordering (simplified whitelist + composite handling)
+        ordering_param = request.GET.get('ordering', '-created_at').strip()
+        if ordering_param:
+            desc = ordering_param.startswith('-')
+            base = ordering_param.lstrip('-')
+
+            # Normalize dotted relation notation
+            normalized = base.replace('.', '__')
+
+            if base == 'fullPhoneNumber':
+                order_expressions = [
+                    ('-phone_prefix' if desc else 'phone_prefix'),
+                    ('-phone_number' if desc else 'phone_number'),
+                ]
+            elif base == 'fullWANumber':
+                order_expressions = [
+                    ('-whatsapp_prefix' if desc else 'whatsapp_prefix'),
+                    ('-whatsapp_number' if desc else 'whatsapp_number'),
+                ]
+            else:
+                order_expressions = [f'-{normalized}' if desc else normalized]
+
+            if order_expressions:
+                profiles = profiles.order_by(*order_expressions)
+            else:
+                profiles = profiles.order_by('-created_at')
+        else:
+            profiles = profiles.order_by('-created_at')
+
         search = request.GET.get('search', '').strip()
         if search:
             profiles = profiles.filter(

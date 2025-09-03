@@ -18,14 +18,14 @@ export const defaultErrorHandler = (responseOrError, setPopup) => {
     if (responseOrError?.json) {
         responseOrError.json().then(json => {
             errorMessage = extractErrorMessage(json, responseOrError.status);
-            popupData.message = `Errore: ${errorMessage}`;
+            popupData.message = `Error: ${errorMessage}`;
             if (typeof setPopup === 'function') {
                 setPopup({...popupData, id: Date.now()});
             }
         });
     } else {
         errorMessage = responseOrError?.message || responseOrError?.toString();
-        popupData.message = `Errore: ${errorMessage}`;
+        popupData.message = `Error: ${errorMessage}`;
 
         // Simplified - just set the popup directly
         if (typeof setPopup === 'function') {
@@ -75,7 +75,7 @@ export const fetchCustom = (method, path, options = {}) => {
     return fetch(url, fetchOptions)
         .then(response => {
             if (response.status === 401) {
-                const error = new Error("Non autorizzato.");
+                const error = new Error("Not Authorized.");
                 if (onError) onError(error, response);
                 return;
             }

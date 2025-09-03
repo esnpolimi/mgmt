@@ -12,6 +12,16 @@ export default function ErasmusProfiles() {
 
     const columns = useMemo(() => [
         {
+            accessorKey: 'created_at',
+            header: names.created_at,
+            size: 50,
+            Cell: ({cell}) => {
+                const v = cell.getValue();
+                if (!v) return '';
+                return new Date(v).toLocaleDateString('it-IT', {day: '2-digit', month: 'short', year: 'numeric'});
+            },
+        },
+        {
             accessorKey: 'id',
             header: names.id,
             size: 50,
@@ -19,7 +29,7 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'name',
             header: names.name,
-            size: 150,
+            size: 50,
             Cell: ({cell}) => (
                 <Box component="span" fontWeight="bold">
                     {cell.getValue()}
@@ -29,7 +39,7 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'surname',
             header: names.surname,
-            size: 150,
+            size: 50,
             Cell: ({cell}) => (
                 <Box component="span" fontWeight="bold">
                     {cell.getValue()}
@@ -39,7 +49,7 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'email',
             header: names.email,
-            size: 150,
+            size: 50,
         },
         {
             accessorKey: 'latest_esncard',
@@ -58,7 +68,7 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'country',
             header: names.country,
-            size: 150,
+            size: 50,
             Cell: ({row}) => {
                 const countryCode = row.original.country;
                 const country = countryCodes.find(c => c.code === countryCode);
@@ -68,27 +78,32 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'birthdate',
             header: names.birthdate,
-            size: 100,
+            size: 50,
+            Cell: ({cell}) => {
+                const v = cell.getValue();
+                if (!v) return '';
+                return new Date(v).toLocaleDateString('it-IT', {day: '2-digit', month: 'short', year: 'numeric'});
+            },
         },
         {
             accessorKey: 'course',
             header: names.course,
-            size: 100,
+            size: 50,
         },
         {
             accessorKey: 'phone_prefix',
             header: 'Prefisso Telefono',
-            size: 60,
+            size: 50,
         },
         {
             accessorKey: 'phone_number',
             header: 'Numero Telefono (no prefisso)',
-            size: 120,
+            size: 50,
         },
         {
             id: 'fullPhoneNumber',
             header: names.phone_number,
-            size: 150,
+            size: 50,
             accessorFn: row => `(${row.phone_prefix || 'vuoto'}) ${row.phone_number || '(vuoto)'}`,
             Cell: ({row}) => (
                 <span>({row.original.phone_prefix || 'vuoto'}) {row.original.phone_number || '(vuoto)'}</span>
@@ -97,17 +112,17 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'whatsapp_prefix',
             header: 'Prefisso WhatsApp',
-            size: 60,
+            size: 50,
         },
         {
             accessorKey: 'whatsapp_number',
             header: 'Numero WhatsApp (no prefisso)',
-            size: 120,
+            size: 50,
         },
         {
             id: 'fullWANumber',
             header: names.whatsapp_number,
-            size: 150,
+            size: 50,
             accessorFn: row => `(${row.whatsapp_prefix || 'vuoto'}) ${row.whatsapp_number || '(vuoto)'}`,
             Cell: ({row}) => (
                 <span>({row.original.whatsapp_prefix || 'vuoto'}) {row.original.whatsapp_number || '(vuoto)'}</span>
@@ -116,7 +131,12 @@ export default function ErasmusProfiles() {
         {
             accessorKey: 'domicile',
             header: names.domicile,
-            size: 200,
+            size: 50,
+        },
+        {
+            accessorKey: 'person_code',
+            header: names.person_code,
+            size: 50,
         },
         {
             accessorKey: 'matricola_number',
@@ -127,6 +147,11 @@ export default function ErasmusProfiles() {
             accessorKey: 'matricola_expiration',
             header: names.matricola_expiration,
             size: 50,
+            Cell: ({cell}) => {
+                const v = cell.getValue();
+                if (!v) return '';
+                return new Date(v).toLocaleDateString('it-IT', {day: '2-digit', month: 'short', year: 'numeric'});
+            },
         },
         {
             accessorKey: 'latest_document.number',
@@ -137,6 +162,7 @@ export default function ErasmusProfiles() {
     ], []);
 
     const columnVisibility = {
+        created_at: true,
         id: false,
         name: true,
         surname: true,

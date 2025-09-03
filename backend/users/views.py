@@ -20,6 +20,7 @@ from profiles.models import Profile
 from users.models import User
 from users.serializers import CustomTokenObtainPairSerializer
 from users.serializers import UserSerializer, LoginSerializer, UserReactSerializer, GroupListSerializer
+from users.serializers import FinancePermissionSerializer
 
 logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
@@ -284,6 +285,59 @@ def group_list(request):
         groups = Group.objects.all()
         serializer = GroupListSerializer(groups, many=True)
         return Response(serializer.data)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+def _in_group(user, name: str):
+    return user.groups.filter(name=name).exists()
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def user_finance_permissions(request, pk):
+    """
+    GET: Return raw and effective finance permission flags.
+    PATCH: Board only. Allowed only if target is ESNer in group 'Aspiranti'.
+    """
+    try:
+        target = User.objects.get(pk=pk)
+
+        def effective_manage(u):
+            return u.can_manage_casse or _in_group(u, 'Attivi') or _in_group(u, 'Board')
+
+        def effective_view(u):
+            return u.can_view_casse_import or _in_group(u, 'Attivi') or _in_group(u, 'Board')
+
+        if request.method == 'GET':
+            return Response({
+                'can_manage_casse': target.can_manage_casse,
+                'can_view_casse_import': target.can_view_casse_import,
+                'effective_can_manage_casse': effective_manage(target),
+                'effective_can_view_casse_import': effective_view(target),
+            }, status=200)
+
+        if request.method == 'PATCH':
+            if not user_is_board(request.user):
+                return Response({'error': 'Solo Board può modificare questi permessi.'}, status=403)
+            if not target.profile.is_esner:
+                return Response({'error': 'Il profilo non è un ESNer.'}, status=400)
+            if not _in_group(target, 'Aspiranti'):
+                return Response({'error': 'Permessi speciali applicabili solo agli Aspiranti.'}, status=400)
+            serializer = FinancePermissionSerializer(target, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    **serializer.data,
+                    'effective_can_manage_casse': effective_manage(target),
+                    'effective_can_view_casse_import': effective_view(target),
+                }, status=200)
+            return Response(serializer.errors, status=400)
+        return Response({'error': 'Metodo non consentito.'}, status=405)
+    except User.DoesNotExist:
+        return Response({'error': 'Utente non trovato.'}, status=404)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)

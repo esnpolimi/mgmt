@@ -338,11 +338,7 @@ def accounts_list(request):
     try:
         accounts = Account.objects.all().order_by('id')
         visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
-        # Returns a plain list, not paginated
-        if request.user.groups.filter(name="Aspiranti").exists():
-            serializer = AccountListViewSerializer(visible_accounts, many=True)
-        else:
-            serializer = AccountDetailedViewSerializer(visible_accounts, many=True, context={'request': request})
+        serializer = AccountListViewSerializer(visible_accounts, many=True, context={'request': request})
         return Response(serializer.data, status=200)
     except Exception as e:
         logger.error(str(e))
@@ -378,21 +374,32 @@ def account_detail(request, pk):
         account = Account.objects.get(pk=pk)
 
         if request.method == 'GET':
-            if request.user.groups.filter(name="Aspiranti").exists():
-                serializer = AccountListViewSerializer(account)
-            else:
-                serializer = AccountDetailedViewSerializer(account, context={'request': request})
+            serializer = AccountDetailedViewSerializer(account, context={'request': request})
             return Response(serializer.data, status=200)
 
         if request.method == 'PATCH':
-            if not get_action_permissions('account_detail_patch', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
-            data = request.data
+            # Status-only toggle?
+            incoming_keys = set(request.data.keys())
+            status_only = incoming_keys.issubset({'status'}) and 'status' in incoming_keys
+
+            # Permission: full edit requires existing permission; status-only allowed for casse managers
+            is_casse_manager = (
+                request.user.can_manage_casse or
+                request.user.groups.filter(name__in=['Attivi', 'Board']).exists()
+            )
+
+            if not status_only:
+                if not get_action_permissions('account_detail_patch', request.user):
+                    return Response({'error': 'Non autorizzato.'}, status=401)
+            else:
+                if not is_casse_manager:
+                    return Response({'error': 'Non autorizzato.'}, status=401)
+
+            data = request.data.copy()
             data['changed_by'] = request.user
             serializer = AccountEditSerializer(account, data=data, partial=True)
             if not serializer.is_valid():
                 return Response(serializer.errors, status=400)
-
             serializer.save()
             return Response(serializer.data, status=200)
         else:
