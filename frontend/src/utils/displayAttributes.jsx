@@ -1,4 +1,5 @@
 export const profileDisplayNames = {
+    created_at: 'Data Iscrizione',
     id: 'Id',
     name: 'Nome',
     surname: 'Cognome',

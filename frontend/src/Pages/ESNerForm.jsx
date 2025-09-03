@@ -48,23 +48,23 @@ export default function ESNerForm() {
     });
 
     /*const [formData, setFormData] = React.useState({
-        email: 'teopompil@gmail.com',
-        email_confirm: 'teopompil@gmail.com',
-        password: '1Unoduetrequattro',
-        password_confirm: '1Unoduetrequattro',
-        name: 'Giampiero',
-        surname: 'Bassini',
-        birthdate: dayjs(),
-        country: 'IT',
-        phone_prefix: '+39',
-        phone_number: '11111111',
-        person_code: '11223344',
-        domicile: 'via bassini 1, Milano',
-        document_type: 'ID Card',
-        document_number: '343536gffgdg',
-        document_expiration: dayjs(),
-        matricola_number: '263544',
-        is_esner: true
+        'name': 'Giampiero',
+        'surname': 'Bassini',
+        'email': 'informatica@esnpolimi.it',
+        'email_confirm': 'informatica@esnpolimi.it',
+        'birthdate': dayjs(),
+        'password': '1Unoduetrequattro',
+        'password_confirm': '1Unoduetrequattro',
+        'country': 'IT',
+        'phone_prefix': '+39',
+        'phone_number': '111111112',
+        'person_code': '65432101',
+        'domicile': 'via bassini 1, Milano',
+        'document_type': 'ID Card',
+        'document_number': '324153gfd3',
+        'document_expiration': dayjs(),
+        'matricola_number': '653463',
+        'is_esner': false,
     });*/
 
     const initialFormErrors = {
@@ -299,19 +299,17 @@ export default function ESNerForm() {
                 setSubmitted(true);
             },
             onError: (responseOrError) => {
-                const cloned = responseOrError?.clone?.();
-                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj));
-                setFormErrors(initialFormErrors);
-                if (cloned) {
-                    cloned.json().then(data => {
-                        const newErrors = {...initialFormErrors};
-                        Object.entries(data).forEach(([field, message]) => {
+                defaultErrorHandler(responseOrError, (msgObj) => {
+                    setStatusMessage(msgObj);
+                    if (msgObj.fieldErrors) {
+                        const newErrors = {...formErrors};
+                        Object.entries(msgObj.fieldErrors).forEach(([field, message]) => {
                             if (newErrors[field]) newErrors[field] = [true, Array.isArray(message) ? message.join(', ') : message];
                         });
                         setFormErrors(newErrors);
-                    });
-                }
-                scrollUp();
+                    } else setFormErrors(initialFormErrors);
+                    scrollUp();
+                });
             },
             onFinally: () => setIsLoading(false)
         });

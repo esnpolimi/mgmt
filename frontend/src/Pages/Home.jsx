@@ -157,7 +157,11 @@ export default function Home() {
             body: {status: actionType === "open" ? "open" : "closed"},
             onSuccess: () => {
                 fetchAccounts();
-                setPopup({message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`, state: "success", id: Date.now()});
+                setPopup({
+                    message: `Cassa ${actionType === "open" ? "aperta" : "chiusa"} con successo!`,
+                    state: "success",
+                    id: Date.now()
+                });
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setConfirmDialogOpen(false)
@@ -180,7 +184,11 @@ export default function Home() {
 
     const handleReimbursementRequestModalClose = (success) => {
         setRimborsoModalOpen(false);
-        if (success) setPopup({message: "Richiesta di rimborso inviata con successo!", state: "success", id: Date.now()});
+        if (success) setPopup({
+            message: "Richiesta di rimborso inviata con successo!",
+            state: "success",
+            id: Date.now()
+        });
     };
 
     useEffect(() => {
@@ -190,6 +198,13 @@ export default function Home() {
     const isAspirante = user?.groups && user.groups[0] === "Aspiranti";
     const isActive = user?.groups && user.groups[0] === "Attivi";
     const isBoard = user?.groups && user.groups[0] === "Board";
+    // New derived finance permission flags (from UserReactSerializer)
+    const canManageCasse = !!user?.effective_can_manage_casse;
+    const canViewBalances = !!user?.effective_can_view_casse_import;
+    const restrictedAccounts = user?.restricted_accounts || [];
+    const displayGroupName = (groupname === "Aspirante" && canManageCasse)
+        ? "Aspirante (con permessi casse)"
+        : groupname;
 
     return (
         <Box sx={{
@@ -259,7 +274,7 @@ export default function Home() {
                     Sistema di Gestione
                 </Typography>
                 <Typography variant="h5" sx={{fontWeight: 500, color: "#2d3a4b", mt: 1, mb: 2}}>
-                    {user ? user.profile.name + ' ' + user.profile.surname + ' - ' + groupname : ''}
+                    {user ? user.profile.name + ' ' + user.profile.surname + ' - ' + displayGroupName : ''}
                 </Typography>
             </Box>
             {/* Main Content */}
@@ -367,13 +382,14 @@ export default function Home() {
                                 sx={{mr: 1}}>
                                 <RefreshIcon/>
                             </IconButton>
-                            {isBoard && (
+                            {canViewBalances && (
                                 <IconButton
                                     variant="outlined"
                                     color="primary"
                                     size="small"
                                     onClick={() => setShowAccountDetails(v => !v)}
-                                    sx={{mr: 1}}>
+                                    sx={{mr: 1}}
+                                    title={showAccountDetails ? "Nascondi Importi" : "Mostra Importi"}>
                                     {showAccountDetails ? <VisibilityOffIcon/> : <VisibilityIcon/>}
                                 </IconButton>
                             )}
@@ -387,102 +403,90 @@ export default function Home() {
                             mt: 2,
                             justifyContent: "center",
                         }}>
-                        {accounts.map((account) => (
-                            <Card
-                                key={account.id}
-                                sx={{
-                                    flex: "1 1 300px",
-                                    minWidth: 200,
-                                    maxWidth: 300,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    boxShadow: 4,
-                                    borderRadius: 2,
-                                    m: 1,
-                                }}>
-                                <CardContent sx={{flex: 1}}>
-                                    <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
-                                        {account.name}
-                                    </Typography>
-                                    {/* Aspirante: only name and state */}
-                                    {isAspirante && (
+                        {accounts.map((account) => {
+                            const balanceValue = account.balance;
+                            const isRestrictedBackend = balanceValue === null || balanceValue === undefined;
+                            const balanceVisible = showAccountDetails
+                                && canViewBalances
+                                && !restrictedAccounts.includes(account.name)
+                                && !isRestrictedBackend;
+                            return (
+                                <Card
+                                    key={account.id}
+                                    sx={{
+                                        flex: "1 1 300px",
+                                        minWidth: 200,
+                                        maxWidth: 300,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        boxShadow: 4,
+                                        borderRadius: 2,
+                                        m: 1,
+                                    }}>
+                                    <CardContent sx={{flex: 1}}>
+                                        <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
+                                            {account.name}
+                                        </Typography>
+                                        {/* Status always visible */}
                                         <Typography
-                                            variant="h7"
-                                            style={{
-                                                color: account.status === "closed" ? 'red' : 'green',
-                                                fontWeight: 'bold',
-                                                padding: '1'
-                                            }}>
+                                            variant="body2"
+                                            sx={{fontWeight: 600, mb: 0.5}}>
                                             {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
                                         </Typography>
-                                    )}
-                                    {/* Active: name, state, last modifications */}
-                                    {isActive && (
-                                        <>
-                                            {account.changed_by &&
-                                                <Typography variant="body2" sx={{color: "#607d8b"}}>
-                                                    {names.changed_by}: {account.changed_by.name}
-                                                </Typography>
-                                            }
-                                        </>
-                                    )}
-                                    {/* Board: everything */}
-                                    {isBoard && (
-                                        <>
+                                        {/* Balance (Board full, others masked if restricted) */}
+                                        {canViewBalances && (
                                             <Typography variant="body1" sx={{color: "#3e5060"}}>
-                                                {names.balance}: <b>€{showAccountDetails ? account.balance : " --"}</b>
+                                                {names.balance}: <b>{balanceVisible ? `€${balanceValue}` : ' --'}</b>
                                             </Typography>
-                                            {account.changed_by &&
-                                                <Typography variant="body2" sx={{color: "#607d8b"}}>
-                                                    {names.changed_by}: {account.changed_by.name}
-                                                </Typography>
-                                            }
-                                        </>
-                                    )}
-                                </CardContent>
-                                {(isActive || isBoard) ? (
-                                    <CardActions sx={{pr: 2, flexDirection: 'row', alignItems: 'center', gap: 1}}>
-                                        {/* Power IconButton for open/close */}
-                                        <IconButton
-                                            color={account.status === "closed" ? "success" : "error"}
-                                            onClick={() => handleAction(account, account.status === "closed" ? "open" : "close")}
-                                            sx={{minWidth: 40}}
-                                            title={account.status === "closed" ? "Apri Cassa" : "Chiudi Cassa"}
-                                        >
-                                            <PowerSettingsNewIcon/>
-                                        </IconButton>
-                                        {isBoard && account.status === "open" && (
-                                            <IconButton
-                                                color="primary"
-                                                onClick={() => openTransactionModal(account)}
-                                                sx={{minWidth: 40}}
-                                                title="Deposita/Preleva"
-                                            >
-                                                <CurrencyExchangeIcon/>
-                                            </IconButton>
                                         )}
-                                    </CardActions>
-                                ) : (
-                                    !isAspirante && (
-                                        <Typography
-                                            variant="h7"
-                                            style={{
-                                                color: account.status === "closed" ? 'red' : 'green',
-                                                fontWeight: 'bold',
-                                                padding: '20px'
-                                            }}>
-                                            {account.status === "closed" ? "Cassa Chiusa" : "Cassa Aperta"}
-                                        </Typography>
-                                    )
-                                )}
-                            </Card>
-                        ))}
+                                        {/* Last modification (show to Active / Board / granted Aspiranti) */}
+                                        {(isActive || isBoard || (isAspirante && canManageCasse)) && account.changed_by && (
+                                            <Typography variant="body2" sx={{color: "#607d8b"}}>
+                                                {names.changed_by}: {account.changed_by.name}
+                                            </Typography>
+                                        )}
+                                    </CardContent>
+                                    {canManageCasse ? (
+                                        <CardActions sx={{pr: 2, flexDirection: 'row', alignItems: 'center', gap: 1}}>
+                                            <IconButton
+                                                color={account.status === "closed" ? "success" : "error"}
+                                                onClick={() => handleAction(account, account.status === "closed" ? "open" : "close")}
+                                                sx={{minWidth: 40}}
+                                                title={account.status === "closed" ? "Apri Cassa" : "Chiudi Cassa"}
+                                            >
+                                                <PowerSettingsNewIcon/>
+                                            </IconButton>
+                                            {isBoard && account.status === "open" && (
+                                                <IconButton
+                                                    color="primary"
+                                                    onClick={() => openTransactionModal(account)}
+                                                    sx={{minWidth: 40}}
+                                                    title="Deposita/Preleva"
+                                                >
+                                                    <CurrencyExchangeIcon/>
+                                                </IconButton>
+                                            )}
+                                        </CardActions>
+                                    ) : null}
+                                </Card>
+                            )
+                        })}
                     </Box>
                 </Paper>
             </Box>
             <ConfirmDialog
                 open={confirmDialogOpen}
-                message={`Confermi la presenza di €${selectedAccount?.balance} nella cassa "${selectedAccount?.name}" prima di ${actionType === "open" ? "aprirla" : "chiuderla"}?`}
+                message={
+                    selectedAccount
+                        ? `Confermi la presenza ${
+                            (canViewBalances
+                                && !restrictedAccounts.includes(selectedAccount.name)
+                                && selectedAccount?.balance != null)
+                                ? `di €${selectedAccount.balance}`
+                                : "dell'importo corretto"
+                        } nella cassa "${selectedAccount.name}" prima di ${actionType === "open" ? "aprirla" : "chiuderla"}?`
+                        : ''
+                }
                 onConfirm={confirmAction}
                 onClose={() => setConfirmDialogOpen(false)}
             />

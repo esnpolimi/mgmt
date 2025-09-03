@@ -45,6 +45,7 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import EventIcon from '@mui/icons-material/Event';
 import EditIcon from "@mui/icons-material/Edit";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -70,6 +71,7 @@ export default function Profile() {
     const [organizedEvents, setOrganizedEvents] = useState([]);
     const [showSubscriptions, setShowSubscriptions] = useState(false);
     const [showOrganizedEvents, setShowOrganizedEvents] = useState(false);
+    const [financePerms, setFinancePerms] = useState(null); // new
     const navigate = useNavigate();
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
@@ -151,6 +153,13 @@ export default function Profile() {
         return rules.hideFields.includes(fieldName);
     };
 
+    const fetchFinancePerms = (email) => {
+        fetchCustom("GET", `/users/${encodeURIComponent(email)}/finance-permissions/`, {
+            onSuccess: (data) => setFinancePerms(data),
+            onError: () => setFinancePerms(null),
+        });
+    };
+
     useEffect(() => {
         refreshProfileData();
     }, []);
@@ -165,7 +174,11 @@ export default function Profile() {
                 setProfileType(data.is_esner ? "ESNer" : "Erasmus");
                 fetchSubscriptions();
                 fetchGroups();
-                if (data.is_esner) fetchOrganizedEvents();
+                if (data.is_esner) {
+                    fetchOrganizedEvents();
+                    // Fetch finance perms only for ESNers (Aspiranti toggle case)
+                    fetchFinancePerms(data.email);
+                }
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setLoading(false)
@@ -446,6 +459,27 @@ export default function Profile() {
         if (success && msg) setPopup({message: msg, state: "success", id: Date.now()});
     };
 
+    const toggleFinancePerms = () => {
+        if (!profile) return;
+        const targetEmail = profile.email;
+        const enable = !(financePerms?.can_manage_casse || false); // toggle both together
+        fetchCustom("PATCH", `/users/${encodeURIComponent(targetEmail)}/finance-permissions/`, {
+            body: {
+                can_manage_casse: enable,
+                can_view_casse_import: enable
+            },
+            onSuccess: (res) => {
+                setFinancePerms(res);
+                setPopup({
+                    message: enable ? 'Permessi casse concessi.' : 'Permessi casse revocati.',
+                    state: 'success',
+                    id: Date.now()
+                });
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup)
+        });
+    };
+
     // Determine which columns to show based on subscriptions data
     const showQuotaColumn = subscriptions.some(sub => sub.status_quota !== undefined && sub.status_quota !== null);
     const showCauzioneColumn = subscriptions.some(sub => sub.status_cauzione !== undefined && sub.status_cauzione !== null);
@@ -675,6 +709,14 @@ export default function Profile() {
                                 <Grid container size={{xs: 12}} alignItems="center">
                                     <Person sx={{color: 'primary.main'}}/>
                                     <Typography variant="h6" sx={{m: 0}}>Informazioni Personali</Typography>
+                                    <Box sx={{ml: 2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1}}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Data Iscrizione: {dayjs(profile?.created_at).format('DD MMMM YYYY')}
+                                        </Typography>
+                                        {profile?.email_is_verified && (
+                                            <Chip sx={{ml:2}} label="Email verificata" color="success" size="small"/>
+                                        )}
+                                    </Box>
                                     <Grid sx={{marginLeft: 'auto'}}>
                                         <Tooltip title="Modifica Profilo" arrow>
                                             <Box
@@ -975,9 +1017,26 @@ export default function Profile() {
                                     <EditIcon sx={{color: 'primary.main', mr: 2}}/>
                                     <Typography variant="h6">Azioni</Typography>
                                 </Box>
-                                <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
-                                    Iscrivi ad Evento
-                                </Button>
+                                <Box sx={{display: 'flex', gap: 1}}>
+                                    <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
+                                        Iscrivi ad Evento
+                                    </Button>
+                                    {/* Finance permission toggle (Board → ESNer Aspiranti) */}
+                                    {user?.groups?.includes('Board') && profileType === 'ESNer' && profile?.group === 'Aspiranti' && (
+                                        <Tooltip
+                                            title="Come per Attivi: apertura/chiusura + visualizzazione importi"
+                                            arrow>
+                                            <Button
+                                                variant={financePerms?.can_manage_casse ? 'outlined' : 'contained'}
+                                                color="secondary"
+                                                startIcon={<AccountBalanceIcon/>}
+                                                onClick={toggleFinancePerms}
+                                            >
+                                                {financePerms?.can_manage_casse ? 'Revoca Permessi Casse' : 'Concedi Permessi Casse'}
+                                            </Button>
+                                        </Tooltip>
+                                    )}
+                                </Box>
                             </Toolbar>
                             {ESNcardModalOpen &&
                                 <ESNcardEmissionModal

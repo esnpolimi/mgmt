@@ -13,6 +13,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(null=True, blank=True)  # Override last_login, to be NULL initially
+    can_manage_casse = models.BooleanField(default=False)  # Board-granted for Aspiranti
+    can_view_casse_import = models.BooleanField(default=False)  # Board-granted for Aspiranti
 
     USERNAME_FIELD = 'profile'
     REQUIRED_FIELDS = []

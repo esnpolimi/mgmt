@@ -74,8 +74,6 @@ export default function ErasmusForm() {
         'email': 'informatica@esnpolimi.it',
         'email_confirm': 'informatica@esnpolimi.it',
         'birthdate': dayjs(),
-        'password': '1Unoduetrequattro',
-        'password_confirm': '1Unoduetrequattro',
         'country': 'IT',
         'phone_prefix': '+39',
         'phone_number': '111111112',
@@ -92,6 +90,7 @@ export default function ErasmusForm() {
         'is_esner': false,
         mobility_semesters: 1
     });*/
+
 
     const initialFormErrors = {
         email: [false, ''],
@@ -311,18 +310,17 @@ export default function ErasmusForm() {
                 setSubmitted(true);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, (msgObj) => setStatusMessage(msgObj)).then();
-                setFormErrors(initialFormErrors);
-                // Try to extract field errors if available
-                if (responseOrError?.json) {
-                    responseOrError.json().then(data => {
+                defaultErrorHandler(responseOrError, (msgObj) => {
+                    setStatusMessage(msgObj);
+                    if (msgObj.fieldErrors) {
                         const newErrors = {...formErrors};
-                        Object.entries(data).forEach(([field, message]) => {
-                            if (newErrors[field]) newErrors[field] = [true, message];
+                        Object.entries(msgObj.fieldErrors).forEach(([field, message]) => {
+                            if (newErrors[field]) newErrors[field] = [true, Array.isArray(message) ? message.join(', ') : message];
                         });
                         setFormErrors(newErrors);
-                    });
-                }
+                    } else setFormErrors(initialFormErrors);
+                    scrollUp();
+                });
             },
             onFinally: () => setIsLoading(false)
         });

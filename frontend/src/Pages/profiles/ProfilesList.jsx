@@ -1,5 +1,5 @@
 import {useEffect, useState, useRef, forwardRef, useImperativeHandle} from 'react';
-import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton, Button} from '@mui/material';
+import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton, Button, TextField} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
@@ -9,6 +9,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {useNavigate} from 'react-router-dom';
+import {profileDisplayNames} from "../../utils/displayAttributes";
 
 const ESNCARD_VALIDITY_OPTIONS = [
     {value: 'valid', label: 'Valida'},
@@ -25,6 +26,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
     const [search, setSearch] = useState('');
     const [appliedSearch, setAppliedSearch] = useState('');
     const [internalLoading, setInternalLoading] = useState(true);
+    const [ordering, setOrdering] = useState('-created_at');
     const searchInputRef = useRef(null);
     const navigate = useNavigate();
 
@@ -33,6 +35,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
         const params = new URLSearchParams();
         params.append('page', pagination.pageIndex + 1);
         params.append('page_size', pagination.pageSize);
+        params.append('ordering', ordering);
         if (appliedSearch) params.append('search', appliedSearch);
         if (filters.esncardValidity.length)
             params.append('esncardValidity', filters.esncardValidity.join(','));
@@ -57,10 +60,9 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
 
     useEffect(() => {
         fetchData();
-
         if (profileType === 'ESNer')
             fetchCustom("GET", "/groups/", {onSuccess: (data) => setGroups(data)});
-    }, [apiEndpoint, pagination.pageIndex, pagination.pageSize, profileType, filters, appliedSearch]);
+    }, [apiEndpoint, pagination.pageIndex, pagination.pageSize, profileType, filters, appliedSearch, ordering]);
 
     const handleSearchApply = () => {
         setAppliedSearch(search);
@@ -101,8 +103,10 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
         data,
         enableStickyHeader: true,
         enableStickyFooter: true,
-        enableColumnFilters: false, // Disabled cause it only allows to search in the current page
-        enableColumnOrdering: true,
+        enableColumnFilters: false,
+        enableColumnOrdering: false,
+        enableSorting: false,  // server-side sorting only
+        enableSortingRemoval: false,
         enableGrouping: true,
         enableColumnPinning: true,
         enableFacetedValues: true,
@@ -167,84 +171,140 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                 alignItems="center"
                 justifyContent="space-between"
             >
+                {/* New ordering selector */}
                 <Grid size={{xs: 12, md: 2}}>
                     <FormControl fullWidth>
-                        <InputLabel id="esncard-validity-label">Validità ESNcard</InputLabel>
+                        <InputLabel id="ordering-label">Ordina per</InputLabel>
                         <Select
-                            labelId="esncard-validity-label"
-                            name="esncardValidity"
+                            labelId="ordering-label"
+                            value={ordering}
+                            label="Ordina per"
+                            variant="outlined"
+                            onChange={(e) => {
+                                setOrdering(e.target.value);
+                                setPagination(prev => ({...prev, pageIndex: 0}));
+                            }}>
+                            <MenuItem value="-created_at">{profileDisplayNames.created_at} (più recenti)</MenuItem>
+                            <MenuItem value="created_at">{profileDisplayNames.created_at} (più vecchi)</MenuItem>
+                            <MenuItem value="id">{profileDisplayNames.id} 0-9</MenuItem>
+                            <MenuItem value="-id">{profileDisplayNames.id} 9-0</MenuItem>
+                            <MenuItem value="name">{profileDisplayNames.name} A-Z</MenuItem>
+                            <MenuItem value="-name">{profileDisplayNames.name} Z-A</MenuItem>
+                            <MenuItem value="surname">{profileDisplayNames.surname} A-Z</MenuItem>
+                            <MenuItem value="-surname">{profileDisplayNames.surname} Z-A</MenuItem>
+                            <MenuItem value="email">{profileDisplayNames.email} A-Z</MenuItem>
+                            <MenuItem value="-email">{profileDisplayNames.email} Z-A</MenuItem>
+                            <MenuItem value="esncard">{profileDisplayNames.latest_esncard} A-Z</MenuItem>
+                            <MenuItem value="-esncard">{profileDisplayNames.latest_esncard} Z-A</MenuItem>
+                            <MenuItem value="country">{profileDisplayNames.country} A-Z</MenuItem>
+                            <MenuItem value="-country">{profileDisplayNames.country} Z-A</MenuItem>
+                            <MenuItem value="birthdate">{profileDisplayNames.birthdate} (più vecchi)</MenuItem>
+                            <MenuItem value="-birthdate">{profileDisplayNames.birthdate} (più giovani)</MenuItem>
+                            <MenuItem value="fullPhoneNumber">{profileDisplayNames.phone_number} 0-9</MenuItem>
+                            <MenuItem value="-fullPhoneNumber">{profileDisplayNames.phone_number} 9-0</MenuItem>
+                            {profileType === 'Erasmus' && (
+                                <MenuItem value="fullWANumber">{profileDisplayNames.whatsapp_number} 0-9</MenuItem>
+                            )}
+                            {profileType === 'Erasmus' && (
+                                <MenuItem value="-fullWANumber">{profileDisplayNames.whatsapp_number} 9-0</MenuItem>
+                            )}
+                            <MenuItem value="person_code">{profileDisplayNames.person_code} A-Z</MenuItem>
+                            <MenuItem value="-person_code">{profileDisplayNames.person_code} Z-A</MenuItem>
+                            <MenuItem value="domicile">{profileDisplayNames.domicile} A-Z</MenuItem>
+                            <MenuItem value="-domicile">{profileDisplayNames.domicile} Z-A</MenuItem>
+                            <MenuItem value="latest_document.number">{profileDisplayNames.latest_document} A-Z</MenuItem>
+                            <MenuItem value="-latest_document.number">{profileDisplayNames.latest_document} Z-A</MenuItem>
+                            <MenuItem value="matricola_number">{profileDisplayNames.matricola_number} A-Z</MenuItem>
+                            <MenuItem value="-matricola_number">{profileDisplayNames.matricola_number} Z-A</MenuItem>
+                            {profileType === 'Erasmus' && (
+                                <MenuItem value="matricola_expiration">{profileDisplayNames.matricola_expiration} (più vecchi)</MenuItem>
+                            )}
+                            {profileType === 'Erasmus' && (
+                                <MenuItem value="-matricola_expiration">{profileDisplayNames.matricola_expiration} (più giovani)</MenuItem>
+                            )}
+                    </Select>
+                </FormControl>
+            </Grid>
+            <Grid size={{xs: 12, md: 2}}>
+                <FormControl fullWidth>
+                    <InputLabel id="esncard-validity-label">Validità ESNcard</InputLabel>
+                    <Select
+                        labelId="esncard-validity-label"
+                        name="esncardValidity"
+                        variant="outlined"
+                        multiple
+                        value={filters.esncardValidity}
+                        onChange={handleFilterChange}
+                        input={<OutlinedInput label="Validità ESNcard"/>}
+                        renderValue={(selected) =>
+                            ESNCARD_VALIDITY_OPTIONS.filter(opt => selected.includes(opt.value)).map(opt => opt.label).join(', ')
+                        }>
+                        {ESNCARD_VALIDITY_OPTIONS.map(opt => (
+                            <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </Grid>
+            {profileType === 'ESNer' && groups.length > 0 && (
+                <Grid size={{xs: 12, md: 2}}>
+                    <FormControl fullWidth>
+                        <InputLabel id="group-label">Gruppi</InputLabel>
+                        <Select
+                            labelId="group-label"
+                            name="group"
                             variant="outlined"
                             multiple
-                            value={filters.esncardValidity}
+                            value={filters.group}
                             onChange={handleFilterChange}
-                            input={<OutlinedInput label="Validità ESNcard"/>}
+                            input={<OutlinedInput label="Gruppi"/>}
                             renderValue={(selected) =>
-                                ESNCARD_VALIDITY_OPTIONS.filter(opt => selected.includes(opt.value)).map(opt => opt.label).join(', ')
+                                groups.filter(opt => selected.includes(opt.name)).map(opt => opt.name).join(', ')
                             }>
-                            {ESNCARD_VALIDITY_OPTIONS.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                            {groups.map(opt => (
+                                <MenuItem key={opt.name} value={opt.name}>{opt.name}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
                 </Grid>
-                {profileType === 'ESNer' && groups.length > 0 && (
-                    <Grid size={{xs: 12, md: 2}}>
-                        <FormControl fullWidth>
-                            <InputLabel id="group-label">Gruppi</InputLabel>
-                            <Select
-                                labelId="group-label"
-                                name="group"
-                                variant="outlined"
-                                multiple
-                                value={filters.group}
-                                onChange={handleFilterChange}
-                                input={<OutlinedInput label="Gruppi"/>}
-                                renderValue={(selected) =>
-                                    groups.filter(opt => selected.includes(opt.name)).map(opt => opt.name).join(', ')
-                                }>
-                                {groups.map(opt => (
-                                    <MenuItem key={opt.name} value={opt.name}>{opt.name}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Grid>
-                )}
-                <Grid size={{xs: 12, md: 3}} sx={{ml: {sm: 'auto'}}}>
-                    <OutlinedInput
-                        inputRef={searchInputRef}
-                        size="small"
-                        placeholder="Cerca"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') handleSearchApply();
-                        }}
-                        fullWidth
-                        endAdornment={
-                            search && appliedSearch === search ? (
-                                <IconButton
-                                    aria-label="clear"
-                                    onClick={handleSearchClear}
-                                    edge="end">
-                                    <ClearIcon/>
-                                </IconButton>
-                            ) : (
-                                <IconButton
-                                    aria-label="search"
-                                    onClick={handleSearchApply}
-                                    edge="end">
-                                    <SearchIcon/>
-                                </IconButton>
-                            )
-                        }
-                    />
-                </Grid>
+            )}
+            <Grid size={{xs: 12, md: 3}} sx={{ml: {sm: 'auto'}}}>
+                <OutlinedInput
+                    inputRef={searchInputRef}
+                    size="small"
+                    placeholder="Cerca"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') handleSearchApply();
+                    }}
+                    fullWidth
+                    endAdornment={
+                        search && appliedSearch === search ? (
+                            <IconButton
+                                aria-label="clear"
+                                onClick={handleSearchClear}
+                                edge="end">
+                                <ClearIcon/>
+                            </IconButton>
+                        ) : (
+                            <IconButton
+                                aria-label="search"
+                                onClick={handleSearchApply}
+                                edge="end">
+                                <SearchIcon/>
+                            </IconButton>
+                        )
+                    }
+                />
             </Grid>
-            {internalLoading ? <Loader/> :
-                <MaterialReactTable table={table}/>
-            }
-        </Box>
-    );
+        </Grid>
+{
+    internalLoading ? <Loader/> :
+        <MaterialReactTable table={table}/>
+}
+</Box>
+)
+    ;
 });
 
 export default ProfilesList;

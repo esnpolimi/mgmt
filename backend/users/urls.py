@@ -14,4 +14,5 @@ urlpatterns = [
     path('api/forgot-password/', views.forgot_password),
     path('api/reset-password/<uid>/<token>/', views.reset_password),
     path('groups/', views.group_list),
+    path('users/<str:pk>/finance-permissions/', views.user_finance_permissions),  # change Aspirante casse permissions
 ]
