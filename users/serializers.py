@@ -55,6 +55,9 @@ class UserReactSerializer(serializers.ModelSerializer):
     groups = serializers.StringRelatedField(many=True)
     permissions = serializers.SerializerMethodField()
     profile = ProfileListViewSerializer(read_only=True)
+    effective_can_manage_casse = serializers.SerializerMethodField()
+    effective_can_view_casse_import = serializers.SerializerMethodField()
+    restricted_accounts = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -66,6 +69,32 @@ class UserReactSerializer(serializers.ModelSerializer):
         user_permissions = obj.user_permissions.values_list('codename', flat=True)
         group_permissions = obj.groups.values_list('permissions__codename', flat=True)
         return list(set(user_permissions).union(set(group_permissions)))
+
+    @staticmethod
+    def _is_in(obj, group_name: str):
+        return obj.groups.filter(name=group_name).exists()
+
+    def get_effective_can_manage_casse(self, obj):
+        return (
+            obj.can_manage_casse
+            or self._is_in(obj, 'Attivi')
+            or self._is_in(obj, 'Board')
+        )
+
+    def get_effective_can_view_casse_import(self, obj):
+        return (
+            obj.can_view_casse_import
+            or self._is_in(obj, 'Attivi')
+            or self._is_in(obj, 'Board')
+        )
+
+    def get_restricted_accounts(self, obj):
+        if self._is_in(obj, 'Board'):
+            return []
+        if self.get_effective_can_view_casse_import(obj) and (
+                self._is_in(obj, 'Attivi') or self._is_in(obj, 'Aspiranti')):
+            return ['SumUp']
+        return []
 
     def to_representation(self, instance):
         """ Convert date fields to ISO 8601 strings. """
@@ -98,3 +127,9 @@ class UserGroupEditSerializer(serializers.ModelSerializer):
             except Group.DoesNotExist:
                 raise serializers.ValidationError({'group': 'Il gruppo specificato non esiste.'})
         return super().update(instance, validated_data)
+
+
+class FinancePermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['can_manage_casse', 'can_view_casse_import']

@@ -104,6 +104,38 @@ class TransactionViewSerializer(serializers.ModelSerializer):
         return obj.event_reference_manual.id if obj.event_reference_manual else None
 
 
+# ---- Finance visibility helpers (moved restriction logic to treasury) ----
+def _primary_group(user):
+    g = user.groups.first()
+    return g.name if g else None
+
+
+def _is_board(user):
+    return user.groups.filter(name="Board").exists()
+
+
+def user_can_view_account_balance(user, account):
+    """
+    Board: can see all balances.
+    Attivi: can see all except SumUp.
+    Aspiranti: only if flag can_view_casse_import (granted) and not SumUp.
+    Others: none.
+    """
+    if not user or not hasattr(user, "groups"):
+        return False
+    if _is_board(user):
+        return True
+    if account.name == "SumUp":
+        return False
+    pg = _primary_group(user)
+    if pg == "Attivi":
+        return True
+    # Granted Aspiranti (flag set previously)
+    if getattr(user, "can_view_casse_import", False):
+        return True
+    return False
+
+
 class AccountDetailedViewSerializer(serializers.ModelSerializer):
     changed_by = serializers.SerializerMethodField()
 
@@ -119,24 +151,38 @@ class AccountDetailedViewSerializer(serializers.ModelSerializer):
             "name": f"{obj.changed_by.profile.name} {obj.changed_by.profile.surname}"
         }
 
-    def to_representation(self, instance):  # Return account visibilty only to Board group members
+    def to_representation(self, instance):
         representation = super().to_representation(instance)
-        request_user = self.context.get('request').user  # Safely retrieve the request object
+        request_user = self.context.get('request').user
+        # Mask balance if user not allowed
+        if not user_can_view_account_balance(request_user, instance):
+            representation['balance'] = None
+        # Visibility of visible_to_groups only for Board (unchanged logic)
         board_group = Group.objects.filter(name="Board").first()
-
-        if board_group and board_group in request_user.groups.all():
-            representation['visible_to_groups'] = [
-                {"id": group.id, "name": group.name} for group in instance.visible_to_groups.all()
-            ]
-        else:
+        if not (board_group and board_group in request_user.groups.all()):
             representation.pop('visible_to_groups', None)
         return representation
 
 
 class AccountListViewSerializer(serializers.ModelSerializer):
+    changed_by = serializers.SerializerMethodField()
+    balance = serializers.SerializerMethodField()
+
     class Meta:
         model = Account
-        fields = ['id', 'name', 'status']
+        fields = ['id', 'name', 'status', 'balance', 'changed_by']
+
+    @staticmethod
+    def get_changed_by(obj):
+        return {
+            "id": obj.changed_by.profile.id,
+            "email": obj.changed_by.profile.email,
+            "name": f"{obj.changed_by.profile.name} {obj.changed_by.profile.surname}"
+        }
+
+    def get_balance(self, obj):
+        user = self.context.get('request').user
+        return obj.balance if user_can_view_account_balance(user, obj) else None
 
 
 # Serializer to create accounts
