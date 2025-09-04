@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import Group
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 
@@ -95,6 +95,9 @@ class Transaction(BaseEntity):
     # Reference to an Event for manual deposit/withdrawal operations
     event_reference_manual = models.ForeignKey('events.Event', null=True, blank=True, on_delete=models.SET_NULL)
 
+    # Optional receipt link (uploaded file stored on Drive)
+    receipt_link = models.URLField(max_length=512, blank=True)
+
     def clean(self):
         # Validate fields based on transaction type
         if self.type == self.TransactionType.SUBSCRIPTION and not self.subscription:
@@ -134,16 +137,25 @@ class Transaction(BaseEntity):
     def save(self, *args, **kwargs):
         with transaction.atomic():
             self.clean()
-            # If this is an update (existing transaction)
             if self.pk:
-                original_transaction = Transaction.objects.get(pk=self.pk)
-                # Only update balance with the difference between new and old amount
-                amount_difference = Decimal(str(self.amount)) - Decimal(str(original_transaction.amount))
-                self.account.balance = Decimal(str(self.account.balance)) + amount_difference
+                # Lock current stored version
+                original_transaction = Transaction.objects.select_for_update().get(pk=self.pk)
+                if original_transaction.account_id != self.account_id:
+                    # Move transaction from old to new account:
+                    # 1. Revert effect on old account
+                    old_acc = original_transaction.account
+                    old_acc.balance = Decimal(str(old_acc.balance)) - Decimal(str(original_transaction.amount))
+                    old_acc.save(update_fields=['balance'])
+                    # 2. Apply full effect on new account
+                    self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
+                else:
+                    # Same account: only apply difference
+                    amount_difference = Decimal(str(self.amount)) - Decimal(str(original_transaction.amount))
+                    self.account.balance = Decimal(str(self.account.balance)) + amount_difference
             else:
-                # For new transactions, add the full amount
+                # New transaction
                 self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
-            self.account.save()
+            self.account.save(update_fields=['balance'])
             super(Transaction, self).save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
