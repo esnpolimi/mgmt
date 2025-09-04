@@ -12,6 +12,65 @@ from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
 
 
+# --- Shared Drive upload helper for receipts (transactions + reimbursements) ---
+def upload_receipt_to_drive(receipt_file, user, instance_time, prefix):
+    if not receipt_file:
+        return None
+    GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    service = build('drive', 'v3', credentials=credentials)
+    receipt_file.seek(0)
+    mimetype = getattr(receipt_file, 'content_type', 'application/octet-stream')
+    media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
+    ext = os.path.splitext(receipt_file.name)[1].lower()
+    filename = f"{prefix}_{user.profile.name}_{user.profile.surname}_{instance_time.strftime('%Y%m%d_%H%M%S')}{ext}"
+    metadata = {'name': filename, 'parents': [GOOGLE_DRIVE_FOLDER_ID]}
+    uploaded = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    service.permissions().create(
+        fileId=uploaded['id'],
+        body={'role': 'reader', 'type': 'anyone'},
+        supportsAllDrives=True
+    ).execute()
+    return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
+
+
+# Centralized allowed mimetypes / extensions for receipt uploads
+ALLOWED_RECEIPT_MIMETYPES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/bmp',
+    'image/webp',
+    'image/tiff',
+    'image/heic',
+    'image/heif'
+]
+ALLOWED_RECEIPT_EXTENSIONS = [
+    '.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'
+]
+
+def validate_receipt_file(file):
+    if not file:
+        return file
+    # Mimetype check (if provided by the backend/form)
+    if hasattr(file, 'content_type') and file.content_type not in ALLOWED_RECEIPT_MIMETYPES:
+        raise serializers.ValidationError("Il file deve essere un'immagine o un PDF.")
+    # Extension check
+    ext = os.path.splitext(file.name)[1].lower()
+    if ext not in ALLOWED_RECEIPT_EXTENSIONS:
+        raise serializers.ValidationError("Il file deve essere un'immagine o un PDF.")
+    return file
+
+
 # Serializer for ESNcard emission/renewal
 class ESNcardEmissionSerializer(serializers.ModelSerializer):
     profile_id = serializers.PrimaryKeyRelatedField(
@@ -60,9 +119,27 @@ class ESNcardSerializer(serializers.ModelSerializer):
 
 # Serializer to create transactions
 class TransactionCreateSerializer(serializers.ModelSerializer):
+    receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
+    receipt_link = serializers.URLField(read_only=True)
+
     class Meta:
         model = Transaction
-        fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type', 'event_reference_manual']
+        fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type',
+                  'event_reference_manual', 'receiptFile', 'receipt_link']
+
+    @staticmethod
+    def validate_receiptFile(file):
+        return validate_receipt_file(file)
+
+    def create(self, validated_data):
+        receipt_file = validated_data.pop('receiptFile', None)
+        with transaction.atomic():
+            tx = Transaction.objects.create(**validated_data)
+            if receipt_file:
+                link = upload_receipt_to_drive(receipt_file, self.context['request'].user, tx.created_at, "transazione")
+                tx.receipt_link = link
+                tx.save(update_fields=['receipt_link'])
+        return tx
 
 
 # Serializer to view transactions
@@ -213,61 +290,12 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def validate_receiptFile(file):
-        if not file:
-            return file
-
-        allowed_mimetypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/bmp', 'image/webp', 'image/tiff']
-        allowed_extensions = ['.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']
-
-        # Check mimetype
-        if hasattr(file, 'content_type') and file.content_type not in allowed_mimetypes:
-            raise serializers.ValidationError("Il file deve essere un'immagine o un PDF.")
-
-        # Check extension
-        ext = os.path.splitext(file.name)[1].lower()
-        if ext not in allowed_extensions:
-            raise serializers.ValidationError("Il file deve essere un'immagine o un PDF.")
-
-        return file
+        return validate_receipt_file(file)
 
     @staticmethod
     def _upload_receipt_to_drive(receipt_file, user, instance_creation_time):
-        GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-        SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
-
-        def upload_to_drive(file, filename):
-            credentials = service_account.Credentials.from_service_account_file(
-                SERVICE_ACCOUNT_FILE,
-                scopes=['https://www.googleapis.com/auth/drive']
-            )
-            service = build('drive', 'v3', credentials=credentials)
-
-            # Wrap Django file object to BytesIO for upload
-            file.seek(0)
-            media = MediaIoBaseUpload(file, mimetype=file.content_type)
-            file_metadata = {
-                'name': filename,
-                'parents': [GOOGLE_DRIVE_FOLDER_ID]
-            }
-            uploaded = service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id',
-                supportsAllDrives=True
-            ).execute()
-
-            # Make the file publicly accessible
-            service.permissions().create(
-                fileId=uploaded['id'],
-                body={'role': 'reader', 'type': 'anyone'},
-                supportsAllDrives=True
-            ).execute()
-
-            return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
-
-        ext = os.path.splitext(receipt_file.name)[1].lower()
-        receipt_filename = f"ricevuta_{user.profile.name}_{user.profile.surname}_{instance_creation_time.strftime('%Y%m%d_%H%M%S')}{ext}"
-        return upload_to_drive(receipt_file, receipt_filename)
+        # Reuse shared helper (prefix 'rimborso')
+        return upload_receipt_to_drive(receipt_file, user, instance_creation_time, "rimborso")
 
     def create(self, validated_data):
         user = self.context['request'].user
@@ -384,3 +412,35 @@ class ReimbursementRequestViewSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_is_reimbursed(obj):
         return obj.is_reimbursed
+
+
+class TransactionUpdateSerializer(serializers.ModelSerializer):
+    receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
+    remove_receipt = serializers.BooleanField(write_only=True, required=False, default=False)
+    receipt_link = serializers.URLField(read_only=True)
+
+    class Meta:
+        model = Transaction
+        fields = ['account', 'amount', 'description', 'receiptFile', 'remove_receipt', 'receipt_link']
+
+    @staticmethod
+    def validate_receiptFile(file):
+        return validate_receipt_file(file)
+
+    def update(self, instance, validated_data):
+        receipt_file = validated_data.pop('receiptFile', None)
+        remove = validated_data.pop('remove_receipt', False)
+
+        # Basic updatable fields
+        for f in ['account', 'amount', 'description']:
+            if f in validated_data:
+                setattr(instance, f, validated_data[f])
+
+        if receipt_file:
+            link = upload_receipt_to_drive(receipt_file, self.context['request'].user, instance.created_at, "transazione")
+            instance.receipt_link = link
+        elif remove:
+            instance.receipt_link = ''  # blank permitted
+
+        instance.save()
+        return instance

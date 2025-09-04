@@ -6,13 +6,15 @@ import {styleESNcardModal as style} from "../../utils/sharedStyles";
 import {useAuth} from "../../Context/AuthContext";
 import Popup from "../Popup";
 import CircularProgress from "@mui/material/CircularProgress";
+import ReceiptFileUpload from "../common/ReceiptFileUpload";
 
-export default function TransactionAdd({open, onClose, eventId = null, eventName = null}) {
+export default function TransactionAdd({open, onClose, account, eventId = null, eventName = null}) {
     const {user} = useAuth();
     const [popup, setPopup] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
+    const [receiptFile, setReceiptFile] = useState(null);
 
     const [formData, setFormData] = useState({
         amount: '',
@@ -27,26 +29,47 @@ export default function TransactionAdd({open, onClose, eventId = null, eventName
                 type: 'deposit',
                 description: `${eventId ? 'Transazione manuale - ' + eventName : ''}`
             });
-            setSelectedAccount('');
-            fetchCustom('GET', '/accounts/', {
-                onSuccess: (data) => setAccounts(data),
-                onError: () => setAccounts([]),
-            });
+            setReceiptFile(null);
+            if (account) {
+                setSelectedAccount(account.id);
+            } else {
+                setSelectedAccount('');
+                fetchCustom('GET', '/accounts/', {
+                    onSuccess: (data) => setAccounts(data),
+                    onError: () => setAccounts([]),
+                });
+            }
         }
-    }, [open]);
+    }, [open, account]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         setSubmitting(true);
-        fetchCustom('POST', '/transaction/', {
-            body: {
+        const manualAmount = formData.type === 'deposit' ? Math.abs(formData.amount) : -Math.abs(formData.amount);
+
+        let body;
+        if (receiptFile) {
+            body = new FormData();
+            body.append('account', selectedAccount);
+            body.append('amount', manualAmount);
+            body.append('description', formData.description);
+            body.append('type', formData.type);
+            body.append('executor', user.profile.email);
+            if (eventId) body.append('event_reference_manual', eventId);
+            body.append('receiptFile', receiptFile);
+        } else {
+            body = {
                 account: selectedAccount,
-                amount: formData.type === 'deposit' ? Math.abs(formData.amount) : -Math.abs(formData.amount),
+                amount: manualAmount,
                 description: formData.description,
                 type: formData.type,
                 executor: user.profile.email,
                 event_reference_manual: eventId || null
-            },
+            };
+        }
+
+        fetchCustom('POST', '/transaction/', {
+            body,
             onSuccess: () => onClose(true),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setSubmitting(false)
@@ -69,28 +92,34 @@ export default function TransactionAdd({open, onClose, eventId = null, eventName
                 )}
                 <Grid container spacing={2} sx={{mt: 2}}>
                     <Grid size={{xs: 12}}>
-                        <FormControl fullWidth>
-                            <InputLabel id="account-label">Cassa</InputLabel>
-                            <Select
-                                variant="outlined"
-                                labelId="account-label"
-                                value={selectedAccount}
-                                label="Cassa"
-                                onChange={e => setSelectedAccount(e.target.value)}
-                                required
-                            >
-                                {accounts.map(acc => (
-                                    <MenuItem
-                                        key={acc.id}
-                                        value={acc.id}
-                                        disabled={acc.status === 'closed'}
-                                        style={{color: acc.status === 'closed' ? 'grey' : 'inherit'}}
-                                    >
-                                        {acc.name} {acc.status === 'closed' ? '(Chiusa)' : ''}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                        {account ? (
+                            <Typography variant="subtitle1">
+                                <b>Cassa:</b> {account.name}
+                            </Typography>
+                        ) : (
+                            <FormControl fullWidth>
+                                <InputLabel id="account-label">Cassa</InputLabel>
+                                <Select
+                                    variant="outlined"
+                                    labelId="account-label"
+                                    value={selectedAccount}
+                                    label="Cassa"
+                                    onChange={e => setSelectedAccount(e.target.value)}
+                                    required
+                                >
+                                    {accounts.map(acc => (
+                                        <MenuItem
+                                            key={acc.id}
+                                            value={acc.id}
+                                            disabled={acc.status === 'closed'}
+                                            style={{color: acc.status === 'closed' ? 'grey' : 'inherit'}}
+                                        >
+                                            {acc.name} {acc.status === 'closed' ? '(Chiusa)' : ''}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        )}
                     </Grid>
                     <FormControl fullWidth>
                         <InputLabel>Tipo</InputLabel>
@@ -120,6 +149,13 @@ export default function TransactionAdd({open, onClose, eventId = null, eventName
                         required
                         value={formData.description}
                         onChange={(e) => setFormData({...formData, description: e.target.value})}/>
+                    <Grid size={{xs: 12}}>
+                        <ReceiptFileUpload
+                            file={receiptFile}
+                            onFileChange={setReceiptFile}
+                            label="Carica ricevuta (opzionale)"
+                        />
+                    </Grid>
                 </Grid>
                 <Box mt={2}>
                     <Button

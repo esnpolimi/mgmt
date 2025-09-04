@@ -47,12 +47,14 @@ class UserAdmin(admin.ModelAdmin):
         'profile_surname',
         'is_staff',
         'is_superuser',
+        'groups_list',
         'date_joined',
         'last_login',
     )
     list_filter = (
         'is_staff',
         'is_superuser',
+        'groups',
         'date_joined',
         'last_login',
         UserProfileNameFilter,
@@ -102,3 +104,9 @@ class UserAdmin(admin.ModelAdmin):
         return obj.profile.surname
 
     profile_surname.short_description = 'Surname'
+
+    def groups_list(self, obj):
+        names = obj.groups.values_list('name', flat=True)
+        return ", ".join(names) if names else "-"
+
+    groups_list.short_description = 'Groups'

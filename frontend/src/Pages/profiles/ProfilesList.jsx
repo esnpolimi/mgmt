@@ -1,5 +1,5 @@
 import {useEffect, useState, useRef, forwardRef, useImperativeHandle} from 'react';
-import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton, Button, TextField} from '@mui/material';
+import {Box, Grid, FormControl, InputLabel, Select, MenuItem, OutlinedInput, IconButton, Button} from '@mui/material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {fetchCustom} from '../../api/api';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
@@ -107,7 +107,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
         enableColumnOrdering: false,
         enableSorting: false,  // server-side sorting only
         enableSortingRemoval: false,
-        enableGrouping: true,
+        enableGrouping: false,
         enableColumnPinning: true,
         enableFacetedValues: true,
         enableRowActions: false,

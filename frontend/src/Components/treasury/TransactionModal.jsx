@@ -1,8 +1,5 @@
-import {useState, useEffect} from 'react';
-import {
-    Modal, Box, Typography, Grid, IconButton, TextField, Button,
-    FormControl, InputLabel, Select, MenuItem, OutlinedInput, FormHelperText
-} from '@mui/material';
+import {useEffect, useState} from 'react';
+import {Box, Button, FormControl, FormHelperText, Grid, IconButton, InputLabel, MenuItem, Modal, OutlinedInput, Select, TextField, Typography} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {styleESNcardModal as style} from '../../utils/sharedStyles';
 import Loader from '../Loader';
@@ -12,6 +9,7 @@ import {transactionDisplayNames as names} from '../../utils/displayAttributes';
 import ProfileSearch from '../ProfileSearch';
 import CircularProgress from '@mui/material/CircularProgress';
 import ConfirmDialog from '../ConfirmDialog';
+import ReceiptFileUpload from '../common/ReceiptFileUpload';
 
 // List of transaction types that can be deleted
 const deletableTranTypes = ['rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal'];
@@ -39,6 +37,9 @@ export default function TransactionModal({open, onClose, transaction}) {
         description: [false, ''],
     });
 
+    const [receiptFile, setReceiptFile] = useState(null);
+    const [removeReceipt, setRemoveReceipt] = useState(false);
+
     useEffect(() => {
         setLoading(true);
         fetchCustom('GET', '/accounts/', {
@@ -57,6 +58,13 @@ export default function TransactionModal({open, onClose, transaction}) {
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setLoading(false)
         });
+    }, [open, transaction]);
+
+    useEffect(() => {
+        if (transaction) {
+            setReceiptFile(null);
+            setRemoveReceipt(false);
+        }
     }, [open, transaction]);
 
     const handleInputChange = (e) => {
@@ -107,8 +115,18 @@ export default function TransactionModal({open, onClose, transaction}) {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
         setLoading(true);
+        let methodBody = payload;
+        // If we touch the receipt, use FormData
+        const wantsReceiptChange = !!receiptFile || removeReceipt;
+        if (wantsReceiptChange) {
+            const fd = new FormData();
+            Object.entries(payload).forEach(([k, v]) => fd.append(k, v));
+            if (receiptFile) fd.append('receiptFile', receiptFile);
+            if (removeReceipt) fd.append('remove_receipt', 'true');
+            methodBody = fd;
+        }
         fetchCustom('PATCH', `/transaction/${transaction.id}/`, {
-            body: payload,
+            body: methodBody,
             onSuccess: () => onClose(true),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => {
@@ -218,6 +236,62 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 onChange={handleInputChange}
                                 fullWidth
                             />
+                        </Grid>
+                        <Grid size={{xs: 12}}>
+                            {/* Receipt section */}
+                            {transaction?.receipt_link && !removeReceipt && !receiptFile && (
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{mb: 1}}>
+                                        <b>Ricevuta:</b>{' '}
+                                        <Button
+                                            variant="text"
+                                            color="primary"
+                                            sx={{textTransform: 'none', p: 0, minWidth: 0}}
+                                            onClick={() => window.open(transaction.receipt_link, '_blank', 'noopener,noreferrer')}>
+                                            Link Drive
+                                        </Button>
+                                    </Typography>
+                                    <Button
+                                        variant="outlined"
+                                        color="error"
+                                        size="small"
+                                        onClick={() => {
+                                            setRemoveReceipt(true);
+                                            setReceiptFile(null);
+                                        }}>
+                                        Rimuovi ricevuta
+                                    </Button>
+                                </Box>
+                            )}
+                            {(!transaction?.receipt_link || removeReceipt || receiptFile) && (
+                                <Box sx={{mt: 1}}>
+                                    <ReceiptFileUpload
+                                        file={receiptFile}
+                                        onFileChange={(f) => {
+                                            setReceiptFile(f);
+                                            if (f) setRemoveReceipt(false);
+                                        }}
+                                        label={transaction?.receipt_link && removeReceipt ? "Carica nuova ricevuta" : "Carica ricevuta"}
+                                    />
+                                    {removeReceipt && !receiptFile && (
+                                        <Typography variant="caption" color="warning.main">
+                                            La ricevuta esistente verrà rimossa al salvataggio.
+                                        </Typography>
+                                    )}
+                                    {transaction?.receipt_link && (removeReceipt || receiptFile) && (
+                                        <Button
+                                            variant="text"
+                                            size="small"
+                                            onClick={() => {
+                                                setRemoveReceipt(false);
+                                                setReceiptFile(null);
+                                            }}
+                                            sx={{mt: 1}}>
+                                            Annulla modifica ricevuta
+                                        </Button>
+                                    )}
+                                </Box>
+                            )}
                         </Grid>
                     </Grid>
                     <Box mt={2}>

@@ -154,10 +154,12 @@ export default function Profile() {
     };
 
     const fetchFinancePerms = (email) => {
-        fetchCustom("GET", `/users/${encodeURIComponent(email)}/finance-permissions/`, {
+        fetchCustom("GET", `/users/finance-permissions/?email=${encodeURIComponent(email)}`, {
             onSuccess: (data) => setFinancePerms(data),
             onError: () => setFinancePerms(null),
-        });
+        }
+    )
+        ;
     };
 
     useEffect(() => {
@@ -463,7 +465,7 @@ export default function Profile() {
         if (!profile) return;
         const targetEmail = profile.email;
         const enable = !(financePerms?.can_manage_casse || false); // toggle both together
-        fetchCustom("PATCH", `/users/${encodeURIComponent(targetEmail)}/finance-permissions/`, {
+        fetchCustom("PATCH",`/users/finance-permissions/?email=${encodeURIComponent(targetEmail)}`, {
             body: {
                 can_manage_casse: enable,
                 can_view_casse_import: enable
@@ -714,7 +716,7 @@ export default function Profile() {
                                             Data Iscrizione: {dayjs(profile?.created_at).format('DD MMMM YYYY')}
                                         </Typography>
                                         {profile?.email_is_verified && (
-                                            <Chip sx={{ml:2}} label="Email verificata" color="success" size="small"/>
+                                            <Chip sx={{ml: 2}} label="Email verificata" color="success" size="small"/>
                                         )}
                                     </Box>
                                     <Grid sx={{marginLeft: 'auto'}}>
@@ -1135,8 +1137,8 @@ export default function Profile() {
                                 </Card>
                             </Grid>
                             {profileType === "ESNer" && (<>
-                                    <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1, mt:-5}}/></Grid>
-                                    <Grid size={{xs: 12}} sx={{mb: 5, mt:-5}}>
+                                    <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1, mt: -5}}/></Grid>
+                                    <Grid size={{xs: 12}} sx={{mb: 5, mt: -5}}>
                                         <Card sx={{p: 2}}>
                                             <Box
                                                 sx={{

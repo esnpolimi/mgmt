@@ -1,28 +1,32 @@
 import React, {useEffect, useState} from 'react';
 import {
-    Modal,
     Box,
-    TextField,
     Button,
-    IconButton,
-    Typography,
-    Tooltip,
-    Grid,
-    CircularProgress,
-    FormControlLabel,
-    Switch,
-    Select,
-    MenuItem,
+    Checkbox,
     Chip,
-    Paper,
+    CircularProgress,
+    FormControl,
+    FormControlLabel,
+    FormLabel,
+    Grid,
+    IconButton,
     InputLabel,
-    Checkbox
+    MenuItem,
+    Modal,
+    Paper,
+    Radio,
+    RadioGroup,
+    Select,
+    Switch,
+    TextField,
+    Tooltip,
+    Typography
 } from '@mui/material';
-import {LocalizationProvider, DatePicker, DateTimePicker} from '@mui/x-date-pickers';
+import {DatePicker, DateTimePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon} from '@mui/icons-material';
-import {fetchCustom, defaultErrorHandler} from "../../api/api";
+import {defaultErrorHandler, fetchCustom} from "../../api/api";
 import {style} from '../../utils/sharedStyles'
 import CustomEditor from '../CustomEditor';
 import Loader from "../Loader";
@@ -30,20 +34,18 @@ import CloseIcon from '@mui/icons-material/Close';
 import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import StatusBanner from "../StatusBanner";
-import {Radio, RadioGroup, FormControl, FormLabel} from '@mui/material';
 import ProfileSearch from '../ProfileSearch';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 
 export default function EventModal({open, event, isEdit, onClose}) {
 
     /* General event information block, at the top of the modal */
-    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef, errorsRef}) {
+    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef}) {
 
         console.log("General info block rendered ")
         console.log(dataRef)
         // Local state for UI only (fast typing, no parent re-render)
         const [localData, setLocalData] = useState(dataRef.current);
-        const [localErrors, setLocalErrors] = useState(errorsRef.current);
 
         // Update ref and local state on input change
         const handleInputChange = (event) => {
@@ -534,7 +536,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     }
 
     /* Profile data */
-    const ProfileData = function ProfileData({dataRef, formFieldsDisabled}) {
+    const ProfileData = function ProfileData({dataRef}) {
 
         const [localData, setLocalData] = useState(dataRef.current);
 
@@ -553,7 +555,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             <Box my={2}>
                 <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
-                    Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell'organizzazione.<br/>
+                    Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell&apos;organizzazione.<br/>
                     I dati sono presi dal profilo Erasmus! Richiedi dati aggiornati tra i campi del Form di Iscrizione.
                 </Typography>
                 <Select
@@ -581,7 +583,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     fullWidth
                 >
                     {Object.entries(profileDisplayNames)
-                        .filter(([k]) => k !== 'id' && k !== 'group')
+                        // Exclude technical fields (added created_at exclusion)
+                        .filter(([k]) => k !== 'id' && k !== 'group' && k !== 'created_at')
                         .map(([k, v]) => (
                             <MenuItem key={k} value={k}>
                                 {v}
@@ -784,7 +787,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
 
     /* Additional fields */
-    const AdditionalFields = function AdditionalFields({dataRef, errorsRef, isEdit, hasSubscriptions}) {
+    const AdditionalFields = function AdditionalFields({dataRef, isEdit, hasSubscriptions}) {
 
         const [localData, setLocalData] = useState(dataRef.current)
 
@@ -1121,7 +1124,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Box>
                     <FieldSection
                         title={"Campi form"}
-                        description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste."}
+                        description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste. L'email è sempre richiesta prima di compilare il form e visibile nelle liste se impostata tra i Dati Anagrafici."}
                         fields={localData.fields.filter((field) => field.field_type === "form")}
                         onAdd={onAdd}
                         onDelete={onDelete}
@@ -1150,11 +1153,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
         is_variable_fee: false,
         allow_online_payment: false,
         organizers: [],
-        lists: [{id: '', name: 'Main List', capacity: ''}],
+        lists: [{id: '', name: 'Main List', capacity: '', is_main_list: true}], // set default as Main List type
         profile_fields: [],
-        fields: [
-            {field_type: 'additional', name: 'Stato pagamento', type: 'b'}
-        ],
+        fields: [],
         enable_form: false,
         form_programmed_open_time: dayjs()
     })
@@ -1181,7 +1182,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const [deleting, setDeleting] = useState(false);
     const [popup, setPopup] = useState(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [seed, setSeed] = useState(0) // Used to trigger re renders when displaying errors
+    const [, setSeed] = useState(0); // Used to trigger re-renders when displaying errors
 
     useEffect(() => {
         if (isEdit) {
@@ -1203,12 +1204,24 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 ...dataRef.current,
                 ...eventData
             }
-
+            // Remove created_at if present in saved profile_fields
+            dataRef.current.profile_fields = (dataRef.current.profile_fields || []).filter(f => f !== 'created_at');
             setHasSubscriptions(event.subscriptions && event.subscriptions.length > 0);
 
             console.log("Use effect run")
             console.log(dataRef)
 
+        } else {
+            dataRef.current = {
+                ...dataRef.current,
+                organizers: [],
+                profile_fields: ['name', 'surname', 'email'],
+                fields: [
+                    {field_type: 'form', name: 'Vegetarian?', type: 'b', required: true}
+                ],
+            }
+            // Safety: ensure created_at never slips in
+            dataRef.current.profile_fields = dataRef.current.profile_fields.filter(f => f !== 'created_at');
         }
         setLoading(false);
     }, []);
@@ -1223,8 +1236,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
     const convert = (data) => {
 
-        // Remove subscriptions, form_fields, and additional_fields if present
-        const {subscriptions, form_fields, additional_fields, ...rest} = data;
+        // Exclude keys we don't want to send without creating unused variables
+        const rest = {...data};
+        delete rest.subscriptions;
+        delete rest.form_fields;
+        delete rest.additional_fields;
+
         return ({
             ...rest,
             name: rest.name,
