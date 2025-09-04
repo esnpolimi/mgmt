@@ -15,6 +15,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.core.mail import send_mail
 
 from events.models import Subscription, Event
 from profiles.models import Profile
@@ -22,8 +23,11 @@ from treasury.models import Account, ESNcard, Settings, ReimbursementRequest
 from treasury.models import Transaction
 from treasury.serializers import TransactionViewSerializer, AccountDetailedViewSerializer, AccountEditSerializer, \
     AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
-    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer
+    ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer, \
+    TransactionUpdateSerializer
 from users.models import User
+from googleapiclient.errors import HttpError
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +49,9 @@ def get_action_permissions(action, user):
     if action == 'transaction_add':
         return user.has_perm('treasury.add_transaction')
     if action == 'transaction_detail_patch':
-        return user.has_perm('treasury.change_transaction')
+        return user.has_perm('treasury.change_transaction') or getattr(user, 'can_manage_casse', False)
     if action == 'transaction_detail_delete':
-        return user.has_perm('treasury.delete_transaction')
+        return user.has_perm('treasury.delete_transaction') or getattr(user, 'can_manage_casse', False)
     if action == 'esncard_detail_patch':
         return user.has_perm('treasury.change_esncard')
     if action == 'reimbursement_request_detail_patch':
@@ -194,7 +198,7 @@ def transaction_add(request):
         if not get_action_permissions('transaction_add', request.user):
             return Response({'error': 'Non autorizzato.'}, status=401)
 
-        transaction_serializer = TransactionCreateSerializer(data=request.data)
+        transaction_serializer = TransactionCreateSerializer(data=request.data, context={'request': request})
         if not transaction_serializer.is_valid():
             return Response(transaction_serializer.errors, status=400)
 
@@ -204,11 +208,38 @@ def transaction_add(request):
                 return Response({'error': 'Non autorizzato.'}, status=401)
 
         try:
-            transaction_serializer.save()
+            tx = transaction_serializer.save()
         except ValueError as ve:
             return Response({'error': str(ve)}, status=400)
         except PermissionDenied as pe:
             return Response({'error': str(pe)}, status=403)
+
+        # --- Email notification for manual deposit / withdrawal ---
+        if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
+            try:
+                executor_profile = getattr(tx.executor, 'profile', None)
+                executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
+                executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
+                receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
+                subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
+                body = (
+                    f"Tipo: {transaction_type}\n"
+                    f"Importo: {tx.amount} EUR\n"
+                    f"Cassa: {tx.account.name}\n"
+                    f"Esecutore: {executor_name} ({executor_email})\n"
+                    f"Descrizione: {tx.description}\n"
+                    f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Ricevuta: {receipt_info}\n"
+                )
+                send_mail(
+                    subject=subject,
+                    message=body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    recipient_list=['tesoriere@esnpolimi.it'],
+                    fail_silently=True
+                )
+            except Exception as mail_exc:
+                logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
 
         return Response(status=200)
     except Exception as e:
@@ -276,33 +307,39 @@ def transaction_detail(request, pk):
                         try:
                             executor_pk = User.objects.get(profile__email=executor_raw).pk
                         except User.DoesNotExist:
-                            return Response({'error': 'Invalid executor information'}, status=400)
+                            return Response({'error': 'Executor non valido.'}, status=400)
 
-            with transaction.atomic():
-                try:
-                    if int(request.data.get('account', transaction_obj.account.id)) != transaction_obj.account.id:
-                        transaction_obj.delete()
-                        t = Transaction(
-                            type=transaction_obj.type,
-                            account_id=request.data['account'],
-                            executor_id=executor_pk,
-                            amount=float(request.data['amount']),
-                            description=request.data.get('description', ''),
-                            esncard=transaction_obj.esncard,
-                            subscription=transaction_obj.subscription
-                        )
-                        t.save()
-                    else:
-                        transaction_obj.amount = float(request.data['amount'])
-                        transaction_obj.executor_id = executor_pk
-                        transaction_obj.description = request.data.get('description', '')
-                        transaction_obj.save()
-                except ValueError as ve:
-                    return Response({'error': str(ve)}, status=400)
-                except PermissionDenied as pe:
-                    return Response({'error': str(pe)}, status=403)
+            update_payload = request.data.copy()  # may include: account, amount, description, receiptFile, remove_receipt
+            # Remove executor from serializer payload
+            update_payload.pop('executor', None)
 
-                return Response(status=200)
+            serializer = TransactionUpdateSerializer(
+                transaction_obj,
+                data=update_payload,
+                partial=True,
+                context={'request': request}
+            )
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=400)
+
+            try:
+                serializer.save()  # handles amount/account/description/receipt
+            except HttpError as he:
+                status = getattr(he, 'resp', None).status if getattr(he, 'resp', None) else None
+                if status in (500, 502, 503, 504):
+                    return Response({'error': 'Errore temporaneo durante l\'upload della ricevuta. Riprova.'}, status=503)
+                return Response({'error': 'Errore upload ricevuta.'}, status=400)
+            except Exception as e:
+                logger.error(f"Errore salvataggio transazione (PATCH): {e}")
+                return Response({'error': 'Errore durante l\'aggiornamento.'}, status=500)
+
+            # Update executor separately (not handled by serializer)
+            if executor_pk != transaction_obj.executor_id:
+                transaction_obj.executor_id = executor_pk
+                transaction_obj.save(update_fields=['executor'])
+
+            return Response(status=200)
+
         elif request.method == 'DELETE':
             if not get_action_permissions('transaction_detail_delete', request.user):
                 return Response({'error': 'Non autorizzato.'}, status=401)
@@ -315,7 +352,7 @@ def transaction_detail(request, pk):
                 Transaction.TransactionType.WITHDRAWAL
             ]
             if transaction_obj.type in list_deleteable:
-                if not request.user.has_perm('treasury.delete_transaction'):
+                if not (request.user.has_perm('treasury.delete_transaction') or request.user.can_manage_casse):
                     return Response({'error': 'Non autorizzato.'}, status=401)
                 transaction_obj.delete()
                 return Response(status=204)
@@ -418,7 +455,31 @@ def reimbursement_request_creation(request):
     try:
         serializer = ReimbursementRequestSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            instance = serializer.save()
+            # --- Email notification for reimbursement request creation ---
+            try:
+                profile = getattr(instance.user, 'profile', None)
+                user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
+                receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
+                subject = f"Nuova richiesta di rimborso #{instance.id}"
+                body = (
+                    f"Richiedente: {user_name}\n"
+                    f"Importo: {instance.amount} EUR\n"
+                    f"Metodo pagamento: {instance.payment}\n"
+                    f"Descrizione: {instance.description}\n"
+                    f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Ricevuta: {receipt_info}\n"
+                )
+                send_mail(
+                    subject=subject,
+                    message=body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    recipient_list=['tesoriere@esnpolimi.it'],
+                    fail_silently=True
+                )
+            except Exception as mail_exc:
+                logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
+
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
     except Exception as e:

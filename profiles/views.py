@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
+from django.db import models
 from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
@@ -28,6 +29,13 @@ from users.serializers import UserGroupEditSerializer
 
 logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
+
+# Dynamically collect searchable Profile fields (char/text/email)
+SEARCHABLE_PROFILE_FIELDS = [
+    f.name for f in Profile._meta.get_fields()
+    if hasattr(f, 'attname') and isinstance(f, (models.CharField, models.TextField, models.EmailField))
+    and f.name not in ['password']
+]
 
 
 def user_is_board(user):
@@ -86,13 +94,18 @@ def profile_list(request, is_esner):
 
         search = request.GET.get('search', '').strip()
         if search:
-            profiles = profiles.filter(
-                Q(name__icontains=search) |
-                Q(surname__icontains=search) |
-                Q(email__icontains=search) |
-                Q(phone_number__icontains=search) |
-                Q(whatsapp_number__icontains=search)
-            )
+            # Support multi-token search: each token must appear in at least one field (AND across tokens)
+            tokens = [t for t in search.split() if t]
+            for token in tokens:
+                token_q = Q()
+                for field_name in SEARCHABLE_PROFILE_FIELDS:
+                    token_q |= Q(**{f"{field_name}__icontains": token})
+                # Extra related / composite fields
+                token_q |= Q(esncard__number__icontains=token)
+                token_q |= Q(phone_prefix__icontains=token) | Q(phone_number__icontains=token)
+                token_q |= Q(whatsapp_prefix__icontains=token) | Q(whatsapp_number__icontains=token)
+                profiles = profiles.filter(token_q)
+            profiles = profiles.distinct()
 
         # Filter by user's group (only if ESNer)
         if is_esner:
@@ -307,14 +320,27 @@ def verify_email_and_enable_profile(request, uid, token):
                 except User.DoesNotExist:
                     return Response({'error': "L'utente associato a questo profilo non esiste."}, status=500)
 
+        # Send confirmation email to secretary if ESNer has confirmed its email
         if profile.is_esner:
-            return Response({'message': 'Email verificata e profilo attivato con successo!'})
-        else:
-            return Response({'message': 'Email verified and profile successfully activated!'})
+            try:
+                send_mail(
+                    subject="Nuova iscrizione ESNer a gestionale completata",
+                    message=f"L'ESNer {profile.name} {profile.surname} ({profile.email}) ha completato la sua iscrizione a gestionale e verificato la sua email.",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=["segretario@esnpolimi.it"],
+                    fail_silently=False
+                )
+            except Exception as e:
+                logger.error(f"Errore invio email segretario: {str(e)}")
+                sentry_sdk.capture_exception(e)
+                # Do not block the response for secretary email errors
+
+        return Response({'message': 'Email verificata e profilo attivato con successo!'})
+
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+    return Response({'error': 'Errore interno del server.'}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
