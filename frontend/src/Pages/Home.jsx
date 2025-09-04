@@ -14,6 +14,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import RecentAccountTransactionsModal from "../Components/treasury/RecentAccountTransactionsModal";
 
 
 const style = {
@@ -37,6 +39,7 @@ export default function Home() {
     const casseRef = useRef(null);
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
     const [showFirstLoginBanner, setShowFirstLoginBanner] = useState(!user?.last_login);
+    const [recentModalAccount, setRecentModalAccount] = useState(null);
 
     const groupname = user?.groups
         ? user.groups[0] === "Aspiranti"
@@ -418,12 +421,20 @@ export default function Home() {
                                         minWidth: 200,
                                         maxWidth: 300,
                                         display: "flex",
-                                        alignItems: "center",
+                                        alignItems: "stretch",
+                                        justifyContent: "space-between",
                                         boxShadow: 4,
                                         borderRadius: 2,
                                         m: 1,
+                                        p: 0.5
                                     }}>
-                                    <CardContent sx={{flex: 1}}>
+                                    <CardContent
+                                        sx={{
+                                            flex: "1 1 auto",
+                                            minWidth: 0,
+                                            pr: 1.5,
+                                            pb: 1.5
+                                        }}>
                                         <Typography variant="h6" sx={{fontWeight: 700, color: "#2d3a4b"}}>
                                             {account.name}
                                         </Typography>
@@ -447,25 +458,50 @@ export default function Home() {
                                         )}
                                     </CardContent>
                                     {canManageCasse ? (
-                                        <CardActions sx={{pr: 2, flexDirection: 'row', alignItems: 'center', gap: 1}}>
+                                        <CardActions
+                                            sx={{
+                                                p: 0.5,
+                                                pr: 0.5,
+                                                flexDirection: 'row',
+                                                gap: 0.5,
+                                                flexWrap: 'wrap',
+                                                maxWidth: 86,
+                                                height: '100%',
+                                                alignItems: 'center',
+                                                alignContent: 'center',
+                                                justifyContent: 'flex-end',
+                                                alignSelf: 'center'
+                                            }}>
                                             <IconButton
                                                 color={account.status === "closed" ? "success" : "error"}
+                                                size="small"
                                                 onClick={() => handleAction(account, account.status === "closed" ? "open" : "close")}
                                                 sx={{minWidth: 40}}
+                                                disabled={(isActive || (isAspirante && canManageCasse)) && account.name === "SumUp"}
                                                 title={account.status === "closed" ? "Apri Cassa" : "Chiudi Cassa"}
                                             >
                                                 <PowerSettingsNewIcon/>
                                             </IconButton>
-                                            {isBoard && account.status === "open" && (
-                                                <IconButton
-                                                    color="primary"
-                                                    onClick={() => openTransactionModal(account)}
-                                                    sx={{minWidth: 40}}
-                                                    title="Deposita/Preleva"
-                                                >
-                                                    <CurrencyExchangeIcon/>
-                                                </IconButton>
-                                            )}
+                                            <IconButton
+                                                color="primary"
+                                                size="small"
+                                                onClick={() => openTransactionModal(account)}
+                                                sx={{minWidth: 40}}
+                                                disabled={!((isBoard || isActive || (isAspirante && canManageCasse)) && account.status === "open")}
+                                                title="Deposita/Preleva"
+                                            >
+                                                <CurrencyExchangeIcon/>
+                                            </IconButton>
+                                            <IconButton
+                                                color="warning"
+                                                size="small"
+                                                sx={{minWidth: 40}}
+                                                disabled={!((isBoard || ((isActive || (isAspirante && canManageCasse)) && account.name !== "SumUp")))}
+                                                title="Lista Movimenti (ultime 24h)"
+                                                onClick={() => setRecentModalAccount(account)}
+                                            >
+                                                <ListAltIcon/>
+                                            </IconButton>
                                         </CardActions>
                                     ) : null}
                                 </Card>
@@ -495,6 +531,16 @@ export default function Home() {
                 onClose={handleTransactionModalOpen}
                 account={selectedAccount}
             />
+            {/* Recent Transactions Modal */}
+            {recentModalAccount && (
+                <RecentAccountTransactionsModal
+                    account={recentModalAccount}
+                    onClose={(changed) => {
+                        setRecentModalAccount(null);
+                        if (changed) fetchAccounts();
+                    }}
+                />
+            )}
             <ReimbursementRequestModal
                 open={rimborsoModalOpen}
                 onClose={handleReimbursementRequestModalClose}

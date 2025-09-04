@@ -8,6 +8,7 @@ import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import Popup from "../Popup";
 import CircularProgress from "@mui/material/CircularProgress";
 import ConfirmDialog from "../ConfirmDialog";
+import ReceiptFileUpload from "../common/ReceiptFileUpload";
 
 const paymentOptions = [
     {value: "cash", label: "Contanti"},
@@ -41,10 +42,6 @@ export default function ReimbursementRequestModal({open, onClose}) {
 
     const handleChange = (e) => {
         setData({...data, [e.target.name]: e.target.value});
-    };
-
-    const handleFileChange = (e) => {
-        setReceiptFile(e.target.files && e.target.files[0] ? e.target.files[0] : null);
     };
 
     const handlePaymentChange = (e) => {
@@ -141,27 +138,12 @@ export default function ReimbursementRequestModal({open, onClose}) {
                         </FormControl>
                     </Grid>
                     <Grid size={{xs: 12}}>
-                        <Button variant={receiptFile ? "outlined" : "text"}
-                                component="label"
-                                fullWidth
-                                sx={{mb: 1}}>
-                            {receiptFile ? `File selezionato: ${receiptFile.name}` : "Carica ricevuta"}
-                            <input type="file"
-                                   accept="application/pdf,image/*"
-                                   hidden
-                                   onChange={handleFileChange}/>
-                        </Button>
-                        {receiptFile && (
-                            <Button variant="text"
-                                    color="error"
-                                    fullWidth
-                                    sx={{mb: 1}}
-                                    onClick={() => setReceiptFile(null)}>
-                                Rimuovi file
-                            </Button>
-                        )}
-                        {/* Optionally show error if receipt is required */}
-                        {/* <FormHelperText error={!!errors.receiptFile}>{errors.receiptFile}</FormHelperText> */}
+                        <ReceiptFileUpload
+                            file={receiptFile}
+                            onFileChange={setReceiptFile}
+                            label="Carica ricevuta"
+                            removable
+                        />
                     </Grid>
                     {(data.payment === "paypal" || data.payment === "bonifico") && (
                         <Grid size={{xs: 12}}>

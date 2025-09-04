@@ -181,6 +181,22 @@ export default function TransactionsList() {
             ),
         },
         {
+            accessorKey: 'receipt_link',
+            header: "Ricevuta",
+            size: 100,
+            Cell: ({cell}) => cell.getValue() ? (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(cell.getValue(), '_blank', 'noopener,noreferrer')}>
+                        Link Drive
+                    </Button>
+                </span>
+            ) : ("-"),
+        },
+        {
             accessorKey: 'description',
             header: names.description,
             size: 200,
@@ -237,7 +253,8 @@ export default function TransactionsList() {
                                 id: Date.now()
                             });
                             return;
-                        } catch (_) {}
+                            // eslint-disable-next-line no-unused-vars
+                        } catch (_) { /* empty */ }
                     } else if (contentType.includes('text/html')) {
                         setPopup({message: 'Rotta backend non trovata (HTML ricevuto).', state: 'error', id: Date.now()});
                         return;
@@ -257,10 +274,10 @@ export default function TransactionsList() {
                 }
                 if (!filename) {
                     const now = new Date();
-                    const dateStr = now.toLocaleDateString('it-IT').replace(/[\/\\]+/g, '-');
-                    const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}).replace(/[:]+/g, '-');
+                    const dateStr = now.toLocaleDateString('it-IT').replace(/[/\\]+/g, '-');
+                    const timeStr = now.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}).replace(/:+/g, '-');
                     const base = eventData?.name
-                        ? `Evento_${eventData.name.replace(/[^\w\-]+/g, '_')}`
+                        ? `Evento_${eventData.name.replace(/[^\w-]+/g, '_')}`
                         : 'Transazioni';
                     filename = `Bilancio_${base}_${dateStr}_${timeStr}.xlsx`;
                 }

@@ -297,13 +297,18 @@ def _in_group(user, name: str):
 
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
-def user_finance_permissions(request, pk):
+def user_finance_permissions(request):
     """
     GET: Return raw and effective finance permission flags.
     PATCH: Board only. Allowed only if target is ESNer in group 'Aspiranti'.
     """
+    email = request.query_params.get("email")
+    if not email:
+        return Response({"error": "Missing 'email' parameter."}, status=400)
+
     try:
-        target = User.objects.get(pk=pk)
+        print(email)
+        target = User.objects.get(profile=email)
 
         def effective_manage(u):
             return u.can_manage_casse or _in_group(u, 'Attivi') or _in_group(u, 'Board')

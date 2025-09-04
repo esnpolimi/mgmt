@@ -170,8 +170,8 @@ export default function EventForm() {
                 if (typeof err.json === 'function') {
                     try {
                         body = await err.json();
-                    } catch (_) {
-                    }
+                        // eslint-disable-next-line no-unused-vars
+                    } catch (_) { /* empty */ }
                 }
                 const fields = body?.fields;
                 const errorMsg =
@@ -277,6 +277,11 @@ export default function EventForm() {
                     </Grid>
                 </Paper>
                 <Box component="form" onSubmit={handleSubmit} sx={{mt: 3, width: '100%'}}>
+                    {/* Added subscription email display */}
+                    <Paper elevation={1} sx={{p:2, mb:3}}>
+                        <Typography variant="subtitle2" color="text.secondary">Subscription Email</Typography>
+                        <Typography variant="body1" sx={{mt:0.5}}>{userEmail}</Typography>
+                    </Paper>
                     {/* Only form fields section now */}
                     {formFields.length > 0 && (
                         <Paper elevation={3} sx={{p: 2, mb: 3}}>
