@@ -20,7 +20,8 @@ import {
     Switch,
     TextField,
     Tooltip,
-    Typography
+    Typography,
+    Alert
 } from '@mui/material';
 import {DatePicker, DateTimePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
@@ -41,9 +42,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
     /* General event information block, at the top of the modal */
     const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef}) {
-
-        console.log("General info block rendered ")
-        console.log(dataRef)
         // Local state for UI only (fast typing, no parent re-render)
         const [localData, setLocalData] = useState(dataRef.current);
 
@@ -376,10 +374,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
     }
 
     /* Lists block*/
-    const Lists = function Lists({dataRef, errorsRef}) {
+    const Lists = function Lists({dataRef, isEdit}) {
 
         const [localData, setLocalData] = useState(dataRef.current);
-        const [localErrors] = useState(errorsRef.current);
+        //const [localErrors] = useState(errorsRef.current);
 
         /* Helpers */
         const handleAddList = () => {
@@ -399,6 +397,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
         const handleListChange = (index, event) => {
             const {name, value} = event.target;
+            const listObj = localData.lists[index];
+            // Prevent renaming (or changing type) of the special form list in edit mode
+            if (isEdit && listObj && listObj.name === 'Form List') {
+                if (name === 'name') return;
+            }
+
             const updatedLists = localData.lists.map((list, i) =>
                 i === index ? {...list, [name]: value} : list
             );
@@ -411,6 +415,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
         };
 
         const handleDeleteList = (index) => {
+            const listObj = localData.lists[index];
+            if (isEdit && listObj && listObj.name === 'Form List') {
+                return; // cannot delete form list
+            }
 
             // Update local state
             setLocalData({
@@ -426,6 +434,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         };
 
         const handleListTypeChange = (index, type) => {
+            const listObj = localData.lists[index];
+            if (isEdit && listObj && listObj.name === 'Form List') return; // cannot change type
 
             const updatedLists = localData.lists.map((list, i) => {
                 if (type === 'main') {
@@ -464,73 +474,82 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <IconButton title="Aggiungi Lista" onClick={handleAddList} sx={{ml: -2}}><AddIcon/></IconButton>
                 </Grid>
 
-                {localData.lists.map((list, index) => (
-                    <Grid container spacing={2} alignItems="center" sx={{mt: 1}} key={index}>
-                        <Grid>
-                            <TextField
-                                label={eventNames.list_name}
-                                name="name"
-                                value={list.name}
-                                onChange={(e) => handleListChange(index, e)}
-                                required
-                                error={localErrors.listItems[index]?.name}
-                                helperText={localErrors.listItems[index]?.name ? "Il nome è obbligatorio" : ""}
-                            />
-                        </Grid>
-                        <Grid>
-                            <TextField
-                                label={eventNames.list_capacity}
-                                name="capacity"
-                                type="number"
-                                value={list.capacity}
-                                slotProps={{htmlInput: {min: "0", step: "1"}}}
-                                onChange={(e) => handleListChange(index, e)}
-                                placeholder="Inserisci 0 se illimitata"
-                                required
-                                error={localErrors.listItems[index]?.capacity}
-                                helperText={localErrors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
-                            />
-                        </Grid>
-                        <Grid>
-                            <FormControl component="fieldset">
-                                <FormLabel component="legend" sx={{fontSize: '0.9rem'}}>Tipo</FormLabel>
-                                <RadioGroup
-                                    row
-                                    value={
-                                        list.is_main_list
-                                            ? 'main'
-                                            : list.is_waiting_list
-                                                ? 'waiting'
-                                                : 'none'
-                                    }
-                                    onChange={(e) => handleListTypeChange(index, e.target.value)}
+                {localData.lists.map((list, index) => {
+                    const isFormList = isEdit && list.name === 'Form List';
+                    return (
+                        <Grid container spacing={2} alignItems="center" sx={{mt: 1}} key={index}>
+                            <Grid>
+                                <TextField
+                                    label={eventNames.list_name}
+                                    name="name"
+                                    value={list.name}
+                                    onChange={(e) => handleListChange(index, e)}
+                                    required
+                                    disabled={isFormList}
+                                    //error={localErrors.listItems[index]?.name}
+                                    //helperText={localErrors.listItems[index]?.name ? "Il nome è obbligatorio" : ""}
+                                />
+                            </Grid>
+                            <Grid>
+                                <TextField
+                                    label={eventNames.list_capacity}
+                                    name="capacity"
+                                    type="number"
+                                    value={list.capacity}
+                                    slotProps={{htmlInput: {min: "0", step: "1"}}}
+                                    onChange={(e) => handleListChange(index, e)}
+                                    placeholder="Inserisci 0 se illimitata"
+                                    required
+                                    //error={localErrors.listItems[index]?.capacity}
+                                    //helperText={localErrors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
+                                />
+                            </Grid>
+                            <Grid>
+                                <FormControl component="fieldset">
+                                    <FormLabel component="legend" sx={{fontSize: '0.9rem'}}>Tipo</FormLabel>
+                                    <RadioGroup
+                                        row
+                                        value={
+                                            list.is_main_list
+                                                ? 'main'
+                                                : list.is_waiting_list
+                                                    ? 'waiting'
+                                                    : 'none'
+                                        }
+                                        onChange={(e) => handleListTypeChange(index, e.target.value)}
+                                    >
+                                        <FormControlLabel
+                                            value="main"
+                                            control={<Radio/>}
+                                            label="Main List"
+                                            disabled={isFormList || localData.lists.some((l, i) => l.is_main_list && i !== index)}
+                                        />
+                                        <FormControlLabel
+                                            value="waiting"
+                                            control={<Radio/>}
+                                            label="Waiting List"
+                                            disabled={isFormList || localData.lists.some((l, i) => l.is_waiting_list && i !== index)}
+                                        />
+                                        <FormControlLabel
+                                            value="none"
+                                            control={<Radio/>}
+                                            label="Altro"
+                                            disabled={isFormList}
+                                        />
+                                    </RadioGroup>
+                                </FormControl>
+                            </Grid>
+                            <Grid size={{xs: 2}}>
+                                <IconButton
+                                    onClick={() => handleDeleteList(index)}
+                                    disabled={isFormList}
                                 >
-                                    <FormControlLabel
-                                        value="main"
-                                        control={<Radio/>}
-                                        label="Main List"
-                                        disabled={localData.lists.some((l, i) => l.is_main_list && i !== index)}
-                                    />
-                                    <FormControlLabel
-                                        value="waiting"
-                                        control={<Radio/>}
-                                        label="Waiting List"
-                                        disabled={localData.lists.some((l, i) => l.is_waiting_list && i !== index)}
-                                    />
-                                    <FormControlLabel
-                                        value="none"
-                                        control={<Radio/>}
-                                        label="Altro"
-                                    />
-                                </RadioGroup>
-                            </FormControl>
+                                    <DeleteIcon/>
+                                </IconButton>
+                            </Grid>
                         </Grid>
-                        <Grid size={{xs: 2}}>
-                            <IconButton onClick={() => handleDeleteList(index)}><DeleteIcon/></IconButton>
-                        </Grid>
-                    </Grid>
-
-                ))}
+                    )
+                })}
             </Box>
         )
     }
@@ -764,7 +783,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Typography color="text.secondary">Nessun campo configurato</Typography>
                     ) : (
                         fields.map((field, i) => {
-
                             return (
                                 <FieldRow
                                     key={i}
@@ -1055,13 +1073,19 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             <Switch
                                 checked={!!localData.enable_form}
                                 onChange={(e) => {
-                                    if (isEdit && hasSubscriptions)
-                                        return;
+                                    if (isEdit && hasSubscriptions) return;
+                                    const enabled = e.target.checked;
                                     setLocalData({
                                         ...localData,
-                                        enable_form: e.target.checked
-                                    })
-                                    dataRef.current.enable_form = e.target.checked
+                                        enable_form: enabled,
+                                        form_programmed_open_time: enabled
+                                            ? (localData.form_programmed_open_time || dayjs().add(1, 'hour').toISOString())
+                                            : null
+                                    });
+                                    dataRef.current.enable_form = enabled;
+                                    dataRef.current.form_programmed_open_time = enabled
+                                        ? (dataRef.current.form_programmed_open_time || dayjs().add(1, 'hour').toISOString())
+                                        : null;
                                 }}
                                 name="enable_form"
                                 color="primary"
@@ -1072,7 +1096,15 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     />
                 </Grid>
 
-                {localData.enable_form && <Paper elevation={3} sx={{p: 2, my: 2, border: '1px solid #eee',}}>
+                {localData.enable_form && (
+                    <Alert severity="info" sx={{mt: 1}}>
+                        Abilitando il form viene creata automaticamente la lista &#34;Form List&#34;.
+                        Le iscrizioni online finiscono lì e saranno spostate automaticamente in Main/Waiting List al pagamento online,
+                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì (default: somma di capacità ML e WL).
+                    </Alert>
+                )}
+
+                {localData.enable_form && <Paper elevation={3} sx={{p: 2, my: 2}}>
                     <Typography variant="h5" gutterBottom>Impostazioni Form di Iscrizione Online</Typography>
 
                     {/* Display validation errors if present */}
@@ -1207,10 +1239,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
             // Remove created_at if present in saved profile_fields
             dataRef.current.profile_fields = (dataRef.current.profile_fields || []).filter(f => f !== 'created_at');
             setHasSubscriptions(event.subscriptions && event.subscriptions.length > 0);
-
-            console.log("Use effect run")
-            console.log(dataRef)
-
         } else {
             dataRef.current = {
                 ...dataRef.current,
@@ -1235,40 +1263,40 @@ export default function EventModal({open, event, isEdit, onClose}) {
     };
 
     const convert = (data) => {
-
         // Exclude keys we don't want to send without creating unused variables
         const rest = {...data};
         delete rest.subscriptions;
         delete rest.form_fields;
         delete rest.additional_fields;
 
-        return ({
+        return {
             ...rest,
-            name: rest.name,
+            name: (rest.name || '').trim(),
             date: formatDateString(rest.date),
             description: rest.description,
             subscription_start_date: formatDateTimeString(rest.subscription_start_date),
             subscription_end_date: formatDateTimeString(rest.subscription_end_date),
-            cost: Number(rest.cost).toFixed(2),
-            deposit: Number(rest.deposit).toFixed(2),
-            lists: rest.lists.map(t => ({
+            cost: Number(rest.cost || 0).toFixed(2),
+            deposit: Number(rest.deposit || 0).toFixed(2),
+            lists: (rest.lists || []).map(t => ({
                 id: t.id || null,
                 name: t.name,
-                capacity: Math.floor(Number(t.capacity)),
+                capacity: Math.floor(Number(t.capacity || 0)),
                 is_main_list: !!t.is_main_list,
                 is_waiting_list: !!t.is_waiting_list
             })),
             is_a_bando: !!rest.is_a_bando,
             is_allow_external: !!rest.is_allow_external,
             fields: rest.fields ?? [],
-            allow_online_payment: rest.allow_online_payment,
-            form_programmed_open_time: rest.form_programmed_open_time || null,
+            allow_online_payment: !!rest.allow_online_payment,
+            enable_form: !!rest.enable_form,
+            form_programmed_open_time: rest.enable_form ? (rest.form_programmed_open_time || null) : null,
             organizers: (rest.organizers || []).map(o => ({
                 profile: o.profile,
                 is_lead: !!o.is_lead
-            })),
-        })
-    }
+            }))
+        };
+    };
 
     const scrollUp = () => {
         window.scrollTo({
@@ -1366,11 +1394,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
         const method = isEdit ? "PATCH" : "POST";
         const url = isEdit ? `/event/${dataRef.current.id}/` : '/event/';
 
-        console.log("DEBUG")
-        console.log(payload)
-        console.log(method)
-        console.log(url)
-
         fetchCustom(method, url, {
             body: payload,
             onSuccess: () => onClose(true),
@@ -1433,7 +1456,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                           isEdit={isEdit}/>
                         <Description dataRef={dataRef}/>
                         <Organizers dataRef={dataRef}/>
-                        <Lists dataRef={dataRef} errorsRef={errorsRef}/>
+                        <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
                         <FormBlock dataRef={dataRef} errorsRef={errorsRef} hasSubscriptions={hasSubscriptions}

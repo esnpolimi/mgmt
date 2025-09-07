@@ -222,6 +222,11 @@ export default function EventForm() {
                 <Typography variant="h4" gutterBottom>
                     Event Subscription Form - {eventData.name}
                 </Typography>
+                <Alert severity="info" sx={{mb: 2}}>
+                    {eventData.allow_online_payment
+                        ? "Reminder: Your position in Main/Waiting List will be assigned when your online payment succeeds. Earlier payment = higher priority."
+                        : "Reminder: Your position in Main/Waiting List will be assigned when you pay at the office. Order of in‑office payments decides priority."}
+                </Alert>
                 {/* Alert for missing fields */}
                 {showMissingAlert && !backendError && (
                     <Alert severity="warning" sx={{mb: 2}}>

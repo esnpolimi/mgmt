@@ -164,6 +164,9 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
             if len(main_lists) != 1:
                 raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
+        # If form not enabled, nullify programmed open time to avoid date constraints
+        if not attrs.get('enable_form', False):
+            attrs['form_programmed_open_time'] = None
         return attrs
 
     @staticmethod
@@ -210,13 +213,29 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         lists_data = validated_data.pop('lists', [])
         organizers_data = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
-
-        # Create event with the remaining data
         event = Event.objects.create(**validated_data)
 
-        # Create lists
+        # Create provided lists
+        created_lists = []
         for list_data in lists_data:
-            EventList.objects.create(event=event, **list_data)
+            created_lists.append(EventList.objects.create(event=event, **list_data))
+
+        # Auto-create form list if form enabled
+        if event.enable_form:
+            has_form_list = event.lists.filter(name='Form List').exists()
+            if not has_form_list:
+                # Sum capacities of ML + WL
+                ml_cap = sum(l.capacity for l in event.lists.filter(is_main_list=True))
+                wl_cap = sum(l.capacity for l in event.lists.filter(is_waiting_list=True))
+                default_cap = ml_cap + wl_cap
+                EventList.objects.create(
+                    event=event,
+                    name='Form List',
+                    capacity=default_cap,
+                    display_order=event.lists.count(),
+                    is_main_list=False,
+                    is_waiting_list=False
+                )
 
         # Create organizers (supports multiple leaders)
         parsed_orgs = self._parse_organizers_input(organizers_data, lead_organizer)
@@ -364,55 +383,67 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             setattr(instance, attr, value)
         instance.save()
 
-        # Handle lists separately
         if lists_data is not None:
-            # Get all existing lists for this event
             existing_lists = {lst.id: lst for lst in instance.lists.all()}
             provided_list_ids = set()
-
             for list_data in lists_data:
                 list_id = list_data.get('id')
-                list_name = list_data.get('name', '').strip()
-                list_capacity = list_data.get('capacity', 0)
-                list_display_order = list_data.get('display_order', 0)
-                is_main_list = list_data.get('is_main_list', False)
-                is_waiting_list = list_data.get('is_waiting_list', False)
-
-                if list_id:  # Existing list
+                list_name = (list_data.get('name') or '').strip()
+                if list_id:
                     list_id = int(list_id)
-                    provided_list_ids.add(list_id)
-
                     if list_id in existing_lists:
-                        # Update existing list
-                        existing_list = existing_lists[list_id]
-                        existing_list.name = list_name
-                        existing_list.capacity = list_capacity
-                        existing_list.display_order = list_display_order
-                        existing_list.is_main_list = is_main_list
-                        existing_list.is_waiting_list = is_waiting_list
-                        existing_list.save()
-                else:  # New list (no ID or empty ID)
-                    if list_name:  # Only create if name is provided
-                        # Check if a list with this name already exists for this event
-                        existing_list_with_name = instance.lists.filter(name=list_name).first()
-                        if not existing_list_with_name:
-                            # Create new list only if no list with this name exists
-                            EventList.objects.create(
-                                event=instance,
-                                name=list_name,
-                                capacity=list_capacity,
-                                display_order=list_display_order,
-                                is_main_list=is_main_list,
-                                is_waiting_list=is_waiting_list
-                            )
+                        el = existing_lists[list_id]
+                        provided_list_ids.add(list_id)
+                        if el.name == 'Form List':
+                        # Protect form list name
+                            el.capacity = list_data.get('capacity', el.capacity)
+                            # Allow capacity & flags update except name
+                            el.display_order = list_data.get('display_order', el.display_order)
+                            el.is_main_list = False
+                            # Force non-main/non-waiting
+                            el.is_waiting_list = False
+                            el.save()
+                        else:
+                            el.name = list_name
+                            el.capacity = list_data.get('capacity', el.capacity)
+                            el.display_order = list_data.get('display_order', el.display_order)
+                            el.is_main_list = list_data.get('is_main_list', el.is_main_list)
+                            el.is_waiting_list = list_data.get('is_waiting_list', el.is_waiting_list)
+                            el.save()
+                else:
+                    if list_name and list_name != 'Form List':
+                    # New list; ignore attempts to manually create another form list
+                        EventList.objects.create(
+                            event=instance,
+                            name=list_name,
+                            capacity=list_data.get('capacity', 0),
+                            display_order=list_data.get('display_order', 0),
+                            is_main_list=list_data.get('is_main_list', False),
+                            is_waiting_list=list_data.get('is_waiting_list', False)
+                        )
 
-            # Remove lists that are no longer provided (only if they have no subscriptions)
-            lists_to_remove = set(existing_lists.keys()) - provided_list_ids
-            for list_id_to_remove in lists_to_remove:
-                list_to_remove = existing_lists[list_id_to_remove]
-                # Only delete if no subscriptions exist for this list
-                if not list_to_remove.subscriptions.exists():
-                    list_to_remove.delete()
+            # Remove unprovided lists (except form list) if no subscriptions
+            removable = set(existing_lists.keys()) - provided_list_ids
+            for rid in removable:
+                lst = existing_lists[rid]
+                if lst.name == 'Form List':
+                    continue
+                if not lst.subscriptions.exists():
+                    lst.delete()
+
+        # Ensure form list exists if form enabled
+        if instance.enable_form and not instance.lists.filter(name='Form List').exists():
+            ml_cap = sum(l.capacity for l in instance.lists.filter(is_main_list=True))
+            wl_cap = sum(l.capacity for l in instance.lists.filter(is_waiting_list=True))
+            default_cap = ml_cap + wl_cap
+            EventList.objects.create(
+                event=instance,
+                name='Form List',
+                capacity=default_cap,
+                display_order=instance.lists.count(),
+                is_main_list=False,
+                is_waiting_list=False
+            )
 
         # Handle organizers
         if organizers_data is not None:

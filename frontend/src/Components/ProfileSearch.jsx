@@ -88,7 +88,7 @@ export default function ProfileSearch({
                     helperText={helperText}
                 />
             )}
-            noOptionsText="Nessun profilo trovato"
+            noOptionsText={searchQuery === '' ? "Digita almeno 3 caratteri" : "Nessun profilo trovato per la ricerca '" + searchQuery + "'"}
             loadingText="Caricamento..."
             disabled={disabled}
         />
