@@ -114,7 +114,7 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
     html_parts = [
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>",
         "<p>We received your subscription!</p>",
-        f"<p><b>Assigned list:</b> {assigned_label}</p>"
+        # f"<p><b>Assigned list:</b> {assigned_label}</p>"
     ]
     if waiting:
         html_parts.append(
@@ -125,11 +125,11 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
                 "<p>Payment is required. If you already paid online you will soon get a separate payment confirmation email.</p>")
         else:
             html_parts.append(
-                "<p>Payment is required. Follow the instructions sent on our channels.<br/>"
-                "A confirmation email will follow once the payment has been received.</p>")
+                "<p>Payment is required. Please follow the instructions sent on our channels.<br/>"
+            )
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
-    html_parts.append("<p>Thank you!<br/><br/>ESN Politecnico Milano</p></body></html>")
+    html_parts.append("<p>Thank you!<br/><br/><i>ESN Politecnico Milano</i></p></body></html>")
     html_content = "".join(html_parts)
 
     if _send_email(subject, html_content, recipient):
@@ -815,6 +815,7 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
 def _ensure_sumup_transactions(subscription):
     """
     Idempotently create quota/deposit if paid remotely. Uses unified helpers.
+    Also moves subscription out of 'Form List' into Main/Waiting List if payment succeeds and space exists.
     """
     try:
         event_obj = subscription.event
@@ -822,19 +823,34 @@ def _ensure_sumup_transactions(subscription):
         deposit = Decimal(event_obj.deposit or 0)
         if cost <= 0 and deposit <= 0:
             return
-
-        # Account selection (SumUp)
         account = Account.objects.filter(name="SumUp").first()
-
-        # Apply statuses = paid (do not delete existing if already present)
         _handle_payment_status(
             subscription=subscription,
-            account_id=account.id,
+            account_id=account.id if account else None,
             quota_status='paid' if cost > 0 else 'pending',
             deposit_status='paid' if deposit > 0 else 'pending',
             executor=None,
             allow_delete=False
         )
+        # TODO (To Uncomment): Auto-move from form list if applicable
+        '''current_list = subscription.list
+        if current_list and current_list.name == 'Form List':
+            from events.models import EventList
+            lists = EventList.objects.filter(event=event_obj)
+            ml = lists.filter(is_main_list=True).first()
+            wl = lists.filter(is_waiting_list=True).first()
+
+            def has_space(lst):
+                if not lst:
+                    return False
+                if lst.capacity == 0:
+                    return True
+                return lst.subscriptions.count() < lst.capacity
+
+            target = ml if has_space(ml) else (wl if has_space(wl) else None)
+            if target:
+                subscription.list = target
+                subscription.save(update_fields=['list'])'''
     except Exception as e:
         logger.error(f"Failed _ensure_sumup_transactions for sub {subscription.pk}: {e}")
 
@@ -969,37 +985,46 @@ def event_form_view(_, event_id):
 @api_view(['GET'])
 def event_form_status(_, event_id):
     """
-    Public endpoint to check if the event is full (both ML and WL full).
-    Returns: { "full": true/false, "message": "...", "main_list_full": true/false, "waiting_list_full": true/false }
+    Public endpoint to check if the event is full.
+    NOW: primary gate is the Form List capacity (Form List).
+    Legacy fields (main_list_full / waiting_list_full) still returned for backward compatibility.
     """
     try:
         event = Event.objects.get(pk=event_id)
         event_lists = EventList.objects.filter(event=event)
         main_list = event_lists.filter(is_main_list=True).first()
         waiting_list = event_lists.filter(is_waiting_list=True).first()
+        form_list = event_lists.filter(name='Form List').first()
 
         def is_full(lst):
             if not lst:
                 return True
             if lst.capacity == 0:
-                return False
+                return False  # unlimited
             return lst.subscriptions.count() >= lst.capacity
 
         main_list_full = is_full(main_list)
         waiting_list_full = is_full(waiting_list)
+        form_list_full = is_full(form_list)
 
         message = ""
         if main_list_full and waiting_list and waiting_list_full:
             message = "Main List and Waiting List are both full."
         elif main_list_full and waiting_list:
             message = "Main List is full. You may be assigned to the Waiting List if places will be available."
-        # If main list is full but no waiting list exists, don't show any message here
-        # The frontend will handle showing that subscriptions are not possible
+
+        form_message = ""
+        if form_list_full:
+            form_message = "The Form List is full. No further online subscriptions are possible."
 
         return Response({
             "main_list_full": main_list_full,
             "waiting_list_full": waiting_list_full,
-            "message": message
+            "message": message,
+            "form_list_full": form_list_full,
+            "form_list_capacity": getattr(form_list, 'capacity', None),
+            "form_list_subscriptions": form_list.subscriptions.count() if form_list else 0,
+            "form_message": form_message
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -1056,6 +1081,7 @@ def event_form_submit(request, event_id):
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
         # Determine target list (main, else waiting)
+        '''
         event_lists = EventList.objects.filter(event=event)
         main_list = event_lists.filter(is_main_list=True).first()
         waiting_list = event_lists.filter(is_waiting_list=True).first()
@@ -1075,12 +1101,18 @@ def event_form_submit(request, event_id):
             assigned_label = "Waiting List"
         else:
             return Response({"error": "No available list for subscription. All lists are full."}, status=400)
+        '''
+        # Determine form list (always use form list; capacity not enforced here)
+        form_list = event.lists.filter(name='Form List').first()
+        if not form_list:
+            return Response({"error": "Form list not configured for this event"}, status=400)
+        assigned_label = ''
 
         sub = Subscription.objects.create(
             profile=profile,
             external_name=external_name,
             event=event,
-            list=assigned_list,
+            list=form_list,  # assigned_list
             form_data=form_data,
             form_notes=form_notes,
             additional_data={'form_email': email},
@@ -1263,4 +1295,3 @@ def sumup_webhook(request):
     except Exception as e:
         logger.error(f"Webhook exception for checkout {checkout_id}: {e}")
         return Response({"status": "error", "detail": str(e)}, status=200)
-
