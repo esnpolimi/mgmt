@@ -57,7 +57,7 @@ export default function Home() {
                 {
                     name: "FOGLIO TURNI UFFICIO",
                     description: "",
-                    url: "https://docs.google.com/spreadsheets/d/1Bi_jw4_MgAPV3R_Cu-eCRlexbL23xJL63uey1rmY-P0/edit?gid=2036311463#gid=2036311463",
+                    url: "https://docs.google.com/spreadsheets/d/1oHRaRcJvzt5XLfEjU-zlTcgH8ZOg9G-a9w0wGejAY2I/edit?gid=2036311463#gid=2036311463",
                     color: "#388e3c"
                 },
                 {

@@ -1,12 +1,5 @@
 # Deploy your backend and frontend applications
 
-## Backend Deployment
-
-```bash
-# Commit and push to development, then:
-git subtree push --prefix backend origin deploy-backend
-```
-
 ## Frontend Deployment
 
 ```bash
@@ -18,9 +11,17 @@ git add -f frontend/build
 git subtree push --prefix frontend/build origin deploy-frontend
 ```
 
+## Backend Deployment
+
+```bash
+# Commit and push to development, then:
+git subtree push --prefix backend origin deploy-backend
+```
+
 ## Notes
 
 After having updated the deploy-xxxxxend branch, access to the server's console and execute the script:
+
 ```bash
 cd mgmt.esnpolimi.it
 ./gitpull_xxxxxend.sh
