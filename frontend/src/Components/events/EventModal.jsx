@@ -39,9 +39,21 @@ import ProfileSearch from '../ProfileSearch';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 
 export default function EventModal({open, event, isEdit, onClose}) {
+    const errorsRef = React.useRef({
+        name: [false, ''],
+        date: [false, ''],
+        description: [false, ''],
+        cost: [false, ''],
+        deposit: [false, ''],
+        subscription_start_date: [false, ''],
+        subscription_end_date: [false, ''],
+        lists: [false, ''],
+        listItems: [],
+        form: ''
+    });
 
     /* General event information block, at the top of the modal */
-    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef}) {
+    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef, onSubscriptionWindowChange}) {
         // Local state for UI only (fast typing, no parent re-render)
         const [localData, setLocalData] = useState(dataRef.current);
 
@@ -73,8 +85,18 @@ export default function EventModal({open, event, isEdit, onClose}) {
             } else {
                 newData = {...localData, subscription_start_date: date};
             }
+
+            // Adjust programmed form open time if now invalid (must be >= start + 1 minute)
+            if (dataRef.current.enable_form && newData.form_programmed_open_time) {
+                const minAllowed = dayjs(newData.subscription_start_date).add(1, 'minute');
+                if (dayjs(newData.form_programmed_open_time).isBefore(minAllowed)) {
+                    newData.form_programmed_open_time = minAllowed.toISOString();
+                }
+            }
+
             setLocalData(newData);
             dataRef.current = newData;
+            onSubscriptionWindowChange(); // notify parent to refresh FormBlock
         };
 
         const handleSubscriptionEndChange = (date) => {
@@ -92,6 +114,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             const newData = {...localData, subscription_end_date: newDate};
             setLocalData(newData);
             dataRef.current = newData;
+            onSubscriptionWindowChange(); // keep consistency if needed
         };
 
         return (
@@ -759,6 +782,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                               updateChoice,
                               deleteChoice,
                               disabled,
+                              alert // NEW: optional alert node rendered under description
                           }) {
 
         return (
@@ -777,6 +801,11 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
                         {description}
                     </Typography>
+                )}
+                {alert && (
+                    <Box sx={{mb: 1}}>
+                        {alert}
+                    </Box>
                 )}
                 <Paper elevation={1} sx={{p: 2, mb: 3}}>
                     {fields.length === 0 ? (
@@ -1156,7 +1185,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Box>
                     <FieldSection
                         title={"Campi form"}
-                        description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste. L'email è sempre richiesta prima di compilare il form e visibile nelle liste se impostata tra i Dati Anagrafici."}
+                        description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste."}
+                        alert={
+                            <Alert severity="info" sx={{mt: 1}}>
+                                L&apos;email viene sempre raccolta prima della compilazione del form: non aggiungere un campo Email.
+                                Per mostrarla nelle liste selezionala tra i Dati Anagrafici.
+                            </Alert>
+                        }
                         fields={localData.fields.filter((field) => field.field_type === "form")}
                         onAdd={onAdd}
                         onDelete={onDelete}
@@ -1192,20 +1227,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
         form_programmed_open_time: dayjs()
     })
 
-    /* Errors ref */
-    const errorsRef = React.useRef({
-        name: [false, ''],
-        date: [false, ''],
-        description: [false, ''],
-        cost: [false, ''],
-        deposit: [false, ''],
-        subscription_start_date: [false, ''],
-        subscription_end_date: [false, ''],
-        lists: [false, ''],
-        listItems: [],
-        form: ''
-    });
-
     /* State variables*/
     const [isLoading, setLoading] = useState(true);
     const [statusMessage, setStatusMessage] = useState(null);
@@ -1215,6 +1236,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const [popup, setPopup] = useState(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [, setSeed] = useState(0); // Used to trigger re-renders when displaying errors
+    const [subscriptionWindowVersion, setSubscriptionWindowVersion] = useState(0); // triggers FormBlock remount on subscription window changes
 
     useEffect(() => {
         if (isEdit) {
@@ -1451,16 +1473,25 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Box>
                         )}
 
-                        <GeneralInfoBlock dataRef={dataRef} errorsRef={errorsRef}
-                                          hasSubscriptions={isEdit && hasSubscriptions}
-                                          isEdit={isEdit}/>
+                        <GeneralInfoBlock
+                            dataRef={dataRef}
+                            errorsRef={errorsRef}
+                            hasSubscriptions={isEdit && hasSubscriptions}
+                            isEdit={isEdit}
+                            onSubscriptionWindowChange={() => setSubscriptionWindowVersion(v => v + 1)}
+                        />
                         <Description dataRef={dataRef}/>
                         <Organizers dataRef={dataRef}/>
                         <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
-                        <FormBlock dataRef={dataRef} errorsRef={errorsRef} hasSubscriptions={hasSubscriptions}
-                                   isEdit={isEdit}/>
+                        <FormBlock
+                            key={subscriptionWindowVersion} // force remount so minDate updates when subscription start date changes
+                            dataRef={dataRef}
+                            errorsRef={errorsRef}
+                            hasSubscriptions={hasSubscriptions}
+                            isEdit={isEdit}
+                        />
 
                         <Box mt={2} sx={{display: 'flex', gap: 2}}>
                             <Button variant="contained" color="primary" type="submit" disabled={submitting}>
