@@ -18,7 +18,9 @@ import {
     OpenInNew as OpenInNewIcon,
     ExpandMore as ExpandMoreIcon,
     ExpandLess as ExpandLessIcon,
-    EditNote as EditNoteIcon
+    EditNote as EditNoteIcon,
+    ContentCopy as ContentCopyIcon,
+    Check as CheckIcon
 } from '@mui/icons-material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
@@ -184,6 +186,8 @@ export default memo(function EventListAccordions({
                     accessorKey: 'profile_name',
                     header: 'Profilo',
                     size: 50,
+                    muiTableHeadCellProps: { 'data-profile-header': 1 },
+                    muiTableBodyCellProps: { 'data-profile-cell': 1 },
                     Cell: ({row}) => {
                         const sub = row.original;
                         if (sub.external_name) {
@@ -359,6 +363,126 @@ export default memo(function EventListAccordions({
                 });
             }
 
+            // Copy column (sticky/pinned left) with header + row copy (skipping checkbox, Profilo, Azioni)
+            const copyColumn = {
+                id: 'copy',
+                header: '',
+                size: 40,
+                enableSorting: false,
+                enableColumnActions: false,
+                Header: () => {
+                    const [copiedHead, setCopiedHead] = React.useState(false);
+                    const handleCopyHeaders = async (e) => {
+                        e.stopPropagation();
+                        try {
+                            const thead = e.currentTarget.closest('thead');
+                            if (!thead) return;
+                            const headerRow = thead.querySelector('tr');
+                            if (!headerRow) return;
+                            const ths = Array.from(headerRow.querySelectorAll('th'));
+                            const values = ths
+                                .filter(th => {
+                                    if (th.querySelector('button[title="Copia nomi colonne (Excel)"]')) return false;
+                                    if (th.querySelector('input[type="checkbox"]')) return false;
+                                    if (th.hasAttribute('data-profile-header')) return false; // Robust Profilo exclusion
+                                    const txt = th.innerText.trim();
+                                    if (txt === 'Profilo') return false;
+                                    if (txt === 'Azioni') return false;
+                                    return true;
+                                })
+                                .map(th => {
+                                    let txt = th.innerText.replace(/\s+/g, ' ').trim();
+                                    // Remove standalone numbers (e.g., spurious "0")
+                                    txt = txt.replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
+                                    return txt;
+                                })
+                                .filter(v => v.length);
+                            if (values.length) {
+                                await navigator.clipboard.writeText(values.join('\t'));
+                                setCopiedHead(true);
+                                setTimeout(() => setCopiedHead(false), 1500);
+                            }
+                        } catch (err) {
+                            console.error('Header copy failed', err);
+                        }
+                    };
+                    return (
+                        <Box sx={{display: 'flex', alignItems: 'center'}}>
+                            <IconButton
+                                size="small"
+                                onClick={handleCopyHeaders}
+                                title="Copia nomi colonne (Excel)"
+                            >
+                                {copiedHead ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
+                            </IconButton>
+                            {copiedHead && (
+                                <Typography variant="caption" color="success.main" sx={{ml: 0.5}}>
+                                    Copiato
+                                </Typography>
+                            )}
+                        </Box>
+                    );
+                },
+                Cell: ({row}) => {
+                    const [copied, setCopied] = React.useState(false);
+                    const handleCopy = async (e) => {
+                        e.stopPropagation();
+                        try {
+                            const rowEl = e.currentTarget.closest('tr');
+                            let values = [];
+                            if (rowEl) {
+                                const tds = Array.from(rowEl.querySelectorAll('td'));
+                                values = tds
+                                    .filter(td => {
+                                        if (td.querySelector('button[title="Copia riga (Excel)"]')) return false; // copy cell
+                                        if (td.querySelector('input[type="checkbox"]')) return false; // selection
+                                        if (td.hasAttribute('data-profile-cell')) return false; // Profilo (incl. external name)
+                                        if (td.querySelector('button[title="Modifica Risposte Form"]')) return false; // Azioni
+                                        return true;
+                                    })
+                                    .map(td =>
+                                        td.innerText
+                                            .replace(/\s+/g, ' ')
+                                            .trim()
+                                    );
+                            }
+                            if (!values.length) {
+                                const visibleCells = row.getVisibleCells()
+                                    .filter(c => !['copy','profile_name','actions','mrt-row-select'].includes(c.column.id));
+                                values = visibleCells.map(cell => {
+                                    let raw = cell.getValue();
+                                    if (raw === null || raw === undefined) return '';
+                                    if (Array.isArray(raw)) return raw.join(', ');
+                                    if (typeof raw === 'object') return '';
+                                    return String(raw);
+                                });
+                            }
+                            await navigator.clipboard.writeText(values.join('\t'));
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1500);
+                        } catch (err) {
+                            console.error('Row copy failed', err);
+                        }
+                    };
+                    return (
+                        <Box sx={{display:'flex', alignItems:'center'}}>
+                            <IconButton size="small" onClick={handleCopy} title="Copia riga (Excel)">
+                                {copied ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
+                            </IconButton>
+                            {copied && (
+                                <Typography variant="caption" color="success.main" sx={{ml:0.5}}>
+                                    Copiato
+                                </Typography>
+                            )}
+                        </Box>
+                    );
+                },
+                muiTableHeadCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 3}},
+                muiTableBodyCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 2}},
+            };
+            // Insert at far left
+            columns.unshift(copyColumn);
+
             // Add a caption and toggles for form/aspect columns
             const formAspectCaption = (
                 <Box sx={{mb: 1, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap'}}>
@@ -416,6 +540,80 @@ export default memo(function EventListAccordions({
         });
     }, [data, hasDeposit, hasQuota, isBoardMember, onOpenEditAnswers, onOpenReimburseQuota, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns, showProfileColumns]);
 
+    // Build a vCard 3.0 file for an array of subscription objects
+    const buildVCard = (subs) => {
+        const safe = v => (v || '').toString().replace(/[\r\n]+/g, ' ').trim();
+        const linesArr = subs.map(sub => {
+            let name = '';
+            let surname = '';
+            if (sub.profile) {
+                name = safe(sub.profile.name);
+                surname = safe(sub.profile.surname);
+            } else if (sub.external_name) {
+                const parts = sub.external_name.trim().split(/\s+/);
+                name = safe(parts[0]);
+                surname = safe(parts.slice(1).join(' '));
+            }
+            const email = safe(
+                (sub.profile && sub.profile.email) ||
+                sub.additional_data?.form_email ||
+                ''
+            );
+
+            const pickNumber = () => {
+                const wpPrefix = sub.profile?.whatsapp_prefix;
+                const wpNumber = sub.profile?.whatsapp_number;
+                const phPrefix = sub.profile?.phone_prefix;
+                const phNumber = sub.profile?.phone_number;
+                let prefix = '';
+                let num = '';
+                if (wpPrefix && wpNumber) {
+                    prefix = wpPrefix;
+                    num = wpNumber;
+                } else if (phPrefix && phNumber) {
+                    prefix = phPrefix;
+                    num = phNumber;
+                }
+                if (!num) return '';
+                let full = `${prefix || ''}${num}`;
+                full = full.replace(/\s+/g, '');
+                if (full && !full.startsWith('+') && /^\d+$/.test(full)) {
+                    full = '+' + full;
+                }
+                return full;
+            };
+            const phone = pickNumber();
+
+            const fullName = (name + ' ' + surname).trim();
+            const vcardLines = [
+                'BEGIN:VCARD',
+                'VERSION:3.0',
+                `N:${surname};${name};;;`,
+                `FN:${fullName}`,
+            ];
+            if (email) vcardLines.push(`EMAIL;TYPE=INTERNET:${email}`);
+            if (phone) vcardLines.push(`TEL;TYPE=CELL,VOICE,WHATSAPP:${phone}`);
+            vcardLines.push('END:VCARD');
+            return vcardLines.join('\r\n');
+        });
+        return linesArr.join('\r\n');
+    };
+
+    const downloadVCard = (subs) => {
+        if (!subs.length) return;
+        const content = buildVCard(subs);
+        const blob = new Blob([content], {type: 'text/vcard;charset=utf-8'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'event_contacts.vcf';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            URL.revokeObjectURL(a.href);
+            document.body.removeChild(a);
+        }, 0);
+    };
+
     const lists = useMemo(() => {
         return listConfigs.map(config => ({
             ...config,
@@ -423,6 +621,7 @@ export default memo(function EventListAccordions({
                 columns: config.columns,
                 data: config.subscriptions,
                 enableStickyHeader: true,
+                enableColumnPinning: true,
                 enablePagination: true,
                 enableRowSelection: true,
                 enableRowActions: false,
@@ -435,11 +634,9 @@ export default memo(function EventListAccordions({
                 display: false,
                 initialState: {
                     showColumnFilters: false,
-                    pagination: {
-                        pageSize: 10,
-                        pageIndex: 0,
-                    },
+                    pagination: { pageSize: 10, pageIndex: 0 },
                     columnVisibility: {id: false},
+                    columnPinning: { left: ['copy'] },
                 },
                 paginationDisplayMode: 'pages',
                 localization: MRT_Localization_IT,
@@ -486,16 +683,24 @@ export default memo(function EventListAccordions({
                                         </Button>
                                     </>
                                 )}
-                                {selectedCount === 1 && (<>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            onClick={() => onEditSubscription(selectedRows[0].original.id)}
-                                            disabled={!canChangeSubscription}
-                                        >
-                                            Modifica Iscrizione
-                                        </Button>
-                                    </>
+                                {selectedCount === 1 && (
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={() => onEditSubscription(selectedRows[0].original.id)}
+                                        disabled={!canChangeSubscription}
+                                    >
+                                        Modifica Iscrizione
+                                    </Button>
+                                )}
+                                {selectedCount >= 1 && (
+                                    <Button
+                                        variant="outlined"
+                                        color="success"
+                                        onClick={() => downloadVCard(selectedRows.map(r => r.original))}
+                                    >
+                                        Esporta contatti (vCard)
+                                    </Button>
                                 )}
                                 {hasDeposit && canChangeTransactions && selectedCount === 0 && isBoardMember && (
                                     <Button variant="contained"
@@ -543,7 +748,8 @@ export default memo(function EventListAccordions({
         } else if (listObj?.is_waiting_list) {
             listLabel = <Chip label="Waiting List" color="warning" size="small" sx={{ml: 1}} />;
         }
-        const occupancyPercentage = capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
+        const isInfinite = capacity === 0;
+        const occupancyPercentage = !isInfinite && capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;
         const occupancyColor = occupancyPercentage >= 90 ? 'error' : occupancyPercentage >= 60 ? 'warning' : 'success';
         const fixedTableOptions = {...tableOptions, paginationDisplayMode: 'pages'};
         const list = useMaterialReactTable(fixedTableOptions);
@@ -551,26 +757,30 @@ export default memo(function EventListAccordions({
         return (
             <Box key={listId} sx={{mt: 2, border: '1px solid #ccc', borderRadius: 2, overflow: 'hidden'}}>
                 <Box onClick={() => toggleCollapse(listId)}
-                     sx={{
-                         display: 'flex',
-                         alignItems: 'center',
-                         cursor: 'pointer',
-                         padding: 1,
-                         backgroundColor: '#f5f5f5'
-                     }}>
+                     sx={{display: 'flex', alignItems: 'center', cursor: 'pointer', padding: 1, backgroundColor: '#f5f5f5'}}>
                     <BallotIcon sx={{color: 'primary.main', mr: 2}}/>
                     <Typography variant="h6" component="div" sx={{flexGrow: 1, display: 'flex', alignItems: 'center'}}>
                         {listName}
                         {listLabel}
                     </Typography>
                     <Box sx={{width: '200px', mr: 2}}>
-                        <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
-                            <Typography variant="body2">{subscription_count}/{capacity}</Typography>
-                        </Box>
-                        <LinearProgress variant="determinate"
-                                        value={occupancyPercentage}
-                                        color={occupancyColor}
-                                        sx={{height: 8, borderRadius: 5}}/>
+                        {isInfinite ? (
+                            <Box sx={{display: 'flex', justifyContent: 'flex-end'}}>
+                                <Typography variant="body2">{subscription_count}/♾️</Typography>
+                            </Box>
+                        ) : (
+                            <>
+                                <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
+                                    <Typography variant="body2">{subscription_count}/{capacity}</Typography>
+                                </Box>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={occupancyPercentage}
+                                    color={occupancyColor}
+                                    sx={{height: 8, borderRadius: 5}}
+                                />
+                            </>
+                        )}
                     </Box>
                     <IconButton onClick={(e) => {
                         e.stopPropagation();

@@ -97,6 +97,12 @@ export default function Home() {
                     color: "#512da8"
                 },
                 {
+                    name: "GUIDA GENERALE AL GESTIONALE",
+                    description: "",
+                    url: "https://docs.google.com/document/d/1jgFvO2zo2xKmkPwbQGBQF7bgLrqkLSpB_BSG6guHdhs/edit?usp=sharing",
+                    color: "#01476d"
+                },
+                {
                     name: "TUTORIAL viaggi e attività",
                     description: "",
                     url: "https://drive.google.com/drive/folders/13DZUKo7D74VmbX2S3uKTOPrO5h1VFTGh",
