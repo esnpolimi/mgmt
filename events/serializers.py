@@ -519,13 +519,52 @@ class FormSubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.Mo
 
 # Inline profile serializer exposing only the allowed profile fields (safe, read-only)
 class SubscriptionProfileInlineSerializer(serializers.ModelSerializer):
+    # Combine prefix + number and expose as the number fields
+    phone_number = serializers.SerializerMethodField()
+    whatsapp_number = serializers.SerializerMethodField()
+    # Ensure non-primitive properties are serialized safely
+    latest_esncard = serializers.SerializerMethodField()
+    latest_document = serializers.SerializerMethodField()
+
     class Meta:
         model = Profile
         fields = [
             'name', 'surname', 'email', 'phone_prefix', 'phone_number', 'whatsapp_prefix',
             'whatsapp_number', 'country', 'birthdate', 'matricola_number', 'matricola_expiration',
-            'course', 'person_code', 'domicile'
+            'course', 'person_code', 'domicile', 'latest_esncard', 'latest_document'
         ]
+
+    @staticmethod
+    def _combine(prefix, number):
+        number = (number or '').strip()
+        prefix = (prefix or '').strip()
+        if not number:
+            return ''
+        if prefix and not number.startswith(prefix):
+            return f"{prefix} {number}"
+        return number
+
+    def get_phone_number(self, obj):
+        return self._combine(obj.phone_prefix, obj.phone_number)
+
+    def get_whatsapp_number(self, obj):
+        return self._combine(obj.whatsapp_prefix, obj.whatsapp_number)
+
+    @staticmethod
+    def get_latest_esncard(obj):
+        card = getattr(obj, 'latest_esncard', None)
+        try:
+            return card.number if card else ''
+        except Exception:
+            return ''
+
+    @staticmethod
+    def get_latest_document(obj):
+        doc = getattr(obj, 'latest_document', None)
+        try:
+            return doc.number if doc else ''
+        except Exception:
+            return ''
 
 
 # Serializers for Subscription
@@ -711,7 +750,7 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
 class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
-    subscriptions = SubscriptionSerializer(many=True, read_only=True, source='subscription_set')
+    subscriptions = serializers.SerializerMethodField(read_only=True)
     profile_fields = serializers.ListField(read_only=True)
     fields = serializers.ListField(read_only=True)
     enable_form = serializers.BooleanField(read_only=True)
@@ -735,6 +774,10 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             data['profile_fields'] = order_profile_fields(data['profile_fields'])
         return data
 
+    @staticmethod
+    def get_subscriptions(obj):
+        qs = obj.subscription_set.all().order_by('-created_at')
+        return SubscriptionSerializer(qs, many=True).data
 
 class LiberatoriaProfileSerializer(serializers.ModelSerializer):
     address = serializers.CharField(source='domicile')
@@ -818,7 +861,7 @@ class PrintableLiberatoriaSerializer(serializers.ModelSerializer):
         if obj.profile:
             return f"{obj.profile.name} {obj.profile.surname}"
         elif obj.external_name:
-            obj.external_name
+            return obj.external_name
         return ""
 
     @staticmethod
