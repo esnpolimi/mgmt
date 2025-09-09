@@ -218,9 +218,9 @@ export default function EventForm() {
         <Container component="main" maxWidth="sm">
             <CssBaseline/>
             <Box sx={{marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-                <img src={logo} alt='ESN Polimi Logo' style={{height: '25vh', marginBottom: "4px"}}/>
-                <Typography variant="h4" gutterBottom>
-                    Event Subscription Form - {eventData.name}
+                <img src={logo} alt='ESN Polimi Logo' style={{height: '20vh', marginBottom: "4px"}}/>
+                <Typography variant="h4" gutterBottom align="center">
+                    Event Subscription Form <br/> <i>{eventData.name}</i>
                 </Typography>
                 <Alert severity="info" sx={{mb: 2}}>
                     {eventData.allow_online_payment

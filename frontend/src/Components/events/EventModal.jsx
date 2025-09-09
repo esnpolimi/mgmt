@@ -585,7 +585,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         // Helpers
         const canonicalProfileOrder = [
             "name", "surname", "birthdate", "email", "latest_esncard", "country", "domicile",
-            "phone_prefix", "phone_number", "whatsapp_prefix", "whatsapp_number",
+            // removed: "phone_prefix", "whatsapp_prefix"
+            "phone_number", "whatsapp_number",
             "latest_document", "course", "matricola_expiration", "person_code", "matricola_number"
         ];
 
@@ -598,7 +599,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
                     Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell&apos;organizzazione.<br/>
-                    I dati sono presi dal profilo Erasmus! Richiedi dati aggiornati tra i campi del Form di Iscrizione.
+                    I dati sono presi dal profilo Erasmus! Richiedi dati aggiornati tra i campi del Form di Iscrizione.<br/>
+                    {/* NEW: clarify combined formatting */}
+                    Numero Telefono e Numero WhatsApp includono automaticamente il prefisso (es: +39 3396793228).
                 </Typography>
                 <Select
                     multiple
@@ -625,8 +628,14 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     fullWidth
                 >
                     {Object.entries(profileDisplayNames)
-                        // Exclude technical fields (added created_at exclusion)
-                        .filter(([k]) => k !== 'id' && k !== 'group' && k !== 'created_at')
+                        // Exclude technical and prefix-only fields
+                        .filter(([k]) =>
+                            k !== 'id' &&
+                            k !== 'group' &&
+                            k !== 'created_at' &&
+                            k !== 'phone_prefix' &&
+                            k !== 'whatsapp_prefix'
+                        )
                         .map(([k, v]) => (
                             <MenuItem key={k} value={k}>
                                 {v}
@@ -1129,7 +1138,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Alert severity="info" sx={{mt: 1}}>
                         Abilitando il form viene creata automaticamente la lista &#34;Form List&#34;.
                         Le iscrizioni online finiscono lì e saranno spostate automaticamente in Main/Waiting List al pagamento online,
-                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì (default: somma di capacità ML e WL).
+                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì (default: illimitata).
                     </Alert>
                 )}
 
@@ -1258,8 +1267,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 ...dataRef.current,
                 ...eventData
             }
-            // Remove created_at if present in saved profile_fields
-            dataRef.current.profile_fields = (dataRef.current.profile_fields || []).filter(f => f !== 'created_at');
+            // Remove fields we don't want selectable anymore
+            dataRef.current.profile_fields = (dataRef.current.profile_fields || []).filter(
+                f => !['created_at', 'phone_prefix', 'whatsapp_prefix'].includes(f)
+            );
             setHasSubscriptions(event.subscriptions && event.subscriptions.length > 0);
         } else {
             dataRef.current = {

@@ -169,7 +169,7 @@ export default function Sidebar() {
                         color="inherit"
                         aria-label="menu"
                         onClick={toggleDrawer(true)}
-                        onMouseEnter={() => toggleDrawer(true)()}
+                        // onMouseEnter={() => toggleDrawer(true)()}
                         sx={{margin: "10px"}}>
                 <MenuIcon/>
             </IconButton>

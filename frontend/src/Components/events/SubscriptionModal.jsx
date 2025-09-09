@@ -249,7 +249,18 @@ export default function SubscriptionModal({
                 status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
                 external_name: data.external_name || undefined
             },
-            onSuccess: () => onClose(true, (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!'),
+            onSuccess: (resp) => {
+                let baseMsg = (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!';
+                // Append auto-move info if present
+                if (resp && resp.auto_move_status) {
+                    if (resp.auto_move_status === 'moved' && resp.auto_move_list) {
+                        baseMsg += ` Spostata nella lista: ${resp.auto_move_list}.`;
+                    } else if (resp.auto_move_status === 'stayed' && resp.auto_move_reason === 'no_capacity') {
+                        baseMsg += ' Nessuna disponibilità nelle liste principali: rimane in Form List.';
+                    }
+                }
+                onClose(true, baseMsg);
+            },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setSubmitLoading(false)
         });
