@@ -92,17 +92,19 @@ export default function AccountsList() {
         },
         {
             accessorKey: 'visible_to_groups', header: names.visible_to_groups, size: 150,
-            Cell: ({cell}) => (
-                <Box sx={{}}>
-                    {cell.getValue() !== null ? (
-                        cell.getValue().map((group) => (
-                            <Chip key={group.id} label={group.name} color="grey" sx={{mr: 1}}/>
-                        ))
-                    ) : (
-                        <Chip label="N/A" color="warning"/>
-                    )}
-                </Box>
-            ),
+            Cell: ({cell}) => {
+                const groups = typeof cell.getValue === 'function' ? cell.getValue() : cell.getValue;
+                if (!Array.isArray(groups) || groups.length === 0) {
+                    return <Chip label="N/A" color="warning"/>;
+                }
+                return (
+                    <Box sx={{}}>
+                        {groups.map((group) => (
+                            <Chip key={group.id ?? String(group)} label={group.name ?? String(group)} color="default" sx={{mr: 1}}/>
+                        ))}
+                    </Box>
+                );
+            },
         },
         {
             header: 'Azioni',

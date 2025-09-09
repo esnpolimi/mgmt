@@ -275,7 +275,6 @@ export default function ErasmusForm() {
             ...prev,
             matricola_expiration: computeExchangeEndDate(prev.mobility_semesters || 1)
         }));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleSubmit = (e) => {
@@ -339,7 +338,7 @@ export default function ErasmusForm() {
                     Your response has been sent.
                 </Typography>
                 <Typography variant="subtitle1" align="center">
-                    Check your inbox to verify your email.
+                    Check your inbox to verify your email (validity of link: 24 hours).
                 </Typography>
                 <Typography variant="body2" align="center" sx={{mt: 2}}>
                     In case you do not receive an email, please check your spam folder or contact us on our channels.

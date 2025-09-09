@@ -38,6 +38,81 @@ from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
 
+# Merge phone/whatsapp prefixes into numbers in any dict/list payload
+def _combine_prefix_numbers(obj):
+    def _merge_in_place(d, num_key, pref_key, also_keys=None):
+        if not isinstance(d, dict):
+            return
+        n = (d.get(num_key) or "").strip()
+        p = (d.get(pref_key) or "").strip()
+        if n and p and not n.startswith(p):
+            d[num_key] = f"{p} {n}"
+        # Optional aliases like 'phone'/'whatsapp'
+        for k in (also_keys or []):
+            v = (d.get(k) or "").strip()
+            if v and p and not v.startswith(p):
+                d[k] = f"{p} {v}"
+
+    if isinstance(obj, dict):
+        _merge_in_place(obj, 'phone_number', 'phone_prefix', also_keys=['phone'])
+        _merge_in_place(obj, 'whatsapp_number', 'whatsapp_prefix', also_keys=['whatsapp'])
+        # Recurse
+        for v in obj.values():
+            _combine_prefix_numbers(v)
+    elif isinstance(obj, list):
+        for it in obj:
+            _combine_prefix_numbers(it)
+
+# --- Helper to auto-move from "Form List" to ML/WL after payment ---
+def attempt_move_from_form_list(subscription):
+    """
+    If the subscription is in 'Form List' and a quota or deposit transaction exists
+    (or event has no cost/deposit), move it to Main List (priority) else Waiting List.
+    Returns outcome dict or None if not applicable.
+    """
+    try:
+        lst = subscription.list
+        if not lst or lst.name != 'Form List':
+            return None
+        event = subscription.event
+        cost = Decimal(event.cost or 0)
+        deposit = Decimal(event.deposit or 0)
+
+        quota_tx_exists = Transaction.objects.filter(
+            subscription=subscription,
+            type=Transaction.TransactionType.SUBSCRIPTION
+        ).exists()
+        deposit_tx_exists = Transaction.objects.filter(
+            subscription=subscription,
+            type=Transaction.TransactionType.CAUZIONE
+        ).exists()
+
+        paid_flag = quota_tx_exists or deposit_tx_exists or (cost <= 0 and deposit <= 0)
+        if not paid_flag:
+            return {'status': 'stayed', 'reason': 'not_paid'}
+
+        lists_qs = event.lists.all()
+        main_list = lists_qs.filter(is_main_list=True).first()
+        waiting_list = lists_qs.filter(is_waiting_list=True).first()
+
+        def has_space(target):
+            if not target:
+                return False
+            if target.capacity == 0:
+                return True
+            return target.subscriptions.count() < target.capacity
+
+        for target in [main_list, waiting_list]:
+            if has_space(target):
+                subscription.list = target
+                subscription.save(update_fields=['list'])
+                return {'status': 'moved', 'list': target.name}
+
+        return {'status': 'stayed', 'reason': 'no_capacity'}
+    except Exception as e:
+        logger.error(f"attempt_move_from_form_list error sub {subscription.pk}: {e}")
+        return {'status': 'stayed', 'reason': 'error'}
+
 
 # -- Helper functions -- #
 def get_action_permissions(request, action, default_perm=None):
@@ -333,7 +408,9 @@ def event_detail(request, pk):
             if not get_action_permissions(request, 'event_detail_GET'):
                 return Response({'error': 'Non hai i permessi per visualizzare questo evento.'}, status=403)
             serializer = EventWithSubscriptionsSerializer(event)
-            return Response(serializer.data, status=200)
+            data = serializer.data
+            _combine_prefix_numbers(data)  # ensure phone/wa numbers include prefix
+            return Response(data, status=200)
 
         elif request.method == 'PATCH':
             if not get_action_permissions(request, 'event_detail_PATCH'):
@@ -421,7 +498,24 @@ def subscription_create(request):
                 executor=request.user,
                 allow_delete=False
             )
-            return Response(serializer.data, status=200)
+            move_info = attempt_move_from_form_list(subscription)
+            # Re-serialize to reflect possible list change
+            data = SubscriptionSerializer(subscription).data
+            if move_info:
+                if move_info.get('status') == 'moved':
+                    data.update({
+                        'auto_move_status': 'moved',
+                        'auto_move_list': move_info.get('list'),
+                        'auto_move_reason': None
+                    })
+                elif move_info.get('status') == 'stayed':
+                    data.update({
+                        'auto_move_status': 'stayed',
+                        'auto_move_list': None,
+                        'auto_move_reason': move_info.get('reason')
+                    })
+            _combine_prefix_numbers(data)  # merge prefixes into numbers
+            return Response(data, status=200)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
     except ObjectDoesNotExist as e:
@@ -451,7 +545,9 @@ def subscription_detail(request, pk):
             if not get_action_permissions(request, 'subscription_detail_GET'):
                 return Response({'error': 'Non hai i permessi per visualizzare questa iscrizione.'}, status=403)
             serializer = SubscriptionSerializer(sub)
-            return Response(serializer.data, status=200)
+            data = serializer.data
+            _combine_prefix_numbers(data)  # merge prefixes into numbers
+            return Response(data, status=200)
 
         if request.method == "PATCH":
             ''' TODO:
@@ -474,9 +570,9 @@ def subscription_detail(request, pk):
                 # --- Sanitize nullable statuses ---
                 mutable_data = request.data.copy()
                 if mutable_data.get('status_quota', None) is None:
-                    mutable_data['status_quota'] = sub.status_quota or 'pending'
+                    mutable_data['status_quota'] = 'pending'
                 if mutable_data.get('status_cauzione', None) is None:
-                    mutable_data['status_cauzione'] = sub.status_cauzione or 'pending'
+                    mutable_data['status_cauzione'] = 'pending'
                 serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
                 serializer.is_valid(raise_exception=True)
                 with transaction.atomic():
@@ -494,7 +590,24 @@ def subscription_detail(request, pk):
                         executor=request.user,
                         allow_delete=True
                     )
-                return Response(serializer.data, status=200)
+                    move_info = attempt_move_from_form_list(updated_sub)
+                # Re-serialize to reflect possible move
+                resp_data = SubscriptionSerializer(updated_sub).data
+                if move_info:
+                    if move_info.get('status') == 'moved':
+                        resp_data.update({
+                            'auto_move_status': 'moved',
+                            'auto_move_list': move_info.get('list'),
+                            'auto_move_reason': None
+                        })
+                    elif move_info.get('status') == 'stayed':
+                        resp_data.update({
+                            'auto_move_status': 'stayed',
+                            'auto_move_list': None,
+                            'auto_move_reason': move_info.get('reason')
+                        })
+                _combine_prefix_numbers(resp_data)  # merge prefixes into numbers
+                return Response(resp_data, status=200)
             else:
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
 
@@ -628,6 +741,16 @@ def generate_liberatorie_pdf(request):
                 story.append(logo)
                 story.append(Spacer(1, 1 * cm))
 
+            # Build phone with prefix if available
+            phone_combined = (profile_data.get('phone') or '').strip()
+            if not phone_combined:
+                pn = (profile_data.get('phone_number') or profile_data.get('phone') or '').strip()
+                pp = (profile_data.get('phone_prefix') or '').strip()
+                if pn and pp and not pn.startswith(pp):
+                    phone_combined = f"{pp} {pn}"
+                else:
+                    phone_combined = pn
+
             # --- Personal Details ---
             details = f"""
             <b>Nome/Name:</b> {display_na(profile_data.get('name'))}<br/>
@@ -637,7 +760,7 @@ def generate_liberatorie_pdf(request):
             <b>ID/Passport N°:</b> {display_na(profile_data.get('document_number'))}<br/>
             <b>Data di scadenza/Expiration date:</b> {display_na(profile_data.get('document_expiry'))}<br/>
             <b>Data e Luogo di nascita/Date and Place of birth:</b> {display_na(profile_data.get('date_of_birth'))} - {display_na(profile_data.get('place_of_birth'))}<br/>
-            <b>Telefono/Telephone:</b> {display_na(profile_data.get('phone'))}<br/>
+            <b>Telefono/Telephone:</b> {display_na(phone_combined)}<br/>
             <b>E-mail:</b> {display_na(profile_data.get('email'))}<br/>
             <b>Matricola/Enrollment Number:</b> {display_na(profile_data.get('matricola'))}<br/>
             <b>Codice Persona/Personal Code:</b> {display_na(profile_data.get('codice_persona'))}<br/>
@@ -721,7 +844,9 @@ def printable_liberatorie(request, event_id):
             subs_with_paid_quota = subs_with_paid_quota.filter(list_id=list_id)
 
         serializer = PrintableLiberatoriaSerializer(subs_with_paid_quota, many=True)
-        return Response(serializer.data, status=200)
+        data = serializer.data
+        _combine_prefix_numbers(data)  # merge prefixes into numbers
+        return Response(data, status=200)
 
     except Event.DoesNotExist:
         return Response({'error': "L'evento non esiste"}, status=404)
@@ -815,7 +940,7 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
 def _ensure_sumup_transactions(subscription):
     """
     Idempotently create quota/deposit if paid remotely. Uses unified helpers.
-    Also moves subscription out of 'Form List' into Main/Waiting List if payment succeeds and space exists.
+    Also moves subscription out of 'Form List' if payment succeeds and space exists.
     """
     try:
         event_obj = subscription.event
@@ -832,25 +957,8 @@ def _ensure_sumup_transactions(subscription):
             executor=None,
             allow_delete=False
         )
-        # TODO (To Uncomment): Auto-move from form list if applicable
-        '''current_list = subscription.list
-        if current_list and current_list.name == 'Form List':
-            from events.models import EventList
-            lists = EventList.objects.filter(event=event_obj)
-            ml = lists.filter(is_main_list=True).first()
-            wl = lists.filter(is_waiting_list=True).first()
-
-            def has_space(lst):
-                if not lst:
-                    return False
-                if lst.capacity == 0:
-                    return True
-                return lst.subscriptions.count() < lst.capacity
-
-            target = ml if has_space(ml) else (wl if has_space(wl) else None)
-            if target:
-                subscription.list = target
-                subscription.save(update_fields=['list'])'''
+        # Auto-move after successful SumUp payment
+        attempt_move_from_form_list(subscription)
     except Exception as e:
         logger.error(f"Failed _ensure_sumup_transactions for sub {subscription.pk}: {e}")
 

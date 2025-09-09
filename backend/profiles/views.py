@@ -288,6 +288,12 @@ def verify_email_and_enable_profile(request, uid, token):
         except (TypeError, ValueError, OverflowError, Profile.DoesNotExist):
             return Response({'error': 'Link di verifica non valido.'}, status=400)
 
+        if profile.email_is_verified:
+            if profile.is_esner:
+                return Response({'message': 'Email già verificata.'}, status=200)
+            else:
+                return Response({'message': 'Email already verified.'}, status=200)
+
         if not email_verification_token.check_token(profile, token):
             if profile.is_esner:
                 return Response({'error': 'Link di verifica non valido o scaduto.'}, status=400)
@@ -295,12 +301,6 @@ def verify_email_and_enable_profile(request, uid, token):
                 return Response(
                     {'error': 'Invalid or expired verification link. Please contact us at informatica@esnpolimi.it'},
                     status=400)
-
-        if profile.email_is_verified:
-            if profile.is_esner:
-                return Response({'message': 'Email già verificata.'}, status=200)
-            else:
-                return Response({'message': 'Email already verified.'}, status=200)
 
         # Activate profile and related objects
         with transaction.atomic():

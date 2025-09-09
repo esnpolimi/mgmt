@@ -292,6 +292,7 @@ export default function EventsList() {
                 is_a_bando: true,
                 is_allow_external: false,
             },
+            sorting: [{ id: 'date', desc: true }],
         },
         paginationDisplayMode: 'pages',
         positionToolbarAlertBanner: 'bottom',

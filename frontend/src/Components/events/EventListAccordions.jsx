@@ -183,6 +183,15 @@ export default memo(function EventListAccordions({
                     size: 50,
                 },
                 {
+                    accessorKey: 'subscribed_at',
+                    header: 'Iscritto il',
+                    size: 50,
+                    Cell: ({row}) => {
+                        const dt = row.original?.subscribed_at;
+                        return dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : '';
+                    }
+                },
+                {
                     accessorKey: 'profile_name',
                     header: 'Profilo',
                     size: 50,
@@ -363,7 +372,7 @@ export default memo(function EventListAccordions({
                 });
             }
 
-            // Copy column (sticky/pinned left) with header + row copy (skipping checkbox, Profilo, Azioni)
+            // Copy column (sticky/pinned left) with header + row copy (Excel-safe '+')
             const copyColumn = {
                 id: 'copy',
                 header: '',
@@ -387,8 +396,8 @@ export default memo(function EventListAccordions({
                                     if (th.hasAttribute('data-profile-header')) return false; // Robust Profilo exclusion
                                     const txt = th.innerText.trim();
                                     if (txt === 'Profilo') return false;
-                                    if (txt === 'Azioni') return false;
-                                    return true;
+                                    return txt !== 'Azioni';
+
                                 })
                                 .map(th => {
                                     let txt = th.innerText.replace(/\s+/g, ' ').trim();
@@ -427,6 +436,13 @@ export default memo(function EventListAccordions({
                     const [copied, setCopied] = React.useState(false);
                     const handleCopy = async (e) => {
                         e.stopPropagation();
+                        const toExcelSafe = (val) => {
+                            if (typeof val !== 'string') return val;
+                            const s = val.trim();
+                            // Excel-safe: treat +NN as text to avoid formula error
+                            if (s.startsWith('+')) return `'${s}`;
+                            return val;
+                        };
                         try {
                             const rowEl = e.currentTarget.closest('tr');
                             let values = [];
@@ -440,21 +456,26 @@ export default memo(function EventListAccordions({
                                         if (td.querySelector('button[title="Modifica Risposte Form"]')) return false; // Azioni
                                         return true;
                                     })
-                                    .map(td =>
-                                        td.innerText
-                                            .replace(/\s+/g, ' ')
-                                            .trim()
-                                    );
+                                    .map(td => td.innerText.replace(/\s+/g, ' ').trim())
+                                    // Excel-safe transform
+                                    .map(toExcelSafe);
                             }
                             if (!values.length) {
                                 const visibleCells = row.getVisibleCells()
                                     .filter(c => !['copy','profile_name','actions','mrt-row-select'].includes(c.column.id));
                                 values = visibleCells.map(cell => {
+                                    // Format subscribed_at like the UI
+                                    if (cell.column.id === 'subscribed_at') {
+                                        const dt = row.original?.subscribed_at;
+                                        const s = dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : '';
+                                        return toExcelSafe(s);
+                                    }
                                     let raw = cell.getValue();
                                     if (raw === null || raw === undefined) return '';
-                                    if (Array.isArray(raw)) return raw.join(', ');
-                                    if (typeof raw === 'object') return '';
-                                    return String(raw);
+                                    if (Array.isArray(raw)) raw = raw.join(', ');
+                                    if (typeof raw === 'object') raw = '';
+                                    const s = String(raw).replace(/\s+/g, ' ').trim();
+                                    return toExcelSafe(s);
                                 });
                             }
                             await navigator.clipboard.writeText(values.join('\t'));
@@ -533,7 +554,7 @@ export default memo(function EventListAccordions({
                 listName: list.name,
                 capacity: list.capacity,
                 subscription_count: list.subscription_count,
-                subscriptions: listSubscriptions,
+                subscriptions: listSubscriptions, // backend-ordered (desc by time)
                 columns,
                 formAspectCaption
             };
@@ -624,6 +645,7 @@ export default memo(function EventListAccordions({
                 enableColumnPinning: true,
                 enablePagination: true,
                 enableRowSelection: true,
+                enableSorting: false,  // server-side sorting only
                 enableRowActions: false,
                 enableGrouping: false,
                 enableSearchHighlighting: true,
@@ -766,12 +788,12 @@ export default memo(function EventListAccordions({
                     <Box sx={{width: '200px', mr: 2}}>
                         {isInfinite ? (
                             <Box sx={{display: 'flex', justifyContent: 'flex-end'}}>
-                                <Typography variant="body2">{subscription_count}/♾️</Typography>
+                                <Typography variant="body2">{subscription_count} /♾️</Typography>
                             </Box>
                         ) : (
                             <>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
-                                    <Typography variant="body2">{subscription_count}/{capacity}</Typography>
+                                    <Typography variant="body2">{subscription_count} / {capacity}</Typography>
                                 </Box>
                                 <LinearProgress
                                     variant="determinate"
