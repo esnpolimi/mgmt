@@ -351,7 +351,10 @@ def profile_detail(request, pk):
         profile = Profile.objects.get(pk=pk)
         if request.method == 'GET':
             serializer = ProfileDetailViewSerializer(profile)
-            return Response(serializer.data)
+            data = serializer.data
+            # expose if there are subscriptions to gate deletion on frontend
+            data['has_subscriptions'] = Subscription.objects.filter(profile=profile).exists()
+            return Response(data)
 
         elif request.method == 'PATCH':
             if not get_action_permissions('profile_detail_patch', request.user):
@@ -409,9 +412,14 @@ def profile_detail(request, pk):
         elif request.method == 'DELETE':
             if not get_action_permissions('profile_detail_delete', request.user):
                 return Response({'error': 'Non hai i permessi per eliminare questo profilo.'}, status=401)
-            profile.enabled = False
-            profile.save()
-            return Response(status=200)
+            if Subscription.objects.filter(profile=profile).exists():
+                return Response({'error': 'Impossibile eliminare il profilo: prima elimina tutte le iscrizioni associate.'}, status=400)
+            # Hard delete: remove related User (if ESNer) and Documents, then delete Profile
+            if profile.is_esner:
+                User.objects.filter(profile=profile).delete()
+            Document.objects.filter(profile=profile).delete()
+            profile.delete()
+            return Response({'message': 'Profilo eliminato definitivamente.'}, status=200)
         else:
             return Response({'error': 'Metodo non supportato.'}, status=405)
     except Profile.DoesNotExist:
