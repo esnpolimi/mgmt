@@ -292,8 +292,14 @@ export default function ErasmusForm() {
         setStatusMessage(null);
         setIsLoading(true);
 
+        // Sanitize zero-only placeholders to avoid duplicate 000000 / 00000000 records
+        const sanitizedPersonCode = (formData.person_code === '00000000') ? '' : formData.person_code;
+        const sanitizedMatricola = (formData.matricola_number === '000000') ? '' : formData.matricola_number;
+
         let body = {
             ...formData,
+            person_code: sanitizedPersonCode,
+            matricola_number: sanitizedMatricola,
             whatsapp_prefix: sameWAasPhone ? formData.phone_prefix : formData.whatsapp_prefix,
             whatsapp_number: sameWAasPhone ? formData.phone_number : formData.whatsapp_number,
             birthdate: formatDateString(formData.birthdate),
@@ -703,7 +709,7 @@ export default function ErasmusForm() {
                     <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
                         You can find your Person Code and Matricola in the Polimi App under your profile section, or
                         from the Online Services.
-                        <br/> In case the university has not provided you a Matricola yet, you can fill the field with 6
+                        <br/> In case the university has not provided you a Person Code or Matricola yet, you can fill the field with 8 or 6
                         0s.
                     </Typography>
                 </Grid>

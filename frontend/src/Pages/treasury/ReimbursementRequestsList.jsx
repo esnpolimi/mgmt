@@ -401,6 +401,7 @@ export default function ReimbursementRequestsList() {
                     onClose={handleCloseReimburseModal}
                     requestData={selectedRequest}
                     onReimbursed={handleReimbursed}
+                    requestId={selectedRequest ? selectedRequest.id : null}
                 />
                 {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
             </Box>

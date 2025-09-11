@@ -63,7 +63,7 @@ export const transactionDisplayNames = {
         withdrawal: 'Prelievo',
         subscription: 'Iscrizione',
         cauzione: 'Cauzione',
-        reimbursement: 'Rimborso Richiesta',
+        reimbursement: 'Richiesta Rimborso',
         rimborso_cauzione: 'Rimborso Cauzione Evento',
         rimborso_quota: 'Rimborso Quota Evento',
     },

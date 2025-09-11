@@ -323,34 +323,48 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
         account = validated_data.get('account', None)
         amount = validated_data.get('amount', None)
 
+        old_reimbursed = instance.is_reimbursed
         with transaction.atomic():
+            # Field updates
             if description is not None:
                 instance.description = description
-
             if amount is not None:
                 instance.amount = amount
-
             if receipt_file:
                 new_receipt_link = self._upload_receipt_to_drive(receipt_file, instance.user, instance.created_at)
                 instance.receipt_link = new_receipt_link
             elif receipt_link is not None:
                 instance.receipt_link = receipt_link
 
+            # Handle account change (even if already reimbursed)
             if account is not None:
+                account_changed = instance.account_id != (account.id if account else None)
                 instance.account = account
 
-            # Prevent double reimbursement with select_for_update
-            if not instance.is_reimbursed and instance.account:
+                # If already reimbursed and account changed -> move the existing transaction
+                if account_changed and instance.reimbursement_transaction:
+                    tx = Transaction.objects.select_for_update().get(pk=instance.reimbursement_transaction.pk)
+                    new_account = Account.objects.select_for_update().get(pk=account.pk)
+                    if new_account.status == "closed":
+                        raise serializers.ValidationError("La nuova cassa selezionata è chiusa.")
+                    # tx.amount is negative (money leaving the cassa). Check future balance.
+                    future_balance = new_account.balance + tx.amount  # tx.amount < 0
+                    if future_balance < 0:
+                        raise serializers.ValidationError("Saldo insufficiente nella nuova cassa per spostare il rimborso.")
+                    # Move transaction (Transaction.save adjusts both accounts' balances)
+                    tx.account = new_account
+                    tx.save(update_fields=['account'])
+
+            # Create reimbursement transaction if not yet reimbursed
+            if not instance.is_reimbursed and instance.account and not instance.reimbursement_transaction:
+                if instance.amount is None:
+                    raise serializers.ValidationError("Importo mancante per effettuare il rimborso.")
                 account_obj = Account.objects.select_for_update().get(pk=instance.account.pk)
                 if account_obj.status == "closed":
                     raise serializers.ValidationError("La cassa selezionata è chiusa.")
-
-                reimbursement_amount = instance.amount if amount is None else amount
-
+                reimbursement_amount = instance.amount
                 if account_obj.balance - reimbursement_amount < 0:
                     raise serializers.ValidationError("Il saldo della cassa non può andare in negativo.")
-                if instance.reimbursement_transaction:
-                    raise serializers.ValidationError("Questa richiesta è già stata rimborsata.")
                 tx = Transaction.objects.create(
                     type=Transaction.TransactionType.REIMBURSEMENT,
                     executor=instance.user,
@@ -359,8 +373,8 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
                     description=f"Rimborso richiesta #{instance.id}: {instance.description}"
                 )
                 instance.reimbursement_transaction = tx
-            elif instance.is_reimbursed:
-                # Restrict unmarking to superusers (optional)
+            elif old_reimbursed and not instance.is_reimbursed:
+                # (Unreachable with current model logic, retained for completeness)
                 if not self.context['request'].user.is_superuser:
                     raise serializers.ValidationError("Solo un superuser può annullare un rimborso.")
                 if instance.reimbursement_transaction:

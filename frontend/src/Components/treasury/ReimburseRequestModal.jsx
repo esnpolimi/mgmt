@@ -17,14 +17,23 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
     const [loading, setLoading] = useState(false);
     const [popup, setPopup] = useState(null);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (open) {
+            // Reset to avoid out-of-range value while options are empty
+            setSelectedAccount('');
             fetchCustom('GET', '/accounts/', {
-                onSuccess: (data) => setAccounts(data),
+                onSuccess: (data) => {
+                    setAccounts(data);
+                    // Set only after options are available and id exists
+                    if (requestData?.account?.id && data.some(a => a.id === requestData.account.id)) {
+                        setSelectedAccount(requestData.account.id);
+                    }
+                },
                 onError: () => setAccounts([]),
             });
-            setSelectedAccount(requestData?.account?.id || '');
+            // Keep other field initializations
             setDescription(requestData?.description || '');
             setAmount(requestData?.amount || '');
             setReceiptLink(requestData?.receipt_link || '');
@@ -32,7 +41,11 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
     }, [open, requestData]);
 
     const handleSubmit = () => {
-        // Show confirm dialog with amount and cassa
+        const originalAccountId = requestData?.account?.id;
+        // If no cassa selected OR unchanged, skip confirm dialog
+        if (!selectedAccount || selectedAccount === originalAccountId) {
+            return doSubmit();
+        }
         const accName = accounts.find(acc => acc.id === selectedAccount)?.name || '';
         setConfirmDialog({
             open: true,
@@ -63,8 +76,21 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
         });
     };
 
+    const doDelete = () => {
+        setConfirmDialog({open: false, action: null, message: ''});
+        setDeleting(true);
+        fetchCustom('DELETE', `/reimbursement_request/${requestData.id}/`, {
+            onSuccess: () => {
+                onReimbursed?.();
+                onClose(true);
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => setDeleting(false)
+        });
+    };
+
     return (
-        <Modal open={open} onClose={() => onClose(false)} aria-labelledby="reimburse-modal-title" fullWidth>
+        <Modal open={open} onClose={() => onClose(false)} aria-labelledby="reimburse-modal-title">
             <Box sx={style}>
                 <Box sx={{display: "flex", justifyContent: "flex-end", mb: 0}}>
                     <IconButton onClick={() => onClose(false)}><CloseIcon/></IconButton>
@@ -124,12 +150,27 @@ export default function ReimburseRequestModal({open, onClose, requestData, onRei
                 </Grid>
                 <Button onClick={handleSubmit}
                         variant="contained"
-                        disabled={loading}
+                        disabled={loading || deleting}
                         sx={{mt: 2, bgcolor: "#1976d2", "&:hover": {bgcolor: "#1565c0"}}}>
                     {loading ? (<CircularProgress size={24} color="inherit"/>) : (
                         "Modifica / Rimborsa"
                     )}
                 </Button>
+                {!!requestData?.id && (
+                    <Button
+                        variant="outlined"
+                        color="error"
+                        disabled={deleting || loading}
+                        sx={{mt: 1}}
+                        onClick={() => setConfirmDialog({
+                            open: true,
+                            action: () => doDelete(),
+                            message: "Confermi di voler eliminare questa richiesta di rimborso?"
+                        })}
+                    >
+                        {deleting ? <CircularProgress size={24} color="inherit"/> : "Elimina richiesta"}
+                    </Button>
+                )}
                 <ConfirmDialog
                     open={confirmDialog.open}
                     message={confirmDialog.message}

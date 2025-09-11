@@ -13,7 +13,8 @@ import {
     IconButton,
     Collapse,
     Chip, Divider,
-    Tooltip
+    Tooltip,
+    Dialog, DialogTitle, DialogContent, DialogActions
 } from "@mui/material";
 import React, {useEffect, useMemo, useState} from 'react';
 import {DatePicker, LocalizationProvider} from '@mui/x-date-pickers';
@@ -46,6 +47,7 @@ import EventIcon from '@mui/icons-material/Event';
 import EditIcon from "@mui/icons-material/Edit";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -72,6 +74,8 @@ export default function Profile() {
     const [showSubscriptions, setShowSubscriptions] = useState(false);
     const [showOrganizedEvents, setShowOrganizedEvents] = useState(false);
     const [financePerms, setFinancePerms] = useState(null); // new
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [deletingProfile, setDeletingProfile] = useState(false);
     const navigate = useNavigate();
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
@@ -155,10 +159,10 @@ export default function Profile() {
 
     const fetchFinancePerms = (email) => {
         fetchCustom("GET", `/users/finance-permissions/?email=${encodeURIComponent(email)}`, {
-            onSuccess: (data) => setFinancePerms(data),
-            onError: () => setFinancePerms(null),
-        }
-    )
+                onSuccess: (data) => setFinancePerms(data),
+                onError: () => setFinancePerms(null),
+            }
+        )
         ;
     };
 
@@ -465,7 +469,7 @@ export default function Profile() {
         if (!profile) return;
         const targetEmail = profile.email;
         const enable = !(financePerms?.can_manage_casse || false); // toggle both together
-        fetchCustom("PATCH",`/users/finance-permissions/?email=${encodeURIComponent(targetEmail)}`, {
+        fetchCustom("PATCH", `/users/finance-permissions/?email=${encodeURIComponent(targetEmail)}`, {
             body: {
                 can_manage_casse: enable,
                 can_view_casse_import: enable
@@ -686,6 +690,22 @@ export default function Profile() {
         localization: MRT_Localization_IT,
     });
 
+    const handleDeleteProfile = () => setDeleteConfirmOpen(true);
+
+    const confirmDeleteProfile = () => {
+        setDeletingProfile(true);
+        fetchCustom("DELETE", `/profile/${profile.id}/`, {
+            onSuccess: () => {
+                navigate(`/profiles/${profileType === 'ESNer' ? 'esners/' : 'erasmus/'}`);
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup),
+            onFinally: () => {
+                setDeletingProfile(false);
+                setDeleteConfirmOpen(false);
+            }
+        });
+    };
+
     return (
         <Box>
             <Sidebar/>
@@ -719,7 +739,7 @@ export default function Profile() {
                                             <Chip sx={{ml: 2}} label="Email verificata" color="success" size="small"/>
                                         )}
                                     </Box>
-                                    <Grid sx={{marginLeft: 'auto'}}>
+                                    <Grid sx={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 1}}>
                                         <Tooltip title="Modifica Profilo" arrow>
                                             <Box
                                                 sx={{
@@ -742,6 +762,32 @@ export default function Profile() {
                                                     onSave={handleSave}
                                                 />
                                             </Box>
+                                        </Tooltip>
+                                        <Tooltip
+                                            arrow
+                                            title={
+                                                !user?.groups?.includes('Board')
+                                                    ? "Solo Board Members possono eliminare profili"
+                                                    : (subscriptions.length > 0
+                                                        ? "Elimina prima tutte le iscrizioni associate"
+                                                        : "Elimina profilo")
+                                            }>
+                                        <span>
+                                            <IconButton
+                                                variant="contained"
+                                                color="error"
+                                                disabled={
+                                                    !user?.groups?.includes('Board') ||
+                                                    subscriptions.length > 0 ||
+                                                    deletingProfile
+                                                }
+                                                onClick={handleDeleteProfile}
+                                                sx={{
+                                                    opacity: (!user?.groups?.includes('Board') || subscriptions.length > 0) ? 0.6 : 1
+                                                }}>
+                                                <DeleteIcon/>
+                                            </IconButton>
+                                        </span>
                                         </Tooltip>
                                     </Grid>
                                 </Grid>
@@ -1177,6 +1223,25 @@ export default function Profile() {
                     </Box>
                 </>
             )}
+            <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Conferma Eliminazione</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2">
+                        Sei sicuro di voler eliminare questo profilo (e l&apos;utente associato se ESNer)?
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deletingProfile}>Annulla</Button>
+                    <Button
+                        color="error"
+                        variant="contained"
+                        onClick={confirmDeleteProfile}
+                        disabled={deletingProfile}
+                    >
+                        {deletingProfile ? "Elimino..." : "Conferma"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

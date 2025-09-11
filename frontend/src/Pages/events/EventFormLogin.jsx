@@ -231,8 +231,11 @@ export default function EventFormLogin() {
                     alignItems: 'center',
                 }}>
                 <img src={logo} alt='ESN Polimi Logo' style={{height: '20vh', marginBottom: "8px"}}/>
-                <Typography variant="h4" gutterBottom align="center">
-                    Event Subscription Form <br/> <i>{eventData.name}</i>
+                <Typography variant="h5" gutterBottom align="center">
+                    Event Subscription Form
+                </Typography>
+                <Typography variant="h4" gutterBottom align="center" component="div">
+                    <i>{eventData.name}</i>
                 </Typography>
                 <Box sx={{width: '100%'}}>
                     <TextField
