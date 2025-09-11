@@ -171,7 +171,8 @@ export default function EventForm() {
                     try {
                         body = await err.json();
                         // eslint-disable-next-line no-unused-vars
-                    } catch (_) { /* empty */ }
+                    } catch (_) { /* empty */
+                    }
                 }
                 const fields = body?.fields;
                 const errorMsg =
@@ -219,8 +220,11 @@ export default function EventForm() {
             <CssBaseline/>
             <Box sx={{marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
                 <img src={logo} alt='ESN Polimi Logo' style={{height: '20vh', marginBottom: "4px"}}/>
-                <Typography variant="h4" gutterBottom align="center">
-                    Event Subscription Form <br/> <i>{eventData.name}</i>
+                <Typography variant="h5" gutterBottom align="center">
+                    Event Subscription Form
+                </Typography>
+                <Typography variant="h4" gutterBottom align="center" component="div">
+                    <i>{eventData.name}</i>
                 </Typography>
                 <Alert severity="info" sx={{mb: 2}}>
                     {eventData.allow_online_payment
@@ -283,9 +287,9 @@ export default function EventForm() {
                 </Paper>
                 <Box component="form" onSubmit={handleSubmit} sx={{mt: 3, width: '100%'}}>
                     {/* Added subscription email display */}
-                    <Paper elevation={1} sx={{p:2, mb:3}}>
+                    <Paper elevation={1} sx={{p: 2, mb: 3}}>
                         <Typography variant="subtitle2" color="text.secondary">Subscription Email</Typography>
-                        <Typography variant="body1" sx={{mt:0.5}}>{userEmail}</Typography>
+                        <Typography variant="body1" sx={{mt: 0.5}}>{userEmail}</Typography>
                     </Paper>
                     {/* Only form fields section now */}
                     {formFields.length > 0 && (

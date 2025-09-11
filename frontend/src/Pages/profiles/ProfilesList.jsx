@@ -172,7 +172,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                 justifyContent="space-between"
             >
                 {/* New ordering selector */}
-                <Grid size={{xs: 12, md: 2}}>
+                <Grid size={{xs: 12, md: 3}}>
                     <FormControl fullWidth>
                         <InputLabel id="ordering-label">Ordina per</InputLabel>
                         <Select

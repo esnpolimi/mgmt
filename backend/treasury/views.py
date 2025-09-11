@@ -56,6 +56,8 @@ def get_action_permissions(action, user):
         return user.has_perm('treasury.change_esncard')
     if action == 'reimbursement_request_detail_patch':
         return user_is_board(user)
+    if action == 'reimbursement_request_detail_delete':
+        return user_is_board(user) or user.has_perm('treasury.delete_reimbursementrequest')
     # Default: allow
     return True
 
@@ -421,8 +423,8 @@ def account_detail(request, pk):
 
             # Permission: full edit requires existing permission; status-only allowed for casse managers
             is_casse_manager = (
-                request.user.can_manage_casse or
-                request.user.groups.filter(name__in=['Attivi', 'Board']).exists()
+                    request.user.can_manage_casse or
+                    request.user.groups.filter(name__in=['Attivi', 'Board']).exists()
             )
 
             if not status_only:
@@ -488,7 +490,7 @@ def reimbursement_request_creation(request):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
-@api_view(['GET', 'PATCH'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def reimbursement_request_detail(request, pk):
     try:
@@ -521,6 +523,16 @@ def reimbursement_request_detail(request, pk):
                 return Response(serializer.errors, status=400)
             else:
                 return Response({'error': 'Non autorizzato.'}, status=401)
+
+        elif request.method == 'DELETE':
+            if not get_action_permissions('reimbursement_request_detail_delete', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
+            try:
+                instance.delete()
+                return Response(status=204)
+            except Exception as del_exc:
+                logger.error(f"Errore eliminazione richiesta rimborso #{pk}: {del_exc}")
+                return Response({'error': 'Errore durante l\'eliminazione.'}, status=500)
         else:
             return Response({'error': "Metodo non consentito"}, status=405)
     except Exception as e:
@@ -761,78 +773,158 @@ def reimburse_quota(request):
 @permission_classes([IsAuthenticated])
 def transactions_export(request):
     """
-    Export filtered transactions (optionally for a specific event via ?event=<id>),
-    same filters as transactions_list. Single endpoint replacing previous event/global variants.
+    Export filtered transactions with columns:
+    Esecuzione | Attività | Descrizione | Descrizione (gestionale) | Importo | Cassa | Commenti
     """
-    try:
-        txs = Transaction.objects.all().select_related('account', 'subscription__event').order_by('created_at')
-        txs = apply_transaction_filters(txs, request)
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Bilancio"
-        headers = ["Esecuzione", "Commenti", "Importo", "Cassa"]
-        header_font = Font(bold=True)
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-
-        row_idx = 2
-        for t in txs:
-            # Base amount
-            amount = float(t.amount) if t.amount is not None else None
-            # Fallback for legacy ESNcard transactions with missing/zero amount
-            if t.type == Transaction.TransactionType.ESNCARD and (amount is None or amount == 0):
-                try:
-                    s = Settings.get()
-                    desc_lower = (t.description or "").lower()
-                    if "smarrita" in desc_lower:
-                        amount = float(s.esncard_lost_fee)
-                    else:  # emissione or rinnovo
-                        amount = float(s.esncard_release_fee)
-                except Exception as e:
-                    return Response({'error': 'Errore nel calcolo dell\'importo della transazione ESNcard: ' + str(e)},
-                                    status=500)
-
-            ws.cell(row=row_idx, column=1, value=t.created_at.strftime('%d/%m/%Y %H:%M'))
-            ws.cell(row=row_idx, column=2, value=t.description)
-            ws.cell(row=row_idx, column=3, value=amount).number_format = '#,##0.00 €'
-            ws.cell(row=row_idx, column=4, value=t.account.name if t.account else '')
-            row_idx += 1
-
-        for col in ws.columns:
-            max_len = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                if cell.value:
-                    max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
-
-        from io import BytesIO
-        stream = BytesIO()
-        wb.save(stream)
-        stream.seek(0)
-
-        event_id = request.GET.get('event')
-        if event_id:
-            # Attempt to fetch event name for filename (ignore failures silently)
+    # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
+    def compute_amount(tx_obj):
+        amt = float(tx_obj.amount) if tx_obj.amount is not None else None
+        if tx_obj.type == Transaction.TransactionType.ESNCARD and (amt is None or amt == 0):
             try:
-                ev = Event.objects.get(id=event_id)
-                base = f"Bilancio_Evento_{ev.name.replace(' ', '_')}"
-            except Event.DoesNotExist:
-                base = "Bilancio_Evento"
-        else:
-            base = "Bilancio_Transazioni"
+                settings_obj = Settings.get()
+                desc_lower = (tx_obj.description or "").lower()
+                if "smarrita" in desc_lower:
+                    amt = float(settings_obj.esncard_lost_fee)
+                else:
+                    amt = float(settings_obj.esncard_release_fee)
+            except (Settings.DoesNotExist, AttributeError, ValueError) as calc_exc:
+                logger.error(f"Errore calcolo importo ESNcard (tx id={tx_obj.id}): {calc_exc}")
+                return None
+        return amt
 
-        filename = f"{base}_{datetime.now().strftime('%d%m%Y_%H%M%S')}.xlsx"
-        resp = HttpResponse(
-            stream.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        resp['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
-        return resp
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+    txs_qs = Transaction.objects.all().select_related(
+        'account',
+        'subscription__event',
+        'subscription__profile',
+        'esncard__profile',
+        'event_reference_manual',
+        'executor__profile'
+    ).order_by('-created_at')
+    txs_qs = apply_transaction_filters(txs_qs, request)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Bilancio"
+
+    # Updated headers: inserted computed "Descrizione" and renamed original.
+    headers = ["Esecuzione", "Attività", "Descrizione", "Descrizione (gestionale)", "Importo", "Cassa", "Commenti"]
+    header_font = Font(bold=True)
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+
+    def build_attivita(tx_obj):
+        if tx_obj.type == Transaction.TransactionType.ESNCARD:
+            return "ESNcard"
+        if tx_obj.type == Transaction.TransactionType.DEPOSIT:
+            return "Deposito"
+        if tx_obj.type == Transaction.TransactionType.WITHDRAWAL:
+            return "Prelievo"
+        if tx_obj.type == Transaction.TransactionType.REIMBURSEMENT:
+            return "Richiesta Rimborso"
+        ev = None
+        if getattr(tx_obj, 'subscription_id', None) and getattr(tx_obj.subscription, 'event', None):
+            ev = tx_obj.subscription.event
+        elif getattr(tx_obj, 'event_reference_manual_id', None) and tx_obj.event_reference_manual:
+            ev = tx_obj.event_reference_manual
+        if not ev:
+            return ""
+        return ev.name or ""
+
+    def _academic_year(date_obj):
+        # Academic year starts Aug 1.
+        y = date_obj.year
+        if date_obj.month >= 9:
+            start = y % 100
+        else:
+            start = (y - 1) % 100
+        end = (start + 1) % 100
+        return f"{start:02d}/{end:02d}"
+
+    def build_descrizione(tx_obj):
+        # New computed description column.
+        if tx_obj.type == Transaction.TransactionType.ESNCARD:
+            return f"Quota Associativa {_academic_year(tx_obj.created_at)}"
+        ev = None
+        if getattr(tx_obj, 'subscription_id', None) and getattr(tx_obj.subscription, 'event', None):
+            ev = tx_obj.subscription.event
+        elif getattr(tx_obj, 'event_reference_manual_id', None) and tx_obj.event_reference_manual:
+            ev = tx_obj.event_reference_manual
+        if not ev:
+            return ""
+        ev_date = getattr(ev, 'date', None) or getattr(ev, 'start_date', None) or getattr(ev, 'start', None)
+        if not ev_date:
+            return ""
+        try:
+            base_date = ev_date.strftime('%d/%m')
+        except Exception:
+            return ""
+        mapping = {
+            Transaction.TransactionType.SUBSCRIPTION: "iscrizione",
+            Transaction.TransactionType.CAUZIONE: "cauzione",
+            Transaction.TransactionType.RIMBORSO_QUOTA: "rimborso iscrizione",
+            Transaction.TransactionType.RIMBORSO_CAUZIONE: "rimborso cauzione"
+        }
+        label = mapping.get(tx_obj.type)
+        if not label:
+            return ""
+        return f"{base_date} - {label}"
+
+    def build_commenti(tx_obj):
+        if getattr(tx_obj, 'subscription_id', None) and getattr(tx_obj.subscription, 'profile', None):
+            p = tx_obj.subscription.profile
+            return f"{p.name} {p.surname}"
+        if getattr(tx_obj, 'esncard_id', None) and getattr(tx_obj.esncard, 'profile', None):
+            p = tx_obj.esncard.profile
+            return f"{p.name} {p.surname}"
+        if getattr(tx_obj, 'executor_id', None) and getattr(tx_obj.executor, 'profile', None):
+            p = tx_obj.executor.profile
+            return f"{p.name} {p.surname}"
+        return ""
+
+    row_idx = 2
+    for tx in txs_qs:
+        amount_val = compute_amount(tx)
+        ws.cell(row=row_idx, column=1, value=tx.created_at.strftime('%d/%m/%Y %H:%M'))
+        ws.cell(row=row_idx, column=2, value=build_attivita(tx))
+        ws.cell(row=row_idx, column=3, value=build_descrizione(tx))               # New computed description
+        ws.cell(row=row_idx, column=4, value=tx.description)                      # Original description renamed
+        amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
+        amt_cell.number_format = '#,##0.00 €'
+        ws.cell(row=row_idx, column=6, value=tx.account.name if tx.account else '')
+        ws.cell(row=row_idx, column=7, value=build_commenti(tx))
+        row_idx += 1
+
+    # Auto width
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column:
+            if cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+
+    from io import BytesIO
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    event_id = request.GET.get('event')
+    if event_id:
+        try:
+            ev_for_name = Event.objects.get(id=event_id)
+            base = f"Bilancio_Evento_{ev_for_name.name.replace(' ', '_')}"
+        except Event.DoesNotExist:
+            base = "Bilancio_Evento"
+    else:
+        base = "Bilancio_Transazioni"
+
+    filename = f"{base}_{datetime.now().strftime('%d%m%Y_%H%M%S')}.xlsx"
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
+    return response

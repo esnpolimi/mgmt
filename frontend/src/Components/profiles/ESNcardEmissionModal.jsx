@@ -133,7 +133,7 @@ export default function ESNcardEmissionModal({open, profile, onClose}) {
                                             display: 'flex',
                                             alignItems: 'center'
                                         }}>
-                                        Il numero deve essere di 11 cifre
+                                        Il numero deve essere lungo 11 caratteri
                                     </Typography>
                                 </Box>
                             </Grid>

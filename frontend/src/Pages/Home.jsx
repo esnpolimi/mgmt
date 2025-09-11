@@ -85,6 +85,12 @@ export default function Home() {
                     color: "#1976d2",
                     onClick: () => setRimborsoModalOpen(true)
                 },
+                {
+                    name: "SEGNALAZIONI BUGS/MIGLIORIE",
+                    description: "",
+                    url: "https://docs.google.com/forms/d/e/1FAIpQLSfgCax4iiVea-pHDppHGWHiOe2FmMknaT9Wsl2Kn5r2xBJTBw/viewform?usp=sharing&ouid=112656928168770237958",
+                    color: "#29b6d2",
+                },
             ]
         },
         {
