@@ -104,16 +104,52 @@ class ProfileListViewSerializer(serializers.ModelSerializer):
 
 
 # Serializer for editing a profile (except for specified fields)
-class ProfileFullEditSerializer(serializers.ModelSerializer):
+class ZeroPlaceholderMixin:
+    """
+    Converts all-zero placeholder values for person_code (8) and matricola_number (6) to None so:
+    - Users can input 00000000 / 000000 as temporary placeholders
+    - DB uniqueness is not violated (multiple NULLs allowed)
+    """
+    PLACEHOLDERS = {
+        'person_code': 8,
+        'matricola_number': 6,
+    }
+
+    def _normalize_zero_placeholders(self, attrs):
+        for field, length in self.PLACEHOLDERS.items():
+            val = attrs.get(field)
+            if isinstance(val, str):
+                if val == '' or (len(val) == length and set(val) == {'0'}):
+                    attrs[field] = None
+        return attrs
+
+
+class ProfileFullEditSerializer(ZeroPlaceholderMixin, serializers.ModelSerializer):
     class Meta:
         model = Profile
         exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email']
+        extra_kwargs = {
+            'person_code': {'required': False, 'allow_blank': True},
+            'matricola_number': {'required': False, 'allow_blank': True},
+        }
+
+    def validate(self, attrs):
+        attrs = self._normalize_zero_placeholders(attrs)
+        return super().validate(attrs)
 
 
-class ProfileCreateSerializer(serializers.ModelSerializer):
+class ProfileCreateSerializer(ZeroPlaceholderMixin, serializers.ModelSerializer):
     class Meta:
         model = Profile
         exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email_is_verified']
+        extra_kwargs = {
+            'person_code': {'required': False, 'allow_blank': True},
+            'matricola_number': {'required': False, 'allow_blank': True},
+        }
+
+    def validate(self, attrs):
+        attrs = self._normalize_zero_placeholders(attrs)
+        return super().validate(attrs)
 
 
 class UserGroupEditSerializer(serializers.ModelSerializer):

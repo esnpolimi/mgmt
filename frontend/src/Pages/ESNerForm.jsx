@@ -221,15 +221,20 @@ export default function ESNerForm() {
     };
 
     const handleChange = (e) => {
+        let { name, value } = e.target;
+        if (name === 'person_code' || name === 'matricola_number') {
+            value = value.replace(/\D/g, '');
+            const maxLen = name === 'person_code' ? 8 : 6;
+            if (value.length > maxLen) value = value.slice(0, maxLen);
+        }
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value,
+            [name]: value,
         });
-        // Reset error for this field
-        if (formErrors[e.target.name]) {
+        if (formErrors[name]) {
             setFormErrors({
                 ...formErrors,
-                [e.target.name]: [false, '']
+                [name]: [false, '']
             });
         }
     };
@@ -647,7 +652,8 @@ export default function ESNerForm() {
                         label={names.person_code}
                         variant="outlined"
                         name="person_code"
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={formData.person_code}
                         onChange={handleChange}
                         fullWidth
@@ -660,7 +666,8 @@ export default function ESNerForm() {
                         label={names.matricola_number}
                         variant="outlined"
                         name="matricola_number"
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={formData.matricola_number}
                         onChange={handleChange}
                         fullWidth
