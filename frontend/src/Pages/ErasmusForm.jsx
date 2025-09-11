@@ -191,15 +191,21 @@ export default function ErasmusForm() {
     };
 
     const handleChange = (e) => {
+        let { name, value } = e.target;
+        // Preserve leading zeros and enforce length for codes
+        if (name === 'person_code' || name === 'matricola_number') {
+            value = value.replace(/\D/g, '');
+            const maxLen = name === 'person_code' ? 8 : 6;
+            if (value.length > maxLen) value = value.slice(0, maxLen);
+        }
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value,
+            [name]: value,
         });
-        // Reset error for this field
-        if (formErrors[e.target.name]) {
+        if (formErrors[name]) {
             setFormErrors({
                 ...formErrors,
-                [e.target.name]: [false, '']
+                [name]: [false, '']
             });
         }
     };
@@ -283,23 +289,16 @@ export default function ErasmusForm() {
         if (!formData.matricola_expiration || !dayjs(formData.matricola_expiration).isSame(computedEnd, 'day')) {
             setFormData(prev => ({...prev, matricola_expiration: computedEnd}));
         }
-
         if (!validateForm()) {
             scrollUp();
             return;
         }
-
         setStatusMessage(null);
         setIsLoading(true);
 
-        // Sanitize zero-only placeholders to avoid duplicate 000000 / 00000000 records
-        const sanitizedPersonCode = (formData.person_code === '00000000') ? '' : formData.person_code;
-        const sanitizedMatricola = (formData.matricola_number === '000000') ? '' : formData.matricola_number;
-
+        // Removed zero-to-empty sanitization: backend now handles zero placeholders
         let body = {
             ...formData,
-            person_code: sanitizedPersonCode,
-            matricola_number: sanitizedMatricola,
             whatsapp_prefix: sameWAasPhone ? formData.phone_prefix : formData.whatsapp_prefix,
             whatsapp_number: sameWAasPhone ? formData.phone_number : formData.whatsapp_number,
             birthdate: formatDateString(formData.birthdate),
@@ -684,7 +683,8 @@ export default function ErasmusForm() {
                         label="Person Code (8 digits)"
                         variant="outlined"
                         name="person_code"
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={formData.person_code}
                         onChange={handleChange}
                         fullWidth
@@ -697,7 +697,8 @@ export default function ErasmusForm() {
                         label="Matricola (6 digits)"
                         variant="outlined"
                         name="matricola_number"
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={formData.matricola_number}
                         onChange={handleChange}
                         fullWidth
