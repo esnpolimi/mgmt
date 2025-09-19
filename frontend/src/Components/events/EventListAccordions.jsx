@@ -176,7 +176,6 @@ export default memo(function EventListAccordions({
             ];
 
             const listSubscriptionsColumns = [
-                // ...existing columns...
                 {
                     accessorKey: 'id',
                     header: 'ID',

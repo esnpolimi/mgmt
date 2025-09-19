@@ -223,7 +223,7 @@ def initiate_profile_creation(request):
                     <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verifica indirizzo email</a></p>
                     <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
                     <p>{verification_link}</p>
-                    <p>Questo link scadrà tra 24 ore.</p>
+                    <p>Questo link scadrà tra 7 giorni.</p>
                 </body>
                 </html>
                 """
@@ -241,7 +241,7 @@ def initiate_profile_creation(request):
                     <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verify Email Address</a></p>
                     <p>If the button doesn't work, copy and paste this URL into your browser:</p>
                     <p>{verification_link}</p>
-                    <p>This link will expire in 24 hours.</p>
+                    <p>This link will expire in 7 days.</p>
                 </body>
                 </html>
                 """

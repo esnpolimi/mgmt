@@ -28,6 +28,11 @@ from treasury.serializers import TransactionViewSerializer, AccountDetailedViewS
 from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
+from django.utils import timezone
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 logger = logging.getLogger(__name__)
 
@@ -817,7 +822,7 @@ def transactions_export(request):
 
     def build_attivita(tx_obj):
         if tx_obj.type == Transaction.TransactionType.ESNCARD:
-            return "ESNcard"
+            return "Quota Associativa"
         if tx_obj.type == Transaction.TransactionType.DEPOSIT:
             return "Deposito"
         if tx_obj.type == Transaction.TransactionType.WITHDRAWAL:
@@ -887,10 +892,16 @@ def transactions_export(request):
     row_idx = 2
     for tx in txs_qs:
         amount_val = compute_amount(tx)
-        ws.cell(row=row_idx, column=1, value=tx.created_at.strftime('%d/%m/%Y %H:%M'))
+        # Localize to Italian timezone (handles DST)
+        if ZoneInfo is not None:
+            local_dt = timezone.localtime(tx.created_at, ZoneInfo('Europe/Rome'))
+        else:
+            # Fallback to current timezone if zoneinfo unavailable
+            local_dt = timezone.localtime(tx.created_at)
+        ws.cell(row=row_idx, column=1, value=local_dt.strftime('%d/%m/%Y %H:%M'))
         ws.cell(row=row_idx, column=2, value=build_attivita(tx))
-        ws.cell(row=row_idx, column=3, value=build_descrizione(tx))               # New computed description
-        ws.cell(row=row_idx, column=4, value=tx.description)                      # Original description renamed
+        ws.cell(row=row_idx, column=3, value=build_descrizione(tx))
+        ws.cell(row=row_idx, column=4, value=tx.description)
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
         amt_cell.number_format = '#,##0.00 €'
         ws.cell(row=row_idx, column=6, value=tx.account.name if tx.account else '')
