@@ -343,7 +343,7 @@ export default function ErasmusForm() {
                     Your response has been sent.
                 </Typography>
                 <Typography variant="subtitle1" align="center">
-                    Check your inbox to verify your email (validity of link: 24 hours).
+                    Check your inbox to verify your email (validity of link: 7 days).
                 </Typography>
                 <Typography variant="body2" align="center" sx={{mt: 2}}>
                     In case you do not receive an email, please check your spam folder or contact us on our channels.

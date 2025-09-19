@@ -5,6 +5,9 @@ from profiles.models import Profile
 
 
 class TokenGenerator(PasswordResetTokenGenerator):
+    # Make verification links last 7 days
+    timeout = 60 * 60 * 24 * 7
+
     def _make_hash_value(self, user: "Profile", timestamp):
         return (
                 text_type(user.pk) + text_type(timestamp) +

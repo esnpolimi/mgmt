@@ -48,6 +48,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -706,6 +707,21 @@ export default function Profile() {
         });
     };
 
+    // Helper: copy formatted number (prefix + number) or simple number
+    const handleCopyNumber = async (prefix, number, label = 'Numero') => {
+        const plainNumber = (prefix ? `${prefix} ${number || ''}` : (number || '')).trim();
+        if (!plainNumber) {
+            setPopup({message: `${label} vuoto`, state: "error", id: Date.now()});
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(plainNumber);
+            setPopup({message: `${label} copiato: ${plainNumber}`, state: "success", id: Date.now()});
+        } catch {
+            setPopup({message: `Errore copia ${label}`, state: "error", id: Date.now()});
+        }
+    };
+
     return (
         <Box>
             <Sidebar/>
@@ -847,7 +863,7 @@ export default function Profile() {
                                     </Grid>
                                 )}
                                 {!shouldHideField('country') && (
-                                    <Grid size={{xs: 12, md: 2}}>
+                                    <Grid size={{xs: 12, md: 3}}>
                                         <FormControl fullWidth required>
                                             <InputLabel id="country-label">{names.country}</InputLabel>
                                             <Select
@@ -888,7 +904,7 @@ export default function Profile() {
                                 {/* --- Phone numbers --- */}
                                 {!shouldHideField('phone_prefix') && !shouldHideField('phone_number') && (
                                     <Grid size={{xs: 12}} container spacing={2}>
-                                        <Grid size={{xs: 12, md: 1}}>
+                                        <Grid size={{xs: 12, md: 1.5}}>
                                             <FormControl fullWidth required>
                                                 <InputLabel id="phone-prefix-label">{names.phone_prefix}</InputLabel>
                                                 <Select
@@ -910,23 +926,34 @@ export default function Profile() {
                                                 </Select>
                                             </FormControl>
                                         </Grid>
-                                        <Grid size={{xs: 12, md: 2}}>
-                                            <TextField
-                                                label={names.phone_number}
-                                                name='phone_number'
-                                                value={updatedData.phone_number || ''}
-                                                error={errors.phone_number[0]}
-                                                helperText={errors.phone_number[1]}
-                                                onChange={handleChange}
-                                                slotProps={{input: {readOnly: readOnly.phone_number}}}
-                                                sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white'}}
-                                                fullWidth/>
+                                        <Grid size={{xs: 12, md: 2.5}}>
+                                            {/* Box wraps the TextField and copy button */}
+                                            <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                                                <TextField
+                                                    label={names.phone_number}
+                                                    name='phone_number'
+                                                    value={updatedData.phone_number || ''}
+                                                    error={errors.phone_number[0]}
+                                                    helperText={errors.phone_number[1]}
+                                                    onChange={handleChange}
+                                                    slotProps={{input: {readOnly: readOnly.phone_number}}}
+                                                    sx={{backgroundColor: readOnly.phone_number ? 'grey.200' : 'white', flexGrow: 1}}
+                                                    fullWidth/>
+                                                <Tooltip title="Copia numero" arrow>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={() => handleCopyNumber(updatedData.phone_prefix, updatedData.phone_number, 'Telefono')}
+                                                    >
+                                                        <ContentCopyIcon fontSize="small"/>
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Box>
                                         </Grid>
                                     </Grid>
                                 )}
                                 {!shouldHideField('whatsapp_prefix') && !shouldHideField('whatsapp_number') && (
                                     <Grid size={{xs: 12}} container spacing={2}>
-                                        <Grid size={{xs: 12, md: 1}}>
+                                        <Grid size={{xs: 12, md: 1.5}}>
                                             <FormControl fullWidth required>
                                                 <InputLabel
                                                     id="whatsapp-prefix-label">{names.whatsapp_prefix}</InputLabel>
@@ -949,17 +976,27 @@ export default function Profile() {
                                                 </Select>
                                             </FormControl>
                                         </Grid>
-                                        <Grid size={{xs: 12, md: 2}}>
-                                            <TextField
-                                                label={names.whatsapp_number}
-                                                name='whatsapp_number'
-                                                value={updatedData.whatsapp_number || ''}
-                                                error={errors.whatsapp_number[0]}
-                                                helperText={errors.whatsapp_number[1]}
-                                                onChange={handleChange}
-                                                slotProps={{input: {readOnly: readOnly.whatsapp_number}}}
-                                                sx={{backgroundColor: readOnly.whatsapp_number ? 'grey.200' : 'white'}}
-                                                fullWidth/>
+                                        <Grid size={{xs: 12, md: 2.5}}>
+                                            <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                                                <TextField
+                                                    label={names.whatsapp_number}
+                                                    name='whatsapp_number'
+                                                    value={updatedData.whatsapp_number || ''}
+                                                    error={errors.whatsapp_number[0]}
+                                                    helperText={errors.whatsapp_number[1]}
+                                                    onChange={handleChange}
+                                                    slotProps={{input: {readOnly: readOnly.whatsapp_number}}}
+                                                    sx={{backgroundColor: readOnly.whatsapp_number ? 'grey.200' : 'white', flexGrow: 1}}
+                                                    fullWidth/>
+                                                <Tooltip title="Copia numero" arrow>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={() => handleCopyNumber(updatedData.whatsapp_prefix, updatedData.whatsapp_number, 'WhatsApp')}
+                                                    >
+                                                        <ContentCopyIcon fontSize="small"/>
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Box>
                                         </Grid>
                                     </Grid>
                                 )}
@@ -969,7 +1006,7 @@ export default function Profile() {
                                     <Typography variant="h6" sx={{m: 0}}>Dati Studente</Typography>
                                 </Grid>
                                 {!shouldHideField('person_code') && (
-                                    <Grid size={{xs: 12, md: 3}}>
+                                    <Grid size={{xs: 12, md: 2}}>
                                         <TextField
                                             label={names.person_code}
                                             name='person_code'
@@ -1003,7 +1040,7 @@ export default function Profile() {
                                     </Grid>
                                 )}
                                 {!shouldHideField('matricola_number') && (
-                                    <Grid size={{xs: 12, md: 3}}>
+                                    <Grid size={{xs: 12, md: 2}}>
                                         <TextField
                                             label={names.matricola_number}
                                             name='matricola_number'

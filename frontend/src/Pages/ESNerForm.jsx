@@ -333,7 +333,7 @@ export default function ESNerForm() {
                     La tua richiesta di registrazione è stata inviata con successo!
                 </Typography>
                 <Typography variant="subtitle1" align="center">
-                    Controlla la tua email per ulteriori istruzioni (validità link: 24 ore).
+                    Controlla la tua email per ulteriori istruzioni (validità link: 7 giorni).
                 </Typography>
                 <Typography variant="body2" align="center" sx={{mt: 2}}>
                     In caso non avessi ricevuto nulla, controlla la cartella spam o contattaci all&apos;indirizzo <Link
