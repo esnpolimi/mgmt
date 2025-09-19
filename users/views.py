@@ -232,7 +232,7 @@ def forgot_password(request):
                 <p><a href="{reset_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Reimposta Password</a></p>
                 <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
                 <p>{reset_link}</p>
-                <p>Questo link scadrà tra 24 ore.</p>
+                <p>Questo link scadrà tra 7 giorni.</p>
                 <p>Se non hai richiesto questa reimpostazione, puoi ignorare questa email in tutta sicurezza.</p>
             </body>
             </html>
