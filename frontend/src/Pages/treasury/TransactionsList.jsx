@@ -20,6 +20,7 @@ import Popup from "../../Components/Popup";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import {TRANSACTION_CONFIGS} from "../../data/transactionConfigs";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 
 // For the filter dropdown
@@ -296,6 +297,23 @@ export default function TransactionsList() {
         });
     };
 
+    const handleRefaToggle = () => {
+        if (!eventId || !eventData) return;
+        
+        fetchCustom('PATCH', `/event/${eventId}/`, {
+            body: { is_refa_done: true },
+            onSuccess: (updatedEvent) => {
+                setEventData(updatedEvent);
+                setPopup({
+                    message: "REFA marcato come completato!",
+                    state: "success",
+                    id: Date.now()
+                });
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup),
+        });
+    };
+
     const table = useMaterialReactTable({
         columns,
         data: transactions,
@@ -350,6 +368,18 @@ export default function TransactionsList() {
                 >
                     {isExporting ? 'Esportazione...' : 'Esporta Bilancio (Excel)'}
                 </Button>
+                {eventId && eventData && (
+                    <Button
+                        variant={eventData.is_refa_done ? "contained" : "outlined"}
+                        color={eventData.is_refa_done ? "success" : "primary"}
+                        sx={{ml: 2}}
+                        disabled={eventData.is_refa_done}
+                        startIcon={<CheckCircleIcon />}
+                        onClick={handleRefaToggle}
+                    >
+                        {eventData.is_refa_done ? 'REFA Fatto' : 'Segna REFA Fatto'}
+                    </Button>
+                )}
             </Box>
         ),
     });
