@@ -138,6 +138,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
     form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
+    is_refa_done = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Event
@@ -145,7 +146,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
-            'allow_online_payment', 'form_programmed_open_time'
+            'allow_online_payment', 'form_programmed_open_time', 'is_refa_done'
         ]
 
     def validate(self, attrs):
