@@ -308,10 +308,12 @@ export default memo(function EventListAccordions({
                         const sub = row.original;
                         const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
                         const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
+
                         return (<>
                             <IconButton
                                 title="Modifica Risposte Form"
                                 color="primary"
+                                disabled={!sub.created_by_form}
                                 onClick={e => {
                                     e.stopPropagation();
                                     onOpenEditAnswers(sub);
