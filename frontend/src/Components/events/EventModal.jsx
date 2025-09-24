@@ -86,11 +86,15 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 newData = {...localData, subscription_start_date: date};
             }
 
-            // Adjust programmed form open time if now invalid (must be >= start + 1 minute)
+            // Adjust programmed form open time if now invalid (must be >= start + 1 minute and < end - 1 minute)
             if (dataRef.current.enable_form && newData.form_programmed_open_time) {
                 const minAllowed = dayjs(newData.subscription_start_date).add(1, 'minute');
+                const maxAllowed = dayjs(newData.subscription_end_date).subtract(1, 'minute');
+                
                 if (dayjs(newData.form_programmed_open_time).isBefore(minAllowed)) {
                     newData.form_programmed_open_time = minAllowed.toISOString();
+                } else if (dayjs(newData.form_programmed_open_time).isAfter(maxAllowed)) {
+                    newData.form_programmed_open_time = maxAllowed.toISOString();
                 }
             }
 
@@ -113,6 +117,15 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 }
             }
             const newData = {...localData, subscription_end_date: newDate};
+            
+            // Adjust programmed form open time if now invalid (must be < end - 1 minute)
+            if (dataRef.current.enable_form && newData.form_programmed_open_time && newDate) {
+                const maxAllowed = dayjs(newDate).subtract(1, 'minute');
+                if (dayjs(newData.form_programmed_open_time).isAfter(maxAllowed)) {
+                    newData.form_programmed_open_time = maxAllowed.toISOString();
+                }
+            }
+            
             setLocalData(newData);
             dataRef.current = newData;
             onSubscriptionWindowChange(); // keep consistency if needed
@@ -978,7 +991,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
             // Ensure it's after subscription start date
             if (t && localData.subscription_start_date && dayjs(t).isBefore(dayjs(localData.subscription_start_date))) {
-                t = dayjs(localData.subscription_start_date).add(1, 'hour').toISOString()
+                t = dayjs(localData.subscription_start_date).add(1, 'minute').toISOString()
+            }
+
+            // Ensure it's before subscription end date
+            if (t && localData.subscription_end_date && dayjs(t).isAfter(dayjs(localData.subscription_end_date))) {
+                t = dayjs(localData.subscription_end_date).subtract(1, 'minute').toISOString()
             }
 
             //Update local data
@@ -1163,6 +1181,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                         value={localData.form_programmed_open_time ? dayjs(localData.form_programmed_open_time) : null}
                                         onChange={val => setFormOpenTime(val)}
                                         minDate={localData.subscription_start_date ? dayjs(localData.subscription_start_date).add(1, 'minute') : dayjs()}
+                                        maxDate={localData.subscription_end_date ? dayjs(localData.subscription_end_date).subtract(1, 'minute') : null}
                                         slotProps={{
                                             textField: {
                                                 fullWidth: true,
