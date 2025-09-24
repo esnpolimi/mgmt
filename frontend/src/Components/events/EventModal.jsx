@@ -107,7 +107,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 const now = dayjs();
                 if (endDateTime.isBefore(startDateTime)) {
                     newDate = startDateTime;
-                } else if (endDateTime.isBefore(now)) {
+                } else if (!isEdit && endDateTime.isBefore(now)) {
+                    // Only prevent past dates when creating new events, not when editing existing ones
                     newDate = now;
                 }
             }
@@ -172,7 +173,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 label={eventNames.subscription_end_date}
                                 value={localData.subscription_end_date || null}
                                 onChange={handleSubscriptionEndChange}
-                                minDate={dayjs().isAfter(localData.subscription_start_date) ? dayjs() : localData.subscription_start_date || dayjs()}
+                                minDate={isEdit ? localData.subscription_start_date || null : (dayjs().isAfter(localData.subscription_start_date) ? dayjs() : localData.subscription_start_date || dayjs())}
                                 slotProps={{textField: {fullWidth: true, required: true}}}
                                 required
                                 //error={errors.subscription_end_date[0]}

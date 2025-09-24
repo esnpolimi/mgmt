@@ -142,7 +142,7 @@ export default function EventForm() {
                             noPayment: true,
                             paymentError: true,
                             paymentErrorMessage: offlineMsg
-                        }
+                        }   
                     });
                     return;
                 }
