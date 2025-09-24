@@ -350,7 +350,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             end_date = validated_data['subscription_end_date']
             now = timezone.now()
 
-            if end_date < now:
+            # Only validate against past dates if the date is actually being changed
+            if end_date != instance.subscription_end_date and end_date < now:
                 raise serializers.ValidationError({
                     'subscription_end_date': "Non è possibile impostare una data fine iscrizioni nel passato"
                 })
