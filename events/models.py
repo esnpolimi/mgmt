@@ -167,6 +167,13 @@ class Event(BaseEntity):
                 'form_programmed_open_time': 'Form opening time must be after subscription start date.'
             })
 
+        # Validate that form_programmed_open_time is before subscription_end_date
+        if (self.form_programmed_open_time and self.subscription_end_date and
+                self.form_programmed_open_time >= self.subscription_end_date):
+            raise ValidationError({
+                'form_programmed_open_time': 'Form opening time must be before subscription end date.'
+            })
+
     @property
     def form_fields(self):
         return [f for f in self.fields if f.get('field_type') == 'form']
