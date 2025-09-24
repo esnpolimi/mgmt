@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import sentry_sdk
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils.dateparse import parse_datetime
@@ -145,6 +145,14 @@ def esncard_emission(request):
 
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
+    except IntegrityError as e:
+        # Handle duplicate ESNcard number
+        if 'number' in str(e) and ('unique' in str(e).lower() or 'duplicate' in str(e).lower()):
+            return Response({
+                'esncard_number': ['Questo numero ESNcard è già in uso.']
+            }, status=400)
+        logger.error(f"IntegrityError non gestito: {str(e)}")
+        return Response({'error': 'Errore di integrità dei dati.'}, status=400)
     except (ObjectDoesNotExist, ValueError) as e:
         return Response({'error': str(e)}, status=400)
     except Exception as e:
