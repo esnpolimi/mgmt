@@ -8,7 +8,8 @@ import {
     Typography,
     Collapse,
     FormControlLabel,
-    Switch
+    Switch,
+    Tooltip
 } from '@mui/material';
 import {
     PersonAdd as PersonAddIcon,
@@ -663,6 +664,25 @@ export default memo(function EventListAccordions({
                 },
                 paginationDisplayMode: 'pages',
                 localization: MRT_Localization_IT,
+                muiTableBodyRowProps: ({ row }) => {
+                    const profile = row.original.profile;
+                    const matricolaExpiration = profile?.matricola_expiration;
+                    const isExpired = matricolaExpiration && dayjs(matricolaExpiration).isBefore(dayjs(), 'day');
+                    
+                    const tooltipTitle = isExpired 
+                        ? `⚠️ Matricola scaduta il ${dayjs(matricolaExpiration).format('DD/MM/YYYY')}`
+                        : '';
+                    
+                    return {
+                        sx: {
+                            backgroundColor: isExpired ? '#ffebee' : 'inherit', 
+                            '&:hover': {                                
+                                backgroundColor: isExpired ? '#ffcdd2' : 'rgba(0, 0, 0, 0.04)', 
+                            },
+                        },
+                        title: tooltipTitle,
+                    };
+                },
                 renderEmptyRowsFallback: () => (
                     <Box sx={{textAlign: 'center', p: 2}}>
                         <Typography variant="body1">Nessuna iscrizione presente</Typography>
