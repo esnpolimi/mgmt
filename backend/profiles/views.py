@@ -545,18 +545,26 @@ def check_erasmus_email(request):
     email = request.data.get('email', '').strip().lower()
     if not email:
         return Response({'error': 'Email required.'}, status=400)
-    exists = Profile.objects.filter(email__iexact=email, enabled=True, email_is_verified=True).exists()  # Removed is_esner=False
-    # Return profile data to allow automatic field filling in the form
-    if exists:
-        profile = Profile.objects.get(email__iexact=email, enabled=True, email_is_verified=True)  # Removed is_esner=False
-        res = {
-            'id': profile.id,
-            'email': profile.email,
-            'esncard_number': profile.latest_esncard.number if profile.latest_esncard else '',
-        }
-        return Response(res, status=200)
-    else:
-        return Response(None, status=200)
+    
+    # Check if any profile exists with this email
+    profile_exists = Profile.objects.filter(email__iexact=email).first()
+    
+    if not profile_exists:
+        # Email doesn't exist at all
+        return Response({'error': 'email_not_found', 'message': 'This email does not belong to a registered Erasmus user.'}, status=200)
+    
+    # Check if profile is active and verified
+    if not profile_exists.enabled or not profile_exists.email_is_verified:
+        # Email exists but is not active/verified  
+        return Response({'error': 'email_not_active', 'message': 'This email is not active. Please verify your email or contact support.'}, status=200)
+    
+    # Email exists and is active - return profile data
+    res = {
+        'id': profile_exists.id,
+        'email': profile_exists.email,
+        'esncard_number': profile_exists.latest_esncard.number if profile_exists.latest_esncard else '',
+    }
+    return Response(res, status=200)
 
 
 @api_view(['GET'])

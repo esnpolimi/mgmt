@@ -63,12 +63,28 @@ export default function EventFormLogin() {
             body: {email},
             auth: false,
             onSuccess: (data) => {
-                if (data && Object.keys(data).length > 0) {
-                    // Extract possible ESNcard number fields
+                // Handle specific error cases first
+                if (data?.error === 'email_not_found') {
+                    if (eventData?.is_allow_external) {
+                        navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
+                    } else {
+                        setStatusMessage({
+                            message: data.message || "This email does not belong to a registered Erasmus user.",
+                            state: "error"
+                        });
+                    }
+                } else if (data?.error === 'email_not_active') {
+                    setStatusMessage({
+                        message: data.message || "This email is not active. Please verify your email or contact support.",
+                        state: "error"
+                    });
+                } else if (data && Object.keys(data).length > 0 && !data.error) {
+                    // Valid profile found - extract possible ESNcard number fields
                     const esncardNumber = data?.esncard_number || '';
                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber}});
                 } else if (eventData?.is_allow_external) {
-                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
+                    // Fallback for external users
+                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
                 } else {
                     setStatusMessage({
                         message: "This email does not belong to a registered Erasmus user.",
@@ -77,7 +93,8 @@ export default function EventFormLogin() {
                 }
                 setIsLoading(false);
             },
-            onError: () => {
+            onError: (errorResponse) => {
+                // Generic error handling
                 if (eventData?.is_allow_external) {
                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
                 } else {
