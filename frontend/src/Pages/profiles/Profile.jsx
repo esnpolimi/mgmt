@@ -48,6 +48,9 @@ import EditIcon from "@mui/icons-material/Edit";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EmailIcon from '@mui/icons-material/Email';
+import WarningIcon from '@mui/icons-material/Warning';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const profileFieldRules = {
@@ -751,8 +754,25 @@ export default function Profile() {
                                         <Typography variant="body2" color="text.secondary">
                                             Data Iscrizione: {dayjs(profile?.created_at).format('DD MMMM YYYY')}
                                         </Typography>
-                                        {profile?.email_is_verified && (
-                                            <Chip sx={{ml: 2}} label="Email verificata" color="success" size="small"/>
+                                        {profile?.email_is_verified ? (
+                                            <Chip 
+                                                sx={{ml: 2}} 
+                                                icon={<CheckCircleIcon />}
+                                                label="Email verificata" 
+                                                color="success" 
+                                                size="small"
+                                            />
+                                        ) : (
+                                            <Tooltip title="Email non verificata" arrow>
+                                                <Chip 
+                                                    sx={{ml: 2}} 
+                                                    icon={<WarningIcon />}
+                                                    label="Email non verificata" 
+                                                    color="error" 
+                                                    size="small"
+                                                    variant="outlined"
+                                                />
+                                            </Tooltip>
                                         )}
                                     </Box>
                                     <Grid sx={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 1}}>
