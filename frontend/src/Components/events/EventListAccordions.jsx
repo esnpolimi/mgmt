@@ -8,8 +8,7 @@ import {
     Typography,
     Collapse,
     FormControlLabel,
-    Switch,
-    Tooltip
+    Switch
 } from '@mui/material';
 import {
     PersonAdd as PersonAddIcon,
@@ -314,7 +313,7 @@ export default memo(function EventListAccordions({
                             <IconButton
                                 title="Modifica Risposte Form"
                                 color="primary"
-                                disabled={!sub.created_by_form}
+                                disabled={!data.enable_form}
                                 onClick={e => {
                                     e.stopPropagation();
                                     onOpenEditAnswers(sub);
