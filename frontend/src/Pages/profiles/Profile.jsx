@@ -766,8 +766,7 @@ export default function Profile() {
                                             <Tooltip title="Email non verificata" arrow>
                                                 <Chip 
                                                     sx={{ml: 2}} 
-                                                    icon={<WarningIcon />}
-                                                    label="Email non verificata" 
+                                                    label="Email non verificata"
                                                     color="error" 
                                                     size="small"
                                                     variant="outlined"
