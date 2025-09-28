@@ -1,135 +1,243 @@
-# ESN Politecnico Milano New Management System
-This is a webapp designed to manage the activities and events of the Erasmus Student Network of Politecnico di Milano organization. The system is built using Django for the backend and React for the frontend, providing a modern and efficient user experience.
-
-# Guida Workflow Git
-
-## Branch principali
-
-#### `main`: Codice stabile e pronto per la produzione, usato solo per il codice già testato e approvato.
-#### `development`: Area di staging per integrare nuove funzionalità e fix; Tutto il codice completato e testato si unisce prima qui.
-
-## Branch per nuove modifiche
-
-1. **Crea un branch**:
-   - Per ogni nuova funzionalità o fix, crea un branch.
-   - Convenzioni di nome:
-     - Funzionalità: `feature/nome-funzionalita`
-     - Correzione bug: `fix/nome-bug`
-
-2. **Sviluppa**:
-   - Effettua le modifiche, chiedendo eventuale supporto agli altri membri del team :)
-   - Testa i cambiamenti in locale.
-
-3. **Richiedi una Pull Request (PR)**:
-   - Al termine del lavoro, richiedi una PR verso il branch `development`.
-
-4. **Revisione**:
-   - La PR sarà revisionata e, una volta approvata, il codice sarà unito a `development`.
+Here’s a cleaned-up, fully **English version** of your guide. I’ve also corrected some inconsistencies, added missing details for Mac/Linux users, and improved clarity where needed.
 
 ---
 
-# Run Backend + Frontend on Local with Docker
-After having installed Docker (Docker Desktop on Windows) you can start the deamon (just open Docker Desktop on Windows) and execute (from the folder in which local.yml is located):
+# ESN Politecnico Milano – New Management System
 
-`docker compose -f .\local.yml build` to build the containers (only the first time, or when you've made changes to the Dockerfile or requirements.txt)
+This is a web application designed to manage the activities and events of the Erasmus Student Network at Politecnico di Milano.
+The system is built using **Django** (backend) and **React** (frontend), providing a modern and efficient user experience.
 
-`docker compose -f .\local.yml up` to execute the containers (backend and frontend)
+---
 
-Remember to reserve the ports 8000, 3000, 8080 and 3306 on your machine, as they will be used by the backend and frontend respectively:
-``` bash
-netsh int ipv4 add excludedportrange protocol=tcp startport=3000 numberofports=1
-netsh int ipv4 add excludedportrange protocol=tcp startport=8000 numberofports=1
-netsh int ipv4 add excludedportrange protocol=tcp startport=8080 numberofports=1
-netsh int ipv4 add excludedportrange protocol=tcp startport=3306 numberofports=1
-netsh int ipv4 show excludedportrange protocol=tcp
+# Git Workflow Guide
+
+## Main Branches
+
+* **`main`**: Stable, production-ready code. Only tested and approved code is merged here.
+* **`development`**: Staging area for new features and fixes. All work is merged here before moving to `main`.
+
+## Branches for New Work
+
+1. **Create a branch**:
+
+   * For every new feature or fix, create a new branch.
+   * Naming conventions:
+
+     * Feature: `feature/feature-name`
+     * Bugfix: `fix/bug-name`
+
+2. **Develop**:
+
+   * Implement your changes.
+   * Ask teammates for support if needed.
+   * Test everything locally before pushing.
+
+3. **Open a Pull Request (PR)**:
+
+   * Once finished, open a PR targeting the `development` branch.
+
+4. **Review**:
+
+   * Your PR will be reviewed.
+   * Once approved, it will be merged into `development`.
+
+---
+
+# Retrieve the Project
+
+Clone the repository from the `development` branch:
+
+```bash
+git clone -b development git@github.com:esnpolimi/mgmt.git
 ```
-This will expose the backend on [http://localhost:8000](http://localhost:8000) and the frontend on [http://localhost:3000](http://localhost:3000).
 
-Enjoy!
+Navigate into the project folder. You will find two main subfolders:
 
-# Run Backend on Local (w/o Docker)
+* `backend/`
+* `frontend/`
 
-Set up a virtual environment and install the required packages, **after having locally installed and added to PATH the same python verison os the one in the Dockerfile (3.11 as of June 2025)**:
-``` bash
-python3.11 -m venv venv
-source venv/bin/activate  # On macOS/Linux
-venv\Scripts\activate  # On Windows
-.\venv\Scripts\Activate.ps1 # On Windows PowerShell
-cd backend
-pip install -r requirements.txt
-```
+⚠️ **Important:** Request private files from a teammate, as they are not included in the public repository for security reasons.
+---
 
-To ensure your Django project runs with the correct environment (`development` or `production`), you need to set the environment variable `DJANGO_ENV` **before** running the `python manage.py runserver` command.
-## **On macOS/Linux**
-You can export the environment variable using the `export` command in your terminal:
-``` bash
-DJANGO_ENV=dev DJANGO_SETTINGS_MODULE=backend.settings.dev python manage.py runserver # On macOS/Linux
-$set DJANGO_ENV="dev" && set DJANGO_SETTINGS_MODULE="backend.settings.dev" && python manage.py runserver # On Windows (Command Prompt)
-$env:DJANGO_ENV="dev"; $env:DJANGO_SETTINGS_MODULE="backend.settings.dev"; python manage.py runserver # On Windows (PowerShell)
-```
+# Run Backend + Frontend Locally with Docker
 
-## Verify the Current Environment
-To ensure the environment variable is set correctly, you can temporarily add a print statement to your `manage.py` file:
-``` python
+1. Install [Docker](https://www.docker.com/products/docker-desktop).
+
+   * **Windows**: Use Docker Desktop (ensure the daemon is running).
+   * **macOS/Linux**: Install via package manager or Docker website.
+
+2. From the project root (where `local.yml` is located), run:
+
+   * Build the containers (first time or after changes to `Dockerfile` / `requirements.txt`):
+
+     ```bash
+     docker compose -f local.yml build
+     ```
+
+   * Start the containers:
+
+     ```bash
+     docker compose -f local.yml up
+     ```
+
+3. Reserve ports `8000`, `3000`, `8080`, and `3306`.
+
+   * **Windows**:
+
+     ```bash
+     netsh int ipv4 add excludedportrange protocol=tcp startport=3000 numberofports=1
+     netsh int ipv4 add excludedportrange protocol=tcp startport=8000 numberofports=1
+     netsh int ipv4 add excludedportrange protocol=tcp startport=8080 numberofports=1
+     netsh int ipv4 add excludedportrange protocol=tcp startport=3306 numberofports=1
+     netsh int ipv4 show excludedportrange protocol=tcp
+     ```
+
+   * **macOS/Linux**: Normally no port reservation is needed, but make sure no services are running on those ports.
+
+4. Access the services:
+
+   * Backend: [http://localhost:8000](http://localhost:8000)
+   * Frontend: [http://localhost:3000](http://localhost:3000)
+
+---
+
+# Import Database for Local Testing/Development
+
+Next step is to import a local copy of a database dump (SQL file) into your local MySQL server:
+- After running the Docker 'mgmt' container, access the url `http://localhost:8080` to open phpMyAdmin.
+- Login with user `user` and password `password`
+- Click on the `newgest` database, then Check All tables and Drop them, making sure no tables are present anymore
+- Click on the `Import` tab, then choose the SQL file and click `Import` (leave all other options as default)
+
+
+# Run Backend Locally (without Docker)
+
+1. Install Python **3.11** (the same version used in the Dockerfile) and add it to your PATH.
+
+2. Create and activate a virtual environment:
+
+   ```bash
+   python3.11 -m venv venv
+   # macOS/Linux
+   source venv/bin/activate
+   # Windows (Command Prompt)
+   venv\Scripts\activate
+   # Windows (PowerShell)
+   .\venv\Scripts\Activate.ps1
+   ```
+
+3. Install dependencies:
+
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+4. Set environment variables and run the server:
+
+   * **macOS/Linux**:
+
+     ```bash
+     DJANGO_ENV=dev DJANGO_SETTINGS_MODULE=backend.settings.dev python manage.py runserver
+     ```
+   * **Windows (Command Prompt)**:
+
+     ```bash
+     set DJANGO_ENV=dev && set DJANGO_SETTINGS_MODULE=backend.settings.dev && python manage.py runserver
+     ```
+   * **Windows (PowerShell)**:
+
+     ```powershell
+     $env:DJANGO_ENV="dev"; $env:DJANGO_SETTINGS_MODULE="backend.settings.dev"; python manage.py runserver
+     ```
+
+---
+
+## Verify the Environment
+
+To confirm the environment is set correctly, temporarily add this snippet to `manage.py`:
+
+```python
 import os
-
 print("DJANGO_ENV:", os.getenv("DJANGO_ENV", "Not Set"))
 print("DJANGO_SETTINGS_MODULE:", os.getenv("DJANGO_SETTINGS_MODULE"))
 ```
-When you run the `runserver` command, it should output either `development` or `production`.
-This approach ensures Django loads the correct settings file (e.g., `backend.settings.dev` or `backend.settings.prod`) based on the value of `DJANGO_ENV`.
 
+When running `runserver`, you should see `development` or `production`.
 
-## Run Frontend on Local (w/o Docker)
+---
 
-After having [installed](https://nodejs.org/en/download) the same version of Node as from the frontend's Dockerfile (22 as of June 2025), execute:
-``` bash
-cd frontend
-npm install
-```
+# Run Frontend Locally (without Docker)
 
-Now you can run the frontend in development mode:
-### `npm run dev`
+1. Install [Node.js](https://nodejs.org/en/download) version **22** (same as in the Dockerfile).
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+2. Install dependencies:
 
-The page will (hot) reload when you make changes.\
-You may also see any lint errors in the console.
+   ```bash
+   cd frontend
+   npm install
+   ```
 
-### `npm run build`
+3. Run the frontend:
 
-Builds the app for **production** to the `build` folder.\
-It optimizes the build for the best performance, ensuring fast loading and modern JavaScript output.
+   * Development mode:
 
-### `npm run preview`
+     ```bash
+     npm run dev
+     ```
 
-Previews the production build locally.\
-This is useful for ensuring the build works before deployment.
+     Access it at [http://localhost:3000](http://localhost:3000).
 
+   * Production build:
 
-## Install and Update backend and frontend dependencies
+     ```bash
+     npm run build
+     ```
 
-For backend dependencies, follow these steps:
+   * Preview production build locally:
+
+     ```bash
+     npm run preview
+     ```
+
+---
+
+# Install and Update Dependencies
+
+## Backend (Django)
 
 ```bash
 cd backend
-pip install *package* # the package will be installed in the local virtual environment
-pip freeze > requirements.txt # this will update the requirements.txt file with the installed packages
-# BEWARE this will overwrite the file and add all packages installed in the virtual environment, so make sure to have only the packages you need installed, or to manually remove the ones you don't need
+pip install <package>              # Installs the package in your venv
+pip freeze > requirements.txt      # Updates requirements.txt with installed packages
+```
 
-# To update all packages, you can use pip-upgrader:
+⚠️ Note: `pip freeze` overwrites the file with all installed packages. Ensure only required packages are included.
+
+To update all packages:
+
+```bash
 pip install pip-upgrader
 pip-upgrade
 ```
 
-For the frontend:
+## Frontend (React)
+
 ```bash
 cd frontend
-npm install *package* # the package will be installed globally AND update the package.json file!
+npm install <package>              # Installs the package and updates package.json
+```
 
-# To update all packages, you can use npm-check-updates:
+To update all packages:
+
+```bash
 npm install -g npm-check-updates
 npx npm-check-updates -u
 npm install
 ```
+
+---
+
+✅ This version is now **entirely in English**, works for **Windows, macOS, and Linux**, and removes some small errors in the original instructions.
+
+Would you like me to also create a **quick-start cheat sheet** (just the essential commands for daily use) in addition to this full guide?
