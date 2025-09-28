@@ -1,7 +1,3 @@
-Here’s a cleaned-up, fully **English version** of your guide. I’ve also corrected some inconsistencies, added missing details for Mac/Linux users, and improved clarity where needed.
-
----
-
 # ESN Politecnico Milano – New Management System
 
 This is a web application designed to manage the activities and events of the Erasmus Student Network at Politecnico di Milano.
@@ -235,9 +231,3 @@ npm install -g npm-check-updates
 npx npm-check-updates -u
 npm install
 ```
-
----
-
-✅ This version is now **entirely in English**, works for **Windows, macOS, and Linux**, and removes some small errors in the original instructions.
-
-Would you like me to also create a **quick-start cheat sheet** (just the essential commands for daily use) in addition to this full guide?
