@@ -1,11 +1,18 @@
 import * as Sentry from "@sentry/react";
 
 if (import.meta.env.MODE === 'production') {
+    // Set VITE_SENTRY_DSN and VITE_API_HOST manually
+    window.API_HOST = "https://mgmt.esnpolimi.it/backend";
     Sentry.init({
-        dsn: import.meta.env.VITE_SENTRY_DSN,
+        dsn: "https://f7ee9b97bae2c35e767d8e156eb7b116@o4509581352828928.ingest.de.sentry.io/4509581461487696",
         sendDefaultPii: true,
         environment: 'production'
     });
+}
+
+else {
+    // Set VITE_API_HOST manually
+    window.API_HOST = "http://localhost:8000/backend";
 }
 
 import ReactDOM from 'react-dom/client';
