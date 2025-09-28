@@ -139,23 +139,25 @@ export default function EventForm() {
                         state: {
                             subscriptionId: data.subscription_id,
                             assignedList: data.assigned_list,
-                            noPayment: true,
+                            noPayment: false,
                             paymentError: true,
                             paymentErrorMessage: offlineMsg
-                        }   
-                    });
-                    return;
-                }
-                if (data.payment_required && data.checkout_id) {
-                    navigate(`/event/${eventData.id}/pay`, {
-                        state: {
-                            subscriptionId: data.subscription_id,
-                            assignedList: data.assigned_list,
-                            checkoutId: data.checkout_id
                         }
                     });
                     return;
                 }
+                if (data.payment_required && data.checkout_id) {
+                    // Do NOT redirect to widget now; user will use email link
+                    navigate(`/event/${eventData.id}/formresult`, {
+                        state: {
+                            subscriptionId: data.subscription_id,
+                            assignedList: data.assigned_list,
+                            paymentRequired: true
+                        }
+                    });
+                    return;
+                }
+                // No payment required at all
                 navigate(`/event/${eventData.id}/formresult`, {
                     state: {
                         subscriptionId: data.subscription_id,
@@ -528,9 +530,9 @@ export default function EventForm() {
                     >
                         {submitLoading
                             ? "Processing..."
-                            : (eventData.allow_online_payment && (Number(eventData.cost) + Number(eventData.deposit)) > 0
-                                ? "Proceed to Payment"
-                                : "Submit (no payment required)")}
+                            : ((eventData.allow_online_payment && (Number(eventData.cost) + Number(eventData.deposit)) > 0)
+                                ? "Submit Registration"
+                                : "Submit")}
                     </Button>
                 </Box>
             </Box>
