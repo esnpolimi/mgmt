@@ -196,8 +196,14 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
             "<p style='color:#b06500'>You are on the Waiting List. We will contact you if a spot becomes available.</p>")
     if payment_required:
         if event.allow_online_payment:
+            # Build payment link (supports both absolute and relative, prefers configured base)
+            base = settings.SCHEME_HOST
+            # base = (base or '').rstrip('/')
+            pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
             html_parts.append(
-                "<p>Payment is required. If you already paid online you will soon get a separate payment confirmation email.</p>")
+                "<p>Payment is required. Use the link below to complete your payment:<br/>"
+                f"<a href='{pay_link}' style='font-weight:bold;color:#0a5db3;'>{pay_link}</a></p>"
+            )
         else:
             html_parts.append(
                 "<p>Payment is required. Please follow the instructions sent on our channels.<br/>"
@@ -1094,10 +1100,12 @@ def event_form_view(_, event_id):
 def event_form_status(_, event_id):
     """
     Public endpoint to check if the event is full.
+    Also checks for the status of the SumUp account.
     NOW: primary gate is the Form List capacity (Form List).
     Legacy fields (main_list_full / waiting_list_full) still returned for backward compatibility.
     """
     try:
+        sumup_account = Account.objects.filter(name="SumUp").first()
         event = Event.objects.get(pk=event_id)
         event_lists = EventList.objects.filter(event=event)
         main_list = event_lists.filter(is_main_list=True).first()
@@ -1126,6 +1134,7 @@ def event_form_status(_, event_id):
             form_message = "The Form List is full. No further online subscriptions are possible."
 
         return Response({
+            "account_status": sumup_account.status,
             "main_list_full": main_list_full,
             "waiting_list_full": waiting_list_full,
             "message": message,

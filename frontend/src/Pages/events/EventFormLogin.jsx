@@ -98,7 +98,7 @@ export default function EventFormLogin() {
                 if (eventData?.is_allow_external) {
                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
                 } else {
-                    setStatusMessage({message: "Error checking email. Please try again.", state: "error"});
+                    setStatusMessage({message: "Error checking email: " + (errorResponse?.error || 'Unknown error'), state: "error"});
                 }
                 setIsLoading(false);
             }
@@ -188,6 +188,28 @@ export default function EventFormLogin() {
                                     on <strong>{formatDateTime(eventData.form_programmed_open_time)}</strong>.</>
                                 : <>The form is currently closed. Please check back later.</>
                             }
+                        </Typography>
+                    </Paper>
+                </Box>
+            </Container>
+        );
+    }
+    // If form is not open, show info
+    if (formStatus?.account_status === 'closed') {
+        return (
+            <Container component="main" maxWidth="xs">
+                <CssBaseline/>
+                <Box
+                    sx={{
+                        marginTop: 8,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                    }}>
+                    <img src={logo} alt='ESN Polimi Logo' style={{height: '20vh', marginBottom: "4px"}}/>
+                    <Paper elevation={3} sx={{p: 3, mt: 2, textAlign: 'center'}}>
+                        <Typography variant="h5" gutterBottom>
+                            The payment account is closed. Please contact support.
                         </Typography>
                     </Paper>
                 </Box>
