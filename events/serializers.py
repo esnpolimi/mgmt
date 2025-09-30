@@ -689,28 +689,37 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione',
-                  'external_name', 'form_data', 'additional_data']
+                  'external_name', 'email', 'form_data', 'additional_data']
 
     def validate(self, attrs):
         event = attrs.get('event')
-        email = self.initial_data.get('email', '').strip()
+        email = (self.initial_data.get('email') or '').strip()
         profile = attrs.get('profile', None)
-        external_name = attrs.get('external_name', '').strip() if attrs.get('external_name') else ''
+        external_name = (attrs.get('external_name') or '').strip()
 
-        # If profile not found and event allows externals, use email as external_name
-        if not profile and event and getattr(event, 'is_allow_external', False):
-            if email:
-                attrs['external_name'] = email
-            else:
-                raise serializers.ValidationError("Email is required for external subscription.")
-        elif not profile:
-            raise serializers.ValidationError("Profile not found for this email and event does not allow externals.")
+        # Ensure additional_data dict present
+        attrs.setdefault('additional_data', {})
+
+        if not profile:
+            # External path
+            if not event or not getattr(event, 'is_allow_external', False):
+                raise serializers.ValidationError("Event does not allow external subscriptions.")
+            if not external_name:
+                raise serializers.ValidationError("Il nominativo esterno è obbligatorio.")
+            if not email:
+                raise serializers.ValidationError("L'email esterna è obbligatoria.")
+            # Store email inside additional_data
+            attrs['additional_data']['external_email'] = email
+        else:
+            # Internal profile path must not send external_name
+            pass
 
         if profile and Subscription.objects.filter(profile=profile, event=event).exists():
             raise serializers.ValidationError("This profile is already registered for this event")
@@ -721,6 +730,8 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         self.pay_deposit = attrs.pop('pay_deposit', True)
         self.status_quota = attrs.pop('status_quota', 'pending')
         self.status_cauzione = attrs.pop('status_cauzione', 'pending')
+        # POP the temporary write_only field so it is not passed to model
+        attrs.pop('email', None)
         return attrs
 
 
@@ -729,23 +740,40 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    email = serializers.EmailField(write_only=True, required=False, allow_blank=True)  # NEW
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione', 'external_name',
-                  'form_data', 'additional_data']
+                  'email', 'form_data', 'additional_data']
 
     def validate(self, attrs):
         self.account_id = attrs.get('account_id', self.instance and getattr(self.instance, 'account_id', None))
         self.status_quota = attrs.pop('status_quota', 'pending')
         self.status_cauzione = attrs.pop('status_cauzione', 'pending')
         attrs.pop('account_id', None)
+
+        external_name = (attrs.get('external_name') or '').strip()
+        email = (self.initial_data.get('email') or '').strip()
+
+        # If subscription is external (existing or becoming) enforce both name & email
+        is_external = external_name or (self.instance and self.instance.external_name)
+        if is_external:
+            if external_name and not email and not (self.instance and self.instance.additional_data.get('external_email')):
+                raise serializers.ValidationError({"email": "L'email esterna è obbligatoria."})
+            # Merge / ensure additional_data
+            ad = attrs.setdefault('additional_data', self.instance.additional_data if self.instance else {})
+            if email:
+                ad['external_email'] = email
+        # Always remove temp field
+        attrs.pop('email', None)
         return attrs
 
     def update(self, instance, validated_data):
-
+        # Ensure 'email' not passed even if future changes reintroduce it
+        validated_data.pop('email', None)
         return super().update(instance, validated_data)
 
 

@@ -149,7 +149,7 @@ def _subscription_recipient_email(subscription):
     if subscription.profile and getattr(subscription.profile, 'email', None):
         return subscription.profile.email
     ad = subscription.additional_data or {}
-    return ad.get('form_email')
+    return ad.get('form_email') or ad.get('external_email')
 
 
 def _send_email(subject, html_content, to_email):
@@ -170,7 +170,7 @@ def _send_email(subject, html_content, to_email):
         return False
 
 
-def _send_form_subscription_email(subscription, assigned_label, payment_required):
+def _send_form_subscription_email(subscription, assigned_label, online_payment_required, payment_required):
     # Only for form-created subscriptions; send once
     if not getattr(subscription, 'created_by_form', False):
         return
@@ -189,19 +189,22 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
     html_parts = [
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>",
         "<p>We received your subscription!</p>",
-        # f"<p><b>Assigned list:</b> {assigned_label}</p>"
     ]
-    if waiting:
-        html_parts.append(
-            "<p style='color:#b06500'>You are on the Waiting List. We will contact you if a spot becomes available.</p>")
+
     if payment_required:
-        if event.allow_online_payment:
+        if online_payment_required:
             # Build payment link (supports both absolute and relative, prefers configured base)
             base = settings.SCHEME_HOST
             # base = (base or '').rstrip('/')
             pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
+            html_parts.append("<p>Please complete your payment to be assigned a spot in a list.</p>")
+            if waiting:
+                html_parts.append("<p style='color:#b06500'>Spots are only available in the Waiting List at the moment.</p>")
+            else:
+                html_parts.append("<p style='color:#0a5db3'>Spots are available in the Main List at the moment.</p>")
+
             html_parts.append(
-                "<p>Payment is required. Use the link below to complete your payment:<br/>"
+                "<p>Use the link below to complete your payment:<br/>"
                 f"<a href='{pay_link}' style='font-weight:bold;color:#0a5db3;'>{pay_link}</a></p>"
             )
         else:
@@ -220,10 +223,10 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
 
 
 def _send_payment_confirmation_email(subscription):
-    # Only for form-created subscriptions; send once when payment actually recorded
-    if not getattr(subscription, 'created_by_form', False):
-        return
+    # Allow either form-created OR manual external with email
     ad = subscription.additional_data or {}
+    if not (getattr(subscription, 'created_by_form', False) or (subscription.external_name and ad.get('external_email'))):
+        return
     if ad.get('payment_confirmation_email_sent'):
         return
 
@@ -263,6 +266,7 @@ def _send_payment_confirmation_email(subscription):
     html_content = (
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
         f"<p>We have registered your <b>{paid_label}</b>.</p>"
+        f"<p>You have been assigned to the <b>{subscription.list.name if subscription.list else '(no list)'}</b>.</p>"
         "<p>Thank you,<br/>ESN Politecnico Milano</p>"
         "</body></html>"
     )
@@ -340,6 +344,12 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
         )
     elif allow_delete:
         _remove_transaction(subscription, Transaction.TransactionType.CAUZIONE)
+
+    # Move after payments are recorded so paid_flag can become true
+    try:
+        attempt_move_from_form_list(subscription)
+    except Exception as move_err:
+        logger.error(f"Auto-move after payment failed for sub {subscription.pk}: {move_err}")
 
     _send_payment_confirmation_email(subscription)
 
@@ -954,6 +964,7 @@ def _ensure_sumup_transactions(subscription):
         deposit = Decimal(event_obj.deposit or 0)
         if cost <= 0 and deposit <= 0:
             return
+
         account = Account.objects.filter(name="SumUp").first()
         _handle_payment_status(
             subscription=subscription,
@@ -963,8 +974,7 @@ def _ensure_sumup_transactions(subscription):
             executor=None,
             allow_delete=False
         )
-        # Auto-move after successful SumUp payment
-        attempt_move_from_form_list(subscription)
+
     except Exception as e:
         logger.error(f"Failed _ensure_sumup_transactions for sub {subscription.pk}: {e}")
 
@@ -1197,33 +1207,13 @@ def event_form_submit(request, event_id):
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
-        # Determine target list (main, else waiting)
-        '''
-        event_lists = EventList.objects.filter(event=event)
-        main_list = event_lists.filter(is_main_list=True).first()
-        waiting_list = event_lists.filter(is_waiting_list=True).first()
 
-        def has_space(lst):
-            if not lst:
-                return False
-            if lst.capacity == 0:
-                return True
-            return lst.subscription_count < lst.capacity
 
-        if has_space(main_list):
-            assigned_list = main_list
-            assigned_label = "Main List"
-        elif has_space(waiting_list):
-            assigned_list = waiting_list
-            assigned_label = "Waiting List"
-        else:
-            return Response({"error": "No available list for subscription. All lists are full."}, status=400)
-        '''
         # Determine form list (always use form list; capacity not enforced here)
         form_list = event.lists.filter(name='Form List').first()
         if not form_list:
             return Response({"error": "Form list not configured for this event"}, status=400)
-        assigned_label = ''
+
 
         sub = Subscription.objects.create(
             profile=profile,
@@ -1250,9 +1240,33 @@ def event_form_submit(request, event_id):
                 print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
                 logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
 
-        payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error) or total_cost > 0
+        online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error)
+        payment_required = online_payment_required or total_cost > 0
 
-        _send_form_subscription_email(sub, assigned_label, payment_required)
+        assigned_label = ''
+
+        # Determine available list for only online payments (main, else waiting)
+        if online_payment_required:
+            event_lists = EventList.objects.filter(event=event)
+            main_list = event_lists.filter(is_main_list=True).first()
+            waiting_list = event_lists.filter(is_waiting_list=True).first()
+
+            def has_space(lst):
+                if not lst:
+                    return False
+                if lst.capacity == 0:
+                    return True
+                return lst.subscription_count < lst.capacity
+
+            if has_space(main_list):
+                assigned_label = "Main List"
+            elif has_space(waiting_list):
+                assigned_label = "Waiting List"
+            else:
+                return Response({"error": "No available spot for subscription. All lists are full."}, status=400)
+
+
+        _send_form_subscription_email(sub, assigned_label, online_payment_required, payment_required)
 
         return Response({
             "success": True,
