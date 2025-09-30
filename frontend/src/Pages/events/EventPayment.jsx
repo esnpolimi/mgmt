@@ -1,6 +1,6 @@
 import {useEffect, useState, useRef} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
-import {Box, Container, Typography, CircularProgress, Alert, Button} from '@mui/material';
+import {Box, Container, Typography, CircularProgress, Alert} from '@mui/material';
 import {fetchCustom} from '../../api/api';
 
 export default function EventPayment() {
@@ -183,7 +183,7 @@ export default function EventPayment() {
             )}
             {status === 'failed' && (
                 <Alert severity="error" sx={{mt:2}}>
-                    {message} <Button size="small" onClick={finish}>Continue</Button>
+                    {message}
                 </Alert>
             )}
         </Container>
