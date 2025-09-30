@@ -47,6 +47,7 @@ export default function SubscriptionModal({
         profile_id: '',
         profile_name: '',
         external_name: '',
+        external_email: '',
         list_id: listId || '',
         list_name: (event.selectedList ? event.selectedList.name : (event.lists && listId ? (event.lists.find(list => list.id === listId)?.name || 'Lista non trovata') : 'Lista non trovata')),
         notes: '',
@@ -63,6 +64,7 @@ export default function SubscriptionModal({
         profile_id: [false, ''],
         profile_name: [false, ''],
         external_name: [false, ''],
+        external_email: [false, ''],
         status: [false, ''],
         list_id: [false, ''],
         list_name: [false, ''],
@@ -82,14 +84,18 @@ export default function SubscriptionModal({
         let arr = [];
         if (!data.profile_id && !data.external_name) {
             if (event.is_allow_external) {
-                arr.push({
-                    field: 'external_name',
-                    value: data.external_name,
-                    message: "Inserire un nominativo esterno"
-                });
+                arr.push({field: 'external_name', value: data.external_name, message: "Inserire un nominativo esterno"});
             } else {
                 arr.push({field: 'profile_id', value: data.profile_id, message: "Selezionare un Profilo"});
             }
+        }
+        // If using external, require email
+        if (!data.profile_id && data.external_name) {
+            arr.push({
+                field: 'external_email',
+                value: data.external_email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.external_email),
+                message: "Inserire una email valida"
+            });
         }
         if (data.status_quota === 'paid') {
             arr.push({field: 'account_id', value: data.account_id, message: "Selezionare una Cassa"});
@@ -107,6 +113,7 @@ export default function SubscriptionModal({
                 ...subscription,
                 account_id: subscription.account_id || '',
                 external_name: subscription.external_name || '',
+                external_email: (subscription.additional_data && subscription.additional_data.external_email) || '', // preload if stored
                 notes: subscription.notes || ''
             }));
         } else {
@@ -247,7 +254,8 @@ export default function SubscriptionModal({
                 notes: data.notes,
                 status_quota: data.status_quota || 'pending',
                 status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
-                external_name: data.external_name || undefined
+                external_name: data.external_name || undefined,
+                email: (!data.profile_id && data.external_email) ? data.external_email : undefined, // send email when external
             },
             onSuccess: (resp) => {
                 let baseMsg = (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!';
@@ -331,7 +339,7 @@ export default function SubscriptionModal({
                     <Grid container spacing={2} direction="column">
                         {event.is_allow_external ? (
                             <>
-                                {!data.external_name && (
+                                {!data.external_name && !data.external_email && (
                                     <Grid size={{xs: 12}} sx={{mt: 1}}>
                                         <ProfileSearch
                                             value={data.profile_id ? {
@@ -356,28 +364,45 @@ export default function SubscriptionModal({
                                     </Grid>
                                 )}
                                 {!data.profile_id && (
-                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
-                                        <TextField
-                                            label="Nominativo Esterno"
-                                            name="external_name"
-                                            value={data.external_name}
-                                            onChange={(e) => {
-                                                const v = e.target.value;
-                                                setData(d => ({
-                                                    ...d,
-                                                    external_name: v,
-                                                    profile_id: v ? '' : d.profile_id, // ensure exclusivity
-                                                    profile_name: v ? '' : d.profile_name
-                                                }));
-                                                if (v) setProfileHasEsncard(null);
-                                            }}
-                                            fullWidth
-                                            required={!data.profile_id}
-                                            error={errors.external_name && errors.external_name[0]}
-                                            helperText={errors.external_name && errors.external_name[1]}
-                                            disabled={isReimbursed}
-                                        />
-                                    </Grid>
+                                    <>
+                                        <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                            <TextField
+                                                label="Email Esterno"
+                                                name="external_email"
+                                                type="email"
+                                                value={data.external_email}
+                                                onChange={handleChange}
+                                                fullWidth
+                                                required={!data.profile_id}
+                                                error={errors.external_email && errors.external_email[0]}
+                                                helperText={errors.external_email && errors.external_email[1]}
+                                                disabled={isReimbursed}
+                                            />
+                                        </Grid>
+                                        <Grid size={{xs: 12}} sx={{mt: 0}}>
+                                            <TextField
+                                                label="Nominativo Esterno"
+                                                name="external_name"
+                                                value={data.external_name}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    setData(d => ({
+                                                        ...d,
+                                                        external_name: v,
+                                                        profile_id: v ? '' : d.profile_id,
+                                                        profile_name: v ? '' : d.profile_name
+                                                    }));
+                                                    if (v) setProfileHasEsncard(null);
+                                                }}
+                                                fullWidth
+                                                required={!data.profile_id}
+                                                error={errors.external_name && errors.external_name[0]}
+                                                helperText={errors.external_name && errors.external_name[1]}
+                                                disabled={isReimbursed}
+                                            />
+                                        </Grid>
+
+                                    </>
                                 )}
                             </>
                         ) : (
@@ -534,15 +559,15 @@ export default function SubscriptionModal({
                     )}
 
                     <Button variant="contained"
-                            fullWidth
-                            sx={{
-                                mt: 2,
-                                bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
-                                '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
-                            }}
-                            onClick={handleSubmit}
-                            disabled={submitLoading || isReimbursed}
-                            startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
+                        fullWidth
+                        sx={{
+                            mt: 2,
+                            bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
+                            '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
+                        }}
+                        onClick={handleSubmit}
+                        disabled={submitLoading || isReimbursed || (!data.profile_id && !(data.external_name && data.external_email))}
+                        startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
                         {isEdit ? 'Salva Modifiche' : 'Conferma'}
                     </Button>
                     {isEdit && (

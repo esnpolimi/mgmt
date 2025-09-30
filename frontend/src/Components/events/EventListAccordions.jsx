@@ -199,7 +199,7 @@ export default memo(function EventListAccordions({
                     Cell: ({row}) => {
                         const sub = row.original;
                         if (sub.external_name) {
-                            return <span>{sub.external_name}</span>;
+                            return <span>{sub.external_name} ({sub.additional_data.external_email})</span>;
                         }
                         return (
                             <span>
