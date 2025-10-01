@@ -24,6 +24,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+import os
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import json
 
 from events.models import Event, Subscription
 from events.models import EventList, validate_field_data
@@ -37,6 +42,61 @@ from profiles.models import Profile
 from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
+
+# --- Allowed file types for 'link' form fields (mirrors treasury) ---
+FORM_UPLOAD_ALLOWED_MIMETYPES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/bmp',
+    'image/webp',
+    'image/tiff',
+    'image/heic',
+    'image/heif'
+]
+FORM_UPLOAD_ALLOWED_EXTENSIONS = [
+    '.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'
+]
+
+def _validate_form_upload(file_obj):
+    ext = os.path.splitext(file_obj.name)[1].lower()
+    if hasattr(file_obj, 'content_type') and file_obj.content_type not in FORM_UPLOAD_ALLOWED_MIMETYPES:
+        raise ValidationError("File must be an image or a PDF.")
+    if ext not in FORM_UPLOAD_ALLOWED_EXTENSIONS:
+        raise ValidationError("File must be an image or a PDF.")
+    return True
+
+def _upload_form_file_to_drive(file_obj, event_id, field_name):
+    """
+    Uploads file for form 'l' field to Drive and returns public link.
+    """
+    GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    service = build('drive', 'v3', credentials=credentials)
+    file_obj.seek(0)
+    mimetype = getattr(file_obj, 'content_type', 'application/octet-stream')
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    ext = os.path.splitext(file_obj.name)[1].lower()
+    safe_field = "".join(c for c in field_name if c.isalnum() or c in ('-', '_'))[:40]
+    filename = f"event{event_id}_form_{safe_field}_{timestamp}{ext}"
+    media = MediaIoBaseUpload(file_obj, mimetype=mimetype)
+    metadata = {'name': filename, 'parents': [GOOGLE_DRIVE_FOLDER_ID]}
+    created = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    service.permissions().create(
+        fileId=created['id'],
+        body={'role': 'reader', 'type': 'anyone'},
+        supportsAllDrives=True
+    ).execute()
+    return f"https://drive.google.com/file/d/{created['id']}/view?usp=sharing"
 
 # Merge phone/whatsapp prefixes into numbers in any dict/list payload
 def _combine_prefix_numbers(obj):
@@ -1174,7 +1234,17 @@ def event_form_submit(request, event_id):
     """
     try:
         event = Event.objects.get(pk=event_id)
-        form_data = request.data.get("form_data", {}) or {}
+        form_data_raw = request.data.get("form_data", {}) or {}
+        # Support multipart where form_data may arrive as JSON string
+        if isinstance(form_data_raw, str):
+            try:
+                form_data = json.loads(form_data_raw)
+                if not isinstance(form_data, dict):
+                    form_data = {}
+            except Exception:
+                form_data = {}
+        else:
+            form_data = form_data_raw
         form_notes = request.data.get("form_notes", "") or ""
         email = (request.data.get("email") or "").strip()
 
@@ -1202,11 +1272,23 @@ def event_form_submit(request, event_id):
         if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
             return Response({"error": "Already subscribed to this event as external"}, status=400)
 
-        # Validate only form field data
+        # --- Handle file uploads for 'l' type fields BEFORE validation ---
+        link_fields = [f['name'] for f in event.form_fields if f.get('type') == 'l']
+        for fname in link_fields:
+            uploaded = request.FILES.get(fname)
+            if uploaded:
+                _validate_form_upload(uploaded)
+                try:
+                    link = _upload_form_file_to_drive(uploaded, event.id, fname)
+                except Exception as up_err:
+                    logger.error(f"Upload failed for field {fname}: {up_err}")
+                    return Response({"error": f"Upload failed for field {fname}"}, status=500)
+                form_data[fname] = link
+
+        # Validate only form field data (now includes generated links)
         errors = validate_field_data(event.fields, form_data, 'form')
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
-
 
 
         # Determine form list (always use form list; capacity not enforced here)
