@@ -66,12 +66,12 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
     }, [open, event, subscription]);
 
     // Helper to render a field input for form/additional fields
-    const renderFieldInput = (field, value, onChange, isAdditional = false) => {
+    const renderFieldInput = (field, value, onChange) => {
         switch (field.type) {
             case 't':
-            case 'd': // date stored as string
-            case 'e': // esncard number
-            case 'p': // phone "+prefix number"
+            case 'd':
+            case 'e':
+            case 'p':
                 return (
                     <TextField
                         fullWidth
@@ -80,6 +80,29 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                         size="small"
                         variant="outlined"
                     />
+                );
+            case 'l':
+                return (
+                    <Box sx={{display: 'flex', flexDirection: 'column', gap: 0.5}}>
+                        <TextField
+                            fullWidth
+                            placeholder="Incolla un nuovo link Drive"
+                            value={value || ''}
+                            onChange={e => onChange(field, e.target.value)}
+                            size="small"
+                            variant="outlined"
+                        />
+                        {value && (
+                            <Button
+                                onClick={() => onChange(field, '')}
+                                color="error"
+                                size="small"
+                                sx={{textTransform: 'none', alignSelf: 'flex-start', p: 0}}
+                            >
+                                Rimuovi link
+                            </Button>
+                        )}
+                    </Box>
                 );
             case 'n':
                 return (
@@ -158,20 +181,15 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
         const formFields = (event.fields || []).filter(field => field.field_type === 'form');
         formFields.forEach(field => {
             const val = formData[field.name];
-
-            // Handle each field type according to backend validation
             if (field.type === 'n') {
-                // For numbers: convert to number or skip if empty
                 if (val !== '' && val !== undefined && val !== null) {
                     cleanedFormData[field.name] = Number(val);
                 }
             } else if (field.type === 'm') {
-                // For multiple choice: ensure it's an array
                 cleanedFormData[field.name] = Array.isArray(val) ? val : [];
             } else if (field.type === 'b') {
-                // For boolean: convert to boolean
                 cleanedFormData[field.name] = Boolean(val);
-            } else if (['t','c','d','e','p'].includes(field.type)) {
+            } else if (['t','c','d','e','p','l'].includes(field.type)) {
                 cleanedFormData[field.name] = val || '';
             }
         });
@@ -180,7 +198,6 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
         const additionalFields = (event.fields || []).filter(field => field.field_type === 'additional');
         additionalFields.forEach(field => {
             const val = additionalData[field.name];
-
             if (field.type === 'n') {
                 if (val !== '' && val !== undefined && val !== null) {
                     cleanedAdditionalData[field.name] = Number(val);
@@ -189,7 +206,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                 cleanedAdditionalData[field.name] = Array.isArray(val) ? val : [];
             } else if (field.type === 'b') {
                 cleanedAdditionalData[field.name] = Boolean(val);
-            } else if (['t','c','d','e','p'].includes(field.type)) {
+            } else if (['t','c','d','e','p','l'].includes(field.type)) {
                 cleanedAdditionalData[field.name] = val || '';
             }
         });
