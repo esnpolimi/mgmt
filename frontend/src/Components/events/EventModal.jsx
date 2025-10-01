@@ -679,7 +679,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
             {value: 'b', label: 'Sì/No'},
             {value: 'd', label: 'Data'},
             {value: 'e', label: 'ESNcard'},
-            {value: 'p', label: 'Telefono'}
+            {value: 'p', label: 'Telefono'},
+            {value: 'l', label: 'File Upload'},
         ];
 
         const needsChoices = ['c', 'm'].includes(field.type);

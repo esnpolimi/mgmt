@@ -136,6 +136,22 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.form_data?.[field.name];
+                    if (field.type === 'l') {
+                        if (val) {
+                            return (
+                                <span>
+                                    <Button variant="text"
+                                            color="primary"
+                                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                                            onClick={() => window.open(val, '_blank', 'noopener,noreferrer')}>
+                                        Link Drive
+                                    </Button>
+                                </span>
+                            );
+                        }
+                        return '';
+                    }
                     if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
                     if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
                     return val ?? '';
@@ -160,6 +176,22 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.additional_data?.[field.name];
+                    if (field.type === 'l') {
+                        if (val) {
+                            return (
+                                <span>
+                                    <Button variant="text"
+                                            color="primary"
+                                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                                            onClick={() => window.open(val, '_blank', 'noopener,noreferrer')}>
+                                        Link Drive
+                                    </Button>
+                                </span>
+                            );
+                        }
+                        return '';
+                    }
                     if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
                     if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
                     return val ?? '';
