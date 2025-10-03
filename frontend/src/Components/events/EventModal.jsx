@@ -26,7 +26,7 @@ import {
 import {DatePicker, DateTimePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon} from '@mui/icons-material';
+import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon} from '@mui/icons-material';
 import {defaultErrorHandler, fetchCustom} from "../../api/api";
 import {style} from '../../utils/sharedStyles'
 import CustomEditor from '../CustomEditor';
@@ -670,6 +670,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                            updateChoice,
                                            deleteChoice,
                                            disabled,
+                                           onMoveUp,
+                                           onMoveDown,
+                                           isFirst,
+                                           isLast,
                                        }) {
         const typeOptions = [
             {value: 't', label: 'Testo'},
@@ -737,7 +741,29 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
                     )}
 
-                    <Grid size={{xs: 6, sm: 1}}>
+                    <Grid size={{xs: 12, sm: 'auto'}} sx={{display: 'flex', gap: 0.5, alignItems: 'center'}}>
+                        <Tooltip title="Sposta su">
+                            <span>
+                                <IconButton
+                                    onClick={() => onMoveUp(index)}
+                                    disabled={disabled || isFirst}
+                                    size="small"
+                                >
+                                    <ArrowUpwardIcon fontSize="small"/>
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Sposta giù">
+                            <span>
+                                <IconButton
+                                    onClick={() => onMoveDown(index)}
+                                    disabled={disabled || isLast}
+                                    size="small"
+                                >
+                                    <ArrowDownwardIcon fontSize="small"/>
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                         <IconButton
                             onClick={() => onDelete(index)}
                             disabled={disabled}
@@ -805,7 +831,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                               updateChoice,
                               deleteChoice,
                               disabled,
-                              alert // NEW: optional alert node rendered under description
+                              alert, // NEW: optional alert node rendered under description
+                              onMoveUp,
+                              onMoveDown
                           }) {
 
         return (
@@ -846,6 +874,10 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     updateChoice={updateChoice}
                                     deleteChoice={deleteChoice}
                                     disabled={disabled}
+                                    onMoveUp={onMoveUp}
+                                    onMoveDown={onMoveDown}
+                                    isFirst={i === 0}
+                                    isLast={i === fields.length - 1}
                                 />
                             );
                         })
@@ -963,6 +995,45 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 {choices: localData.fields[gIndex].choices.filter((_, i) => i !== choiceIndex)})
         }
 
+        const onMoveUp = function onMoveUp(index) {
+            if (index === 0) return;
+
+            let gIndex = globalIndex(index)
+            let gIndexPrev = globalIndex(index - 1)
+
+            const newFields = [...localData.fields];
+            [newFields[gIndexPrev], newFields[gIndex]] = [newFields[gIndex], newFields[gIndexPrev]];
+
+            // Update local state
+            setLocalData({
+                ...localData,
+                fields: newFields
+            });
+
+            // Update ref
+            dataRef.current.fields = newFields;
+        }
+
+        const onMoveDown = function onMoveDown(index) {
+            const additionalFields = localData.fields.filter(f => f.field_type === 'additional');
+            if (index === additionalFields.length - 1) return;
+
+            let gIndex = globalIndex(index)
+            let gIndexNext = globalIndex(index + 1)
+
+            const newFields = [...localData.fields];
+            [newFields[gIndex], newFields[gIndexNext]] = [newFields[gIndexNext], newFields[gIndex]];
+
+            // Update local state
+            setLocalData({
+                ...localData,
+                fields: newFields
+            });
+
+            // Update ref
+            dataRef.current.fields = newFields;
+        }
+
         return (
             <FieldSection
                 title={"Campi aggiuntivi"}
@@ -975,6 +1046,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 updateChoice={updateChoice}
                 deleteChoice={deleteChoice}
                 disabled={isEdit && hasSubscriptions}
+                onMoveUp={onMoveUp}
+                onMoveDown={onMoveDown}
             />
         )
     }
@@ -1122,6 +1195,45 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 {choices: localData.fields[gIndex].choices.filter((_, i) => i !== choiceIndex)})
         }
 
+        const onMoveUp = function onMoveUp(index) {
+            if (index === 0) return;
+
+            let gIndex = globalIndex(index)
+            let gIndexPrev = globalIndex(index - 1)
+
+            const newFields = [...localData.fields];
+            [newFields[gIndexPrev], newFields[gIndex]] = [newFields[gIndex], newFields[gIndexPrev]];
+
+            // Update local state
+            setLocalData({
+                ...localData,
+                fields: newFields
+            });
+
+            // Update ref
+            dataRef.current.fields = newFields;
+        }
+
+        const onMoveDown = function onMoveDown(index) {
+            const formFields = localData.fields.filter(f => f.field_type === 'form');
+            if (index === formFields.length - 1) return;
+
+            let gIndex = globalIndex(index)
+            let gIndexNext = globalIndex(index + 1)
+
+            const newFields = [...localData.fields];
+            [newFields[gIndex], newFields[gIndexNext]] = [newFields[gIndexNext], newFields[gIndex]];
+
+            // Update local state
+            setLocalData({
+                ...localData,
+                fields: newFields
+            });
+
+            // Update ref
+            dataRef.current.fields = newFields;
+        }
+
         return (
             <>
                 <Grid size={{xs: 12, md: 4}} sx={{mt: 3}}>
@@ -1229,6 +1341,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         updateChoice={updateChoice}
                         deleteChoice={deleteChoice}
                         disabled={isEdit && hasSubscriptions}
+                        onMoveUp={onMoveUp}
+                        onMoveDown={onMoveDown}
                     />
                 </Paper>}
             </>
