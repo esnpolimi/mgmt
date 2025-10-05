@@ -45,4 +45,6 @@ urlpatterns = [
     # Public webhook endpoint for SumUp
     path('sumup/webhook/', views.sumup_webhook),
 
+    # Endpoint to edit form or additional fields data
+    path('subscription/<str:pk>/edit_formfields/', views.subscription_edit_formfields),
 ]
