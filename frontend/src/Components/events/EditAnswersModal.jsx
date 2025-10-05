@@ -224,7 +224,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
 
         console.log('Sending data:', {form_data, additional_data}); // Debug log
 
-        fetchCustom("PATCH", `/subscription/${subscription.id}/`, {
+        fetchCustom("PATCH", `/subscription/${subscription.id}/edit_formfields/`, {
             body: {
                 form_data,
                 additional_data

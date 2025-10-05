@@ -148,13 +148,16 @@ class Transaction(BaseEntity):
                     old_acc.save(update_fields=['balance'])
                     # 2. Apply full effect on new account
                     self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
+                    logger.info(f"Log: moved transaction of €{self.amount} from account {old_acc.name} to {self.account.name}, new balance: €{self.account.balance}")
                 else:
                     # Same account: only apply difference
                     amount_difference = Decimal(str(self.amount)) - Decimal(str(original_transaction.amount))
                     self.account.balance = Decimal(str(self.account.balance)) + amount_difference
+                    logger.info(f"Log: updated transaction of €{self.amount} on account {self.account.name}, new balance: €{self.account.balance}")
             else:
                 # New transaction
                 self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
+                logger.info(f"Log: new transaction of €{self.amount} on account {self.account.name}, new balance: €{self.account.balance}")
             self.account.save(update_fields=['balance'])
             super(Transaction, self).save(*args, **kwargs)
 

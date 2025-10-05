@@ -58,6 +58,7 @@ FORM_UPLOAD_ALLOWED_EXTENSIONS = [
     '.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'
 ]
 
+
 def _validate_form_upload(file_obj):
     ext = os.path.splitext(file_obj.name)[1].lower()
     if hasattr(file_obj, 'content_type') and file_obj.content_type not in FORM_UPLOAD_ALLOWED_MIMETYPES:
@@ -65,6 +66,7 @@ def _validate_form_upload(file_obj):
     if ext not in FORM_UPLOAD_ALLOWED_EXTENSIONS:
         raise ValidationError("File must be an image or a PDF.")
     return True
+
 
 def _upload_form_file_to_drive(file_obj, event_id, field_name):
     """
@@ -98,6 +100,7 @@ def _upload_form_file_to_drive(file_obj, event_id, field_name):
     ).execute()
     return f"https://drive.google.com/file/d/{created['id']}/view?usp=sharing"
 
+
 # Merge phone/whatsapp prefixes into numbers in any dict/list payload
 def _combine_prefix_numbers(obj):
     def _merge_in_place(d, num_key, pref_key, also_keys=None):
@@ -122,6 +125,7 @@ def _combine_prefix_numbers(obj):
     elif isinstance(obj, list):
         for it in obj:
             _combine_prefix_numbers(it)
+
 
 # --- Helper to auto-move from "Form List" to ML/WL after payment ---
 def attempt_move_from_form_list(subscription):
@@ -637,55 +641,55 @@ def subscription_detail(request, pk):
 
             # otherwise return permission denied
             else:'''
-            if not get_action_permissions(request, 'subscription_detail_PATCH'):
-                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
             if quota_reimbursed or cauzione_reimbursed:
                 return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'},
                                 status=400)
-            if request.user.has_perm('events.change_subscription'):
-                # --- Sanitize nullable statuses ---
-                mutable_data = request.data.copy()
-                if mutable_data.get('status_quota', None) is None:
-                    mutable_data['status_quota'] = 'pending'
-                if mutable_data.get('status_cauzione', None) is None:
-                    mutable_data['status_cauzione'] = 'pending'
-                serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
-                serializer.is_valid(raise_exception=True)
-                with transaction.atomic():
-                    updated_sub = serializer.save()
-                    account_id = (mutable_data.get('account_id')
-                                  or mutable_data.get('account')
-                                  or getattr(serializer, 'account_id', None))
-                    status_quota = mutable_data.get('status_quota', 'pending')
-                    status_cauzione = mutable_data.get('status_cauzione', 'pending')
-                    _handle_payment_status(
-                        subscription=updated_sub,
-                        account_id=account_id,
-                        quota_status=status_quota,
-                        deposit_status=status_cauzione,
-                        executor=request.user,
-                        allow_delete=True
-                    )
-                    move_info = attempt_move_from_form_list(updated_sub)
-                # Re-serialize to reflect possible move
-                resp_data = SubscriptionSerializer(updated_sub).data
-                if move_info:
-                    if move_info.get('status') == 'moved':
-                        resp_data.update({
-                            'auto_move_status': 'moved',
-                            'auto_move_list': move_info.get('list'),
-                            'auto_move_reason': None
-                        })
-                    elif move_info.get('status') == 'stayed':
-                        resp_data.update({
-                            'auto_move_status': 'stayed',
-                            'auto_move_list': None,
-                            'auto_move_reason': move_info.get('reason')
-                        })
-                _combine_prefix_numbers(resp_data)  # merge prefixes into numbers
-                return Response(resp_data, status=200)
-            else:
+            if not get_action_permissions(request, 'subscription_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+            # --- Sanitize nullable statuses ---
+            mutable_data = request.data.copy()
+            if 'status_quota' not in mutable_data or mutable_data['status_quota'] is None:
+                return Response({'error': 'status_quota is required.'}, status=400)
+            if 'status_cauzione' not in mutable_data or mutable_data['status_cauzione'] is None:
+                return Response({'error': 'status_cauzione is required.'}, status=400)
+            serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            with transaction.atomic():
+                updated_sub = serializer.save()
+                account_id = (mutable_data.get('account_id')
+                              or mutable_data.get('account')
+                              or getattr(serializer, 'account_id', None))
+
+                status_quota = mutable_data['status_quota']
+                status_cauzione = mutable_data['status_cauzione']
+
+                _handle_payment_status(
+                    subscription=updated_sub,
+                    account_id=account_id,
+                    quota_status=status_quota,
+                    deposit_status=status_cauzione,
+                    executor=request.user,
+                    allow_delete=True
+                )
+                move_info = attempt_move_from_form_list(updated_sub)
+
+            # Re-serialize to reflect possible move
+            resp_data = SubscriptionSerializer(updated_sub).data
+            if move_info:
+                if move_info.get('status') == 'moved':
+                    resp_data.update({
+                        'auto_move_status': 'moved',
+                        'auto_move_list': move_info.get('list'),
+                        'auto_move_reason': None
+                    })
+                elif move_info.get('status') == 'stayed':
+                    resp_data.update({
+                        'auto_move_status': 'stayed',
+                        'auto_move_list': None,
+                        'auto_move_reason': move_info.get('reason')
+                    })
+            _combine_prefix_numbers(resp_data)  # merge prefixes into numbers
+            return Response(resp_data, status=200)
 
         elif request.method == "DELETE":
             if not get_action_permissions(request, 'subscription_detail_DELETE'):
@@ -1290,12 +1294,10 @@ def event_form_submit(request, event_id):
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
-
         # Determine form list (always use form list; capacity not enforced here)
         form_list = event.lists.filter(name='Form List').first()
         if not form_list:
             return Response({"error": "Form list not configured for this event"}, status=400)
-
 
         sub = Subscription.objects.create(
             profile=profile,
@@ -1346,7 +1348,6 @@ def event_form_submit(request, event_id):
                 assigned_label = "Waiting List"
             else:
                 return Response({"error": "No available spot for subscription. All lists are full."}, status=400)
-
 
         _send_form_subscription_email(sub, assigned_label, online_payment_required, payment_required)
 
@@ -1508,3 +1509,104 @@ def sumup_webhook(request):
     except Exception as e:
         logger.error(f"Webhook exception for checkout {checkout_id}: {e}")
         return Response({"status": "error", "detail": str(e)}, status=200)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def subscription_edit_formfields(request, pk):
+    """
+    Edit form fields or additional data of a subscription.
+    Expects JSON:
+      {
+        "form_data": {...},          # optional, partial update of form fields
+        "additional_data": {...}     # optional, partial update of additional data
+      }
+    """
+    if not get_action_permissions(request, 'subscription_detail_PATCH'):
+        return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+    try:
+        sub = Subscription.objects.select_related('event').get(pk=pk)
+    except Subscription.DoesNotExist:
+        return Response({"error": "Subscription not found"}, status=404)
+
+    payload = request.data or {}
+    # Accept JSON strings (from multipart or mis-sent payloads)
+    raw_form = payload.get("form_data", {}) or {}
+    raw_add = payload.get("additional_data", {}) or {}
+
+    if isinstance(raw_form, str):
+        try:
+            raw_form = json.loads(raw_form) or {}
+        except Exception:
+            raw_form = {}
+    if isinstance(raw_add, str):
+        try:
+            raw_add = json.loads(raw_add) or {}
+        except Exception:
+            raw_add = {}
+
+    if not isinstance(raw_form, dict) and not isinstance(raw_add, dict):
+        return Response({"error": "No valid data to update"}, status=400)
+
+    event = sub.event
+    existing_form = sub.form_data or {}
+    existing_add = sub.additional_data or {}
+
+    # Index fields by name per field_type
+    fields = event.fields or []
+    form_fields = {f.get('name'): f for f in fields if f.get('field_type') == 'form'}
+    add_fields = {f.get('name'): f for f in fields if f.get('field_type') == 'additional'}
+
+    def coerce_value(ftype, v):
+        if ftype == 'b':
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, str):
+                s = v.strip().lower()
+                if s in ('true', '1', 'yes', 'y', 'on'):
+                    return True
+                if s in ('false', '0', 'no', 'n', 'off', ''):
+                    return False
+            return bool(v)
+        if ftype == 'm':
+            return v if isinstance(v, list) else ([] if v in (None, '', False) else [v])
+        # keep numbers/strings as-is; validator will enforce
+        return v if v is not None else ''
+
+    # Build merged dicts with minimal coercion on changed keys
+    merged_form = dict(existing_form)
+    for k, v in (raw_form.items() if isinstance(raw_form, dict) else []):
+        fdef = form_fields.get(k) or {}
+        merged_form[k] = coerce_value(fdef.get('type'), v)
+
+    merged_add = dict(existing_add)
+    for k, v in (raw_add.items() if isinstance(raw_add, dict) else []):
+        fdef = add_fields.get(k) or {}
+        merged_add[k] = coerce_value(fdef.get('type'), v)
+
+    # Validate using model helper
+    form_errors = validate_field_data(fields, merged_form, 'form') or {}
+    add_errors = validate_field_data(fields, merged_add, 'additional') or {}
+
+    if form_errors or add_errors:
+        return Response({"error": "Validation error", "fields": {**form_errors, **add_errors}}, status=400)
+
+    # Persist only the parts that were provided
+    to_update = []
+    if isinstance(raw_form, dict) and raw_form:
+        sub.form_data = merged_form
+        to_update.append('form_data')
+    if isinstance(raw_add, dict) and raw_add:
+        sub.additional_data = merged_add
+        to_update.append('additional_data')
+
+    if not to_update:
+        return Response({"error": "No changes provided"}, status=400)
+
+    sub.save(update_fields=to_update)
+
+    # Return updated pieces only (sufficient for UI close/refresh)
+    return Response({
+        "form_data": sub.form_data if 'form_data' in to_update else existing_form,
+        "additional_data": sub.additional_data if 'additional_data' in to_update else existing_add
+    }, status=200)
