@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react";
-console.log(location.hostname);
+// console.log(location.hostname);
 if (location.hostname !== "localhost") {
     window.API_HOST = "https://mgmt.esnpolimi.it/backend";
     Sentry.init({
@@ -9,7 +9,7 @@ if (location.hostname !== "localhost") {
     });
 }
 else window.API_HOST = "http://localhost:8000/backend";
-console.log("API_HOST set to " + window.API_HOST);
+// console.log("API_HOST set to " + window.API_HOST);
 
 
 import ReactDOM from 'react-dom/client';
