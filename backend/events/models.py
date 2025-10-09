@@ -154,6 +154,9 @@ class Event(BaseEntity):
     # Unified fields (replaces form_fields and additional_fields)
     fields = models.JSONField(default=list, blank=True)
 
+    # Manage via event modla toggle, to notify to the Erasmus via confirmation email the assigned list
+    notify_list = models.BooleanField(default=True)
+
     def __str__(self):
         return f"{self.name} ({self.date})"
 

@@ -46,13 +46,16 @@ export default function SubscriptionModal({
         account_name: '',
         profile_id: '',
         profile_name: '',
-        external_name: '',
-        external_email: '',
         list_id: listId || '',
         list_name: (event.selectedList ? event.selectedList.name : (event.lists && listId ? (event.lists.find(list => list.id === listId)?.name || 'Lista non trovata') : 'Lista non trovata')),
+        external: false,
+        external_name: '',
+        external_email: '',
         notes: '',
         status_quota: subscription?.status_quota || 'pending',
-        status_cauzione: subscription?.status_cauzione || 'pending'
+        status_cauzione: subscription?.status_cauzione || 'pending',
+        send_payment_email: true,
+        auto_move_after_payment: true
     });
 
     const [profileHasEsncard, setProfileHasEsncard] = useState(null);
@@ -78,7 +81,6 @@ export default function SubscriptionModal({
     const toAmount = (v) => Math.max(0, Number.parseFloat(v) || 0);
     const getQuotaImport = () => toAmount(event?.cost);
     const getCauzioneImport = () => toAmount(event?.deposit);
-
 
     const fieldsToValidate = useMemo(() => {
         let arr = [];
@@ -106,15 +108,26 @@ export default function SubscriptionModal({
     const [submitLoading, setSubmitLoading] = useState(false);
 
     useEffect(() => {
+        if (listId) { // Ensure listId is used to set the selected list
+            const selectedList = event.lists.find(list => list.id === listId);
+            setData(d => ({
+                ...d,
+                list_id: selectedList?.id || '',
+                list_name: selectedList?.name || 'Lista non trovata',
+                is_main_list: selectedList?.is_main_list || false,
+                is_waiting_list: selectedList?.is_waiting_list || false
+            }));
+        }
         if (isEdit && subscription) {
-            // NEW normalization for null/undefined
             setData(d => ({
                 ...d,
                 ...subscription,
                 account_id: subscription.account_id || '',
                 external_name: subscription.external_name || '',
-                external_email: (subscription.additional_data && subscription.additional_data.external_email) || '', // preload if stored
-                notes: subscription.notes || ''
+                external_email: (subscription.additional_data && subscription.additional_data.external_email) || '',
+                notes: subscription.notes || '',
+                list_id: subscription.list_id || '', // Ensure list_id is set for editing
+                list_name: event.lists.find(list => list.id === subscription.list_id)?.name || 'Lista non trovata'
             }));
         } else {
             if (profileId) {
@@ -124,17 +137,10 @@ export default function SubscriptionModal({
                     profile_name: profileName || ''
                 }));
             }
-            if (event.selectedList) {
-                setData(d => ({
-                    ...d,
-                    list_id: event.selectedList.id,
-                    list_name: event.selectedList.name
-                }));
-            }
         }
         setLoading(false);
         fetchAccounts();
-    }, [isEdit, subscription, profileId, profileName, event])
+    }, [isEdit, subscription, profileId, profileName, event, listId]);
 
     const fetchAccounts = () => {
         fetchCustom("GET", "/accounts/", {
@@ -150,6 +156,11 @@ export default function SubscriptionModal({
         if (event.deposit > 0 && data.status_cauzione === 'paid') total += getCauzioneImport();
         return total;
     };
+
+    const hasAnyPayment = useMemo(() =>
+            data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid'),
+        [data.status_quota, data.status_cauzione, event.deposit]
+    );
 
     // Helper to detect status changes for quota/cauzione
     const getStatusChanges = () => {
@@ -241,6 +252,9 @@ export default function SubscriptionModal({
         doSubmit();
     };
 
+    const statusChanges = getStatusChanges();
+    const paymentBeingRegistered = statusChanges.quotaChangedToPaid || statusChanges.cauzioneChangedToPaid || (!isEdit && hasAnyPayment);
+
     const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitLoading(true);
@@ -255,7 +269,12 @@ export default function SubscriptionModal({
                 status_quota: data.status_quota || 'pending',
                 status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
                 external_name: data.external_name || undefined,
-                email: (!data.profile_id && data.external_email) ? data.external_email : undefined, // send email when external
+                email: (!data.profile_id && data.external_email) ? data.external_email : undefined,
+                // Apply only when a payment is being newly registered
+                ...(paymentBeingRegistered ? {
+                    send_payment_email: !!data.send_payment_email,
+                    auto_move_after_payment: !!data.auto_move_after_payment
+                } : {})
             },
             onSuccess: (resp) => {
                 let baseMsg = (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!';
@@ -536,6 +555,44 @@ export default function SubscriptionModal({
                                             <FormHelperText>{errors.account_id[1]}</FormHelperText>}
                                     </FormControl>
                                 </Grid>
+                                {/* Options for email notification + automove */}
+                                {paymentBeingRegistered && (
+                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                        <Paper elevation={1} sx={{p: 1.5}}>
+                                            {paymentBeingRegistered && (
+                                                <FormControlLabel
+                                                    control={
+                                                        <Switch
+                                                            checked={!!data.send_payment_email}
+                                                            onChange={() => setData(d => ({...d, send_payment_email: !d.send_payment_email}))}
+                                                            color="primary"
+                                                            size="small"
+                                                            disabled={isReimbursed}
+                                                        />
+                                                    }
+                                                    label="Invia email di conferma pagamento"
+                                                    labelPlacement="end"
+                                                    sx={{mr: 2}}
+                                                />
+                                            )}
+                                            {!data.is_main_list && !data.is_waiting_list && (
+                                                <FormControlLabel
+                                                    control={
+                                                        <Switch
+                                                            checked={!!data.auto_move_after_payment}
+                                                            onChange={() => setData(d => ({...d, auto_move_after_payment: !d.auto_move_after_payment}))}
+                                                            color="primary"
+                                                            size="small"
+                                                            disabled={isReimbursed}
+                                                        />
+                                                    }
+                                                    label="Sposta nella prima lista libera"
+                                                    labelPlacement="end"
+                                                />
+                                            )}
+                                        </Paper>
+                                    </Grid>
+                                )}
                             </>
                         )}
                         <Grid size={{xs: 12}}>
@@ -559,15 +616,15 @@ export default function SubscriptionModal({
                     )}
 
                     <Button variant="contained"
-                        fullWidth
-                        sx={{
-                            mt: 2,
-                            bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
-                            '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
-                        }}
-                        onClick={handleSubmit}
-                        disabled={submitLoading || isReimbursed || (!data.profile_id && !(data.external_name && data.external_email))}
-                        startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
+                            fullWidth
+                            sx={{
+                                mt: 2,
+                                bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
+                                '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
+                            }}
+                            onClick={handleSubmit}
+                            disabled={submitLoading || isReimbursed || (!data.profile_id && !(data.external_name && data.external_email))}
+                            startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
                         {isEdit ? 'Salva Modifiche' : 'Conferma'}
                     </Button>
                     {isEdit && (

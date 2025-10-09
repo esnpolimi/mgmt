@@ -258,6 +258,19 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             }
                         />
                     </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Notifica Lista assegnata nelle conferme via email"
+                            control={
+                                <Switch
+                                    checked={!!localData.notify_list}
+                                    onChange={handleInputChange}
+                                    name="notify_list"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
                 </Grid>
             </Box>
         );
@@ -1361,6 +1374,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         subscription_end_date: dayjs().hour(24).minute(0),
         is_a_bando: false,
         is_allow_external: false,
+        notify_list: true,
         is_variable_fee: false,
         allow_online_payment: false,
         organizers: [],
@@ -1368,7 +1382,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         profile_fields: [],
         fields: [],
         enable_form: false,
-        form_programmed_open_time: dayjs()
+        form_programmed_open_time: dayjs(),
     })
 
     /* State variables*/
@@ -1455,6 +1469,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             })),
             is_a_bando: !!rest.is_a_bando,
             is_allow_external: !!rest.is_allow_external,
+            notify_list: !!rest.notify_list,
             fields: rest.fields ?? [],
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,

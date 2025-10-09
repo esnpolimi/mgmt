@@ -159,8 +159,9 @@ export default function Event() {
     };
 
     const handleEditSubscription = (subscriptionId) => {
-        setSelectedList(null);
-        setSubscription(data.subscriptions.find(sub => sub.id === subscriptionId) || null);
+        const subscription = data.subscriptions.find(sub => sub.id === subscriptionId) || null;
+        setSelectedList(subscription?.list_id || null); // Set the listId from the subscription
+        setSubscription(subscription);
         setSubscriptionIsEdit(true);
         setSubscriptionModalOpen(true);
     };
@@ -482,7 +483,7 @@ export default function Event() {
                                         </Button>
                                         {!canEditEvent && (
                                             <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
-                                                Solo gli Organizzatori dell'evento e i Board Members possono modificare questo evento.
+                                                Solo gli Organizzatori dell&apos;evento e i Board Members possono modificare questo evento.
                                             </Typography>
                                         )}
                                     </Grid>
