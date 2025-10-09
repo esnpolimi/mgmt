@@ -87,6 +87,7 @@ class EventsListSerializer(serializers.ModelSerializer):
     lists_capacity = serializers.SerializerMethodField()
     enable_form = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    notify_list = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Event
@@ -95,6 +96,7 @@ class EventsListSerializer(serializers.ModelSerializer):
             'is_a_bando', 'is_allow_external',
             'lists_capacity', 'enable_form', 'form_programmed_open_time',
             'is_refa_done',
+            'notify_list',
         ]
 
     @staticmethod
@@ -139,6 +141,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     allow_online_payment = serializers.BooleanField(required=False, default=False)
     form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
     is_refa_done = serializers.BooleanField(required=False, default=False)
+    notify_list = serializers.BooleanField(required=False, default=True)
 
     class Meta:
         model = Event
@@ -146,7 +149,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
-            'allow_online_payment', 'form_programmed_open_time', 'is_refa_done'
+            'allow_online_payment', 'form_programmed_open_time', 'is_refa_done',
+            'notify_list',
         ]
 
     def validate(self, attrs):
@@ -477,6 +481,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     available_profile_fields = serializers.SerializerMethodField(read_only=True)
     allow_online_payment = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    notify_list = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Event
@@ -486,7 +491,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields',
             'allow_online_payment', 'form_programmed_open_time',
-            'is_refa_done'
+            'is_refa_done',
+            'notify_list',
         ]
 
     def to_representation(self, instance):
@@ -786,6 +792,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     enable_form = serializers.BooleanField(read_only=True)
     allow_online_payment = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    notify_list = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Event
@@ -794,7 +801,8 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time',
-            'is_refa_done'
+            'is_refa_done',
+            'notify_list',
         ]
 
     def to_representation(self, instance):
