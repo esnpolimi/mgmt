@@ -57,7 +57,11 @@ class ProfileAdmin(admin.ModelAdmin):
         'created_at', 'updated_at',
         'enabled', 'email_is_verified'
     ]
-    search_fields = ('email', 'name', 'surname', 'person_code')
+    search_fields = ('email', 'name', 'surname', 'birthdate',
+                     'phone_number', 'whatsapp_number',
+                     'country', 'domicile',
+                     'course', 'person_code', 'matricola_number', 'matricola_expiration',
+                     'created_at', 'updated_at')
     list_filter = ('is_esner', 'enabled', 'email_is_verified')
     ordering = ('-created_at',)
 
@@ -78,6 +82,7 @@ class ProfileAdmin(admin.ModelAdmin):
             groups = obj.user.groups.all()
             return ", ".join([group.name for group in groups])
         return "-"
+
     get_groups.short_description = "Groups"
 
     def get_queryset(self, request):
