@@ -175,6 +175,7 @@ def esncard_detail(request, pk):
             esncard_serializer = ESNcardSerializer(esncard, data=update_data, partial=True)
             if esncard_serializer.is_valid():
                 esncard_serializer.save()
+                return Response(esncard_serializer.data, status=200)  # Return updated data
             else:
                 return Response(esncard_serializer.errors, status=400)
         else:

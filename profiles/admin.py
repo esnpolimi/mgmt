@@ -36,7 +36,7 @@ class ProfileAdminForm(forms.ModelForm):
         optional_fields = [
             'whatsapp_prefix', 'whatsapp_number',
             'phone_prefix', 'phone_number',
-            'domicile', 'matricola_number',
+            'domicile', 'matricola_number', 'person_code',
             'matricola_expiration', 'course'
         ]
 
