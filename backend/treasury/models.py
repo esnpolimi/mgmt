@@ -90,7 +90,7 @@ class Transaction(BaseEntity):
     executor = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True)
     account = models.ForeignKey('Account', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=9, decimal_places=2)
-    description = models.CharField(max_length=256)
+    description = models.TextField(max_length=1024)
 
     # Reference to an Event for manual deposit/withdrawal operations
     event_reference_manual = models.ForeignKey('events.Event', null=True, blank=True, on_delete=models.SET_NULL)
@@ -178,7 +178,7 @@ class ReimbursementRequest(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=9, decimal_places=2)
     payment = models.CharField(max_length=16, choices=PAYMENT_CHOICES)
-    description = models.CharField(max_length=512)
+    description = models.TextField(max_length=1024)
     receipt_link = models.URLField(max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     account = models.ForeignKey('Account', null=True, blank=True, on_delete=models.SET_NULL)

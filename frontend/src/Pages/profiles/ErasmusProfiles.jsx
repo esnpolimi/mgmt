@@ -174,7 +174,7 @@ export default function ErasmusProfiles() {
         fullWANumber: true,
         person_code: false,
         domicile: false,
-        matricola_number: false,
+        matricola_number: true,
         matricola_expiration: false,
         'latest_document.number': false,
         phone_prefix: false,
