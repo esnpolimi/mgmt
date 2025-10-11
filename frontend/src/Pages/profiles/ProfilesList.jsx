@@ -271,7 +271,7 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                 <OutlinedInput
                     inputRef={searchInputRef}
                     size="small"
-                    placeholder="Cerca"
+                    placeholder="Cerca tra tutti i campi"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     onKeyDown={e => {

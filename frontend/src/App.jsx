@@ -22,12 +22,14 @@ import ResetPassword from "./Pages/ResetPassword.jsx";
 import TransactionsList from "./Pages/treasury/TransactionsList.jsx";
 import ReimbursementRequestsList from "./Pages/treasury/ReimbursementRequestsList.jsx";
 import Profile from "./Pages/profiles/Profile.jsx";
+import UrlSanitizer from "./UrlSanitizer";
 
 function App() {
     return (
         <AuthProvider>
             <SidebarProvider>
                 <Router>
+                    <UrlSanitizer />
                     <Routes>
                         <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
                         <Route path="/reset-password/:uid/:token" element={<ResetPassword/>}/>
@@ -55,4 +57,5 @@ function App() {
         </AuthProvider>
     )
 }
+
 export default App;
