@@ -435,18 +435,48 @@ class TransactionUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Transaction
-        fields = ['account', 'amount', 'description', 'receiptFile', 'remove_receipt', 'receipt_link']
+        fields = ['account', 'amount', 'description', 'type', 'receiptFile', 'remove_receipt', 'receipt_link']
 
     @staticmethod
     def validate_receiptFile(file):
         return validate_receipt_file(file)
 
+    def validate(self, attrs):
+        # Allow type change only between deposit and withdrawal
+        if 'type' in attrs:
+            new_type = attrs['type']
+            old_type = self.instance.type
+            allowed = {Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL}
+            if new_type != old_type:
+                if not (old_type in allowed and new_type in allowed):
+                    raise serializers.ValidationError("Il tipo può essere cambiato solo tra deposito e prelievo.")
+        return attrs
+
     def update(self, instance, validated_data):
         receipt_file = validated_data.pop('receiptFile', None)
         remove = validated_data.pop('remove_receipt', False)
+        new_type = validated_data.get('type', instance.type)
+        type_changed = 'type' in validated_data and new_type != instance.type
 
-        # Basic updatable fields
-        for f in ['account', 'amount', 'description']:
+        # Handle amount normalization if type changes
+        if type_changed and 'amount' not in validated_data:
+            # Flip sign automatically
+            instance.amount = -instance.amount
+        elif 'amount' in validated_data:
+            amt = validated_data['amount']
+            try:
+                from decimal import Decimal
+                amt_dec = Decimal(amt)
+            except Exception:
+                amt_dec = amt
+            # Ensure sign coherence
+            if new_type == Transaction.TransactionType.WITHDRAWAL and amt_dec > 0:
+                validated_data['amount'] = -amt_dec
+            if new_type == Transaction.TransactionType.DEPOSIT and amt_dec < 0:
+                validated_data['amount'] = -amt_dec
+
+        # Basic updatable fields (including possibly normalized amount)
+        for f in ['account', 'amount', 'description', 'type']:
             if f in validated_data:
                 setattr(instance, f, validated_data[f])
 
@@ -454,7 +484,7 @@ class TransactionUpdateSerializer(serializers.ModelSerializer):
             link = upload_receipt_to_drive(receipt_file, self.context['request'].user, instance.created_at, "transazione")
             instance.receipt_link = link
         elif remove:
-            instance.receipt_link = ''  # blank permitted
+            instance.receipt_link = ''
 
         instance.save()
         return instance

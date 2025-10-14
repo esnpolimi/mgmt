@@ -231,31 +231,34 @@ def transaction_add(request):
             return Response({'error': str(pe)}, status=403)
 
         # --- Email notification for manual deposit / withdrawal ---
-        if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
-            try:
-                executor_profile = getattr(tx.executor, 'profile', None)
-                executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
-                executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
-                receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
-                subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
-                body = (
-                    f"Tipo: {transaction_type}\n"
-                    f"Importo: {tx.amount} EUR\n"
-                    f"Cassa: {tx.account.name}\n"
-                    f"Esecutore: {executor_name} ({executor_email})\n"
-                    f"Descrizione: {tx.description}\n"
-                    f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
-                    f"Ricevuta: {receipt_info}\n"
-                )
-                send_mail(
-                    subject=subject,
-                    message=body,
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                    recipient_list=['tesoriere@esnpolimi.it'],
-                    fail_silently=True
-                )
-            except Exception as mail_exc:
-                logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
+        if 'localhost' in settings.SCHEME_HOST:
+            print("Skipping email notification in localhost environment.")
+        else:
+            if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
+                try:
+                    executor_profile = getattr(tx.executor, 'profile', None)
+                    executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
+                    executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
+                    receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
+                    subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
+                    body = (
+                        f"Tipo: {transaction_type}\n"
+                        f"Importo: {tx.amount} EUR\n"
+                        f"Cassa: {tx.account.name}\n"
+                        f"Esecutore: {executor_name} ({executor_email})\n"
+                        f"Descrizione: {tx.description}\n"
+                        f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                        f"Ricevuta: {receipt_info}\n"
+                    )
+                    send_mail(
+                        subject=subject,
+                        message=body,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        recipient_list=['tesoriere@esnpolimi.it'],
+                        fail_silently=True
+                    )
+                except Exception as mail_exc:
+                    logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
 
         return Response(status=200)
     except Exception as e:
@@ -473,28 +476,31 @@ def reimbursement_request_creation(request):
         if serializer.is_valid():
             instance = serializer.save()
             # --- Email notification for reimbursement request creation ---
-            try:
-                profile = getattr(instance.user, 'profile', None)
-                user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
-                receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
-                subject = f"Nuova richiesta di rimborso #{instance.id}"
-                body = (
-                    f"Richiedente: {user_name}\n"
-                    f"Importo: {instance.amount} EUR\n"
-                    f"Metodo pagamento: {instance.payment}\n"
-                    f"Descrizione: {instance.description}\n"
-                    f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
-                    f"Ricevuta: {receipt_info}\n"
-                )
-                send_mail(
-                    subject=subject,
-                    message=body,
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                    recipient_list=['tesoriere@esnpolimi.it'],
-                    fail_silently=True
-                )
-            except Exception as mail_exc:
-                logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
+            if 'localhost' in settings.SCHEME_HOST:
+                print("Skipping email notification in localhost environment.")
+            else:
+                try:
+                    profile = getattr(instance.user, 'profile', None)
+                    user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
+                    receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
+                    subject = f"Nuova richiesta di rimborso #{instance.id}"
+                    body = (
+                        f"Richiedente: {user_name}\n"
+                        f"Importo: {instance.amount} EUR\n"
+                        f"Metodo pagamento: {instance.payment}\n"
+                        f"Descrizione: {instance.description}\n"
+                        f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                        f"Ricevuta: {receipt_info}\n"
+                    )
+                    send_mail(
+                        subject=subject,
+                        message=body,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        recipient_list=['tesoriere@esnpolimi.it'],
+                        fail_silently=True
+                    )
+                except Exception as mail_exc:
+                    logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
 
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
