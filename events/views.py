@@ -284,7 +284,7 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
             )
         else:
             html_parts.append(
-                "<p>Payment is required. Please follow the instructions sent on our channels.<br/>"
+                "<p>Payment is required. Please follow the instructions already sent on our channels.<br/>"
             )
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
