@@ -38,7 +38,8 @@ export default memo(function EventListAccordions({
                                                 onOpenEditAnswers,
                                                 canChangeSubscription,
                                                 canChangeTransactions,
-                                                isBoardMember
+                                                isBoardMember,
+                                                isOrganizer,
                                             }) {
     const [expandedAccordion, setExpandedAccordion] = useState([]);
     const hasDeposit = data?.deposit > 0;
@@ -788,7 +789,7 @@ export default memo(function EventListAccordions({
                                         Rimborsa Cauzioni
                                     </Button>
                                 )}
-                                {hasQuota && selectedCount === 0 && data.is_a_bando && isBoardMember && (
+                                {hasQuota && selectedCount === 0 && data.is_a_bando && (isBoardMember || isOrganizer) && (
                                     <Button variant="contained"
                                             color="info"
                                             onClick={e => {
