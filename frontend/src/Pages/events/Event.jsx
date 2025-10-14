@@ -503,6 +503,7 @@ export default function Event() {
                                                 canChangeSubscription={canManageSubscriptions}
                                                 canChangeTransactions={canChangeTransactions}
                                                 isBoardMember={isBoardMember}
+                                                isOrganizer={isOrganizer}
                                             />
                                         </Box>
                                     </Grid>
