@@ -220,6 +220,7 @@ export default function ReimbursementRequestsList() {
         enableGrouping: false,
         enableFacetedValues: true,
         enableRowActions: false,
+        enableSorting: false,
         enableRowSelection: false,
         enableExpandAll: false,
         initialState: {

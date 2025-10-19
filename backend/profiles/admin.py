@@ -10,7 +10,7 @@ from .models import Profile, Document
 class DocumentAdmin(admin.ModelAdmin):
     list_display = ('number', 'profile', 'type', 'expiration', 'is_valid', 'is_enabled')
     search_fields = ('number', 'profile__name', 'type')
-    list_filter = ('type', 'expiration')
+    list_filter = ('type', 'expiration', 'enabled')
 
     def is_valid(self, obj):
         return obj.is_valid
