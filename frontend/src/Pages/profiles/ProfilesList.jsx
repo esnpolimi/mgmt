@@ -212,8 +212,8 @@ const ProfilesList = forwardRef(function ProfilesList({apiEndpoint, columns, col
                             <MenuItem value="-person_code">{profileDisplayNames.person_code} Z-A</MenuItem>
                             <MenuItem value="domicile">{profileDisplayNames.domicile} A-Z</MenuItem>
                             <MenuItem value="-domicile">{profileDisplayNames.domicile} Z-A</MenuItem>
-                            <MenuItem value="latest_document.number">{profileDisplayNames.latest_document} A-Z</MenuItem>
-                            <MenuItem value="-latest_document.number">{profileDisplayNames.latest_document} Z-A</MenuItem>
+                            <MenuItem value="document">{profileDisplayNames.latest_document} A-Z</MenuItem>
+                            <MenuItem value="-document">{profileDisplayNames.latest_document} Z-A</MenuItem>
                             <MenuItem value="matricola_number">{profileDisplayNames.matricola_number} A-Z</MenuItem>
                             <MenuItem value="-matricola_number">{profileDisplayNames.matricola_number} Z-A</MenuItem>
                             {profileType === 'Erasmus' && (

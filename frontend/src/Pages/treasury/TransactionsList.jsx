@@ -321,8 +321,9 @@ export default function TransactionsList() {
         enableStickyFooter: true,
         enableColumnFilters: false, // Disable MUI filters, because they only search in the current page
         enableColumnOrdering: true,
-        enableGrouping: true,
+        enableGrouping: false,
         enableFacetedValues: true,
+        enableSorting: false,
         enableRowActions: false,
         enableRowSelection: false,
         enableExpandAll: false,

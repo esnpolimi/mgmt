@@ -22,6 +22,7 @@ import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
 import Popup from "../Popup";
+import EditAnswersModal from "./EditAnswersModal";
 
 export default function SubscriptionModal({
                                               open,
@@ -37,6 +38,9 @@ export default function SubscriptionModal({
     const [accounts, setAccounts] = useState([]);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const [popup, setPopup] = useState(null);
+    const [openEditAnswers, setOpenEditAnswers] = useState(false);
+    const [createdSubscription, setCreatedSubscription] = useState(null);
+    const [postCreateMessage, setPostCreateMessage] = useState('');
     const title = isEdit ? 'Modifica Iscrizione' : 'Iscrizione Evento';
     const originalAccountId = isEdit ? subscription.account_id || null : null; // 'paid' to 'pending' status needs the original account_id
 
@@ -286,6 +290,18 @@ export default function SubscriptionModal({
                         baseMsg += ' Nessuna disponibilità nelle liste principali: rimane in Form List.';
                     }
                 }
+
+                // If it's a creation and there are fields to edit, open EditAnswersModal instead of closing now
+                if (!isEdit) {
+                    const hasAnyEditableFields = Array.isArray(event?.fields) && event.fields.some(f => f.field_type === 'form' || f.field_type === 'additional');
+                    if (hasAnyEditableFields) {
+                        setCreatedSubscription(resp);
+                        setPostCreateMessage(baseMsg);
+                        setOpenEditAnswers(true);
+                        return; // do not close SubscriptionModal yet
+                    }
+                }
+                // Default behavior (edit, or no form/additional fields)
                 onClose(true, baseMsg);
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
@@ -335,319 +351,344 @@ export default function SubscriptionModal({
                onClose={() => onClose(false)}
                aria-labelledby="modal-modal-title"
                aria-describedby="modal-modal-description">
-            <Box sx={style}>
-                {isLoading ? <Loader/> : (<>
-                    <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
-                        <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
-                    </Box>
-                    <Typography variant="h4" component="h2" gutterBottom align="center">{title}</Typography>
-                    <Divider sx={{mb: 2}}/>
-                    {/* Show warning if reimbursed */}
-                    {isReimbursed && (
-                        <Alert severity="warning" sx={{mb: 2}}>
-                            Attenzione: la quota o la cauzione sono state rimborsate. Non è possibile efettuare
-                            modifiche.
-                        </Alert>
-                    )}
-                    <Typography variant="subtitle1" gutterBottom>
-                        <b>Nome Evento:</b> {event.name}
-                    </Typography>
-                    <Typography variant="subtitle1" gutterBottom>
-                        <b>Lista:</b> {data.list_name}
-                    </Typography>
-                    <Grid container spacing={2} direction="column">
-                        {event.is_allow_external ? (
-                            <>
-                                {!data.external_name && !data.external_email && (
-                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
-                                        <ProfileSearch
-                                            value={data.profile_id ? {
-                                                id: data.profile_id,
-                                                name: data.profile_name
-                                            } : null}
-                                            onChange={(ev, newValue) => {
-                                                setData({
-                                                    ...data,
-                                                    profile_id: newValue?.id || '',
-                                                    profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
-                                                    external_name: ''
-                                                });
-                                                setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
-                                            }}
-                                            error={errors.profile_id && errors.profile_id[0]}
-                                            helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
-                                            label="Cerca profilo"
-                                            required={!data.external_name}
-                                            disabled={isEdit || !!profileId || isReimbursed}
-                                        />
-                                    </Grid>
-                                )}
-                                {!data.profile_id && (
-                                    <>
+            <Box sx={{
+                ...style,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                maxHeight: '90vh'
+            }}>
+                <Box sx={{
+                    width: '100%',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    paddingRight: 2
+                }}>
+                    {isLoading ? <Loader/> : (<>
+                        <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: -2}}>
+                            <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
+                        </Box>
+                        <Typography variant="h4" component="h2" gutterBottom align="center">{title}</Typography>
+                        <Divider sx={{mb: 2}}/>
+                        {/* Show warning if reimbursed */}
+                        {isReimbursed && (
+                            <Alert severity="warning" sx={{mb: 2}}>
+                                Attenzione: la quota o la cauzione sono state rimborsate. Non è possibile efettuare
+                                modifiche.
+                            </Alert>
+                        )}
+                        <Typography variant="subtitle1" gutterBottom>
+                            <b>Nome Evento:</b> {event.name}
+                        </Typography>
+                        <Typography variant="subtitle1" gutterBottom>
+                            <b>Lista:</b> {data.list_name}
+                        </Typography>
+                        <Grid container spacing={2} direction="column">
+                            {event.is_allow_external ? (
+                                <>
+                                    {!data.external_name && !data.external_email && (
                                         <Grid size={{xs: 12}} sx={{mt: 1}}>
-                                            <TextField
-                                                label="Email Esterno"
-                                                name="external_email"
-                                                type="email"
-                                                value={data.external_email}
-                                                onChange={handleChange}
-                                                fullWidth
-                                                required={!data.profile_id}
-                                                error={errors.external_email && errors.external_email[0]}
-                                                helperText={errors.external_email && errors.external_email[1]}
-                                                disabled={isReimbursed}
-                                            />
-                                        </Grid>
-                                        <Grid size={{xs: 12}} sx={{mt: 0}}>
-                                            <TextField
-                                                label="Nominativo Esterno"
-                                                name="external_name"
-                                                value={data.external_name}
-                                                onChange={(e) => {
-                                                    const v = e.target.value;
-                                                    setData(d => ({
-                                                        ...d,
-                                                        external_name: v,
-                                                        profile_id: v ? '' : d.profile_id,
-                                                        profile_name: v ? '' : d.profile_name
-                                                    }));
-                                                    if (v) setProfileHasEsncard(null);
+                                            <ProfileSearch
+                                                value={data.profile_id ? {
+                                                    id: data.profile_id,
+                                                    name: data.profile_name
+                                                } : null}
+                                                onChange={(ev, newValue) => {
+                                                    setData({
+                                                        ...data,
+                                                        profile_id: newValue?.id || '',
+                                                        profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
+                                                        external_name: ''
+                                                    });
+                                                    setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
                                                 }}
-                                                fullWidth
-                                                required={!data.profile_id}
-                                                error={errors.external_name && errors.external_name[0]}
-                                                helperText={errors.external_name && errors.external_name[1]}
-                                                disabled={isReimbursed}
+                                                error={errors.profile_id && errors.profile_id[0]}
+                                                helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
+                                                label="Cerca profilo"
+                                                required={!data.external_name}
+                                                disabled={isEdit || !!profileId || isReimbursed}
                                             />
                                         </Grid>
+                                    )}
+                                    {!data.profile_id && (
+                                        <>
+                                            <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                                <TextField
+                                                    label="Email Esterno"
+                                                    name="external_email"
+                                                    type="email"
+                                                    value={data.external_email}
+                                                    onChange={handleChange}
+                                                    fullWidth
+                                                    required={!data.profile_id}
+                                                    error={errors.external_email && errors.external_email[0]}
+                                                    helperText={errors.external_email && errors.external_email[1]}
+                                                    disabled={isReimbursed}
+                                                />
+                                            </Grid>
+                                            <Grid size={{xs: 12}} sx={{mt: 0}}>
+                                                <TextField
+                                                    label="Nominativo Esterno"
+                                                    name="external_name"
+                                                    value={data.external_name}
+                                                    onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        setData(d => ({
+                                                            ...d,
+                                                            external_name: v,
+                                                            profile_id: v ? '' : d.profile_id,
+                                                            profile_name: v ? '' : d.profile_name
+                                                        }));
+                                                        if (v) setProfileHasEsncard(null);
+                                                    }}
+                                                    fullWidth
+                                                    required={!data.profile_id}
+                                                    error={errors.external_name && errors.external_name[0]}
+                                                    helperText={errors.external_name && errors.external_name[1]}
+                                                    disabled={isReimbursed}
+                                                />
+                                            </Grid>
 
-                                    </>
-                                )}
-                            </>
-                        ) : (
-                            <Grid size={{xs: 12}} sx={{mt: 2}}>
-                                <ProfileSearch
-                                    value={data.profile_id ? {id: data.profile_id, name: data.profile_name} : null}
-                                    onChange={(ev, newValue) => {
-                                        setData({
-                                            ...data,
-                                            profile_id: newValue?.id,
-                                            profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
-                                            external_name: ''
-                                        });
-                                        // derive ESNcard presence from the selected option (no extra API call)
-                                        setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
-                                    }}
-                                    error={errors.profile_id && errors.profile_id[0]}
-                                    helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
-                                    label={isEdit ? data.profile_name : "Cerca profilo"}
-                                    required={!event.is_allow_external}
-                                    disabled={isEdit || !!profileId || isReimbursed}
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                <Grid size={{xs: 12}} sx={{mt: 2}}>
+                                    <ProfileSearch
+                                        value={data.profile_id ? {id: data.profile_id, name: data.profile_name} : null}
+                                        onChange={(ev, newValue) => {
+                                            setData({
+                                                ...data,
+                                                profile_id: newValue?.id,
+                                                profile_name: newValue ? `${newValue.name} ${newValue.surname}` : '',
+                                                external_name: ''
+                                            });
+                                            // derive ESNcard presence from the selected option (no extra API call)
+                                            setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
+                                        }}
+                                        error={errors.profile_id && errors.profile_id[0]}
+                                        helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
+                                        label={isEdit ? data.profile_name : "Cerca profilo"}
+                                        required={!event.is_allow_external}
+                                        disabled={isEdit || !!profileId || isReimbursed}
+                                    />
+                                </Grid>
+                            )}
+                            {/* Quota status toggle */}
+                            {event.cost > 0 && (
+                                <Grid size={{xs: 12}}>
+                                    <Paper
+                                        elevation={1}
+                                        sx={{
+                                            p: 1.5,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            bgcolor: data.status_quota === 'paid' ? '#e3f2fd' : 'inherit',
+                                            transition: 'background-color 0.8s',
+                                            mb: 0
+                                        }}
+                                    >
+                                        <Typography variant="subtitle2" sx={{ml: 1}}>Stato Quota</Typography>
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    sx={{ml: 1}}
+                                                    checked={data.status_quota === 'paid'}
+                                                    onChange={() => setData(d => ({
+                                                        ...d,
+                                                        status_quota: d.status_quota === 'paid' ? 'pending' : 'paid'
+                                                    }))}
+                                                    color="primary"
+                                                    disabled={isReimbursed}
+                                                    size="small"
+                                                />
+                                            }
+                                            label={data.status_quota === 'paid' ? "Pagata" : data.status_quota === 'reimbursed' ? "Rimborsata" : "In attesa"}
+                                            labelPlacement="start"
+                                            sx={{mr: 1}}
+                                        />
+                                    </Paper>
+                                </Grid>
+                            )}
+                            {/* Cauzione status toggle */}
+                            {event.deposit > 0 && (
+                                <Grid size={{xs: 12}}>
+                                    <Paper
+                                        elevation={1}
+                                        sx={{
+                                            p: 1.5,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            bgcolor: data.status_cauzione === 'paid' ? '#e3f2fd' : 'inherit',
+                                            transition: 'background-color 0.8s',
+                                            mb: 0
+                                        }}
+                                    >
+                                        <Typography variant="subtitle2" sx={{ml: 1}}>Stato Cauzione</Typography>
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    sx={{ml: 1}}
+                                                    checked={data.status_cauzione === 'paid'}
+                                                    onChange={() => setData(d => ({
+                                                        ...d,
+                                                        status_cauzione: d.status_cauzione === 'paid' ? 'pending' : 'paid'
+                                                    }))}
+                                                    color="primary"
+                                                    disabled={isReimbursed}
+                                                    size="small"
+                                                />
+                                            }
+                                            label={data.status_cauzione === 'paid' ? "Pagata" : data.status_cauzione === 'reimbursed' ? "Rimborsata" : "In attesa"}
+                                            labelPlacement="start"
+                                            sx={{mr: 1}}
+                                        />
+                                    </Paper>
+                                </Grid>
+                            )}
+                            {/* Show total import and cassa select if either is paid */}
+                            {(data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) && (
+                                <>
+                                    <Grid size={{xs: 12}} sx={{mt: 0}}>
+                                        <Typography variant="subtitle1" gutterBottom>
+                                            <b>Importo totale:</b> €{getTotalImport().toFixed(2)}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid size={{xs: 12}}>
+                                        <FormControl fullWidth required error={errors.account_id && errors.account_id[0]}>
+                                            <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
+                                            <Select
+                                                variant="outlined"
+                                                label="Seleziona Cassa"
+                                                labelId="account-selector-label"
+                                                id="account-selector"
+                                                name="account_id"
+                                                value={data.account_id || ''}
+                                                error={errors.account_id && errors.account_id[0]}
+                                                onChange={handleChange}
+                                                disabled={isReimbursed}
+                                            >
+                                                {accounts.map((account) => (
+                                                    <MenuItem key={account.id}
+                                                              value={account.id}
+                                                              disabled={account.status === 'closed'}
+                                                              style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
+                                                        {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                            {errors.account_id && errors.account_id[0] &&
+                                                <FormHelperText>{errors.account_id[1]}</FormHelperText>}
+                                        </FormControl>
+                                    </Grid>
+                                    {/* Options for email notification + automove */}
+                                    {paymentBeingRegistered && (
+                                        <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                            <Paper elevation={1} sx={{p: 1.5}}>
+                                                {paymentBeingRegistered && (
+                                                    <FormControlLabel
+                                                        control={
+                                                            <Switch
+                                                                checked={!!data.send_payment_email}
+                                                                onChange={() => setData(d => ({...d, send_payment_email: !d.send_payment_email}))}
+                                                                color="primary"
+                                                                size="small"
+                                                                disabled={isReimbursed}
+                                                            />
+                                                        }
+                                                        label="Invia email di conferma pagamento"
+                                                        labelPlacement="end"
+                                                        sx={{mr: 2}}
+                                                    />
+                                                )}
+                                                {!data.is_main_list && !data.is_waiting_list && (
+                                                    <FormControlLabel
+                                                        control={
+                                                            <Switch
+                                                                checked={!!data.auto_move_after_payment}
+                                                                onChange={() => setData(d => ({...d, auto_move_after_payment: !d.auto_move_after_payment}))}
+                                                                color="primary"
+                                                                size="small"
+                                                                disabled={isReimbursed}
+                                                            />
+                                                        }
+                                                        label="Sposta nella prima lista libera"
+                                                        labelPlacement="end"
+                                                    />
+                                                )}
+                                            </Paper>
+                                        </Grid>
+                                    )}
+                                </>
+                            )}
+                            <Grid size={{xs: 12}}>
+                                <TextField
+                                    label="Note"
+                                    name="notes"
+                                    value={data.notes}
+                                    onChange={handleChange}
+                                    fullWidth
+                                    disabled={isReimbursed}
                                 />
                             </Grid>
-                        )}
-                        {/* Quota status toggle */}
-                        {event.cost > 0 && (
-                            <Grid size={{xs: 12}}>
-                                <Paper
-                                    elevation={1}
-                                    sx={{
-                                        p: 1.5,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        bgcolor: data.status_quota === 'paid' ? '#e3f2fd' : 'inherit',
-                                        transition: 'background-color 0.8s',
-                                        mb: 0
-                                    }}
-                                >
-                                    <Typography variant="subtitle2" sx={{ml: 1}}>Stato Quota</Typography>
-                                    <FormControlLabel
-                                        control={
-                                            <Switch
-                                                sx={{ml: 1}}
-                                                checked={data.status_quota === 'paid'}
-                                                onChange={() => setData(d => ({
-                                                    ...d,
-                                                    status_quota: d.status_quota === 'paid' ? 'pending' : 'paid'
-                                                }))}
-                                                color="primary"
-                                                disabled={isReimbursed}
-                                                size="small"
-                                            />
-                                        }
-                                        label={data.status_quota === 'paid' ? "Pagata" : data.status_quota === 'reimbursed' ? "Rimborsata" : "In attesa"}
-                                        labelPlacement="start"
-                                        sx={{mr: 1}}
-                                    />
-                                </Paper>
-                            </Grid>
-                        )}
-                        {/* Cauzione status toggle */}
-                        {event.deposit > 0 && (
-                            <Grid size={{xs: 12}}>
-                                <Paper
-                                    elevation={1}
-                                    sx={{
-                                        p: 1.5,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        bgcolor: data.status_cauzione === 'paid' ? '#e3f2fd' : 'inherit',
-                                        transition: 'background-color 0.8s',
-                                        mb: 0
-                                    }}
-                                >
-                                    <Typography variant="subtitle2" sx={{ml: 1}}>Stato Cauzione</Typography>
-                                    <FormControlLabel
-                                        control={
-                                            <Switch
-                                                sx={{ml: 1}}
-                                                checked={data.status_cauzione === 'paid'}
-                                                onChange={() => setData(d => ({
-                                                    ...d,
-                                                    status_cauzione: d.status_cauzione === 'paid' ? 'pending' : 'paid'
-                                                }))}
-                                                color="primary"
-                                                disabled={isReimbursed}
-                                                size="small"
-                                            />
-                                        }
-                                        label={data.status_cauzione === 'paid' ? "Pagata" : data.status_cauzione === 'reimbursed' ? "Rimborsata" : "In attesa"}
-                                        labelPlacement="start"
-                                        sx={{mr: 1}}
-                                    />
-                                </Paper>
-                            </Grid>
-                        )}
-                        {/* Show total import and cassa select if either is paid */}
-                        {(data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) && (
-                            <>
-                                <Grid size={{xs: 12}} sx={{mt: 0}}>
-                                    <Typography variant="subtitle1" gutterBottom>
-                                        <b>Importo totale:</b> €{getTotalImport().toFixed(2)}
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12}}>
-                                    <FormControl fullWidth required error={errors.account_id && errors.account_id[0]}>
-                                        <InputLabel htmlFor="account-selector" sx={{mb: 2}}>Seleziona Cassa</InputLabel>
-                                        <Select
-                                            variant="outlined"
-                                            label="Seleziona Cassa"
-                                            labelId="account-selector-label"
-                                            id="account-selector"
-                                            name="account_id"
-                                            value={data.account_id || ''}
-                                            error={errors.account_id && errors.account_id[0]}
-                                            onChange={handleChange}
-                                            disabled={isReimbursed}
-                                        >
-                                            {accounts.map((account) => (
-                                                <MenuItem key={account.id}
-                                                          value={account.id}
-                                                          disabled={account.status === 'closed'}
-                                                          style={{color: account.status === 'closed' ? 'grey' : 'inherit'}}>
-                                                    {account.name} {account.status === 'closed' ? '(Chiusa)' : ''}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                        {errors.account_id && errors.account_id[0] &&
-                                            <FormHelperText>{errors.account_id[1]}</FormHelperText>}
-                                    </FormControl>
-                                </Grid>
-                                {/* Options for email notification + automove */}
-                                {paymentBeingRegistered && (
-                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
-                                        <Paper elevation={1} sx={{p: 1.5}}>
-                                            {paymentBeingRegistered && (
-                                                <FormControlLabel
-                                                    control={
-                                                        <Switch
-                                                            checked={!!data.send_payment_email}
-                                                            onChange={() => setData(d => ({...d, send_payment_email: !d.send_payment_email}))}
-                                                            color="primary"
-                                                            size="small"
-                                                            disabled={isReimbursed}
-                                                        />
-                                                    }
-                                                    label="Invia email di conferma pagamento"
-                                                    labelPlacement="end"
-                                                    sx={{mr: 2}}
-                                                />
-                                            )}
-                                            {!data.is_main_list && !data.is_waiting_list && (
-                                                <FormControlLabel
-                                                    control={
-                                                        <Switch
-                                                            checked={!!data.auto_move_after_payment}
-                                                            onChange={() => setData(d => ({...d, auto_move_after_payment: !d.auto_move_after_payment}))}
-                                                            color="primary"
-                                                            size="small"
-                                                            disabled={isReimbursed}
-                                                        />
-                                                    }
-                                                    label="Sposta nella prima lista libera"
-                                                    labelPlacement="end"
-                                                />
-                                            )}
-                                        </Paper>
-                                    </Grid>
-                                )}
-                            </>
-                        )}
-                        <Grid size={{xs: 12}}>
-                            <TextField
-                                label="Note"
-                                name="notes"
-                                value={data.notes}
-                                onChange={handleChange}
-                                fullWidth
-                                disabled={isReimbursed}
-                            />
                         </Grid>
-                    </Grid>
 
-                    {/* Alert: profile without ESNcard when externals are not allowed */}
-                    {!event.is_allow_external && data.profile_id && profileHasEsncard === false && (
-                        <Alert severity="error" sx={{mt: 2}}>
-                            Attenzione! Il profilo selezionato non ha una ESNcard attiva. Contatta gli organizzatori per
-                            verificare la situazione.
-                        </Alert>
-                    )}
+                        {/* Alert: profile without ESNcard when externals are not allowed */}
+                        {!event.is_allow_external && data.profile_id && profileHasEsncard === false && (
+                            <Alert severity="error" sx={{mt: 2}}>
+                                Attenzione! Il profilo selezionato non ha una ESNcard attiva. Contatta gli organizzatori per
+                                verificare la situazione.
+                            </Alert>
+                        )}
 
-                    <Button variant="contained"
-                            fullWidth
-                            sx={{
-                                mt: 2,
-                                bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
-                                '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
-                            }}
-                            onClick={handleSubmit}
-                            disabled={submitLoading || isReimbursed || (!data.profile_id && !(data.external_name && data.external_email))}
-                            startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
-                        {isEdit ? 'Salva Modifiche' : 'Conferma'}
-                    </Button>
-                    {isEdit && (
                         <Button variant="contained"
                                 fullWidth
                                 sx={{
-                                    mt: 1,
-                                    bgcolor: '#d32f2f',
-                                    '&:hover': {bgcolor: '#b71c1c'}
+                                    mt: 2,
+                                    bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1976d2' : '#9e9e9e',
+                                    '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
                                 }}
-                                onClick={handleDelete}
-                                disabled={isReimbursed}>
-                            Elimina Iscrizione
+                                onClick={handleSubmit}
+                                disabled={submitLoading || isReimbursed || (!data.profile_id && !(data.external_name && data.external_email))}
+                                startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
+                            {isEdit ? 'Salva Modifiche' : 'Conferma'}
                         </Button>
-                    )}
-                    {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
-                </>)}
+                        {isEdit && (
+                            <Button variant="contained"
+                                    fullWidth
+                                    sx={{
+                                        mt: 1,
+                                        bgcolor: '#d32f2f',
+                                        '&:hover': {bgcolor: '#b71c1c'}
+                                    }}
+                                    onClick={handleDelete}
+                                    disabled={isReimbursed}>
+                                Elimina Iscrizione
+                            </Button>
+                        )}
+                        {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
+                    </>)}
+                </Box>
                 <ConfirmDialog
                     open={confirmDialog.open}
                     message={confirmDialog.message}
                     onConfirm={confirmDialog.action}
                     onClose={() => setConfirmDialog({open: false, action: null, message: ''})}
                 />
+                {openEditAnswers && createdSubscription && (
+                    <EditAnswersModal
+                        open={openEditAnswers}
+                        event={event}
+                        subscription={createdSubscription}
+                        onClose={() => {
+                            setOpenEditAnswers(false);
+                            onClose(true, postCreateMessage || 'Iscrizione completata con successo!');
+                        }}
+                    />
+                )}
             </Box>
         </Modal>
     );
