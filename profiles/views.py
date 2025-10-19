@@ -5,7 +5,8 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.db import models
 from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
@@ -68,8 +69,6 @@ def profile_list(request, is_esner):
         if ordering_param:
             desc = ordering_param.startswith('-')
             base = ordering_param.lstrip('-')
-
-            # Normalize dotted relation notation
             normalized = base.replace('.', '__')
 
             if base == 'fullPhoneNumber':
@@ -82,13 +81,23 @@ def profile_list(request, is_esner):
                     ('-whatsapp_prefix' if desc else 'whatsapp_prefix'),
                     ('-whatsapp_number' if desc else 'whatsapp_number'),
                 ]
+            elif base == 'document':
+                # DB-side annotation of latest enabled document number
+                latest_doc_number_sq = Subquery(
+                    Document.objects.filter(
+                        profile=OuterRef('pk'),
+                        enabled=True
+                    ).order_by('-created_at').values('number')[:1]
+                )
+                profiles = profiles.annotate(
+                    _latest_doc_number=Coalesce(latest_doc_number_sq, Value(''))
+                )
+                order_expressions = ['-_latest_doc_number' if desc else '_latest_doc_number']
             else:
                 order_expressions = [f'-{normalized}' if desc else normalized]
 
             if order_expressions:
                 profiles = profiles.order_by(*order_expressions)
-            else:
-                profiles = profiles.order_by('-created_at')
         else:
             profiles = profiles.order_by('-created_at')
 
@@ -99,9 +108,11 @@ def profile_list(request, is_esner):
             for token in tokens:
                 token_q = Q()
                 for field_name in SEARCHABLE_PROFILE_FIELDS:
+                    print(f"Searching in field: {field_name}")
                     token_q |= Q(**{f"{field_name}__icontains": token})
                 # Extra related / composite fields
                 token_q |= Q(esncard__number__icontains=token)
+                token_q |= Q(document__enabled=True, document__number__icontains=token)
                 token_q |= Q(phone_prefix__icontains=token) | Q(phone_number__icontains=token)
                 token_q |= Q(whatsapp_prefix__icontains=token) | Q(whatsapp_number__icontains=token)
                 profiles = profiles.filter(token_q)
@@ -466,8 +477,7 @@ def document_detail(request, pk):
         elif request.method == 'DELETE':
             if not get_action_permissions('document_delete', request.user):
                 return Response({'error': 'Non hai i permessi per eliminare questo documento.'}, status=403)
-            document.enabled = False
-            document.save()
+            document.delete()
             return Response(status=200)
         else:
             return Response({'error': 'Metodo non supportato.'}, status=405)
