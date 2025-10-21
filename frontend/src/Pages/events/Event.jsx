@@ -83,7 +83,7 @@ export default function Event() {
                 setData(data);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, setPopup);
+                defaultErrorHandler(responseOrError, setPopup).then();
                 navigate('/events/');
             },
             onFinally: () => setLoading(false)
@@ -375,6 +375,22 @@ export default function Event() {
                                             {data.is_allow_external && (
                                                 <Chip label="Iscrizione Esterni Consentita" color="success"
                                                       sx={{mr: 1, mb: 1}}/>
+                                            )}
+                                            {/* Show yellow chip if reimbursements_by_organizers_only */}
+                                            {data.reimbursements_by_organizers_only && (
+                                                <Chip
+                                                    label="Rimborsi limitati agli Organizzatori"
+                                                    color="warning"
+                                                    sx={{mr: 1, mb: 1}}
+                                                />
+                                            )}
+                                            {/* Show yellow chip if visible_to_board_only */}
+                                            {data.visible_to_board_only && (
+                                                <Chip
+                                                    label="Solo Board Members"
+                                                    color="warning"
+                                                    sx={{mr: 1, mb: 1}}
+                                                />
                                             )}
                                             {/* Show if event has a form */}
                                             {data.enable_form && (

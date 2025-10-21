@@ -470,6 +470,10 @@ def events_list(request):
         return Response({'error': 'Non hai i permessi per visualizzare gli eventi.'}, status=403)
     try:
         events = Event.objects.all().order_by('-created_at')
+        # --- Filter out board-only events unless user is board member ---
+        if not request.user.groups.filter(name__in=['Board']).exists():
+            events = events.filter(visible_to_board_only=False)
+
         search = request.GET.get('search', '').strip()
         if search:
             events = events.filter(Q(name__icontains=search))
@@ -525,6 +529,9 @@ def event_creation(request):
 def event_detail(request, pk):
     try:
         event = Event.objects.get(pk=pk)
+        # --- Filter out board-only event unless user is board member ---
+        if event.visible_to_board_only and not request.user.groups.filter(name__in=['Board']).exists():
+            return Response({'error': 'Non hai i permessi per visualizzare questo evento.'}, status=403)
 
         if request.method == 'GET':
             if not get_action_permissions(request, 'event_detail_GET'):
@@ -1641,28 +1648,33 @@ def subscription_edit_formfields(request, pk):
         fdef = add_fields.get(k) or {}
         merged_add[k] = coerce_value(fdef.get('type'), v)
 
-    # Validate using model helper
-        # python
-        # --- inside subscription_edit_formfields(), replace the current error handling block ---
+    # Validate only event-declared fields (exclude backend-only flags from validation)
+    validatable_form = {k: merged_form[k] for k in merged_form.keys() if k in form_fields}
+    validatable_add = {k: merged_add[k] for k in merged_add.keys() if k in add_fields}
 
-        # Validate using model helper
-        form_errors = validate_field_data(fields, merged_form, 'form') or {}
-        add_errors = validate_field_data(fields, merged_add, 'additional') or {}
+    form_errors = validate_field_data(fields, validatable_form, 'form') or {}
+    add_errors = validate_field_data(fields, validatable_add, 'additional') or {}
 
-        if form_errors or add_errors:
-            # Combine errors robustly whether they are dicts or lists
-            if isinstance(form_errors, dict) and isinstance(add_errors, dict):
-                combined = {**form_errors, **add_errors}
+    if form_errors or add_errors:
+        combined = []
+        def push(err):
+            if not err:
+                return
+            if isinstance(err, list):
+                combined.extend(err)
+            elif isinstance(err, dict):
+                for v in err.values():
+                    if isinstance(v, list):
+                        combined.extend(v)
+                    else:
+                        combined.append(str(v))
             else:
-                combined = []
-                if form_errors:
-                    combined.extend(form_errors if isinstance(form_errors, list) else [form_errors])
-                if add_errors:
-                    combined.extend(add_errors if isinstance(add_errors, list) else [add_errors])
+                combined.append(str(err))
+        push(form_errors)
+        push(add_errors)
+        return Response({"error": "Validation error", "fields": combined}, status=400)
 
-            return Response({"error": "Validation error", "fields": combined}, status=400)
-
-    # Persist only the parts that were provided
+    # Persist only the parts that were provided (keep backend-only keys intact)
     to_update = []
     if isinstance(raw_form, dict) and raw_form:
         sub.form_data = merged_form
@@ -1676,7 +1688,6 @@ def subscription_edit_formfields(request, pk):
 
     sub.save(update_fields=to_update)
 
-    # Return updated pieces only (sufficient for UI close/refresh)
     return Response({
         "form_data": sub.form_data if 'form_data' in to_update else existing_form,
         "additional_data": sub.additional_data if 'additional_data' in to_update else existing_add
