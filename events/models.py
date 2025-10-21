@@ -157,6 +157,12 @@ class Event(BaseEntity):
     # Manage via event modla toggle, to notify to the Erasmus via confirmation email the assigned list
     notify_list = models.BooleanField(default=True)
 
+    # Make the event visible only to board members
+    visible_to_board_only = models.BooleanField(default=False)
+
+    # Make the reimbursements doable only by organizers or board members
+    reimbursements_by_organizers_only = models.BooleanField(default=False)
+
     def __str__(self):
         return f"{self.name} ({self.date})"
 
