@@ -46,7 +46,7 @@ def get_action_permissions(action, user):
     Returns True if the user is allowed to perform the given action.
     """
     if action in ['reimburse_deposits', 'reimburse_quota']:
-        return user_is_board(user)
+        return True  # user_is_board(user)
     if action == 'account_creation':
         return user_is_board(user)
     if action == 'account_detail_patch':
@@ -631,6 +631,14 @@ def reimburse_deposits(request):
         account = Account.objects.get(id=account_id)
         subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
 
+        # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
+        if getattr(event, 'reimbursements_by_organizers_only', False):
+            is_board = user_is_board(request.user)
+            organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
+            user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+            if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
+                return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
+
         if not subscriptions.exists():
             return Response({'error': 'Nessuna iscrizione valida trovata.'}, status=400)
 
@@ -742,6 +750,14 @@ def reimburse_quota(request):
         event = Event.objects.get(id=event_id)
         account = Account.objects.get(id=account_id)
         sub = Subscription.objects.get(id=subscription_id, event=event)
+
+        # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
+        if getattr(event, 'reimbursements_by_organizers_only', False):
+            is_board = user_is_board(request.user)
+            organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
+            user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+            if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
+                return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
 
         # Only allow if event is not free and subscription has a paid transaction
         if not event.cost or float(event.cost) <= 0:
