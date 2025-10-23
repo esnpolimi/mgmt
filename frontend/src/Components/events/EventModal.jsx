@@ -1410,7 +1410,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             dataRef.current = {
                 ...dataRef.current,
                 organizers: [],
-                profile_fields: ['name', 'surname', 'email'],
+                profile_fields: ['name', 'surname', 'email', 'latest_esncard','whatsapp_number'],
                 fields: [
                     {field_type: 'form', name: 'Vegetarian?', type: 'b', required: true}
                 ],
