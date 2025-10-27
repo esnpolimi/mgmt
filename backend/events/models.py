@@ -30,7 +30,8 @@ profile_fields_schema = {
 # Types:
 #  't': testo
 #  'n': numero
-#  'c': choice, risposta singola
+#  'c': choice, risposta singola (radio buttons)
+#  's': select, menu a tendina (dropdown)
 #  'm': multiple choice, risposta multipla
 #  'b': boolean, risposta yes/no
 #  'd': date (DD-MM-YYYY)
@@ -45,7 +46,7 @@ unified_fields_schema = {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["t", "n", "c", "m", "b", "d", "e", "p"]},
+            "type": {"enum": ["t", "n", "c", "m", "s", "b", "d", "e", "p"]},
             "field_type": {"enum": ["form", "additional"]},
             "choices": {
                 "type": "array",
@@ -56,7 +57,7 @@ unified_fields_schema = {
         "required": ["name", "type", "field_type"],
         "allOf": [
             {
-                "if": {"properties": {"type": {"enum": ["c", "m"]}}},
+                "if": {"properties": {"type": {"enum": ["c", "m", "s"]}}},
                 "then": {"required": ["choices"]}
             },
             {
@@ -90,6 +91,9 @@ def validate_field_data(field_config, data_dict, field_type_filter=None):
                 except (ValueError, TypeError):
                     errors.append(f'Invalid data type for field "{field_name}" - expected number')
         elif field_type == 'c' and value not in field.get('choices', []):
+            errors.append(
+                f'Invalid value "{value}" for field "{field_name}" - must be one of {field.get("choices", [])}')
+        elif field_type == 's' and value not in field.get('choices', []):
             errors.append(
                 f'Invalid value "{value}" for field "{field_name}" - must be one of {field.get("choices", [])}')
         elif field_type == 'm':
