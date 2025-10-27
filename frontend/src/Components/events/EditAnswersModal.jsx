@@ -107,6 +107,21 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                         ))}
                     </TextField>
                 );
+            case 's':
+                return (
+                    <TextField
+                        select
+                        fullWidth
+                        value={value || ''}
+                        onChange={e => onChange(field, e.target.value)}
+                        size="small"
+                        variant="outlined"
+                    >
+                        {(field.choices || []).map(choice => (
+                            <MenuItem key={choice} value={choice}>{choice}</MenuItem>
+                        ))}
+                    </TextField>
+                );
             case 'm':
                 return (
                     <Box>

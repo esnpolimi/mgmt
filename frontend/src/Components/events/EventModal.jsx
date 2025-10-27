@@ -680,13 +680,14 @@ export default function EventModal({open, event, isEdit, onClose}) {
             {value: 'n', label: 'Numero'},
             {value: 'c', label: 'Scelta Singola'},
             {value: 'm', label: 'Scelta Multipla'},
+            {value: 's', label: 'Menu a Tendina'},
             {value: 'b', label: 'Sì/No'},
             {value: 'd', label: 'Data'},
             {value: 'e', label: 'ESNcard'},
             {value: 'p', label: 'Telefono'}
         ];
 
-        const needsChoices = ['c', 'm'].includes(field.type);
+        const needsChoices = ['c', 'm', 's'].includes(field.type);
         const isFormField = field.field_type === 'form';
 
         return (
@@ -1479,7 +1480,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const normalizeFieldsForValidation = (arr) => {
         return arr.map(f => {
             const name = (f.name || '').trim();
-            if (['c', 'm'].includes(f.type)) {
+            if (['c', 'm', 's'].includes(f.type)) {
                 const raw = Array.isArray(f.choices) ? f.choices : [];
                 const cleanedChoices = raw.map(c => (c || '').trim()).filter(Boolean);
                 return {...f, name, choices: cleanedChoices};
@@ -1503,7 +1504,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 errorsRef.current.form = `Tutti i campi devono avere un nome (manca il nome al campo #${i + 1}).`
                 return false;
             }
-            if (['c', 'm'].includes(field.type)) {
+            if (['c', 'm', 's'].includes(field.type)) {
                 if (!Array.isArray(field.choices) || field.choices.length === 0) {
 
                     errorsRef.current.form = `Il campo "${field.name}" deve avere almeno un'opzione valida.`

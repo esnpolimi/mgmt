@@ -16,7 +16,9 @@ import {
     Paper,
     Grid,
     Alert,
-    MenuItem
+    MenuItem,
+    InputLabel,
+    Select
 } from "@mui/material";
 import {CircularProgress} from "@mui/material";
 import {useLocation, useParams, useNavigate} from "react-router-dom";
@@ -343,6 +345,23 @@ export default function EventForm() {
                                                         />
                                                     ))}
                                                 </RadioGroup>
+                                            </FormControl>
+                                        );
+                                    case "s":
+                                        return (
+                                            <FormControl key={field.name} required={field.required} margin="normal" fullWidth>
+                                                <InputLabel>{field.name}</InputLabel>
+                                                <Select
+                                                    value={formValues[field.name] || ""}
+                                                    onChange={e => handleChange(field.name, e.target.value)}
+                                                    label={field.name}
+                                                >
+                                                    {field.choices?.map(choice => (
+                                                        <MenuItem key={choice} value={choice}>
+                                                            {choice}
+                                                        </MenuItem>
+                                                    ))}
+                                                </Select>
                                             </FormControl>
                                         );
                                     case "m":
