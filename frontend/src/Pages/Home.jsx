@@ -40,6 +40,7 @@ export default function Home() {
     const [rimborsoModalOpen, setRimborsoModalOpen] = useState(false);
     const [showFirstLoginBanner, setShowFirstLoginBanner] = useState(!user?.last_login);
     const [recentModalAccount, setRecentModalAccount] = useState(null);
+    const [dynamicSections, setDynamicSections] = useState([]);
 
     const groupname = user?.groups
         ? user.groups[0] === "Aspiranti"
@@ -50,106 +51,10 @@ export default function Home() {
                     ? "Board Member"
                     : user.groups[0]
         : null;
-    const staticLinks = [
-        {
-            topic: "LINK UTILI",
-            links: [
-                {
-                    name: "FOGLIO TURNI UFFICIO",
-                    description: "",
-                    url: "https://docs.google.com/spreadsheets/d/1oHRaRcJvzt5XLfEjU-zlTcgH8ZOg9G-a9w0wGejAY2I/edit?gid=2036311463#gid=2036311463",
-                    color: "#388e3c"
-                },
-                {
-                    name: "FOGLIO CONTASOLDI",
-                    description: "",
-                    url: "https://docs.google.com/spreadsheets/d/1Ewt9DggEyDy8lT2Kh6YiN2k5SvGZnVkvPwpufZ0w5sU/edit",
-                    color: "#f57c00"
-                },
-                {
-                    name: "FORM REPORT UFFICI",
-                    description: "",
-                    url: "https://goo.gl/forms/xAusvfJZdKppn2D13",
-                    color: "#d32f2f"
-                },
-                {
-                    name: "FOGLI FIRME BANDI",
-                    description: "",
-                    url: "https://drive.google.com/drive/folders/1MBFMmga6IFPqPD_ER9HCdiHoI092y3Zs?usp=sharing",
-                    color: "#7b1fa2"
-                },
-                {
-                    name: "RICHIESTA RIMBORSO",
-                    description: "",
-                    url: "",
-                    color: "#1976d2",
-                    onClick: () => setRimborsoModalOpen(true)
-                },
-                {
-                    name: "SEGNALAZIONI BUGS/MIGLIORIE",
-                    description: "",
-                    url: "https://docs.google.com/forms/d/e/1FAIpQLSfgCax4iiVea-pHDppHGWHiOe2FmMknaT9Wsl2Kn5r2xBJTBw/viewform?usp=sharing&ouid=112656928168770237958",
-                    color: "#29b6d2",
-                },
-            ]
-        },
-        {
-            topic: "WIKI E TUTORIAL",
-            links: [
-                {
-                    name: "WIKI ESN POLIMI",
-                    description: "",
-                    url: "https://wiki.esnpolimi.it/",
-                    color: "#512da8"
-                },
-                {
-                    name: "GUIDA GENERALE AL GESTIONALE",
-                    description: "",
-                    url: "https://docs.google.com/document/d/1jgFvO2zo2xKmkPwbQGBQF7bgLrqkLSpB_BSG6guHdhs/edit?usp=sharing",
-                    color: "#01476d"
-                },
-                {
-                    name: "TUTORIAL viaggi e attività",
-                    description: "",
-                    url: "https://drive.google.com/drive/folders/13DZUKo7D74VmbX2S3uKTOPrO5h1VFTGh",
-                    color: "#0288d1"
-                },
-                {
-                    name: "Importazione Contatti DI MASSA",
-                    description: "",
-                    url: "https://docs.google.com/document/d/1OnwtNsKL9R5ph30IQcFMtPoMxq8-HyDs/edit?usp=sharing&ouid=112656928168770237958&rtpof=true&sd=true",
-                    color: "#0097a7"
-                },
-            ]
-        },
-        {
-            topic: "ISTRUZIONI RESPONSABILI UFFICIO",
-            descriptor: "PER APRIRE E CHIUDERE UFFICIO",
-            links: [
-                {
-                    name: "1. Contare i soldi in cassa con il foglio contasoldi dell'ufficio giusto",
-                    description: "",
-                    url: "",
-                    color: "#607d8b"
-                },
-                {
-                    name: "2. Verificare che coincidano con quelli in cassa a gestionale (se non coincidono comunicarlo al tesoriere)",
-                    description: "",
-                    url: "",
-                    color: "#607d8b"
-                },
-                {
-                    name: "3. Aprire/chiudere cassa a gestionale",
-                    description: "",
-                    url: "",
-                    color: "#607d8b"
-                }
-            ]
-        }
-    ];
 
     useEffect(() => {
         fetchAccounts();
+        fetchDynamicContent();
     }, [user]);
 
     const fetchAccounts = () => {
@@ -158,6 +63,22 @@ export default function Home() {
             onSuccess: (data) => setAccounts(data),
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setCasseLoading(false)
+        });
+    };
+
+    const fetchDynamicContent = () => {
+        fetchCustom("GET", "/content/sections/active_sections/", {
+            onSuccess: (data) => {
+                setDynamicSections(data);
+            },
+            onError: (responseOrError) => {
+                console.error("Errore caricamento contenuti dinamici", responseOrError);
+                setPopup({
+                    message: "Errore nel caricamento dei contenuti. Riprova più tardi.",
+                    state: "error",
+                    id: Date.now()
+                });
+            }
         });
     };
 
@@ -302,14 +223,13 @@ export default function Home() {
                     display: "grid",
                     gridTemplateColumns: {
                         xs: "1fr",
-                        sm: "1fr 1fr",
-                        md: "1fr 1fr 1fr"
+                        sm: "1fr 1fr 1fr"
                     },
                     gap: 2,
                     justifyContent: "center",
                 }}>
-                    {staticLinks.map((section) => (
-                        <Paper key={section.topic}
+                    {dynamicSections.map((section) => (
+                        <Paper key={section.id}
                                elevation={2}
                                sx={{
                                    p: 2,
@@ -322,16 +242,11 @@ export default function Home() {
                                    minWidth: 220,
                                }}>
                             <Typography variant="subtitle1" sx={{fontWeight: 700, color: "#2d3a4b", mb: 1}}>
-                                {section.topic}
+                                {section.title_display}
                             </Typography>
-                            {section.descriptor && (
-                                <Typography variant="body2" sx={{color: "#607d8b", mb: 1}}>
-                                    {section.descriptor}
-                                </Typography>
-                            )}
                             <Box sx={{display: "flex", flexDirection: "column", gap: 1, width: "100%"}}>
                                 {section.links.map((link) => (
-                                    <Box key={link.name}
+                                    <Box key={link.id}
                                          sx={{
                                              mb: 0.5,
                                              pl: 2,
@@ -340,20 +255,19 @@ export default function Home() {
                                              borderRadius: 1,
                                              py: 0.5,
                                          }}>
-                                        <a href={link.url ? link.url : "#"}
+                                        <a href={link.url}
                                            style={{
                                                textDecoration: "none",
                                                color: link.color,
                                                fontWeight: 600,
                                                fontSize: "1rem",
                                            }}
-                                           target={link.url ? "_blank" : "_self"}
-                                           rel="noopener noreferrer"
-                                           onClick={link.onClick}>
+                                           target="_blank"
+                                           rel="noopener noreferrer">
                                             {link.name}
                                         </a>
                                         {link.description && (
-                                            <Typography variant="body2" sx={{color: "#607d8b"}}>
+                                            <Typography variant="body2" sx={{color: "#607d8b", mt: 0.5}}>
                                                 {link.description}
                                             </Typography>
                                         )}
@@ -362,6 +276,77 @@ export default function Home() {
                             </Box>
                         </Paper>
                     ))}
+                    
+                    {/* Sezione Statica: ISTRUZIONI RESPONSABILI UFFICIO */}
+                    <Paper
+                        elevation={2}
+                        sx={{
+                            p: 2,
+                            borderRadius: 3,
+                            background: "#fff",
+                            boxShadow: "0 2px 8px rgba(60,80,120,0.06)",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            minWidth: 220,
+                        }}>
+                        <Typography variant="subtitle1" sx={{fontWeight: 700, color: "#2d3a4b", mb: 1}}>
+                            ISTRUZIONI RESPONSABILI UFFICIO
+                        </Typography>
+                        <Typography variant="body2" sx={{color: "#607d8b", mb: 1}}>
+                            PER APRIRE E CHIUDERE UFFICIO
+                        </Typography>
+                        <Box sx={{display: "flex", flexDirection: "column", gap: 1, width: "100%"}}>
+                            <Box sx={{
+                                mb: 0.5,
+                                pl: 2,
+                                borderLeft: "5px solid #607d8b",
+                                background: "#f7fafd",
+                                borderRadius: 1,
+                                py: 0.5,
+                            }}>
+                                <Typography style={{
+                                    color: "#607d8b",
+                                    fontWeight: 600,
+                                    fontSize: "1rem",
+                                }}>
+                                    1. Contare i soldi in cassa con il foglio contasoldi dell'ufficio giusto
+                                </Typography>
+                            </Box>
+                            <Box sx={{
+                                mb: 0.5,
+                                pl: 2,
+                                borderLeft: "5px solid #607d8b",
+                                background: "#f7fafd",
+                                borderRadius: 1,
+                                py: 0.5,
+                            }}>
+                                <Typography style={{
+                                    color: "#607d8b",
+                                    fontWeight: 600,
+                                    fontSize: "1rem",
+                                }}>
+                                    2. Verificare che coincidano con quelli in cassa a gestionale (se non coincidono comunicarlo al tesoriere)
+                                </Typography>
+                            </Box>
+                            <Box sx={{
+                                mb: 0.5,
+                                pl: 2,
+                                borderLeft: "5px solid #607d8b",
+                                background: "#f7fafd",
+                                borderRadius: 1,
+                                py: 0.5,
+                            }}>
+                                <Typography style={{
+                                    color: "#607d8b",
+                                    fontWeight: 600,
+                                    fontSize: "1rem",
+                                }}>
+                                    3. Aprire/chiudere cassa a gestionale
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </Paper>
                 </Box>
             </Box>
             {/* Casse Section at the bottom (Full Width) */}
