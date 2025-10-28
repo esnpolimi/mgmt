@@ -6,5 +6,6 @@ urlpatterns = [
     path("backend/", include('users.urls')),
     path("backend/", include('profiles.urls')),
     path("backend/", include('treasury.urls')),
-    path("backend/", include('events.urls'))
+    path("backend/", include('events.urls')),
+    path("backend/content/", include('content.urls'))
 ]
