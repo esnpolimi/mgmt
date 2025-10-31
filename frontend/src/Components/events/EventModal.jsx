@@ -26,7 +26,7 @@ import {
 import {DatePicker, DateTimePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon} from '@mui/icons-material';
+import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, ContentCopy as CopyIcon} from '@mui/icons-material';
 import {defaultErrorHandler, fetchCustom} from "../../api/api";
 import {style} from '../../utils/sharedStyles'
 import CustomEditor from '../CustomEditor';
@@ -36,6 +36,7 @@ import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import StatusBanner from "../StatusBanner";
 import ProfileSearch from '../ProfileSearch';
+import SharedListsSelector from './SharedListsSelector';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 
 export default function EventModal({open, event, isEdit, onClose}) {
@@ -414,6 +415,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const Lists = function Lists({dataRef, isEdit}) {
 
         const [localData, setLocalData] = useState(dataRef.current);
+        const [showSharedListsDialog, setShowSharedListsDialog] = useState(false);
         //const [localErrors] = useState(errorsRef.current);
 
         /* Helpers */
@@ -429,6 +431,30 @@ export default function EventModal({open, event, isEdit, onClose}) {
             dataRef.current = {
                 ...dataRef.current,
                 lists: [...dataRef.current.lists, {id: '', name: '', capacity: ''}],
+            };
+        };
+
+        const handleUseSharedLists = (eventId, eventName, lists) => {
+            // Replace current lists with selected event's lists
+            // Note: lists will be automatically shared via Many-to-Many after save
+            const newLists = lists.map(list => ({
+                id: list.id,  // Keep the ID so they link to existing lists
+                name: list.name,
+                capacity: list.capacity,
+                is_main_list: list.is_main_list || false,
+                is_waiting_list: list.is_waiting_list || false,
+            }));
+
+            // Update local state
+            setLocalData({
+                ...localData,
+                lists: newLists,
+            });
+
+            // Update the ref as well
+            dataRef.current = {
+                ...dataRef.current,
+                lists: newLists,
             };
         };
 
@@ -509,7 +535,24 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
                     <Typography variant="h6">Liste</Typography>
                     <IconButton title="Aggiungi Lista" onClick={handleAddList} sx={{ml: -2}}><AddIcon/></IconButton>
+                    {!isEdit && (
+                        <Button 
+                            variant="outlined" 
+                            size="small"
+                            startIcon={<CopyIcon />}
+                            onClick={() => setShowSharedListsDialog(true)}
+                            sx={{ ml: 1 }}
+                        >
+                            Usa Liste Esistenti
+                        </Button>
+                    )}
                 </Grid>
+
+                <SharedListsSelector
+                    open={showSharedListsDialog}
+                    onClose={() => setShowSharedListsDialog(false)}
+                    onSelectEvent={handleUseSharedLists}
+                />
 
                 {localData.lists.map((list, index) => {
                     const isFormList = isEdit && list.name === 'Form List';
