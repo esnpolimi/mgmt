@@ -734,10 +734,18 @@ def reimburse_quota(request):
 
         event = Event.objects.get(id=event_id)
         account = Account.objects.get(id=account_id)
-        sub = Subscription.objects.get(id=subscription_id, event=event)
+
+        sub = Subscription.objects.select_related('event', 'list').get(id=subscription_id)
+
+        # Ensure the subscription's list is actually attached to the requested event (shared lists scenario)
+        if event not in sub.list.events.all():
+            return Response({'error': 'La sottoscrizione non appartiene alle liste di questo evento.'}, status=400)
+
+        # Use the subscription's owning event for quota metadata (cost, name, etc.)
+        sub_event = sub.event
 
         # Only allow if event is not free and subscription has a paid transaction
-        if not event.cost or float(event.cost) <= 0:
+        if not sub_event.cost or float(sub_event.cost) <= 0:
             return Response({'error': 'L\'evento è gratuito, nessuna quota da rimborsare.'}, status=400)
         if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).exists():
             return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'},
@@ -754,7 +762,7 @@ def reimburse_quota(request):
         if account.status == "closed":
             return Response({'error': 'La cassa è chiusa.'}, status=400)
 
-        if account.balance < event.cost:
+        if account.balance < sub_event.cost:
             return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
         # Fix: handle external subscriptions for description
@@ -771,8 +779,8 @@ def reimburse_quota(request):
                 subscription=sub,
                 executor=request.user,
                 account=account,
-                amount=-event.cost,
-                description=f"Rimborso quota {sub_name} - {event.name}" + (f" - {notes}" if notes else "")
+                amount=-sub_event.cost,
+                description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
             )
             serializer = TransactionViewSerializer(tx)
             return Response(serializer.data, status=201)

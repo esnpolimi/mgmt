@@ -76,10 +76,29 @@ class EventListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False, allow_null=True)  # Accept null for new lists
     is_main_list = serializers.BooleanField(required=False, default=False)
     is_waiting_list = serializers.BooleanField(required=False, default=False)
+    
+    # Many-to-Many fields for events
+    event_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Event.objects.all(),
+        source='events',
+        required=False,
+        allow_empty=True
+    )
+    event_names = serializers.SerializerMethodField()
+    available_capacity = serializers.ReadOnlyField()
 
     class Meta:
         model = EventList
-        fields = ['id', 'name', 'capacity', 'display_order', 'subscription_count', 'is_main_list', 'is_waiting_list']
+        fields = [
+            'id', 'name', 'capacity', 'display_order', 'subscription_count', 
+            'is_main_list', 'is_waiting_list',
+            'event_ids', 'event_names', 'available_capacity'
+        ]
+    
+    def get_event_names(self, obj):
+        """Return comma-separated list of event names"""
+        return [event.name for event in obj.events.all()]
 
 
 # Serializers for Event
@@ -216,10 +235,41 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         lead_organizer = validated_data.pop('lead_organizer', None)
         event = Event.objects.create(**validated_data)
 
-        # Create provided lists
+        # Create provided lists or link existing ones
         created_lists = []
         for list_data in lists_data:
-            created_lists.append(EventList.objects.create(event=event, **list_data))
+            # Work on a copy to avoid mutating the original dict
+            list_data = list_data.copy()
+
+            # Extract Many-to-Many payload and serializer-read-only fields
+            event_ids = list_data.pop('events', [])
+            list_id = list_data.pop('id', None)
+            list_data.pop('subscription_count', None)
+            list_data.pop('event_names', None)
+            list_data.pop('available_capacity', None)
+
+            if list_id:
+                # Link existing list to this event (shared lists scenario)
+                try:
+                    event_list = EventList.objects.get(pk=list_id)
+                except EventList.DoesNotExist as exc:
+                    raise serializers.ValidationError({'lists': f"EventList with id {list_id} does not exist."}) from exc
+
+                # Link the current event to the existing list
+                event_list.events.add(event)
+
+                # Optionally attach additional events if provided
+                if event_ids:
+                    event_list.events.add(*event_ids)
+            else:
+                # Create a brand-new list for this event
+                event_list = EventList.objects.create(**list_data)
+                event_list.events.add(event)
+
+                if event_ids:
+                    event_list.events.add(*event_ids)
+
+            created_lists.append(event_list)
 
         # Auto-create form list if form enabled
         if event.enable_form:
@@ -229,14 +279,15 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 ml_cap = sum(l.capacity for l in event.lists.filter(is_main_list=True))
                 wl_cap = sum(l.capacity for l in event.lists.filter(is_waiting_list=True))
                 default_cap = ml_cap + wl_cap
-                EventList.objects.create(
-                    event=event,
+                form_list = EventList.objects.create(
                     name='Form List',
                     capacity=default_cap,
                     display_order=event.lists.count(),
                     is_main_list=False,
                     is_waiting_list=False
                 )
+                # Link to current event
+                form_list.events.add(event)
 
         # Create organizers (supports multiple leaders)
         parsed_orgs = self._parse_organizers_input(organizers_data, lead_organizer)
@@ -776,10 +827,25 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             data['profile_fields'] = order_profile_fields(data['profile_fields'])
         return data
 
-    @staticmethod
-    def get_subscriptions(obj):
-        qs = obj.subscription_set.all().order_by('-created_at')
-        return SubscriptionSerializer(qs, many=True).data
+    def get_subscriptions(self, obj):
+        """
+        Return subscriptions linked to the event's lists, including entries coming
+        from other events when the list is shared. This allows the frontend to
+        display the full roster for shared lists while still indicating the
+        originating event.
+        """
+        list_ids = obj.lists.values_list('id', flat=True)
+        qs = (Subscription.objects
+              .filter(list_id__in=list_ids)
+              .select_related('event', 'list', 'profile')
+              .order_by('-created_at'))
+
+        serialized = SubscriptionSerializer(qs, many=True).data
+
+        for entry in serialized:
+            entry['shared_from_other_event'] = entry.get('event_id') != obj.id
+
+        return serialized
 
 class LiberatoriaProfileSerializer(serializers.ModelSerializer):
     address = serializers.CharField(source='domicile')

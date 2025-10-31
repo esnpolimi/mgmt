@@ -45,4 +45,11 @@ urlpatterns = [
     # Public webhook endpoint for SumUp
     path('sumup/webhook/', views.sumup_webhook),
 
+    # ===== Many-to-Many Shared Lists Endpoints =====
+    # Endpoint to link lists from one event to another
+    path('link-lists/', views.link_event_to_lists),
+    
+    # Endpoint to get events available for sharing lists
+    path('available-for-sharing/', views.available_events_for_sharing),
+
 ]
