@@ -3,7 +3,7 @@ from events.models import Event, EventList, EventOrganizer, Subscription
 
 
 class EventListInline(admin.TabularInline):
-    model = EventList
+    model = EventList.events.through  # Use the through model for Many-to-Many
     extra = 1
 
 
@@ -39,10 +39,16 @@ class EventAdmin(admin.ModelAdmin):
 @admin.register(EventList)
 class EventListAdmin(admin.ModelAdmin):
     list_display = (
-        'name', 'event', 'capacity', 'display_order', 'subscription_count'
+        'name', 'get_events', 'capacity', 'display_order', 'subscription_count'
     )
-    list_filter = ('event', 'capacity')
-    search_fields = ('name', 'event__name')
+    list_filter = ('capacity', 'is_main_list', 'is_waiting_list')
+    search_fields = ('name', 'events__name')
+
+    def get_events(self, obj):
+        """Display comma-separated list of events"""
+        return ', '.join([event.name for event in obj.events.all()[:3]])
+    
+    get_events.short_description = 'Events'
 
     def subscription_count(self, obj):
         return obj.subscriptions.count()
@@ -50,8 +56,8 @@ class EventListAdmin(admin.ModelAdmin):
     subscription_count.short_description = 'Subscriptions'
 
     def get_queryset(self, request):
-        # Prefetch subscriptions for efficiency
-        return super().get_queryset(request).prefetch_related('subscriptions')
+        # Prefetch subscriptions and events for efficiency
+        return super().get_queryset(request).prefetch_related('subscriptions', 'events')
 
 
 '''
