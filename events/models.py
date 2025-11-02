@@ -142,6 +142,9 @@ class Event(BaseEntity):
     # Allow online payment for event form
     allow_online_payment = models.BooleanField(default=False)
 
+    # Optional introductory note shown on the subscription form
+    form_note = models.TextField(blank=True, default='')
+
     # Programmed open time for the form (optional)
     form_programmed_open_time = models.DateTimeField(null=True, blank=True)
 

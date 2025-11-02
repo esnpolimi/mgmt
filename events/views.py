@@ -1085,6 +1085,7 @@ def event_form_view(_, event_id):
             'form_programmed_open_time': event.form_programmed_open_time,
             'allow_online_payment': event.allow_online_payment,
             'is_allow_external': event.is_allow_external,
+            'form_note': event.form_note,
         }, status=200)
     except Event.DoesNotExist:
         return Response({'error': "Event not found"}, status=404)

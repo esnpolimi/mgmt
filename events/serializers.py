@@ -106,13 +106,14 @@ class EventsListSerializer(serializers.ModelSerializer):
     lists_capacity = serializers.SerializerMethodField()
     enable_form = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    form_note = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
         fields = [
             'id', 'name', 'date', 'cost', 'deposit', 'status',
             'is_a_bando', 'is_allow_external',
-            'lists_capacity', 'enable_form', 'form_programmed_open_time',
+            'lists_capacity', 'enable_form', 'form_programmed_open_time', 'form_note',
             'is_refa_done',
         ]
 
@@ -156,6 +157,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     enable_form = serializers.BooleanField(required=False, default=False)
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
+    form_note = serializers.CharField(required=False, allow_blank=True, default='')
     form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
     is_refa_done = serializers.BooleanField(required=False, default=False)
 
@@ -165,7 +167,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
-            'allow_online_payment', 'form_programmed_open_time', 'is_refa_done'
+            'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done'
         ]
 
     def validate(self, attrs):
@@ -528,6 +530,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     available_profile_fields = serializers.SerializerMethodField(read_only=True)
     allow_online_payment = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    form_note = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
@@ -536,7 +539,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields',
-            'allow_online_payment', 'form_programmed_open_time',
+            'allow_online_payment', 'form_programmed_open_time', 'form_note',
             'is_refa_done'
         ]
 
@@ -809,6 +812,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     enable_form = serializers.BooleanField(read_only=True)
     allow_online_payment = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    form_note = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
@@ -816,7 +820,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
-            'allow_online_payment', 'form_programmed_open_time',
+            'allow_online_payment', 'form_programmed_open_time', 'form_note',
             'is_refa_done'
         ]
 
