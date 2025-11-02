@@ -36,6 +36,7 @@ export const eventDisplayNames = {
     allow_online_payment: 'Consenti Pagamenti Online',
     form: 'Stato Form',
     form_programmed_open_time: 'Orario Apertura Form',
+    form_note: 'Nota Form Iscrizione',
 
 };
 
