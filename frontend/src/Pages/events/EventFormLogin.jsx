@@ -255,16 +255,6 @@ export default function EventFormLogin() {
                 <Typography variant="h4" gutterBottom align="center" component="div">
                     <i>{eventData.name}</i>
                 </Typography>
-                {formNote && (
-                    <Paper elevation={3} style={{ padding: '20px', marginBottom: '25px', backgroundColor: '#fffbe6', border: '1px solid #ffe58f' }}>
-                      <Typography variant="h6" style={{ color: '#ad8b00', fontWeight: 'bold' }}>
-                         Notes for participants:
-                      </Typography>
-                      <Typography variant="body1" style={{ marginTop: '10px', whiteSpace: 'pre-line' }}>
-                        {formNote}
-                      </Typography>
-                    </Paper>
-                )}
                 <Box sx={{width: '100%'}}>
                     <TextField
                         margin="normal"
