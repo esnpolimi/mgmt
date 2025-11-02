@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoes
 from django.core.mail import send_mail
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -1229,6 +1229,7 @@ def event_form_view(_, event_id):
             'form_programmed_open_time': event.form_programmed_open_time,
             'allow_online_payment': event.allow_online_payment,
             'is_allow_external': event.is_allow_external,
+            'form_note': event.form_note,
         }, status=200)
     except Event.DoesNotExist:
         return Response({'error': "Event not found"}, status=404)
@@ -1692,3 +1693,122 @@ def subscription_edit_formfields(request, pk):
         "form_data": sub.form_data if 'form_data' in to_update else existing_form,
         "additional_data": sub.additional_data if 'additional_data' in to_update else existing_add
     }, status=200)
+
+
+# ============================================================================
+# Many-to-Many Shared Lists Endpoints
+# ============================================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def link_event_to_lists(request):
+    """
+    Link an event to all lists from another event (Many-to-Many).
+
+    POST /api/events/link-lists/
+
+    Body:
+    {
+        "source_event_id": 5,  # Event to copy lists from
+        "target_event_id": 8   # Event to add lists to
+    }
+
+    Returns:
+    {
+        "message": "Successfully linked 3 lists from Event A to Event B",
+        "linked_lists": [
+            {"id": 18, "name": "Main List", "capacity": 100},
+            {"id": 19, "name": "Waiting List", "capacity": 20}
+        ]
+    }
+    """
+    source_id = request.data.get('source_event_id')
+    target_id = request.data.get('target_event_id')
+
+    if not source_id or not target_id:
+        return Response({
+            'error': 'Both source_event_id and target_event_id are required'
+        }, status=400)
+
+    try:
+        source_event = Event.objects.get(id=source_id)
+        target_event = Event.objects.get(id=target_id)
+    except Event.DoesNotExist:
+        return Response({
+            'error': 'One or both events not found'
+        }, status=404)
+
+    # Get all lists from source event
+    source_lists = source_event.lists.all()
+
+    if not source_lists.exists():
+        return Response({
+            'error': f'Source event "{source_event.name}" has no lists to share'
+        }, status=400)
+
+    # Link all source lists to target event
+    linked_lists = []
+    for event_list in source_lists:
+        # Add target event to the list's events (Many-to-Many)
+        event_list.events.add(target_event)
+        linked_lists.append({
+            'id': event_list.id,
+            'name': event_list.name,
+            'capacity': event_list.capacity,
+            'available_capacity': event_list.available_capacity
+        })
+
+    return Response({
+        'message': f'Successfully linked {len(linked_lists)} lists from "{source_event.name}" to "{target_event.name}"',
+        'linked_lists': linked_lists
+    }, status=200)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def available_events_for_sharing(request):
+    """
+    Get list of events that have lists available for sharing.
+
+    GET /api/events/available-for-sharing/
+
+    Returns:
+    [
+        {
+            "id": 5,
+            "name": "Event A",
+            "lists_count": 3,
+            "lists": [
+                {"id": 18, "name": "Main List", "capacity": 100}
+            ]
+        }
+    ]
+    """
+    # Get all events that have at least one list
+    events_with_lists = Event.objects.prefetch_related('lists').annotate(
+        lists_count=Count('lists')
+    ).filter(lists_count__gt=0).order_by('-date')
+
+    result = []
+    for event in events_with_lists:
+        lists_data = []
+        for event_list in event.lists.all():
+            lists_data.append({
+                'id': event_list.id,
+                'name': event_list.name,
+                'capacity': event_list.capacity,
+                'subscription_count': event_list.subscription_count,
+                'available_capacity': event_list.available_capacity,
+                'is_main_list': event_list.is_main_list,
+                'is_waiting_list': event_list.is_waiting_list
+            })
+
+        result.append({
+            'id': event.id,
+            'name': event.name,
+            'date': event.date,
+            'lists_count': len(lists_data),
+            'lists': lists_data
+        })
+
+    return Response(result, status=200)

@@ -16,7 +16,9 @@ import {
     Paper,
     Grid,
     Alert,
-    MenuItem
+    MenuItem,
+    InputLabel,
+    Select
 } from "@mui/material";
 import {CircularProgress} from "@mui/material";
 import {useLocation, useParams, useNavigate} from "react-router-dom";
@@ -46,6 +48,7 @@ export default function EventForm() {
     const profileEsncardNumber = location.state?.esncardNumber || ""; // ESNcard from profile if available
     const formFields = eventData.form_fields || [];
     const linkFields = formFields.filter(f => f.type === 'l');
+    const formNote = eventData.form_note || "";
 
     // Redirect if missing essentials
     useEffect(() => {
@@ -263,6 +266,16 @@ export default function EventForm() {
                 <Typography variant="h4" gutterBottom align="center" component="div">
                     <i>{eventData.name}</i>
                 </Typography>
+                {formNote && (
+                    <Paper elevation={3} style={{ padding: '20px', marginBottom: '25px', backgroundColor: '#fffbe6', border: '1px solid #ffe58f' }}>
+                      <Typography variant="h6" style={{ color: '#ad8b00', fontWeight: 'bold' }}>
+                        Notes for participants:
+                      </Typography>
+                      <Typography variant="body1" style={{ marginTop: '10px', whiteSpace: 'pre-line' }}>
+                        {formNote}
+                      </Typography>
+                    </Paper>
+                )}
                 <Alert severity="info" sx={{mb: 2}}>
                     {eventData.allow_online_payment
                         ? "Reminder: Your position in Main/Waiting List will be assigned when your online payment succeeds. Earlier payment = higher priority."
@@ -395,6 +408,23 @@ export default function EventForm() {
                                                         />
                                                     ))}
                                                 </RadioGroup>
+                                            </FormControl>
+                                        );
+                                    case "s":
+                                        return (
+                                            <FormControl key={field.name} required={field.required} margin="normal" fullWidth>
+                                                <InputLabel>{field.name}</InputLabel>
+                                                <Select
+                                                    value={formValues[field.name] || ""}
+                                                    onChange={e => handleChange(field.name, e.target.value)}
+                                                    label={field.name}
+                                                >
+                                                    {field.choices?.map(choice => (
+                                                        <MenuItem key={choice} value={choice}>
+                                                            {choice}
+                                                        </MenuItem>
+                                                    ))}
+                                                </Select>
                                             </FormControl>
                                         );
                                     case "m":

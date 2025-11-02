@@ -17,6 +17,7 @@ export default function EventFormLogin() {
     const [emailError, setEmailError] = useState('');
     const navigate = useNavigate();
     const {id} = useParams();
+    const formNote = eventData?.form_note || '';
 
     useEffect(() => {
         setFetching(true);
