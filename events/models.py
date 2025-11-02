@@ -30,7 +30,8 @@ profile_fields_schema = {
 # Types:
 #  't': testo
 #  'n': numero
-#  'c': choice, risposta singola
+#  'c': choice, risposta singola (radio buttons)
+#  's': select, menu a tendina (dropdown)
 #  'm': multiple choice, risposta multipla
 #  'b': boolean, risposta yes/no
 #  'd': date (DD-MM-YYYY)
@@ -46,7 +47,7 @@ unified_fields_schema = {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["t", "n", "c", "m", "b", "d", "e", "p", "l"]},
+            "type": {"enum": ["t", "n", "c", "m", "s", "b", "d", "e", "p", "l"]},
             "field_type": {"enum": ["form", "additional"]},
             "choices": {
                 "type": "array",
@@ -57,7 +58,7 @@ unified_fields_schema = {
         "required": ["name", "type", "field_type"],
         "allOf": [
             {
-                "if": {"properties": {"type": {"enum": ["c", "m"]}}},
+                "if": {"properties": {"type": {"enum": ["c", "m", "s"]}}},
                 "then": {"required": ["choices"]}
             },
             {
@@ -91,6 +92,9 @@ def validate_field_data(field_config, data_dict, field_type_filter=None):
                 except (ValueError, TypeError):
                     errors.append(f'Invalid data type for field "{field_name}" - expected number')
         elif field_type == 'c' and value not in field.get('choices', []):
+            errors.append(
+                f'Invalid value "{value}" for field "{field_name}" - must be one of {field.get("choices", [])}')
+        elif field_type == 's' and value not in field.get('choices', []):
             errors.append(
                 f'Invalid value "{value}" for field "{field_name}" - must be one of {field.get("choices", [])}')
         elif field_type == 'm':
@@ -141,6 +145,9 @@ class Event(BaseEntity):
 
     # Allow online payment for event form
     allow_online_payment = models.BooleanField(default=False)
+
+    # Optional introductory note shown on the subscription form
+    form_note = models.TextField(blank=True, default='')
 
     # Programmed open time for the form (optional)
     form_programmed_open_time = models.DateTimeField(null=True, blank=True)
@@ -246,11 +253,40 @@ class EventOrganizer(BaseEntity):
         return f"{self.profile} - {self.event}"
 
 
+class EventListEvent(models.Model):
+    """
+    Intermediate table for Many-to-Many relationship between EventList and Event.
+    Allows a single EventList to be shared across multiple Events.
+    """
+    eventlist = models.ForeignKey('EventList', on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'events_eventlist_events'
+        unique_together = [['eventlist', 'event']]
+
+    def __str__(self):
+        return f"{self.eventlist.name} → {self.event.name}"
+
+
 class EventList(BaseEntity):
     """
-    Dynamic lists for events, with customizable names and capacities
+    Dynamic lists for events, with customizable names and capacities.
+
+    Many-to-Many Implementation:
+    - A single EventList can be shared across multiple Events
+    - Changes to name/capacity are synchronized across all events
+    - Capacity is pooled: all events share the same total capacity
+    - Subscriptions count towards the shared capacity pool
     """
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='lists')
+    # Many-to-Many relationship with Event through EventListEvent
+    events = models.ManyToManyField(
+        Event,
+        related_name='lists',
+        through='EventListEvent',
+        help_text='Eventi che utilizzano questa lista'
+    )
+
     name = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField(default=0)  # 0 means unlimited
 
@@ -262,31 +298,46 @@ class EventList(BaseEntity):
     is_waiting_list = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ('event', 'name')
         ordering = ['display_order', 'id']
 
     def clean(self):
         super().clean()
-        # Only one main list and one waiting list per event
-        if self.is_main_list:
-            qs = EventList.objects.filter(event=self.event, is_main_list=True)
-            if self.pk:
-                qs = qs.exclude(pk=self.pk)
-            if qs.exists():
-                raise ValidationError("Only one Main List is allowed per event.")
-        if self.is_waiting_list:
-            qs = EventList.objects.filter(event=self.event, is_waiting_list=True)
-            if self.pk:
-                qs = qs.exclude(pk=self.pk)
-            if qs.exists():
-                raise ValidationError("Only one Waiting List is allowed per event.")
+        # Validation: only one main list and one waiting list per event
+        # Note: with Many-to-Many, we need to check this for each event
+        if self.pk:  # Only validate if the list already exists
+            for event in self.events.all():
+                if self.is_main_list:
+                    qs = EventList.objects.filter(events=event, is_main_list=True).exclude(pk=self.pk)
+                    if qs.exists():
+                        raise ValidationError(f"Only one Main List is allowed per event (conflict with {event.name}).")
+                if self.is_waiting_list:
+                    qs = EventList.objects.filter(events=event, is_waiting_list=True).exclude(pk=self.pk)
+                    if qs.exists():
+                        raise ValidationError(f"Only one Waiting List is allowed per event (conflict with {event.name}).")
 
     def __str__(self):
-        return f"{self.name} ({self.event.name})"
+        event_names = ', '.join([event.name for event in self.events.all()[:3]])
+        if self.events.count() > 3:
+            event_names += f' (+{self.events.count() - 3} more)'
+        return f"{self.name} ({event_names})" if event_names else f"{self.name}"
 
     @property
     def subscription_count(self):
+        """
+        Total subscriptions across all events sharing this list.
+        This counts towards the shared capacity pool.
+        """
         return self.subscriptions.count()
+
+    @property
+    def available_capacity(self):
+        """
+        Available capacity in the shared pool.
+        Returns None for unlimited capacity (capacity=0).
+        """
+        if self.capacity == 0:
+            return None  # Unlimited capacity
+        return max(0, self.capacity - self.subscription_count)
 
 
 class SubscriptionStatus(models.TextChoices):

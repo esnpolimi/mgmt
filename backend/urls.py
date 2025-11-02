@@ -7,6 +7,7 @@ urlpatterns = [
     path("backend/", include('profiles.urls')),
     path("backend/", include('treasury.urls')),
     path("backend/", include('events.urls')),
+    path("backend/content/", include('content.urls')),
     path('openid/', include('oidc_provider.urls', namespace='oidc_provider')),
     # This gives us endpoints like:
     #   https://mgmt.esnpolimi.it/openid/authorize/
