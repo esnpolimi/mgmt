@@ -1368,6 +1368,23 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Grid>
                         </Grid>
                     </Box>
+                    <TextField
+                        label={eventNames.form_note}
+                        value={localData.form_note || ''}
+                        onChange={e => {
+                            const value = e.target.value;
+                            setLocalData({...localData, form_note: value});
+                            dataRef.current.form_note = value;
+                        }}
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        sx={{mt: 2}}
+                        placeholder="Messaggio di benvenuto o istruzioni per i partecipanti"
+                    />
+                    <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
+                        Questa nota sarà mostrata sotto il titolo del form pubblico.
+                    </Typography>
                     <FieldSection
                         title={"Campi form"}
                         description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste."}
@@ -1411,6 +1428,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         profile_fields: [],
         fields: [],
         enable_form: false,
+        form_note: '',
         form_programmed_open_time: dayjs()
     })
 
@@ -1432,6 +1450,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 profile_fields: Array.isArray(event.profile_fields) ? event.profile_fields : ['name', 'surname'],
                 fields: Array.isArray(event.fields) ? event.fields : [],
                 enable_form: Boolean(event.enable_form),
+                form_note: typeof event.form_note === 'string' ? event.form_note : '',
                 organizers: Array.isArray(event.organizers)
                     ? event.organizers.map(o => ({
                         profile: o.profile,
@@ -1501,6 +1520,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             fields: rest.fields ?? [],
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,
+            form_note: typeof rest.form_note === 'string' ? rest.form_note : '',
             form_programmed_open_time: rest.enable_form ? (rest.form_programmed_open_time || null) : null,
             organizers: (rest.organizers || []).map(o => ({
                 profile: o.profile,

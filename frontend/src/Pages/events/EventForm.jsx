@@ -46,6 +46,7 @@ export default function EventForm() {
     const userEmail = location.state?.email || ""; // email passed from login
     const profileEsncardNumber = location.state?.esncardNumber || ""; // ESNcard from profile if available
     const formFields = eventData.form_fields || [];
+    const formNote = eventData.form_note || "";
 
     // Redirect if missing essentials
     useEffect(() => {
@@ -228,6 +229,16 @@ export default function EventForm() {
                 <Typography variant="h4" gutterBottom align="center" component="div">
                     <i>{eventData.name}</i>
                 </Typography>
+                {formNote && (
+                    <Paper elevation={3} style={{ padding: '20px', marginBottom: '25px', backgroundColor: '#fffbe6', border: '1px solid #ffe58f' }}>
+                      <Typography variant="h6" style={{ color: '#ad8b00', fontWeight: 'bold' }}>
+                        Notes for participants:
+                      </Typography>
+                      <Typography variant="body1" style={{ marginTop: '10px', whiteSpace: 'pre-line' }}>
+                        {formNote}
+                      </Typography>
+                    </Paper>
+                )}
                 <Alert severity="info" sx={{mb: 2}}>
                     {eventData.allow_online_payment
                         ? "Reminder: Your position in Main/Waiting List will be assigned when your online payment succeeds. Earlier payment = higher priority."
