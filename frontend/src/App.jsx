@@ -23,6 +23,7 @@ import TransactionsList from "./Pages/treasury/TransactionsList.jsx";
 import ReimbursementRequestsList from "./Pages/treasury/ReimbursementRequestsList.jsx";
 import Profile from "./Pages/profiles/Profile.jsx";
 import UrlSanitizer from "./UrlSanitizer";
+import ContentManager from "./Pages/ContentManager.jsx";
 
 function App() {
     return (
@@ -51,6 +52,7 @@ function App() {
                         <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                         <Route path='/treasury/transactions_list/:id' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                         <Route path='/treasury/reimbursement_requests_list' element={<ProtectedRoute><ReimbursementRequestsList/></ProtectedRoute>}/>
+                        <Route path='/content-manager' element={<ProtectedRoute requiredPermission="change_account"><ContentManager/></ProtectedRoute>}/>
                     </Routes>
                 </Router>
             </SidebarProvider>

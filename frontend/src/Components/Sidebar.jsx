@@ -11,6 +11,7 @@ import {
     BabyChangingStation as BabyChangingStationIcon,
     ExpandLess,
     ExpandMore,
+    Edit as EditIcon,
 } from "@mui/icons-material";
 // import HomeRepairServiceIcon from '@mui/icons-material/HomeRepairService';
 import LogoutButton from './LogoutButton';
@@ -27,10 +28,15 @@ export default function Sidebar() {
         return user?.permissions?.includes(permission) || false;
     };
 
+    const hasGroup = (group) => {
+        return user?.groups?.includes(group) || false;
+    };
+
     const menuItems = [
         {text: "Home", icon: <HomeIcon/>, path: "/"},
         {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury", requiredPermission: "change_account"},
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
+        {text: "Gestione Contenuti", icon: <EditIcon/>, path: "/content-manager", requiredPermission: "change_account"},
         {
             text: "Profili",
             icon: <PersonIcon/>,
@@ -45,7 +51,11 @@ export default function Sidebar() {
             children: [
             ],
         },*/
-    ].filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
+    ].filter(item => {
+        if (item.requiredPermission && !hasPermission(item.requiredPermission)) return false;
+        if (item.requiredGroup && !hasGroup(item.requiredGroup)) return false;
+        return true;
+    });
 
     const handleProfileOpen = useCallback(() => {
         navigate(`/profile/${user.profile.id.toString()}`);

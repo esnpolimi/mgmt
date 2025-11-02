@@ -26,7 +26,7 @@ import {
 import {DatePicker, DateTimePicker, LocalizationProvider} from '@mui/x-date-pickers';
 import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon} from '@mui/icons-material';
+import {Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon, ArrowUpward as ArrowUpwardIcon, ArrowDownward as ArrowDownwardIcon, ContentCopy as CopyIcon} from '@mui/icons-material';
 import {defaultErrorHandler, fetchCustom} from "../../api/api";
 import {style} from '../../utils/sharedStyles'
 import CustomEditor from '../CustomEditor';
@@ -36,6 +36,7 @@ import Popup from "../Popup";
 import ConfirmDialog from "../ConfirmDialog";
 import StatusBanner from "../StatusBanner";
 import ProfileSearch from '../ProfileSearch';
+import SharedListsSelector from './SharedListsSelector';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 import {useAuth} from "../../Context/AuthContext";
 
@@ -466,6 +467,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const Lists = function Lists({dataRef, isEdit}) {
 
         const [localData, setLocalData] = useState(dataRef.current);
+        const [showSharedListsDialog, setShowSharedListsDialog] = useState(false);
         //const [localErrors] = useState(errorsRef.current);
 
         /* Helpers */
@@ -481,6 +483,30 @@ export default function EventModal({open, event, isEdit, onClose}) {
             dataRef.current = {
                 ...dataRef.current,
                 lists: [...dataRef.current.lists, {id: '', name: '', capacity: ''}],
+            };
+        };
+
+        const handleUseSharedLists = (eventId, eventName, lists) => {
+            // Replace current lists with selected event's lists
+            // Note: lists will be automatically shared via Many-to-Many after save
+            const newLists = lists.map(list => ({
+                id: list.id,  // Keep the ID so they link to existing lists
+                name: list.name,
+                capacity: list.capacity,
+                is_main_list: list.is_main_list || false,
+                is_waiting_list: list.is_waiting_list || false,
+            }));
+
+            // Update local state
+            setLocalData({
+                ...localData,
+                lists: newLists,
+            });
+
+            // Update the ref as well
+            dataRef.current = {
+                ...dataRef.current,
+                lists: newLists,
             };
         };
 
@@ -561,7 +587,24 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
                     <Typography variant="h6">Liste</Typography>
                     <IconButton title="Aggiungi Lista" onClick={handleAddList} sx={{ml: -2}}><AddIcon/></IconButton>
+                    {!isEdit && (
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<CopyIcon />}
+                            onClick={() => setShowSharedListsDialog(true)}
+                            sx={{ ml: 1 }}
+                        >
+                            Usa Liste Esistenti
+                        </Button>
+                    )}
                 </Grid>
+
+                <SharedListsSelector
+                    open={showSharedListsDialog}
+                    onClose={() => setShowSharedListsDialog(false)}
+                    onSelectEvent={handleUseSharedLists}
+                />
 
                 {localData.lists.map((list, index) => {
                     const isFormList = isEdit && list.name === 'Form List';
@@ -732,6 +775,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             {value: 'n', label: 'Numero'},
             {value: 'c', label: 'Scelta Singola'},
             {value: 'm', label: 'Scelta Multipla'},
+            {value: 's', label: 'Menu a Tendina'},
             {value: 'b', label: 'Sì/No'},
             {value: 'd', label: 'Data'},
             {value: 'e', label: 'ESNcard'},
@@ -739,7 +783,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             {value: 'l', label: 'File Upload'},
         ];
 
-        const needsChoices = ['c', 'm'].includes(field.type);
+        const needsChoices = ['c', 'm', 's'].includes(field.type);
         const isFormField = field.field_type === 'form';
 
         return (
@@ -1377,6 +1421,23 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Grid>
                         </Grid>
                     </Box>
+                    <TextField
+                        label={eventNames.form_note}
+                        value={localData.form_note || ''}
+                        onChange={e => {
+                            const value = e.target.value;
+                            setLocalData({...localData, form_note: value});
+                            dataRef.current.form_note = value;
+                        }}
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        sx={{mt: 2}}
+                        placeholder="Messaggio di benvenuto o istruzioni per i partecipanti"
+                    />
+                    <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
+                        Questa nota sarà mostrata sotto il titolo del form pubblico.
+                    </Typography>
                     <FieldSection
                         title={"Campi form"}
                         description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste."}
@@ -1421,6 +1482,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         profile_fields: [],
         fields: [],
         enable_form: false,
+        form_note: '',
         form_programmed_open_time: dayjs(),
     })
 
@@ -1442,6 +1504,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 profile_fields: Array.isArray(event.profile_fields) ? event.profile_fields : ['name', 'surname'],
                 fields: Array.isArray(event.fields) ? event.fields : [],
                 enable_form: Boolean(event.enable_form),
+                form_note: typeof event.form_note === 'string' ? event.form_note : '',
                 organizers: Array.isArray(event.organizers)
                     ? event.organizers.map(o => ({
                         profile: o.profile,
@@ -1464,7 +1527,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             dataRef.current = {
                 ...dataRef.current,
                 organizers: [],
-                profile_fields: ['name', 'surname', 'email'],
+                profile_fields: ['name', 'surname', 'email', 'latest_esncard','whatsapp_number'],
                 fields: [
                     {field_type: 'form', name: 'Vegetarian?', type: 'b', required: true}
                 ],
@@ -1512,6 +1575,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             fields: rest.fields ?? [],
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,
+            form_note: typeof rest.form_note === 'string' ? rest.form_note : '',
             form_programmed_open_time: rest.enable_form ? (rest.form_programmed_open_time || null) : null,
             organizers: (rest.organizers || []).map(o => ({
                 profile: o.profile,
@@ -1534,7 +1598,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const normalizeFieldsForValidation = (arr) => {
         return arr.map(f => {
             const name = (f.name || '').trim();
-            if (['c', 'm'].includes(f.type)) {
+            if (['c', 'm', 's'].includes(f.type)) {
                 const raw = Array.isArray(f.choices) ? f.choices : [];
                 const cleanedChoices = raw.map(c => (c || '').trim()).filter(Boolean);
                 return {...f, name, choices: cleanedChoices};
@@ -1558,7 +1622,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 errorsRef.current.form = `Tutti i campi devono avere un nome (manca il nome al campo #${i + 1}).`
                 return false;
             }
-            if (['c', 'm'].includes(field.type)) {
+            if (['c', 'm', 's'].includes(field.type)) {
                 if (!Array.isArray(field.choices) || field.choices.length === 0) {
 
                     errorsRef.current.form = `Il campo "${field.name}" deve avere almeno un'opzione valida.`

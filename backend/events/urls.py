@@ -47,4 +47,12 @@ urlpatterns = [
 
     # Endpoint to edit form or additional fields data
     path('subscription/<str:pk>/edit_formfields/', views.subscription_edit_formfields),
+
+    # ===== Many-to-Many Shared Lists Endpoints =====
+    # Endpoint to link lists from one event to another
+    path('link-lists/', views.link_event_to_lists),
+
+    # Endpoint to get events available for sharing lists
+    path('available-for-sharing/', views.available_events_for_sharing),
+
 ]
