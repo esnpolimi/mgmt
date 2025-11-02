@@ -76,12 +76,24 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Step 1: Manually remove the old ForeignKey field 'event' with SQL
-        migrations.RunPython(
-            remove_event_fk_manually,
-            add_event_fk_back
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunPython(
+                    remove_event_fk_manually,
+                    add_event_fk_back,
+                ),
+            ],
+            state_operations=[
+                migrations.RemoveField(
+                    model_name='eventlist',
+                    name='event',
+                ),
+                migrations.AlterUniqueTogether(
+                    name='eventlist',
+                    unique_together=set(),
+                ),
+            ],
         ),
-        
         # Step 2: Add the new ManyToManyField 'events'
         migrations.AddField(
             model_name='eventlist',
