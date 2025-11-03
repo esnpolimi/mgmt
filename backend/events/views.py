@@ -653,15 +653,28 @@ def move_subscriptions(request):
         # Extract data from the request
         subscription_ids = request.data.get('subscriptionIds', [])
         target_list_id = request.data.get('targetListId')
+        target_event_id = request.data.get('targetEventId') or request.data.get('eventId')
 
         if not subscription_ids or not target_list_id:
             return Response({'error': "ID iscrizioni o ID lista di destinazione mancanti"}, status=400)
+
+        if not target_event_id:
+            return Response({'error': "ID evento di destinazione mancante"}, status=400)
 
         # Fetch the target list and validate its existence
         try:
             target_list = EventList.objects.get(id=target_list_id)
         except EventList.DoesNotExist:
             return Response({'error': "Lista di destinazione inesistente"}, status=400)
+
+        try:
+            target_event = Event.objects.get(id=target_event_id)
+        except Event.DoesNotExist:
+            return Response({'error': "Evento di destinazione inesistente"}, status=400)
+
+        # Ensure the target list belongs to the target event (Many-to-Many aware)
+        if not target_list.events.filter(id=target_event.id).exists():
+            return Response({'error': "La lista selezionata non appartiene all'evento indicato"}, status=400)
 
         # Check if moving the subscriptions would exceed the target list's capacity
         current_count = Subscription.objects.filter(list=target_list).count()
@@ -671,15 +684,61 @@ def move_subscriptions(request):
                 status=400)
 
         # Fetch the subscriptions to be moved
-        subscriptions = Subscription.objects.filter(id__in=subscription_ids)
+        subscriptions = (Subscription.objects
+                                  .select_related('profile', 'event')
+                                  .filter(id__in=subscription_ids))
+
+        if subscriptions.count() != len(subscription_ids):
+            return Response({'error': "Alcune iscrizioni selezionate non esistono più"}, status=400)
 
         # Update the list for each subscription
         with transaction.atomic():
             for subscription in subscriptions:
+                # Ensure unique constraint won't be violated when switching event
+                if subscription.profile_id and Subscription.objects.filter(
+                        profile_id=subscription.profile_id,
+                        event=target_event
+                ).exclude(pk=subscription.pk).exists():
+                    raise ValidationError(
+                        f"{subscription.profile} è già iscritto all'evento {target_event.name}")
+
+                if subscription.external_name and Subscription.objects.filter(
+                        external_name=subscription.external_name,
+                        event=target_event
+                ).exclude(pk=subscription.pk).exists():
+                    raise ValidationError(
+                        f"{subscription.external_name} è già registrato all'evento {target_event.name}")
+
                 subscription.list = target_list
-                subscription.save()
+                subscription.event = target_event
+                subscription.save(update_fields=['list', 'event'])
+
+                # Re-sync payment transactions to reflect the new event economics
+                quota_tx = Transaction.objects.filter(
+                    subscription=subscription,
+                    type=Transaction.TransactionType.SUBSCRIPTION
+                ).order_by('-id').first()
+                cauzione_tx = Transaction.objects.filter(
+                    subscription=subscription,
+                    type=Transaction.TransactionType.CAUZIONE
+                ).order_by('-id').first()
+
+                quota_status = 'paid' if quota_tx else 'pending'
+                cauzione_status = 'paid' if cauzione_tx else 'pending'
+                account_id = quota_tx.account_id if quota_tx else (cauzione_tx.account_id if cauzione_tx else None)
+
+                _handle_payment_status(
+                    subscription=subscription,
+                    account_id=account_id,
+                    quota_status=quota_status,
+                    deposit_status=cauzione_status,
+                    executor=request.user,
+                    allow_delete=False
+                )
 
         return Response({'message': "Iscrizioni spostate con successo"}, status=200)
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=400)
     except Exception as e:
         logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
         sentry_sdk.capture_exception(e)
