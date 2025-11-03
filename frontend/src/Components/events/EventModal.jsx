@@ -536,8 +536,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Typography variant="h6">Liste</Typography>
                     <IconButton title="Aggiungi Lista" onClick={handleAddList} sx={{ml: -2}}><AddIcon/></IconButton>
                     {!isEdit && (
-                        <Button 
-                            variant="outlined" 
+                        <Button
+                            variant="outlined"
                             size="small"
                             startIcon={<CopyIcon />}
                             onClick={() => setShowSharedListsDialog(true)}
@@ -1429,7 +1429,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         fields: [],
         enable_form: false,
         form_note: '',
-        form_programmed_open_time: dayjs()
+        form_programmed_open_time: dayjs(),
     })
 
     /* State variables*/

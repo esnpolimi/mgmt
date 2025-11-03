@@ -1465,6 +1465,125 @@ def sumup_webhook(request):
         return Response({"status": "error", "detail": str(e)}, status=200)
 
 
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def subscription_edit_formfields(request, pk):
+    """
+    Edit form fields or additional data of a subscription.
+    Expects JSON:
+      {
+        "form_data": {...},          # optional, partial update of form fields
+        "additional_data": {...}     # optional, partial update of additional data
+      }
+    """
+    if not get_action_permissions(request, 'subscription_detail_PATCH'):
+        return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+    try:
+        sub = Subscription.objects.select_related('event').get(pk=pk)
+    except Subscription.DoesNotExist:
+        return Response({"error": "Subscription not found"}, status=404)
+
+    payload = request.data or {}
+    # Accept JSON strings (from multipart or mis-sent payloads)
+    raw_form = payload.get("form_data", {}) or {}
+    raw_add = payload.get("additional_data", {}) or {}
+
+    if isinstance(raw_form, str):
+        try:
+            raw_form = json.loads(raw_form) or {}
+        except Exception:
+            raw_form = {}
+    if isinstance(raw_add, str):
+        try:
+            raw_add = json.loads(raw_add) or {}
+        except Exception:
+            raw_add = {}
+
+    if not isinstance(raw_form, dict) and not isinstance(raw_add, dict):
+        return Response({"error": "No valid data to update"}, status=400)
+
+    event = sub.event
+    existing_form = sub.form_data or {}
+    existing_add = sub.additional_data or {}
+
+    # Index fields by name per field_type
+    fields = event.fields or []
+    form_fields = {f.get('name'): f for f in fields if f.get('field_type') == 'form'}
+    add_fields = {f.get('name'): f for f in fields if f.get('field_type') == 'additional'}
+
+    def coerce_value(ftype, v):
+        if ftype == 'b':
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, str):
+                s = v.strip().lower()
+                if s in ('true', '1', 'yes', 'y', 'on'):
+                    return True
+                if s in ('false', '0', 'no', 'n', 'off', ''):
+                    return False
+            return bool(v)
+        if ftype == 'm':
+            return v if isinstance(v, list) else ([] if v in (None, '', False) else [v])
+        # keep numbers/strings as-is; validator will enforce
+        return v if v is not None else ''
+
+    # Build merged dicts with minimal coercion on changed keys
+    merged_form = dict(existing_form)
+    for k, v in (raw_form.items() if isinstance(raw_form, dict) else []):
+        fdef = form_fields.get(k) or {}
+        merged_form[k] = coerce_value(fdef.get('type'), v)
+
+    merged_add = dict(existing_add)
+    for k, v in (raw_add.items() if isinstance(raw_add, dict) else []):
+        fdef = add_fields.get(k) or {}
+        merged_add[k] = coerce_value(fdef.get('type'), v)
+
+    # Validate only event-declared fields (exclude backend-only flags from validation)
+    validatable_form = {k: merged_form[k] for k in merged_form.keys() if k in form_fields}
+    validatable_add = {k: merged_add[k] for k in merged_add.keys() if k in add_fields}
+
+    form_errors = validate_field_data(fields, validatable_form, 'form') or {}
+    add_errors = validate_field_data(fields, validatable_add, 'additional') or {}
+
+    if form_errors or add_errors:
+        combined = []
+        def push(err):
+            if not err:
+                return
+            if isinstance(err, list):
+                combined.extend(err)
+            elif isinstance(err, dict):
+                for v in err.values():
+                    if isinstance(v, list):
+                        combined.extend(v)
+                    else:
+                        combined.append(str(v))
+            else:
+                combined.append(str(err))
+        push(form_errors)
+        push(add_errors)
+        return Response({"error": "Validation error", "fields": combined}, status=400)
+
+    # Persist only the parts that were provided (keep backend-only keys intact)
+    to_update = []
+    if isinstance(raw_form, dict) and raw_form:
+        sub.form_data = merged_form
+        to_update.append('form_data')
+    if isinstance(raw_add, dict) and raw_add:
+        sub.additional_data = merged_add
+        to_update.append('additional_data')
+
+    if not to_update:
+        return Response({"error": "No changes provided"}, status=400)
+
+    sub.save(update_fields=to_update)
+
+    return Response({
+        "form_data": sub.form_data if 'form_data' in to_update else existing_form,
+        "additional_data": sub.additional_data if 'additional_data' in to_update else existing_add
+    }, status=200)
+
+
 # ============================================================================
 # Many-to-Many Shared Lists Endpoints
 # ============================================================================
@@ -1474,15 +1593,15 @@ def sumup_webhook(request):
 def link_event_to_lists(request):
     """
     Link an event to all lists from another event (Many-to-Many).
-    
+
     POST /api/events/link-lists/
-    
+
     Body:
     {
         "source_event_id": 5,  # Event to copy lists from
         "target_event_id": 8   # Event to add lists to
     }
-    
+
     Returns:
     {
         "message": "Successfully linked 3 lists from Event A to Event B",
@@ -1494,12 +1613,12 @@ def link_event_to_lists(request):
     """
     source_id = request.data.get('source_event_id')
     target_id = request.data.get('target_event_id')
-    
+
     if not source_id or not target_id:
         return Response({
             'error': 'Both source_event_id and target_event_id are required'
         }, status=400)
-    
+
     try:
         source_event = Event.objects.get(id=source_id)
         target_event = Event.objects.get(id=target_id)
@@ -1507,15 +1626,15 @@ def link_event_to_lists(request):
         return Response({
             'error': 'One or both events not found'
         }, status=404)
-    
+
     # Get all lists from source event
     source_lists = source_event.lists.all()
-    
+
     if not source_lists.exists():
         return Response({
             'error': f'Source event "{source_event.name}" has no lists to share'
         }, status=400)
-    
+
     # Link all source lists to target event
     linked_lists = []
     for event_list in source_lists:
@@ -1527,7 +1646,7 @@ def link_event_to_lists(request):
             'capacity': event_list.capacity,
             'available_capacity': event_list.available_capacity
         })
-    
+
     return Response({
         'message': f'Successfully linked {len(linked_lists)} lists from "{source_event.name}" to "{target_event.name}"',
         'linked_lists': linked_lists
@@ -1539,9 +1658,9 @@ def link_event_to_lists(request):
 def available_events_for_sharing(request):
     """
     Get list of events that have lists available for sharing.
-    
+
     GET /api/events/available-for-sharing/
-    
+
     Returns:
     [
         {
@@ -1558,7 +1677,7 @@ def available_events_for_sharing(request):
     events_with_lists = Event.objects.prefetch_related('lists').annotate(
         lists_count=Count('lists')
     ).filter(lists_count__gt=0).order_by('-date')
-    
+
     result = []
     for event in events_with_lists:
         lists_data = []
@@ -1572,7 +1691,7 @@ def available_events_for_sharing(request):
                 'is_main_list': event_list.is_main_list,
                 'is_waiting_list': event_list.is_waiting_list
             })
-        
+
         result.append({
             'id': event.id,
             'name': event.name,
@@ -1580,5 +1699,5 @@ def available_events_for_sharing(request):
             'lists_count': len(lists_data),
             'lists': lists_data
         })
-    
+
     return Response(result, status=200)
