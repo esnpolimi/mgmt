@@ -121,6 +121,14 @@ export default memo(function EventListAccordions({
                 const key = `${field.field_type || 'form'}::${field.name}`;
                 if (!fieldMap.has(key)) fieldMap.set(key, field);
             });
+            const technicalAdditionalFields = new Set([
+                'subscription_confirmation_email_sent',
+                'payment_confirmation_email_sent',
+                'subscription_confirmation_email_sent_at',
+                'payment_confirmation_email_sent_at',
+                'form_email'
+            ]);
+
             listSubscriptions.forEach(sub => {
                 (sub?.event_fields || []).forEach(field => {
                     if (!field || !field.name) return;
@@ -130,6 +138,9 @@ export default memo(function EventListAccordions({
                 const ensureField = (fieldType, name, value) => {
                     if (!name) return;
                     const safeType = fieldType || 'form';
+                    if (safeType === 'additional' && technicalAdditionalFields.has(name)) {
+                        return;
+                    }
                     const key = `${safeType}::${name}`;
                     if (fieldMap.has(key)) return;
                     let inferredType = 't';
@@ -137,6 +148,9 @@ export default memo(function EventListAccordions({
                         inferredType = 'm';
                     } else if (typeof value === 'boolean') {
                         inferredType = 'b';
+                        if (safeType === 'additional' && /_confirmation/i.test(name)) {
+                            return;
+                        }
                     }
                     fieldMap.set(key, {
                         name,
