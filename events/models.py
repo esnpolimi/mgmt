@@ -46,7 +46,11 @@ unified_fields_schema = {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["t", "n", "c", "m", "s", "b", "d", "e", "p"]},
+<<<<<<<<< Temporary merge branch 1
+            "type": {"enum": ["t", "n", "c", "m", "b", "d", "e", "p", "l"]},
+=========
+            "type": {"enum": ["t", "n", "c", "m", "s", "b", "d", "e", "p", "l"]},
+>>>>>>>>> Temporary merge branch 2
             "field_type": {"enum": ["form", "additional"]},
             "choices": {
                 "type": "array",
@@ -259,7 +263,7 @@ class EventListEvent(models.Model):
 class EventList(BaseEntity):
     """
     Dynamic lists for events, with customizable names and capacities.
-    
+
     Many-to-Many Implementation:
     - A single EventList can be shared across multiple Events
     - Changes to name/capacity are synchronized across all events
@@ -273,7 +277,7 @@ class EventList(BaseEntity):
         through='EventListEvent',
         help_text='Eventi che utilizzano questa lista'
     )
-    
+
     name = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField(default=0)  # 0 means unlimited
 
@@ -315,7 +319,7 @@ class EventList(BaseEntity):
         This counts towards the shared capacity pool.
         """
         return self.subscriptions.count()
-    
+
     @property
     def available_capacity(self):
         """
