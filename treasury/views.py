@@ -237,13 +237,14 @@ def transaction_add(request):
                 executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
                 receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
                 subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
+                local_dt = timezone.localtime(tx.created_at)
                 body = (
                     f"Tipo: {transaction_type}\n"
                     f"Importo: {tx.amount} EUR\n"
                     f"Cassa: {tx.account.name}\n"
                     f"Esecutore: {executor_name} ({executor_email})\n"
                     f"Descrizione: {tx.description}\n"
-                    f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Data: {local_dt.strftime('%d/%m/%Y %H:%M')}\n"
                     f"Ricevuta: {receipt_info}\n"
                 )
                 send_mail(
@@ -477,12 +478,13 @@ def reimbursement_request_creation(request):
                 user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
                 receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
                 subject = f"Nuova richiesta di rimborso #{instance.id}"
+                local_dt = timezone.localtime(instance.created_at)
                 body = (
                     f"Richiedente: {user_name}\n"
                     f"Importo: {instance.amount} EUR\n"
                     f"Metodo pagamento: {instance.payment}\n"
                     f"Descrizione: {instance.description}\n"
-                    f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Data richiesta: {local_dt.strftime('%d/%m/%Y %H:%M')}\n"
                     f"Ricevuta: {receipt_info}\n"
                 )
                 send_mail(
