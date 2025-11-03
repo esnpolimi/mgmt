@@ -69,7 +69,27 @@ export default function Home() {
     const fetchDynamicContent = () => {
         fetchCustom("GET", "/content/sections/active_sections/", {
             onSuccess: (data) => {
-                setDynamicSections(data);
+                const sections = Array.isArray(data) ? data : [];
+                const reimbursementLink = {
+                    id: "reimbursement-request-link",
+                    name: "Richiedi Rimborso",
+                    description: "Compila la richiesta di rimborso.",
+                    url: "internal:reimbursement",
+                    color: "#1976d2",
+                    order: -1,
+                };
+                const augmentedSections = sections.map((section) => {
+                    if (section.title !== "LINK_UTILI") return section;
+                    const existing = (section.links || []).some((link) => (
+                        link.url === reimbursementLink.url || link.name === reimbursementLink.name
+                    ));
+                    if (existing) return section;
+                    return {
+                        ...section,
+                        links: [reimbursementLink, ...(section.links || [])],
+                    };
+                });
+                setDynamicSections(augmentedSections);
             },
             onError: (responseOrError) => {
                 console.error("Errore caricamento contenuti dinamici", responseOrError);
@@ -116,6 +136,11 @@ export default function Home() {
         setSelectedAccount(account);
         setPopup(null); // Clear any existing popup when opening the modal
         setTransactionModalOpen(true);
+    };
+
+    const openReimbursementModal = () => {
+        setPopup(null);
+        setRimborsoModalOpen(true);
     };
 
     const handleReimbursementRequestModalClose = (success) => {
@@ -245,34 +270,55 @@ export default function Home() {
                                 {section.title_display}
                             </Typography>
                             <Box sx={{display: "flex", flexDirection: "column", gap: 1, width: "100%"}}>
-                                {section.links.map((link) => (
-                                    <Box key={link.id}
-                                         sx={{
-                                             mb: 0.5,
-                                             pl: 2,
-                                             borderLeft: `5px solid ${link.color}`,
-                                             background: "#f7fafd",
-                                             borderRadius: 1,
-                                             py: 0.5,
-                                         }}>
-                                        <a href={link.url}
-                                           style={{
-                                               textDecoration: "none",
-                                               color: link.color,
-                                               fontWeight: 600,
-                                               fontSize: "1rem",
-                                           }}
-                                           target="_blank"
-                                           rel="noopener noreferrer">
-                                            {link.name}
-                                        </a>
-                                        {link.description && (
-                                            <Typography variant="body2" sx={{color: "#607d8b", mt: 0.5}}>
-                                                {link.description}
-                                            </Typography>
-                                        )}
-                                    </Box>
-                                ))}
+                                {section.links.map((link) => {
+                                    const key = link.id || link.url || link.name;
+                                    const isInternalReimbursement = link.url === "internal:reimbursement";
+                                    const baseStyle = {
+                                        textDecoration: "none",
+                                        color: link.color || "#1976d2",
+                                        fontWeight: 600,
+                                        fontSize: "1rem",
+                                    };
+                                    return (
+                                        <Box key={key}
+                                             sx={{
+                                                 mb: 0.5,
+                                                 pl: 2,
+                                                 borderLeft: `5px solid ${link.color || "#1976d2"}`,
+                                                 background: "#f7fafd",
+                                                 borderRadius: 1,
+                                                 py: 0.5,
+                                             }}>
+                                            {isInternalReimbursement ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={openReimbursementModal}
+                                                    style={{
+                                                        ...baseStyle,
+                                                        background: "transparent",
+                                                        border: "none",
+                                                        cursor: "pointer",
+                                                        padding: 0,
+                                                    }}
+                                                >
+                                                    {link.name}
+                                                </button>
+                                            ) : (
+                                                <a href={link.url}
+                                                   style={baseStyle}
+                                                   target="_blank"
+                                                   rel="noopener noreferrer">
+                                                    {link.name}
+                                                </a>
+                                            )}
+                                            {link.description && (
+                                                <Typography variant="body2" sx={{color: "#607d8b", mt: 0.5}}>
+                                                    {link.description}
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                    );
+                                })}
                             </Box>
                         </Paper>
                     ))}
