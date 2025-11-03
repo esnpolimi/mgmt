@@ -813,7 +813,7 @@ export default memo(function EventListAccordions({
                                         Rimborsa Cauzioni
                                     </Button>
                                 )}
-                                {hasQuota && selectedCount === 0 && isBoardMember && (
+                                {hasQuota && selectedCount === 0 && (
                                     <Button variant="contained"
                                             color="info"
                                             onClick={e => {
