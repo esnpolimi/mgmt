@@ -25,6 +25,7 @@ export default function MoveToListModal({open, onClose, selectedRows, event, lis
             body: {
                 subscriptionIds: selectedRows.map(row => row.original.id),
                 targetListId: selectedListId,
+                targetEventId: event.id,
             },
             onSuccess: () => onClose(true),
             onError: (err) => defaultErrorHandler(err, setPopup),
