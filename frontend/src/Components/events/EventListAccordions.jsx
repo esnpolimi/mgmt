@@ -88,6 +88,7 @@ export default memo(function EventListAccordions({
     const listConfigs = useMemo(() => {
         if (!data?.lists) return [];
 
+        const baseProfileFields = Array.isArray(data.profile_fields) ? data.profile_fields : [];
         const getProfileFieldValue = (sub, field) => {
             // If internal profile, use live profile value
             if (sub?.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
@@ -103,17 +104,58 @@ export default memo(function EventListAccordions({
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
 
+            const profileFieldSet = new Set(baseProfileFields);
+            listSubscriptions.forEach(sub => {
+                (sub?.event_profile_fields || []).forEach(field => {
+                    if (field) profileFieldSet.add(field);
+                });
+            });
+            const orderedFromCanonical = orderProfileFields(Array.from(profileFieldSet));
+            const extras = Array.from(profileFieldSet).filter(f => !orderedFromCanonical.includes(f));
+            const mergedProfileFields = [...orderedFromCanonical, ...extras];
+
+            const baseFields = Array.isArray(data.fields) ? data.fields : [];
+            const fieldMap = new Map();
+            baseFields.forEach(field => {
+                if (!field || !field.name) return;
+                const key = `${field.field_type || 'form'}::${field.name}`;
+                if (!fieldMap.has(key)) fieldMap.set(key, field);
+            });
+            listSubscriptions.forEach(sub => {
+                (sub?.event_fields || []).forEach(field => {
+                    if (!field || !field.name) return;
+                    const key = `${field.field_type || 'form'}::${field.name}`;
+                    if (!fieldMap.has(key)) fieldMap.set(key, field);
+                });
+                const ensureField = (fieldType, name, value) => {
+                    if (!name) return;
+                    const safeType = fieldType || 'form';
+                    const key = `${safeType}::${name}`;
+                    if (fieldMap.has(key)) return;
+                    let inferredType = 't';
+                    if (Array.isArray(value)) {
+                        inferredType = 'm';
+                    } else if (typeof value === 'boolean') {
+                        inferredType = 'b';
+                    }
+                    fieldMap.set(key, {
+                        name,
+                        type: inferredType,
+                        field_type: safeType,
+                    });
+                };
+                Object.entries(sub?.form_data || {}).forEach(([name, value]) => ensureField('form', name, value));
+                Object.entries(sub?.additional_data || {}).forEach(([name, value]) => ensureField('additional', name, value));
+            });
+            const mergedFields = Array.from(fieldMap.values());
+
             // --- Dynamic columns ---
             let dynamicColumns = [];
 
             // Profile fields (now blue headers, display-only, toggleable)
-            let orderedProfileFields = [];
-            if (Array.isArray(data.profile_fields)) {
-                orderedProfileFields = orderProfileFields(data.profile_fields);
-            }
             if (showProfileColumns) {
                 dynamicColumns = dynamicColumns.concat(
-                    orderedProfileFields.map(field => ({
+                    mergedProfileFields.map(field => ({
                         accessorKey: `profile_field_${field}`,
                         header: profileDisplayNames[field] || (field.charAt(0).toUpperCase() + field.slice(1)),
                         size: 50,
@@ -126,8 +168,8 @@ export default memo(function EventListAccordions({
             }
 
             // Split fields into form and additional
-            const formFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'form') : [];
-            const additionalFields = Array.isArray(data.fields) ? data.fields.filter(f => f.field_type === 'additional') : [];
+            const formFields = mergedFields.filter(f => (f.field_type || 'form') === 'form');
+            const additionalFields = mergedFields.filter(f => f.field_type === 'additional');
 
             // Form fields (still orange)
             let formFieldColumns = showFormColumns ? formFields.map((field, idx) => ({
