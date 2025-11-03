@@ -106,9 +106,6 @@ class EventsListSerializer(serializers.ModelSerializer):
     lists_capacity = serializers.SerializerMethodField()
     enable_form = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
-    notify_list = serializers.BooleanField(read_only=True)
-    visible_to_board_only = serializers.BooleanField(read_only=True)
-    reimbursements_by_organizers_only = serializers.BooleanField(read_only=True)
     form_note = serializers.CharField(read_only=True)
 
     class Meta:
