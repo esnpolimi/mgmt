@@ -639,6 +639,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     event_name = serializers.CharField(source='event.name', read_only=True)
     event_id = serializers.IntegerField(source='event.id', read_only=True)
     event_date = serializers.DateField(source='event.date', read_only=True)
+    event_profile_fields = serializers.SerializerMethodField()
+    event_fields = serializers.SerializerMethodField()
     external_name = serializers.CharField(read_only=True)
     is_external = serializers.SerializerMethodField()
     form_data = serializers.DictField(read_only=True)
@@ -654,6 +656,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'id', 'profile_id', 'profile_name', 'event', 'event_id', 'event_name', 'event_date',
             'list_id', 'list_name',
             'enable_refund', 'notes', 'created_by_form',
+            'event_profile_fields', 'event_fields',
             'account_id', 'account_name',
             'deposit_reimbursement_transaction_id',
             'quota_reimbursement_transaction_id',
@@ -691,6 +694,20 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     def get_account_name(obj):
         transaction = Transaction.objects.filter(subscription=obj.id).order_by('-id').first()
         return transaction.account.name if transaction else None
+
+    @staticmethod
+    def get_event_profile_fields(obj):
+        event = getattr(obj, 'event', None)
+        if not event:
+            return []
+        return list(event.profile_fields or [])
+
+    @staticmethod
+    def get_event_fields(obj):
+        event = getattr(obj, 'event', None)
+        if not event:
+            return []
+        return list(event.fields or [])
 
     @staticmethod
     def get_deposit_reimbursement_transaction_id(obj):
