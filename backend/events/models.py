@@ -46,11 +46,7 @@ unified_fields_schema = {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-<<<<<<<<< Temporary merge branch 1
-            "type": {"enum": ["t", "n", "c", "m", "b", "d", "e", "p", "l"]},
-=========
             "type": {"enum": ["t", "n", "c", "m", "s", "b", "d", "e", "p", "l"]},
->>>>>>>>> Temporary merge branch 2
             "field_type": {"enum": ["form", "additional"]},
             "choices": {
                 "type": "array",
