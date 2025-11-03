@@ -322,7 +322,7 @@ export default function Home() {
                             </Box>
                         </Paper>
                     ))}
-                    
+
                     {/* Sezione Statica: ISTRUZIONI RESPONSABILI UFFICIO */}
                     <Paper
                         elevation={2}
@@ -356,7 +356,7 @@ export default function Home() {
                                     fontWeight: 600,
                                     fontSize: "1rem",
                                 }}>
-                                    1. Contare i soldi in cassa con il foglio contasoldi dell'ufficio giusto
+                                    1. Contare i soldi in cassa con il foglio contasoldi dell&aposufficio giusto
                                 </Typography>
                             </Box>
                             <Box sx={{

@@ -22,6 +22,7 @@ import ResetPassword from "./Pages/ResetPassword.jsx";
 import TransactionsList from "./Pages/treasury/TransactionsList.jsx";
 import ReimbursementRequestsList from "./Pages/treasury/ReimbursementRequestsList.jsx";
 import Profile from "./Pages/profiles/Profile.jsx";
+import UrlSanitizer from "./UrlSanitizer";
 import ContentManager from "./Pages/ContentManager.jsx";
 
 function App() {

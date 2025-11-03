@@ -46,6 +46,7 @@ export default function EventForm() {
     const userEmail = location.state?.email || ""; // email passed from login
     const profileEsncardNumber = location.state?.esncardNumber || ""; // ESNcard from profile if available
     const formFields = eventData.form_fields || [];
+    const linkFields = formFields.filter(f => f.type === 'l');
     const formNote = eventData.form_note || "";
 
     // Redirect if missing essentials
