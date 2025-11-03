@@ -785,17 +785,43 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
+    event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all(), required=False)
 
     class Meta:
         model = Subscription
-        fields = ['list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione', 'external_name',
-                  'form_data', 'additional_data']
+        fields = ['event', 'list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione',
+                  'external_name', 'form_data', 'additional_data']
 
     def validate(self, attrs):
-        self.account_id = attrs.get('account_id', self.instance and getattr(self.instance, 'account_id', None))
+        instance = self.instance
+
+        self.account_id = attrs.get('account_id', instance and getattr(instance, 'account_id', None))
         self.status_quota = attrs.pop('status_quota', 'pending')
         self.status_cauzione = attrs.pop('status_cauzione', 'pending')
         attrs.pop('account_id', None)
+
+        new_event = attrs.get('event', instance.event if instance else None)
+        new_list = attrs.get('list', instance.list if instance else None)
+
+        if new_list and new_event and not new_list.events.filter(id=new_event.id).exists():
+            raise serializers.ValidationError({
+                'list': "La lista selezionata non è collegata all'evento indicato."
+            })
+
+        profile = instance.profile if instance else attrs.get('profile')
+        external_name = attrs.get('external_name', instance.external_name if instance else None)
+
+        if instance:
+            qs = Subscription.objects.exclude(pk=instance.pk)
+            if profile and new_event and qs.filter(profile=profile, event=new_event).exists():
+                raise serializers.ValidationError({
+                    'event': "Questo profilo è già registrato per l'evento selezionato."
+                })
+            if external_name and new_event and qs.filter(external_name=external_name, event=new_event).exists():
+                raise serializers.ValidationError({
+                    'external_name': "Questo nominativo esterno è già registrato per l'evento selezionato."
+                })
+
         return attrs
 
     def update(self, instance, validated_data):
