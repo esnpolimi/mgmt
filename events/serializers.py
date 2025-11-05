@@ -168,9 +168,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
             'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
-            'notify_list',
-            'visible_to_board_only',
-            'reimbursements_by_organizers_only',
+            'notify_list', 'visible_to_board_only', 'reimbursements_by_organizers_only',
         ]
 
     def validate(self, attrs):
