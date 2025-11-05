@@ -151,6 +151,15 @@ class Event(BaseEntity):
     # Rendiconto Finanziario (REFA) state
     is_refa_done = models.BooleanField(default=False)
 
+    # Notify list members about event updates
+    notify_list = models.BooleanField(default=False)
+
+    # Event visible only to board members
+    visible_to_board_only = models.BooleanField(default=False)
+
+    # Only organizers can process reimbursements
+    reimbursements_by_organizers_only = models.BooleanField(default=False)
+
     # Profile fields columns (i.e. name, surname, email) to be shown in the event list tables
     profile_fields = models.JSONField(default=list, blank=True)
 

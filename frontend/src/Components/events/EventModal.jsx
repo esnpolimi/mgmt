@@ -259,6 +259,45 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             }
                         />
                     </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Notifica Lista assegnata nelle conferme via email"
+                            control={
+                                <Switch
+                                    checked={!!localData.notify_list}
+                                    onChange={handleInputChange}
+                                    name="notify_list"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Visibile solo ai Board Members"
+                            control={
+                                <Switch
+                                    checked={!!localData.visible_to_board_only}
+                                    onChange={handleInputChange}
+                                    name="visible_to_board_only"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
+                        <FormControlLabel
+                            label="Rimborsi limitati agli Organizzatori"
+                            control={
+                                <Switch
+                                    checked={!!localData.reimbursements_by_organizers_only}
+                                    onChange={handleInputChange}
+                                    name="reimbursements_by_organizers_only"
+                                    color="primary"
+                                />
+                            }
+                        />
+                    </Grid>
                 </Grid>
             </Box>
         );
@@ -1423,6 +1462,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
         is_allow_external: false,
         is_variable_fee: false,
         allow_online_payment: false,
+        notify_list: true,
+        visible_to_board_only: false,
+        reimbursements_by_organizers_only: false,
         organizers: [],
         lists: [{id: '', name: 'Main List', capacity: '', is_main_list: true}], // set default as Main List type
         profile_fields: [],
@@ -1517,6 +1559,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
             })),
             is_a_bando: !!rest.is_a_bando,
             is_allow_external: !!rest.is_allow_external,
+            notify_list: !!rest.notify_list,
+            visible_to_board_only: !!rest.visible_to_board_only,
+            reimbursements_by_organizers_only: !!rest.reimbursements_by_organizers_only,
             fields: rest.fields ?? [],
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,
