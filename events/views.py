@@ -580,6 +580,16 @@ def subscription_detail(request, pk):
                     account_id = (mutable_data.get('account_id')
                                   or mutable_data.get('account')
                                   or getattr(serializer, 'account_id', None))
+                    
+                    # If account_id is not provided, try to get it from existing transactions
+                    if not account_id:
+                        existing_tx = Transaction.objects.filter(
+                            subscription=sub,
+                            type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
+                        ).first()
+                        if existing_tx:
+                            account_id = existing_tx.account.id
+                    
                     status_quota = mutable_data.get('status_quota', 'pending')
                     status_cauzione = mutable_data.get('status_cauzione', 'pending')
                     _handle_payment_status(
