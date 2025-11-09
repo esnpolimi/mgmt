@@ -500,9 +500,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
         const handleListChange = (index, event) => {
             const {name, value} = event.target;
             const listObj = localData.lists[index];
-            // Prevent renaming (or changing type) of the special form list in edit mode
+            // Prevent renaming or changing capacity of the special form list in edit mode
             if (isEdit && listObj && listObj.name === 'Form List') {
-                if (name === 'name') return;
+                if (name === 'name' || name === 'capacity') return;
             }
 
             const updatedLists = localData.lists.map((list, i) =>
@@ -619,6 +619,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     onChange={(e) => handleListChange(index, e)}
                                     placeholder="Inserisci 0 se illimitata"
                                     required
+                                    disabled={isFormList}
                                     //error={localErrors.listItems[index]?.capacity}
                                     //helperText={localErrors.listItems[index]?.capacity ? "La capacità è obbligatoria" : ""}
                                 />

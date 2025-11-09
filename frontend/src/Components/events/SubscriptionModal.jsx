@@ -12,7 +12,13 @@ import {
     TextField,
     FormHelperText,
     CircularProgress,
-    Alert
+    Alert,
+    Checkbox,
+    FormControlLabel as MuiFormControlLabel,
+    FormLabel,
+    FormGroup,
+    Radio,
+    RadioGroup
 } from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -22,6 +28,13 @@ import Loader from "../Loader";
 import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
 import Popup from "../Popup";
+import {LocalizationProvider, DatePicker} from "@mui/x-date-pickers";
+import {AdapterDayjs} from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import countryCodes from "../../data/countryCodes.json";
+
+dayjs.extend(customParseFormat);
 
 export default function SubscriptionModal({
                                               open,
@@ -55,6 +68,10 @@ export default function SubscriptionModal({
     });
 
     const [profileHasEsncard, setProfileHasEsncard] = useState(null);
+
+    // Form data and additional data for event fields
+    const [formData, setFormData] = useState({});
+    const [additionalData, setAdditionalData] = useState({});
 
     // Reusable empty errors shape
     const emptyErrors = {
@@ -109,6 +126,9 @@ export default function SubscriptionModal({
                 external_name: subscription.external_name || '',
                 notes: subscription.notes || ''
             }));
+            // Load existing form_data and additional_data
+            setFormData(subscription.form_data || {});
+            setAdditionalData(subscription.additional_data || {});
         } else {
             if (profileId) {
                 setData(d => ({
@@ -124,6 +144,18 @@ export default function SubscriptionModal({
                     list_name: event.selectedList.name
                 }));
             }
+            // Initialize form data based on event fields
+            const initialFormData = {};
+            const initialAdditionalData = {};
+            (event.fields || []).forEach(field => {
+                if (field.field_type === 'form') {
+                    initialFormData[field.name] = field.type === 'm' ? [] : (field.type === 'b' ? null : '');
+                } else if (field.field_type === 'additional') {
+                    initialAdditionalData[field.name] = field.type === 'm' ? [] : (field.type === 'b' ? null : '');
+                }
+            });
+            setFormData(initialFormData);
+            setAdditionalData(initialAdditionalData);
         }
         setLoading(false);
         fetchAccounts();
@@ -247,7 +279,9 @@ export default function SubscriptionModal({
                 notes: data.notes,
                 status_quota: data.status_quota || 'pending',
                 status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
-                external_name: data.external_name || undefined
+                external_name: data.external_name || undefined,
+                form_data: formData,
+                additional_data: additionalData
             },
             onSuccess: (resp) => {
                 let baseMsg = (isEdit ? 'Modifica Iscrizione' : 'Iscrizione') + ' completata con successo!';
@@ -302,6 +336,244 @@ export default function SubscriptionModal({
 
     // Helper to check if either quota or cauzione is reimbursed
     const isReimbursed = data.status_quota === 'reimbursed' || data.status_cauzione === 'reimbursed';
+
+    // Handlers for form and additional fields
+    const handleFormFieldChange = (fieldName, value) => {
+        setFormData(prev => ({...prev, [fieldName]: value}));
+    };
+
+    const handleAdditionalFieldChange = (fieldName, value) => {
+        setAdditionalData(prev => ({...prev, [fieldName]: value}));
+    };
+
+    const handleCheckboxChange = (field, choice, isAdditional = false) => {
+        const setter = isAdditional ? setAdditionalData : setFormData;
+        const current = isAdditional ? additionalData : formData;
+        
+        setter(prev => {
+            const arr = prev[field] || [];
+            return {
+                ...prev,
+                [field]: arr.includes(choice)
+                    ? arr.filter(v => v !== choice)
+                    : [...arr, choice]
+            };
+        });
+    };
+
+    // Helper to parse phone (stored as single string)
+    const parsePhone = (val) => {
+        if (!val) return {prefix: '', number: ''};
+        const parts = val.trim().split(/\s+/);
+        if (parts[0].startsWith('+')) {
+            return {prefix: parts[0], number: parts.slice(1).join(' ')};
+        }
+        return {prefix: '', number: val};
+    };
+    
+    const setPhoneValue = (fieldName, prefix, number, isAdditional = false) => {
+        const combined = prefix ? (number ? `${prefix} ${number}` : prefix) : number;
+        if (isAdditional) {
+            handleAdditionalFieldChange(fieldName, combined);
+        } else {
+            handleFormFieldChange(fieldName, combined);
+        }
+    };
+
+    // Render a single field input
+    const renderFieldInput = (field, value, onChange, isAdditional = false) => {
+        const handleCheckbox = (choice) => handleCheckboxChange(field.name, choice, isAdditional);
+        
+        switch (field.type) {
+            case "t":
+                return (
+                    <TextField
+                        label={field.name}
+                        required={field.required}
+                        fullWidth
+                        margin="normal"
+                        value={value || ""}
+                        onChange={e => onChange(field.name, e.target.value)}
+                        disabled={isReimbursed}
+                    />
+                );
+            case "n":
+                return (
+                    <TextField
+                        label={field.name}
+                        required={field.required}
+                        fullWidth
+                        margin="normal"
+                        type="number"
+                        value={value || ""}
+                        onChange={e => onChange(field.name, e.target.value)}
+                        slotProps={{htmlInput: {step: "0.01"}}}
+                        disabled={isReimbursed}
+                    />
+                );
+            case "c":
+                return (
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                        <FormLabel>{field.name}</FormLabel>
+                        <RadioGroup
+                            value={value || ""}
+                            onChange={e => onChange(field.name, e.target.value)}
+                        >
+                            {field.choices?.map(choice => (
+                                <MuiFormControlLabel
+                                    key={choice}
+                                    value={choice}
+                                    control={<Radio/>}
+                                    label={choice}
+                                />
+                            ))}
+                        </RadioGroup>
+                    </FormControl>
+                );
+            case "s":
+                return (
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                        <InputLabel>{field.name}</InputLabel>
+                        <Select
+                            value={value || ""}
+                            onChange={e => onChange(field.name, e.target.value)}
+                            label={field.name}
+                        >
+                            {field.choices?.map(choice => (
+                                <MenuItem key={choice} value={choice}>
+                                    {choice}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                );
+            case "m":
+                return (
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                        <FormLabel>{field.name}</FormLabel>
+                        <FormGroup>
+                            {field.choices?.map(choice => (
+                                <MuiFormControlLabel
+                                    key={choice}
+                                    control={
+                                        <Checkbox
+                                            checked={(value || []).includes(choice)}
+                                            onChange={() => handleCheckbox(choice)}
+                                        />
+                                    }
+                                    label={choice}
+                                />
+                            ))}
+                        </FormGroup>
+                    </FormControl>
+                );
+            case "b":
+                return (
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                        <FormLabel>{field.name}</FormLabel>
+                        <RadioGroup
+                            row
+                            value={
+                                value === true
+                                    ? "yes"
+                                    : value === false
+                                        ? "no"
+                                        : ""
+                            }
+                            onChange={e => onChange(field.name, e.target.value === "yes")}
+                        >
+                            <MuiFormControlLabel value="yes" control={<Radio/>} label="Yes"/>
+                            <MuiFormControlLabel value="no" control={<Radio/>} label="No"/>
+                        </RadioGroup>
+                    </FormControl>
+                );
+            case "d":
+                return (
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale='en-gb'>
+                        <DatePicker
+                            label={field.name}
+                            format="DD-MM-YYYY"
+                            value={value ? dayjs(value, "DD-MM-YYYY") : null}
+                            onChange={val =>
+                                onChange(
+                                    field.name,
+                                    val && val.isValid() ? val.format('DD-MM-YYYY') : ''
+                                )
+                            }
+                            slotProps={{
+                                textField: {
+                                    fullWidth: true,
+                                    margin: "normal",
+                                    required: field.required
+                                }
+                            }}
+                            disabled={isReimbursed}
+                        />
+                    </LocalizationProvider>
+                );
+            case "e":
+                return (
+                    <TextField
+                        label={field.name}
+                        required={field.required}
+                        fullWidth
+                        margin="normal"
+                        value={value || ""}
+                        onChange={e => onChange(field.name, e.target.value)}
+                        disabled={isReimbursed}
+                    />
+                );
+            case "p": {
+                const {prefix, number} = parsePhone(value);
+                const dialEntries = [];
+                const seen = new Set();
+                countryCodes.forEach(c => {
+                    if (c.dial && !seen.has(c.dial)) {
+                        seen.add(c.dial);
+                        dialEntries.push(c);
+                    }
+                });
+                return (
+                    <Box sx={{mt: 2}}>
+                        <Typography variant="subtitle2" sx={{mb: 1}}>
+                            {field.name}{field.required && ' *'}
+                        </Typography>
+                        <Box sx={{display: 'flex', gap: 1}}>
+                            <TextField
+                                select
+                                label="Prefix"
+                                value={prefix}
+                                onChange={e => setPhoneValue(field.name, e.target.value, number, isAdditional)}
+                                sx={{width: 140}}
+                                required={field.required}
+                                disabled={isReimbursed}
+                            >
+                                {dialEntries.map(entry => (
+                                    <MenuItem key={entry.dial} value={entry.dial}>
+                                        {entry.dial}
+                                    </MenuItem>
+                                ))}
+                            </TextField>
+                            <TextField
+                                label="Number"
+                                value={number}
+                                onChange={e => setPhoneValue(field.name, prefix, e.target.value, isAdditional)}
+                                fullWidth
+                                required={field.required}
+                                disabled={isReimbursed}
+                            />
+                        </Box>
+                    </Box>
+                );
+            }
+            default:
+                return null;
+        }
+    };
+
+    // Filter fields by type
+    const formFields = (event.fields || []).filter(field => field.field_type === 'form');
+    const additionalFields = (event.fields || []).filter(field => field.field_type === 'additional');
 
     return (
         <Modal open={open}
@@ -524,6 +796,34 @@ export default function SubscriptionModal({
                             />
                         </Grid>
                     </Grid>
+
+                    {/* Form fields section - only if form is enabled */}
+                    {event.enable_form && formFields.length > 0 && (
+                        <Box sx={{mt: 3}}>
+                            <Typography variant="h6" gutterBottom>Risposte Form</Typography>
+                            <Grid container spacing={2}>
+                                {formFields.map((field, idx) => (
+                                    <Grid key={idx} size={{xs: 12}}>
+                                        {renderFieldInput(field, formData[field.name], handleFormFieldChange, false)}
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </Box>
+                    )}
+
+                    {/* Additional fields section - always shown if present */}
+                    {additionalFields.length > 0 && (
+                        <Box sx={{mt: 3}}>
+                            <Typography variant="h6" gutterBottom>Campi Aggiuntivi</Typography>
+                            <Grid container spacing={2}>
+                                {additionalFields.map((field, idx) => (
+                                    <Grid key={idx} size={{xs: 12}}>
+                                        {renderFieldInput(field, additionalData[field.name], handleAdditionalFieldChange, true)}
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </Box>
+                    )}
 
                     {/* Alert: profile without ESNcard when externals are not allowed */}
                     {!event.is_allow_external && data.profile_id && profileHasEsncard === false && (
