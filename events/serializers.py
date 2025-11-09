@@ -469,14 +469,14 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 else:
                     if list_name and list_name != 'Form List':
                     # New list; ignore attempts to manually create another form list
-                        EventList.objects.create(
-                            event=instance,
+                        new_list = EventList.objects.create(
                             name=list_name,
                             capacity=list_data.get('capacity', 0),
                             display_order=list_data.get('display_order', 0),
                             is_main_list=list_data.get('is_main_list', False),
                             is_waiting_list=list_data.get('is_waiting_list', False)
                         )
+                        new_list.events.add(instance)
 
             # Remove unprovided lists (except form list) if no subscriptions
             removable = set(existing_lists.keys()) - provided_list_ids
@@ -492,14 +492,14 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             ml_cap = sum(l.capacity for l in instance.lists.filter(is_main_list=True))
             wl_cap = sum(l.capacity for l in instance.lists.filter(is_waiting_list=True))
             default_cap = ml_cap + wl_cap
-            EventList.objects.create(
-                event=instance,
+            form_list = EventList.objects.create(
                 name='Form List',
                 capacity=default_cap,
                 display_order=instance.lists.count(),
                 is_main_list=False,
                 is_waiting_list=False
             )
+            form_list.events.add(instance)
 
         # Handle organizers
         if organizers_data is not None:
