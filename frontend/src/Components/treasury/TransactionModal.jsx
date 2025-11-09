@@ -28,6 +28,7 @@ export default function TransactionModal({open, onClose, transaction}) {
         amount: '',
         description: '',
         type: '',
+        created_at: '',
     });
 
     const [errors, setErrors] = useState({
@@ -46,12 +47,25 @@ export default function TransactionModal({open, onClose, transaction}) {
             onSuccess: (results) => {
                 setAccounts(results);
                 if (transaction) {
+                    // Format created_at to datetime-local format (YYYY-MM-DDTHH:MM) in local timezone
+                    let formattedDate = '';
+                    if (transaction.created_at) {
+                        const date = new Date(transaction.created_at);
+                        // Format to local timezone for datetime-local input
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
+                    }
                     setData({
                         executor: transaction.executor || null,
                         account: transaction.account?.id || '',
                         amount: transaction.amount || '',
                         description: transaction.description || '',
                         type: transaction.type || '',
+                        created_at: formattedDate,
                     });
                 }
             },
@@ -101,6 +115,10 @@ export default function TransactionModal({open, onClose, transaction}) {
             amount: parseFloat(data.amount),
             description: data.description,
         };
+        // Only include created_at if it has been modified
+        if (data.created_at) {
+            payload.created_at = new Date(data.created_at).toISOString();
+        }
         if (transaction && (parseFloat(data.amount) !== parseFloat(transaction.amount) || data.account !== (transaction.account?.id || transaction.account))) {
             const accName = accounts.find(acc => acc.id === data.account)?.name || '';
             setConfirmDialog({
@@ -235,6 +253,19 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 value={data.description}
                                 onChange={handleInputChange}
                                 fullWidth
+                            />
+                        </Grid>
+                        <Grid size={{xs: 12}}>
+                            <TextField
+                                label="Data e Ora"
+                                name="created_at"
+                                type="datetime-local"
+                                value={data.created_at}
+                                onChange={handleInputChange}
+                                fullWidth
+                                slotProps={{
+                                    inputLabel: { shrink: true }
+                                }}
                             />
                         </Grid>
                         <Grid size={{xs: 12}}>

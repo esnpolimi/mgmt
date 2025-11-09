@@ -432,10 +432,11 @@ class TransactionUpdateSerializer(serializers.ModelSerializer):
     receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
     remove_receipt = serializers.BooleanField(write_only=True, required=False, default=False)
     receipt_link = serializers.URLField(read_only=True)
+    created_at = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Transaction
-        fields = ['account', 'amount', 'description', 'receiptFile', 'remove_receipt', 'receipt_link']
+        fields = ['account', 'amount', 'description', 'created_at', 'receiptFile', 'remove_receipt', 'receipt_link']
 
     @staticmethod
     def validate_receiptFile(file):
@@ -446,7 +447,7 @@ class TransactionUpdateSerializer(serializers.ModelSerializer):
         remove = validated_data.pop('remove_receipt', False)
 
         # Basic updatable fields
-        for f in ['account', 'amount', 'description']:
+        for f in ['account', 'amount', 'description', 'created_at']:
             if f in validated_data:
                 setattr(instance, f, validated_data[f])
 
