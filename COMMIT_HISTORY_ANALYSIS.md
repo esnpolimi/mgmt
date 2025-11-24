@@ -58,9 +58,9 @@ Questa analisi documenta quando sono state rimosse parti del codice relative a:
 
 ### Note Importanti:
 ⚠️ **ATTENZIONE:** Dopo l'unshallow del repository, si è scoperto che i file treasury esistono ancora nella versione corrente del repository. Il commit `8a87559` era parte di un merge complesso, e i file sono stati successivamente ripristinati. Attualmente (commit `e53583a`), i file treasury sono presenti in:
-- `backend/treasury/` ✅ Presente
-- `frontend/src/Components/treasury/` ✅ Presente (probabilmente)
-- `frontend/src/Pages/treasury/` ✅ Presente (probabilmente)
+- `backend/treasury/` ✅ Presente (verificato)
+- `frontend/src/Components/treasury/` ✅ Presente (10 componenti verificati)
+- `frontend/src/Pages/treasury/` ✅ Presente (4 pagine verificate)
 
 ---
 
@@ -103,7 +103,7 @@ Il commit ha aggiunto il tipo di campo `'l'` (File Upload) ai form degli eventi:
 **Commit Hash:** `4a2d655d2f9030b02ab3a01dba4adaf611c5f9b8`  
 **Autore:** Moussa Gerges <moussagerges9@gmail.com>  
 **Data:** Venerdì 3 Ottobre 2025, 22:39:13 +0200  
-**Messaggio:** "adding ability to order form fields during ceation and editing"
+**Messaggio:** "adding ability to order form fields during creation and editing"
 
 #### Stato della Funzionalità:
 La funzionalità di upload file è stata rimossa (intenzionalmente o accidentalmente) durante il commit `4a2d655`, solo **2 giorni dopo** essere stata aggiunta.
