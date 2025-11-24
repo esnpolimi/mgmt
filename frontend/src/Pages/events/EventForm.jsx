@@ -489,21 +489,6 @@ export default function EventForm() {
                                     }
                                     case "p": {
                                         const {prefix, number} = parsePhone(formValues[field.name]);
-                                        // Build unique dial code entries (first occurrence keeps the country name)
-                                        const dialEntries = [];
-                                        const seen = new Set();
-                                        countryCodes.forEach(c => {
-                                            if (c.dial && !seen.has(c.dial)) {
-                                                seen.add(c.dial);
-                                                dialEntries.push(c);
-                                            }
-                                        });
-                                        // Sort numerically by dial code (removing '+' for comparison)
-                                        dialEntries.sort((a, b) => {
-                                            const valA = parseInt(a.dial.replace('+', ''), 10);
-                                            const valB = parseInt(b.dial.replace('+', ''), 10);
-                                            return valA - valB;
-                                        });
                                         return (
                                             <Box key={field.name} sx={{mt: 2}}>
                                                 <Typography variant="subtitle2"
@@ -517,9 +502,9 @@ export default function EventForm() {
                                                         sx={{width: 140}}
                                                         required={field.required}
                                                     >
-                                                        {dialEntries.map(entry => (
-                                                            <MenuItem key={entry.dial} value={entry.dial}>
-                                                                {entry.dial}
+                                                        {countryCodes.map(entry => (
+                                                            <MenuItem key={entry.code} value={entry.dial}>
+                                                                {entry.dial} ({entry.name})
                                                             </MenuItem>
                                                         ))}
                                                     </TextField>
