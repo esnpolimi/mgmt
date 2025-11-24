@@ -136,10 +136,10 @@ export default function ErasmusForm() {
             }
         });
 
-        // Validate matricola (exactly 6 digits)
-        const matricolaRegex = /^\d{6}$/;
+        // Validate matricola (exactly 6 digits OR 1 letter + 5 digits)
+        const matricolaRegex = /^([A-Za-z]\d{5}|\d{6})$/;
         if (!matricolaRegex.test(formData.matricola_number)) {
-            newErrors.matricola_number = [true, 'Matricola must be exactly 6 digits'];
+            newErrors.matricola_number = [true, 'Matricola must be 6 digits or 1 letter + 5 digits'];
             valid = false;
         } else newErrors.matricola_number = [false, ''];
 
@@ -193,10 +193,22 @@ export default function ErasmusForm() {
     const handleChange = (e) => {
         let { name, value } = e.target;
         // Preserve leading zeros and enforce length for codes
-        if (name === 'person_code' || name === 'matricola_number') {
+        if (name === 'person_code') {
             value = value.replace(/\D/g, '');
-            const maxLen = name === 'person_code' ? 8 : 6;
-            if (value.length > maxLen) value = value.slice(0, maxLen);
+            if (value.length > 8) value = value.slice(0, 8);
+        }
+        if (name === 'matricola_number') {
+            // Matricola: 1st char alphanumeric, rest numeric. Max 6 chars.
+            let cleanValue = '';
+            for (let i = 0; i < value.length && i < 6; i++) {
+                const char = value[i];
+                if (i === 0) {
+                    if (/[a-zA-Z0-9]/.test(char)) cleanValue += char;
+                } else {
+                    if (/\d/.test(char)) cleanValue += char;
+                }
+            }
+            value = cleanValue.toUpperCase();
         }
         setFormData({
             ...formData,
