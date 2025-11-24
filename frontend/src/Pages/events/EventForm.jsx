@@ -498,6 +498,12 @@ export default function EventForm() {
                                                 dialEntries.push(c);
                                             }
                                         });
+                                        // Sort numerically by dial code (removing '+' for comparison)
+                                        dialEntries.sort((a, b) => {
+                                            const valA = parseInt(a.dial.replace('+', ''), 10);
+                                            const valB = parseInt(b.dial.replace('+', ''), 10);
+                                            return valA - valB;
+                                        });
                                         return (
                                             <Box key={field.name} sx={{mt: 2}}>
                                                 <Typography variant="subtitle2"

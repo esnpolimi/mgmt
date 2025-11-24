@@ -544,6 +544,12 @@ export default function SubscriptionModal({
                         dialEntries.push(c);
                     }
                 });
+                // Sort numerically by dial code (removing '+' for comparison)
+                dialEntries.sort((a, b) => {
+                    const valA = parseInt(a.dial.replace('+', ''), 10);
+                    const valB = parseInt(b.dial.replace('+', ''), 10);
+                    return valA - valB;
+                });
                 return (
                     <Box sx={{mt: 2}}>
                         <Typography variant="subtitle2" sx={{mb: 1}}>
