@@ -60,6 +60,7 @@ export default function SubscriptionModal({
         profile_id: '',
         profile_name: '',
         external_name: '',
+        email: '',
         list_id: listId || '',
         list_name: (event.selectedList ? event.selectedList.name : (event.lists && listId ? (event.lists.find(list => list.id === listId)?.name || 'Lista non trovata') : 'Lista non trovata')),
         notes: '',
@@ -80,6 +81,7 @@ export default function SubscriptionModal({
         profile_id: [false, ''],
         profile_name: [false, ''],
         external_name: [false, ''],
+        email: [false, ''],
         status: [false, ''],
         list_id: [false, ''],
         list_name: [false, ''],
@@ -108,6 +110,13 @@ export default function SubscriptionModal({
                 arr.push({field: 'profile_id', value: data.profile_id, message: "Selezionare un Profilo"});
             }
         }
+        if (data.external_name && !data.email) {
+            arr.push({
+                field: 'email',
+                value: data.email,
+                message: "Inserire un'email per il nominativo esterno"
+            });
+        }
         if (data.status_quota === 'paid') {
             arr.push({field: 'account_id', value: data.account_id, message: "Selezionare una Cassa"});
         }
@@ -124,6 +133,7 @@ export default function SubscriptionModal({
                 ...subscription,
                 account_id: subscription.account_id || '',
                 external_name: subscription.external_name || '',
+                email: subscription.email || (subscription.form_data && subscription.form_data.email) || '',
                 notes: subscription.notes || ''
             }));
             // Load existing form_data and additional_data
@@ -280,6 +290,7 @@ export default function SubscriptionModal({
                 status_quota: data.status_quota || 'pending',
                 status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
                 external_name: data.external_name || undefined,
+                email: data.email || undefined,
                 form_data: formData,
                 additional_data: additionalData
             },
@@ -647,6 +658,21 @@ export default function SubscriptionModal({
                                             required={!data.profile_id}
                                             error={errors.external_name && errors.external_name[0]}
                                             helperText={errors.external_name && errors.external_name[1]}
+                                            disabled={isReimbursed}
+                                        />
+                                    </Grid>
+                                )}
+                                {!data.profile_id && data.external_name && (
+                                    <Grid size={{xs: 12}} sx={{mt: 1}}>
+                                        <TextField
+                                            label="Email"
+                                            name="email"
+                                            value={data.email}
+                                            onChange={handleChange}
+                                            fullWidth
+                                            required
+                                            error={errors.email && errors.email[0]}
+                                            helperText={errors.email && errors.email[1]}
                                             disabled={isReimbursed}
                                         />
                                     </Grid>

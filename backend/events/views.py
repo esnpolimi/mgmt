@@ -1,5 +1,6 @@
 import logging
 import time
+import json
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -21,6 +22,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -518,6 +520,8 @@ def subscription_create(request):
             return Response(data, status=200)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
+    except DRFValidationError as e:
+        return Response(e.detail, status=400)
     except ObjectDoesNotExist as e:
         return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:
@@ -644,6 +648,8 @@ def subscription_detail(request, pk):
         return Response({'error': "L'iscrizione non esiste"}, status=404)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
+    except DRFValidationError as e:
+        return Response(e.detail, status=400)
     except ObjectDoesNotExist as e:
         return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:

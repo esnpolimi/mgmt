@@ -783,10 +783,18 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
 
         # If profile not found and event allows externals, use email as external_name
         if not profile and event and getattr(event, 'is_allow_external', False):
-            if email:
+            if not email:
+                raise serializers.ValidationError("Email is required for external subscription.")
+            
+            if not external_name:
                 attrs['external_name'] = email
             else:
-                raise serializers.ValidationError("Email is required for external subscription.")
+                # If external_name is provided, we keep it.
+                # But we ensure email is stored in form_data so it's not lost
+                form_data = attrs.get('form_data', {})
+                form_data['email'] = email
+                attrs['form_data'] = form_data
+
         elif not profile:
             raise serializers.ValidationError("Profile not found for this email and event does not allow externals.")
 
