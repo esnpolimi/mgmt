@@ -166,6 +166,22 @@ class Event(BaseEntity):
     # Unified fields (replaces form_fields and additional_fields)
     fields = models.JSONField(default=list, blank=True)
 
+    def get_effective_fields(self):
+        """
+        Returns the fields of this event, or if empty, inherits fields from
+        another event that shares the same list.
+        """
+        if self.fields and len(self.fields) > 0:
+            return self.fields
+        
+        # Try to find fields in linked events
+        for event_list in self.lists.all():
+            linked_events = event_list.events.exclude(id=self.id)
+            for linked_event in linked_events:
+                if linked_event.fields and len(linked_event.fields) > 0:
+                    return linked_event.fields
+        return []
+
     def __str__(self):
         return f"{self.name} ({self.date})"
 
@@ -374,14 +390,18 @@ class Subscription(BaseEntity):
             current_count = Subscription.objects.filter(list=self.list).exclude(pk=self.pk).count()
             if current_count >= self.list.capacity:
                 raise ValidationError(f"{self.list.name} capacity exceeded")
+        
+        # Get effective fields (local or inherited)
+        effective_fields = self.event.get_effective_fields()
+
         # Validate form data using unified fields
         if self.form_data:
-            errors = validate_field_data(self.event.fields, self.form_data, 'form')
+            errors = validate_field_data(effective_fields, self.form_data, 'form')
             if errors:
                 raise ValidationError('; '.join(errors))
         # Validate additional data using unified fields
         if self.additional_data:
-            errors = validate_field_data(self.event.fields, self.additional_data, 'additional')
+            errors = validate_field_data(effective_fields, self.additional_data, 'additional')
             if errors:
                 raise ValidationError('; '.join(errors))
 

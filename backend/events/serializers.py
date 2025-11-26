@@ -548,6 +548,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
+            'fields_inherited_from',
         ]
 
     def to_representation(self, instance):
@@ -555,6 +556,23 @@ class EventDetailSerializer(serializers.ModelSerializer):
         # Ensure global ordering of profile_fields in output
         if 'profile_fields' in data:
             data['profile_fields'] = order_profile_fields(data['profile_fields'])
+        
+        # Inherit fields from linked events if current event has no fields
+        data['fields_inherited_from'] = None
+        if not data.get('fields') or len(data.get('fields', [])) == 0:
+            # Find events that share the same lists
+            for event_list in instance.lists.all():
+                linked_events = event_list.events.exclude(id=instance.id)
+                for linked_event in linked_events:
+                    if linked_event.fields and len(linked_event.fields) > 0:
+                        data['fields'] = linked_event.fields
+                        data['fields_inherited_from'] = {
+                            'id': linked_event.id,
+                            'name': linked_event.name
+                        }
+                        # Force enable_form to True so frontend renders it
+                        data['enable_form'] = True
+                        return data
         return data
 
 
@@ -886,6 +904,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
+            'fields_inherited_from',
         ]
 
     def to_representation(self, instance):
@@ -893,6 +912,23 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         # Ensure global ordering of profile_fields in output
         if 'profile_fields' in data:
             data['profile_fields'] = order_profile_fields(data['profile_fields'])
+        
+        # Inherit fields from linked events if current event has no fields
+        data['fields_inherited_from'] = None
+        if not data.get('fields') or len(data.get('fields', [])) == 0:
+            # Find events that share the same lists
+            for event_list in instance.lists.all():
+                linked_events = event_list.events.exclude(id=instance.id)
+                for linked_event in linked_events:
+                    if linked_event.fields and len(linked_event.fields) > 0:
+                        data['fields'] = linked_event.fields
+                        data['fields_inherited_from'] = {
+                            'id': linked_event.id,
+                            'name': linked_event.name
+                        }
+                        # Force enable_form to True so frontend renders it
+                        data['enable_form'] = True
+                        return data
         return data
 
     def get_subscriptions(self, obj):

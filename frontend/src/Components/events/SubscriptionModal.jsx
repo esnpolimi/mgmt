@@ -859,6 +859,13 @@ export default function SubscriptionModal({
                         </Grid>
                     </Grid>
 
+                    {/* Alert when using inherited form fields from linked event */}
+                    {event.fields_inherited_from && formFields.length > 0 && (
+                        <Alert severity="info" sx={{mt: 3}}>
+                            I campi del form sono ereditati dall'evento: <strong>{event.fields_inherited_from.name}</strong>
+                        </Alert>
+                    )}
+
                     {/* Form fields section - only if form is enabled */}
                     {event.enable_form && formFields.length > 0 && (
                         <Box sx={{mt: 3}}>
