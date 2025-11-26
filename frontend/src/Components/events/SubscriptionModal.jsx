@@ -243,6 +243,33 @@ export default function SubscriptionModal({
                 hasErrors = true;
             }
         });
+
+        // Validate dynamic fields
+        if (event.fields) {
+            event.fields.forEach(field => {
+                if (field.required) {
+                    let value;
+                    if (field.field_type === 'form') {
+                        value = formData[field.name];
+                    } else if (field.field_type === 'additional') {
+                        value = additionalData[field.name];
+                    }
+
+                    let isEmpty = false;
+                    if (value === null || value === undefined || value === '') {
+                        isEmpty = true;
+                    } else if (Array.isArray(value) && value.length === 0) {
+                        isEmpty = true;
+                    }
+
+                    if (isEmpty) {
+                        newErrors[field.name] = [true, `Il campo ${field.name} è obbligatorio`];
+                        hasErrors = true;
+                    }
+                }
+            });
+        }
+
         if (hasErrors) {
             setErrors(newErrors);
             return;
@@ -406,6 +433,8 @@ export default function SubscriptionModal({
                         value={value || ""}
                         onChange={e => onChange(field.name, e.target.value)}
                         disabled={isReimbursed}
+                        error={!!errors[field.name]?.[0]}
+                        helperText={errors[field.name]?.[1]}
                     />
                 );
             case "n":
@@ -420,11 +449,13 @@ export default function SubscriptionModal({
                         onChange={e => onChange(field.name, e.target.value)}
                         slotProps={{htmlInput: {step: "0.01"}}}
                         disabled={isReimbursed}
+                        error={!!errors[field.name]?.[0]}
+                        helperText={errors[field.name]?.[1]}
                     />
                 );
             case "c":
                 return (
-                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed} error={!!errors[field.name]?.[0]}>
                         <FormLabel>{field.name}</FormLabel>
                         <RadioGroup
                             value={value || ""}
@@ -439,11 +470,12 @@ export default function SubscriptionModal({
                                 />
                             ))}
                         </RadioGroup>
+                        {errors[field.name]?.[0] && <FormHelperText>{errors[field.name][1]}</FormHelperText>}
                     </FormControl>
                 );
             case "s":
                 return (
-                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed} error={!!errors[field.name]?.[0]}>
                         <InputLabel>{field.name}</InputLabel>
                         <Select
                             value={value || ""}
@@ -456,11 +488,12 @@ export default function SubscriptionModal({
                                 </MenuItem>
                             ))}
                         </Select>
+                        {errors[field.name]?.[0] && <FormHelperText>{errors[field.name][1]}</FormHelperText>}
                     </FormControl>
                 );
             case "m":
                 return (
-                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed} error={!!errors[field.name]?.[0]}>
                         <FormLabel>{field.name}</FormLabel>
                         <FormGroup>
                             {field.choices?.map(choice => (
@@ -476,11 +509,12 @@ export default function SubscriptionModal({
                                 />
                             ))}
                         </FormGroup>
+                        {errors[field.name]?.[0] && <FormHelperText>{errors[field.name][1]}</FormHelperText>}
                     </FormControl>
                 );
             case "b":
                 return (
-                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed}>
+                    <FormControl required={field.required} margin="normal" fullWidth disabled={isReimbursed} error={!!errors[field.name]?.[0]}>
                         <FormLabel>{field.name}</FormLabel>
                         <RadioGroup
                             row
@@ -496,6 +530,7 @@ export default function SubscriptionModal({
                             <MuiFormControlLabel value="yes" control={<Radio/>} label="Yes"/>
                             <MuiFormControlLabel value="no" control={<Radio/>} label="No"/>
                         </RadioGroup>
+                        {errors[field.name]?.[0] && <FormHelperText>{errors[field.name][1]}</FormHelperText>}
                     </FormControl>
                 );
             case "d":
@@ -515,7 +550,9 @@ export default function SubscriptionModal({
                                 textField: {
                                     fullWidth: true,
                                     margin: "normal",
-                                    required: field.required
+                                    required: field.required,
+                                    error: !!errors[field.name]?.[0],
+                                    helperText: errors[field.name]?.[1]
                                 }
                             }}
                             disabled={isReimbursed}
@@ -532,6 +569,8 @@ export default function SubscriptionModal({
                         value={value || ""}
                         onChange={e => onChange(field.name, e.target.value)}
                         disabled={isReimbursed}
+                        error={!!errors[field.name]?.[0]}
+                        helperText={errors[field.name]?.[1]}
                     />
                 );
             case "p": {
@@ -550,6 +589,7 @@ export default function SubscriptionModal({
                                 sx={{width: 140}}
                                 required={field.required}
                                 disabled={isReimbursed}
+                                error={!!errors[field.name]?.[0]}
                             >
                                 {countryCodes.map(entry => (
                                     <MenuItem key={entry.code} value={entry.dial}>
@@ -564,8 +604,12 @@ export default function SubscriptionModal({
                                 fullWidth
                                 required={field.required}
                                 disabled={isReimbursed}
+                                error={!!errors[field.name]?.[0]}
                             />
                         </Box>
+                        {errors[field.name]?.[0] && (
+                            <FormHelperText error>{errors[field.name][1]}</FormHelperText>
+                        )}
                     </Box>
                 );
             }
