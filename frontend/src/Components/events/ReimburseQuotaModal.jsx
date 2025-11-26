@@ -9,7 +9,15 @@ import Popup from "../Popup";
 import {fetchCustom, defaultErrorHandler} from "../../api/api";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
 
-export default function ReimburseQuotaModal({open, onClose, event, subscription}) {
+export default function ReimburseQuotaModal({
+                                                open,
+                                                onClose,
+                                                event,
+                                                subscription,
+                                                isEventContextLoading = false,
+                                                pageEventName,
+                                                pageEventId
+                                            }) {
     const [isLoading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
@@ -19,7 +27,7 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
     const [popup, setPopup] = useState(null);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open || !event || !subscription) return;
         setLoading(true);
         setPopup(null);
         setSelectedAccount('');
@@ -29,10 +37,14 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)
         });
-    }, [open]);
+    }, [open, event, subscription]);
 
     const handleSubmit = () => {
         setPopup(null);
+        if (!event) {
+            setPopup({message: "Evento di origine non disponibile.", state: "error", id: Date.now()});
+            return;
+        }
         if (!selectedAccount) {
             setPopup({message: "Seleziona una cassa.", state: "error", id: Date.now()});
             return;
@@ -41,7 +53,7 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
             setPopup({message: "Iscrizione non trovata.", state: "error", id: Date.now()});
             return;
         }
-        const quotaAmount = Number(event.cost || 0);
+        const quotaAmount = Number(event?.cost || 0);
         const message = `Confermi di voler rimborsare €${quotaAmount.toFixed(2)} a ${subscription.profile_name} dalla cassa ${accounts.find(acc => acc.id === selectedAccount)?.name || "N/A"}?`;
         setConfirmDialog({
             open: true,
@@ -51,6 +63,7 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
     };
 
     const doSubmit = () => {
+        if (!event) return;
         setConfirmDialog({open: false, action: null, message: ''});
         setSubmitting(true);
         fetchCustom("POST", "/reimburse_quota/", {
@@ -66,10 +79,13 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
         });
     };
 
+    const isContextMismatch = Boolean(pageEventId && event?.id && pageEventId !== event.id);
+    const busy = isEventContextLoading || isLoading || !event;
+
     return (
         <Modal open={open} onClose={() => onClose(false)}>
             <Box sx={style}>
-                {isLoading ? <Loader/> : (
+                {busy ? <Loader/> : (
                     <>
                         <Box sx={{display: 'flex', justifyContent: 'flex-end', mt: -2}}>
                             <IconButton onClick={() => onClose(false)} sx={{minWidth: 0}}><CloseIcon/></IconButton>
@@ -80,7 +96,21 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
                         <Grid container spacing={1} sx={{mt: 1}}>
                             <Grid size={{xs: 12}}>
                                 <Typography>
-                                    <b>Importo Quota:</b> €{Number(event.cost || 0).toFixed(2)}
+                                    <b>Evento origine rimborso:</b> {event?.name || '-'}
+                                </Typography>
+                            </Grid>
+                            {isContextMismatch && (
+                                <Grid size={{xs: 12}}>
+                                    <Typography color="text.secondary">
+                                        (Stai visualizzando l'evento {pageEventName || '-'}, ma il pagamento appartiene a {subscription?.event_name || event?.name || '-'})
+                                    </Typography>
+                                </Grid>
+                            )}
+                        </Grid>
+                        <Grid container spacing={1} sx={{mt: 1}}>
+                            <Grid size={{xs: 12}}>
+                                <Typography>
+                                    <b>Importo Quota:</b> €{Number(event?.cost || 0).toFixed(2)}
                                 </Typography>
                             </Grid>
                             <Grid size={{xs: 12}}>

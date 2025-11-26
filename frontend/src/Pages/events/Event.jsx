@@ -61,6 +61,8 @@ export default function Event() {
     const [reimburseDepositsListId, setReimburseDepositsListId] = useState(null);
     const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
     const [singleSubToReimburseQuota, setSingleSubToReimburseQuota] = useState(null);
+    const [reimburseQuotaEventContext, setReimburseQuotaEventContext] = useState(null);
+    const [isLoadingReimburseQuotaContext, setIsLoadingReimburseQuotaContext] = useState(false);
     const [editAnswersModalOpen, setEditAnswersModalOpen] = useState(false);
     const [editAnswersSubscription, setEditAnswersSubscription] = useState(null);
     const hasDeposit = data?.deposit > 0;
@@ -178,8 +180,29 @@ export default function Event() {
     };
 
     const handleOpenReimburseQuota = (subscription) => {
+        if (!subscription || !data) return;
         setSingleSubToReimburseQuota(subscription);
+
+        // If the subscription belongs to the same event, reuse current data.
+        if (!subscription.event_id || subscription.event_id === data.id) {
+            setReimburseQuotaEventContext(data);
+            setIsLoadingReimburseQuotaContext(false);
+            setReimburseQuotaModalOpen(true);
+            return;
+        }
+
+        // Otherwise fetch the original event to display the correct cost.
+        setReimburseQuotaEventContext(null);
+        setIsLoadingReimburseQuotaContext(true);
         setReimburseQuotaModalOpen(true);
+        fetchCustom("GET", `/event/${subscription.event_id}/`, {
+            onSuccess: (eventResponse) => setReimburseQuotaEventContext(eventResponse),
+            onError: (responseOrError) => {
+                defaultErrorHandler(responseOrError, setPopup);
+                setReimburseQuotaEventContext(null);
+            },
+            onFinally: () => setIsLoadingReimburseQuotaContext(false)
+        });
     };
 
     const handleOpenPrintableLibetatorie = (listId) => {
@@ -220,6 +243,8 @@ export default function Event() {
             refreshEventData();
         }
         setSingleSubToReimburseQuota(null);
+        setReimburseQuotaEventContext(null);
+        setIsLoadingReimburseQuotaContext(false);
     };
 
     const handleCloseEditAnswersModal = (success, message) => {
@@ -290,8 +315,11 @@ export default function Event() {
                 <ReimburseQuotaModal
                     open={reimburseQuotaModalOpen}
                     onClose={handleCloseReimburseQuotaModal}
-                    event={data}
+                    event={reimburseQuotaEventContext}
                     subscription={singleSubToReimburseQuota}
+                    isEventContextLoading={isLoadingReimburseQuotaContext}
+                    pageEventName={data?.name}
+                    pageEventId={data?.id}
                 />
             )}
             {printableLiberatorieModalOpen && (
