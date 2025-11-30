@@ -106,6 +106,9 @@ class EventsListSerializer(serializers.ModelSerializer):
     lists_capacity = serializers.SerializerMethodField()
     enable_form = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
+    notify_list = serializers.BooleanField(read_only=True)
+    visible_to_board_only = serializers.BooleanField(read_only=True)
+    reimbursements_by_organizers_only = serializers.BooleanField(read_only=True)
     form_note = serializers.CharField(read_only=True)
 
     class Meta:
@@ -115,6 +118,9 @@ class EventsListSerializer(serializers.ModelSerializer):
             'is_a_bando', 'is_allow_external',
             'lists_capacity', 'enable_form', 'form_programmed_open_time', 'form_note',
             'is_refa_done',
+            'notify_list',
+            'visible_to_board_only',
+            'reimbursements_by_organizers_only',
         ]
 
     @staticmethod
@@ -160,6 +166,9 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     form_note = serializers.CharField(required=False, allow_blank=True, default='')
     form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
     is_refa_done = serializers.BooleanField(required=False, default=False)
+    notify_list = serializers.BooleanField(required=False, default=True)
+    visible_to_board_only = serializers.BooleanField(required=False, default=False)
+    reimbursements_by_organizers_only = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Event
@@ -168,7 +177,9 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'enable_form',
             'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
-            'notify_list', 'visible_to_board_only', 'reimbursements_by_organizers_only',
+            'notify_list',
+            'visible_to_board_only',
+            'reimbursements_by_organizers_only',
         ]
 
     def validate(self, attrs):
@@ -190,6 +201,24 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         # If form not enabled, nullify programmed open time to avoid date constraints
         if not attrs.get('enable_form', False):
             attrs['form_programmed_open_time'] = None
+        # Only allow board members/superusers to set visible_to_board_only
+        user = self.context.get('user')
+        if 'visible_to_board_only' in attrs:
+            if not user or not user.groups.filter(name__in=['Board']).exists():
+                attrs.pop('visible_to_board_only', None)
+        # Only allow board members/superusers/organizers to set reimbursements_by_organizers_only
+        if 'reimbursements_by_organizers_only' in attrs:
+            allowed = False
+            if user:
+                if user.groups.filter(name__in=['Board']).exists():
+                    allowed = True
+                else:
+                    # Defensive: Only check organizer if user.profile exists and has integer id
+                    profile_id = user.profile
+                    if profile_id and self.instance and self.instance.organizers.filter(profile_id=profile_id).exists():
+                        allowed = True
+            if not allowed:
+                attrs.pop('reimbursements_by_organizers_only', None)
         return attrs
 
     @staticmethod
@@ -468,7 +497,6 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                             el.save()
                 else:
                     if list_name and list_name != 'Form List':
-                    # New list; ignore attempts to manually create another form list
                         new_list = EventList.objects.create(
                             name=list_name,
                             capacity=list_data.get('capacity', 0),
@@ -767,13 +795,14 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
 
     class Meta:
         model = Subscription
         fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione',
-                  'external_name', 'form_data', 'additional_data']
+                  'external_name', 'email', 'form_data', 'additional_data']
 
     def validate(self, attrs):
         event = attrs.get('event')
@@ -799,6 +828,8 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         self.pay_deposit = attrs.pop('pay_deposit', True)
         self.status_quota = attrs.pop('status_quota', 'pending')
         self.status_cauzione = attrs.pop('status_cauzione', 'pending')
+        # POP the temporary write_only field so it is not passed to model
+        attrs.pop('email', None)
         return attrs
 
 
@@ -807,6 +838,7 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     status_quota = serializers.CharField(write_only=True, required=False, default='pending')
     status_cauzione = serializers.CharField(write_only=True, required=False, default='pending')
     external_name = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    email = serializers.EmailField(write_only=True, required=False, allow_blank=True)  # NEW
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
     event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all(), required=False)
@@ -814,7 +846,7 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     class Meta:
         model = Subscription
         fields = ['event', 'list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione',
-                  'external_name', 'form_data', 'additional_data']
+                  'external_name', 'email', 'form_data', 'additional_data']
 
     def validate(self, attrs):
         instance = self.instance
@@ -849,7 +881,8 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         return attrs
 
     def update(self, instance, validated_data):
-
+        # Ensure 'email' not passed even if future changes reintroduce it
+        validated_data.pop('email', None)
         return super().update(instance, validated_data)
 
 
