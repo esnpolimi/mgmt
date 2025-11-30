@@ -258,8 +258,6 @@ export default function EventsList() {
                     <FestivalIcon/>
                 </IconButton>
             ),
-            enableSorting: false,
-            enableColumnActions: false,
         }
     ], []);
 
@@ -271,11 +269,10 @@ export default function EventsList() {
         enableColumnFilters: false, // Disabled cause it only allows to search in the current page
         enableColumnOrdering: false,
         enableGrouping: false,
-        enableColumnPinning: true,
         enableFacetedValues: true,
+        enableSorting: false,
         enableRowActions: false,
         enableRowSelection: false,
-        enableRowPinning: false,
         enableExpandAll: false,
         initialState: {
             showColumnFilters: false,
@@ -291,8 +288,7 @@ export default function EventsList() {
                 cost: true,
                 is_a_bando: true,
                 is_allow_external: false,
-            },
-            sorting: [{ id: 'date', desc: true }],
+            }
         },
         paginationDisplayMode: 'pages',
         positionToolbarAlertBanner: 'bottom',

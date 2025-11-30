@@ -37,6 +37,7 @@ profile_fields_schema = {
 #  'd': date (DD-MM-YYYY)
 #  'e': esncard number (string)
 #  'p': phone (stored as single string e.g. "+39 3375619379")
+#  'l': link (user uploads a file -> backend stores public sharing link string)
 #
 # Example: [{'name':'What are your allergies?', 'type':'t'},
 #           {'name':'Are you vegan?','type':'m', 'choices':['yes','no','maybe'] }]
@@ -115,6 +116,9 @@ def validate_field_data(field_config, data_dict, field_type_filter=None):
                 from re import match
                 if not match(r'^\d{2}-\d{2}-\d{4}', value):
                     errors.append(f'Invalid date format for field "{field_name}" (expected DD-MM-YYYY)')
+        elif field_type == 'l':
+            if not isinstance(value, str):
+                errors.append(f'Invalid data type for field "{field_name}" - expected link string')
     valid_field_names = [f['name'] for f in relevant_fields]
     for provided_field in data_dict.keys():
         if provided_field not in valid_field_names:
@@ -151,20 +155,20 @@ class Event(BaseEntity):
     # Rendiconto Finanziario (REFA) state
     is_refa_done = models.BooleanField(default=False)
 
-    # Notify list members about event updates
-    notify_list = models.BooleanField(default=False)
-
-    # Event visible only to board members
-    visible_to_board_only = models.BooleanField(default=False)
-
-    # Only organizers can process reimbursements
-    reimbursements_by_organizers_only = models.BooleanField(default=False)
-
     # Profile fields columns (i.e. name, surname, email) to be shown in the event list tables
     profile_fields = models.JSONField(default=list, blank=True)
 
     # Unified fields (replaces form_fields and additional_fields)
     fields = models.JSONField(default=list, blank=True)
+
+    # Manage via event modla toggle, to notify to the Erasmus via confirmation email the assigned list
+    notify_list = models.BooleanField(default=True)
+
+    # Make the event visible only to board members
+    visible_to_board_only = models.BooleanField(default=False)
+
+    # Make the reimbursements doable only by organizers or board members
+    reimbursements_by_organizers_only = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.date})"

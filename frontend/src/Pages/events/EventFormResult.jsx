@@ -1,6 +1,5 @@
 import {useLocation, useParams, useNavigate} from 'react-router-dom';
 import {Container, Typography, Box, Button, Alert} from '@mui/material';
-import StatusBanner from '../../Components/StatusBanner';
 
 export default function EventFormResult() {
     const {id} = useParams();
@@ -9,32 +8,33 @@ export default function EventFormResult() {
 
     const navState = location.state || {};
     const paymentError = !!navState.paymentError;
-    const paymentErrorMessage = navState.paymentErrorMessage ||
-        "Online payment currently unavailable. Your subscription is recorded; please contact us at informatica@esnpolimi.it";
     const subscriptionId = navState.subscriptionId || new URLSearchParams(location.search).get('subscription_id');
     const assignedList = navState.assignedList || localStorage.getItem('sumup_last_assigned_list');
     const paid = !!navState.paid;
     const noPayment = !!navState.noPayment;
+    const paymentRequired = !!navState.paymentRequired;
 
-    let bannerMessage;
-    let bannerState;
+    // Build concise banner
+    let bannerMessage = '';
+    let bannerState = 'info';
 
     if (!subscriptionId) {
         bannerMessage = 'Missing subscription identifier.';
         bannerState = 'error';
-    } else if (paymentError) {
-        bannerMessage = `Subscription saved.`;
+    } else if (paid) {
+        bannerMessage = `Subscription confirmed${assignedList ? ` - ${assignedList}` : ''}.`;
         bannerState = 'success';
     } else if (noPayment) {
         bannerMessage = `Subscription successful${assignedList ? ` - ${assignedList}` : ''}.`;
         bannerState = 'success';
-    } else if (paid) {
-        bannerMessage = 'Subscription confirmed. Payment received.';
-        bannerState = 'success';
-    } else {
-        bannerMessage = 'Subscription submitted. Awaiting payment completion.';
+    } else if (paymentRequired) {
+        bannerMessage = 'Subscription saved. Check your email for the payment link.';
+        bannerState = 'info';
+    } else if (!paymentError) {
+        bannerMessage = 'Subscription submitted.';
         bannerState = 'info';
     }
+    // paymentError handled by dedicated alert (no banner to avoid duplication)
 
     const retryNavigate = () => navigate(`/event/${id}/formlogin`);
 
@@ -42,26 +42,25 @@ export default function EventFormResult() {
         <Container maxWidth="sm">
             <Box sx={{mt:4, display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', p:3, gap:2}}>
                 <Typography variant="h4" gutterBottom>Event Subscription</Typography>
-                <StatusBanner message={bannerMessage} state={bannerState}/>
-                {paymentError && (
-                    <Alert severity="warning">{paymentErrorMessage}</Alert>
-                )}
-                {!paid && !noPayment && !paymentError && (
-                    <Alert severity="info">
-                        If you already completed payment but still see this message, it will update shortly.
+                {bannerMessage && !paymentError && (
+                    <Alert
+                        sx={{width:'100%', alignItems:'center', justifyContent:'center'}}
+                        severity={bannerState === 'success' ? 'success' : bannerState === 'error' ? 'error' : 'info'}
+                    >
+                        {bannerMessage}
                     </Alert>
                 )}
-                {assignedList && bannerState === 'success' && (
-                    <Typography variant="body2">
-                        You were placed in: <strong>{assignedList}</strong>
-                    </Typography>
+                {paymentError && (
+                    <Alert severity="warning" sx={{width:'100%'}}>
+                        Subscription saved. Online payment currently unavailable. Please contact us at informatica@esnpolimi.it
+                    </Alert>
+                )}
+                {bannerState === 'error' && (
+                    <Button variant="contained" sx={{mt:1}} onClick={retryNavigate}>Start Over</Button>
                 )}
                 <Typography variant="caption">
-                    An email has been sent for confirmation.
-                 </Typography>
-                {bannerState === 'error' && (
-                    <Button variant="contained" sx={{mt:2}} onClick={retryNavigate}>Start Over</Button>
-                )}
+                    Confirmation email sent.
+                </Typography>
             </Box>
         </Container>
     );

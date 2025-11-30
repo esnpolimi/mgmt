@@ -10,6 +10,7 @@ import ProfileSearch from '../ProfileSearch';
 import CircularProgress from '@mui/material/CircularProgress';
 import ConfirmDialog from '../ConfirmDialog';
 import ReceiptFileUpload from '../common/ReceiptFileUpload';
+import {ToggleButton, ToggleButtonGroup} from '@mui/material';
 
 // List of transaction types that can be deleted
 const deletableTranTypes = ['rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal'];
@@ -21,6 +22,7 @@ export default function TransactionModal({open, onClose, transaction}) {
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
+    const negative_types = ['withdrawal', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement'];
 
     const [data, setData] = useState({
         executor: null,
@@ -59,10 +61,13 @@ export default function TransactionModal({open, onClose, transaction}) {
                         const minutes = String(date.getMinutes()).padStart(2, '0');
                         formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
                     }
+                    let amount = transaction.amount || 0;
+                    if (transaction.type && negative_types.includes(transaction.type))
+                        amount = -amount;
                     setData({
                         executor: transaction.executor || null,
                         account: transaction.account?.id || '',
-                        amount: transaction.amount || '',
+                        amount: amount,
                         description: transaction.description || '',
                         type: transaction.type || '',
                         created_at: formattedDate,
@@ -109,17 +114,21 @@ export default function TransactionModal({open, onClose, transaction}) {
         e.preventDefault();
         if (!validate()) return;
         // Confirm dialog for account amount change
+        let amount = data.amount;
+        if (negative_types.includes(data.type) && parseFloat(amount) > 0)
+            amount = -amount;
         const payload = {
             executor: data.executor.id || data.executor.email,
             account: data.account,
-            amount: parseFloat(data.amount),
+            amount: amount,
             description: data.description,
+            type: data.type,
         };
         // Only include created_at if it has been modified
         if (data.created_at) {
             payload.created_at = new Date(data.created_at).toISOString();
         }
-        if (transaction && (parseFloat(data.amount) !== parseFloat(transaction.amount) || data.account !== (transaction.account?.id || transaction.account))) {
+        if (transaction && (amount !== parseFloat(transaction.amount) || data.account !== (transaction.account?.id || transaction.account))) {
             const accName = accounts.find(acc => acc.id === data.account)?.name || '';
             setConfirmDialog({
                 open: true,
@@ -193,9 +202,34 @@ export default function TransactionModal({open, onClose, transaction}) {
                     </Typography>
                     {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     <Grid container spacing={2} sx={{mt: 2}}>
-                        <Typography variant="subtitle1" gutterBottom>
-                            <b>Tipo:</b> {names.tran_type[data.type] || 'Non specificato'}
-                        </Typography>
+                        {['deposit', 'withdrawal'].includes(data.type) ? (
+                            <Grid size={{xs: 12}} sx={{display: 'flex', alignItems: 'center'}}>
+                                <Typography variant="subtitle1" gutterBottom sx={{mr: 1}}>
+                                    <b>Tipo:</b>
+                                </Typography>
+                                <ToggleButtonGroup
+                                    sx={{mb: 0.5}}
+                                    color="primary"
+                                    exclusive
+                                    value={data.type}
+                                    onChange={(e, newType) => {
+                                        if (!newType || newType === data.type) return;
+                                        setData(prev => ({
+                                            ...prev,
+                                            type: newType,
+                                        }));
+                                    }}
+                                    size="small"
+                                >
+                                    <ToggleButton value="deposit">Deposito</ToggleButton>
+                                    <ToggleButton value="withdrawal">Prelievo</ToggleButton>
+                                </ToggleButtonGroup>
+                            </Grid>
+                        ) : (
+                            <Typography variant="subtitle1" gutterBottom>
+                                <b>Tipo:</b> {names.tran_type[data.type] || 'Non specificato'}
+                            </Typography>
+                        )}
                         <Grid size={{xs: 12}}>
                             <ProfileSearch
                                 value={data.executor}
@@ -243,7 +277,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 fullWidth
                                 error={errors.amount[0]}
                                 type="number"
-                                slotProps={{htmlInput: {step: "0.01"}}}
+                                slotProps={{htmlInput: {min: "0.00", step: "0.01"}}}
                             />
                         </Grid>
                         <Grid size={{xs: 12}}>

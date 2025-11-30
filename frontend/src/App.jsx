@@ -30,6 +30,7 @@ function App() {
         <AuthProvider>
             <SidebarProvider>
                 <Router>
+                    <UrlSanitizer />
                     <Routes>
                         <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
                         <Route path="/reset-password/:uid/:token" element={<ResetPassword/>}/>
@@ -58,4 +59,5 @@ function App() {
         </AuthProvider>
     )
 }
+
 export default App;

@@ -8,8 +8,7 @@ import {
     Typography,
     Collapse,
     FormControlLabel,
-    Switch,
-    Tooltip
+    Switch
 } from '@mui/material';
 import {
     PersonAdd as PersonAddIcon,
@@ -29,18 +28,19 @@ import dayjs from "dayjs";
 import {profileDisplayNames} from '../../utils/displayAttributes';
 
 export default memo(function EventListAccordions({
-                                                data,
-                                                onOpenSubscriptionModal,
-                                                onEditSubscription,
-                                                onMoveToList,
-                                                onOpenReimburseDeposits,
-                                                onOpenReimburseQuota,
-                                                onOpenPrintableLibetatorie,
-                                                onOpenEditAnswers,
-                                                canChangeSubscription,
-                                                canChangeTransactions,
-                                                isBoardMember
-                                            }) {
+                                                     data,
+                                                     onOpenSubscriptionModal,
+                                                     onEditSubscription,
+                                                     onMoveToList,
+                                                     onOpenReimburseDeposits,
+                                                     onOpenReimburseQuota,
+                                                     onOpenPrintableLibetatorie,
+                                                     onOpenEditAnswers,
+                                                     canChangeSubscription,
+                                                     canChangeTransactions,
+                                                     isBoardMember,
+                                                     isOrganizer,
+                                                 }) {
     const [expandedAccordion, setExpandedAccordion] = useState([]);
     const hasDeposit = data?.deposit > 0;
     const hasQuota = data?.cost > 0;
@@ -193,11 +193,27 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.form_data?.[field.name];
+                    if (field.type === 'l') {
+                        if (val) {
+                            return (
+                                <span>
+                                    <Button variant="text"
+                                            color="primary"
+                                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                                            onClick={() => window.open(val, '_blank', 'noopener,noreferrer')}>
+                                        Link Drive
+                                    </Button>
+                                </span>
+                            );
+                        }
+                        return '';
+                    }
                     if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
                     if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
                     return val ?? '';
                 },
-                muiTableHeadCellProps: { sx: {color: 'orange'} }
+                muiTableHeadCellProps: {sx: {color: 'orange'}}
             })) : [];
 
             // Form notes (orange)
@@ -206,7 +222,7 @@ export default memo(function EventListAccordions({
                 header: 'Note Form',
                 size: 50,
                 Cell: ({row}) => row.original.form_notes || '',
-                muiTableHeadCellProps: { sx: {color: 'orange'} }
+                muiTableHeadCellProps: {sx: {color: 'orange'}}
             } : null;
 
             // Additional fields (keep magenta / purple)
@@ -217,11 +233,27 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.additional_data?.[field.name];
+                    if (field.type === 'l') {
+                        if (val) {
+                            return (
+                                <span>
+                                    <Button variant="text"
+                                            color="primary"
+                                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                                            onClick={() => window.open(val, '_blank', 'noopener,noreferrer')}>
+                                        Link Drive
+                                    </Button>
+                                </span>
+                            );
+                        }
+                        return '';
+                    }
                     if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
                     if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
                     return val ?? '';
                 },
-                muiTableHeadCellProps: { sx: {color: 'mediumvioletred'} }
+                muiTableHeadCellProps: {sx: {color: 'mediumvioletred'}}
             })) : [];
 
             // Order: profile fields, form fields, form notes, additional fields
@@ -251,12 +283,12 @@ export default memo(function EventListAccordions({
                     accessorKey: 'profile_name',
                     header: 'Profilo',
                     size: 50,
-                    muiTableHeadCellProps: { 'data-profile-header': 1 },
-                    muiTableBodyCellProps: { 'data-profile-cell': 1 },
+                    muiTableHeadCellProps: {'data-profile-header': 1},
+                    muiTableBodyCellProps: {'data-profile-cell': 1},
                     Cell: ({row}) => {
                         const sub = row.original;
                         if (sub.external_name) {
-                            return <span>{sub.external_name}</span>;
+                            return <span>{sub.external_name} ({sub.additional_data.external_email})</span>;
                         }
                         return (
                             <span>
@@ -283,7 +315,7 @@ export default memo(function EventListAccordions({
                             label = 'In attesa';
                         } else if (status === 'paid') {
                             color = 'success';
-                            label = 'Pagata ('+ (cell.row.original.account_name || '-') + ')';
+                            label = 'Pagata (' + (cell.row.original.account_name || '-') + ')';
                         } else if (status === 'reimbursed') {
                             color = 'warning';
                             label = 'Rimborsata';
@@ -305,7 +337,7 @@ export default memo(function EventListAccordions({
                             label = 'In attesa';
                             color = 'error';
                         } else if (status === 'paid') {
-                            label = 'Pagata ('+ (cell.row.original.account_name || '-') + ')';
+                            label = 'Pagata (' + (cell.row.original.account_name || '-') + ')';
                             color = 'success';
                         } else if (status === 'reimbursed') {
                             label = 'Rimborsata';
@@ -353,82 +385,84 @@ export default memo(function EventListAccordions({
                 columns = [...listSubscriptionsColumns, ...dynamicColumns];
             }
 
-            // ...existing actions column logic...
-            if ((hasDeposit || hasQuota) && isBoardMember) {
-                columns.push({
-                    accessorKey: 'actions',
-                    header: 'Azioni',
-                    size: 120,
-                    enableSorting: false,
-                    enableColumnActions: false,
-                    Cell: ({row}) => {
-                        const sub = row.original;
-                        const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
-                        const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
+            // Actions column (sticky/pinned left)
+            const actionsColumn = hasDeposit || hasQuota ? {
+                accessorKey: 'actions',
+                header: 'Azioni',
+                size: 120,
+                enableSorting: false,
+                enableColumnActions: false,
+                Cell: ({row}) => {
+                    const sub = row.original;
+                    const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
+                    const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
 
-                        return (<>
+                    // --- Disable reimbursement if event.reimbursements_by_organizers_only is true and user is not allowed ---
+                    const reimbursementsRestricted = data.reimbursements_by_organizers_only && !(isBoardMember || isOrganizer);
+
+                    return (<>
+                        <IconButton
+                            title="Modifica Risposte Form"
+                            color="primary"
+                            disabled={!data.enable_form}
+                            onClick={e => {
+                                e.stopPropagation();
+                                onOpenEditAnswers(sub);
+                            }}
+                        >
+                            <EditNoteIcon/>
+                        </IconButton>
+                        {hasQuota && (
                             <IconButton
-                                title="Modifica Risposte Form"
-                                color="primary"
-                                disabled={!sub.created_by_form}
+                                title="Rimborsa Quota"
+                                color="secondary"
+                                disabled={!canReimburseQuota || reimbursementsRestricted}
                                 onClick={e => {
                                     e.stopPropagation();
-                                    onOpenEditAnswers(sub);
+                                    if (!reimbursementsRestricted) onOpenReimburseQuota(sub);
                                 }}
                             >
-                                <EditNoteIcon/>
+                                <EuroIcon/>
                             </IconButton>
-                            {hasQuota && isBoardMember && (
-                                <IconButton
-                                    title="Rimborsa Quota"
-                                    color="secondary"
-                                    disabled={!canReimburseQuota}
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        onOpenReimburseQuota(sub);
-                                    }}>
-                                    <EuroIcon/>
-                                </IconButton>
-                            )}
-                            {hasDeposit && isBoardMember && (
-                                <IconButton
-                                    title="Rimborsa Cauzione"
-                                    color="primary"
-                                    disabled={!canReimburseDeposit}
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        onOpenReimburseDeposits(sub);
-                                    }}>
-                                    <AddCardIcon/>
-                                </IconButton>
-                            )}
-                        </>);
-                    },
-                });
-            } else {
-                columns.push({
-                    accessorKey: 'actions',
-                    header: 'Azioni',
-                    size: 120,
-                    enableSorting: false,
-                    enableColumnActions: false,
-                    Cell: ({row}) => {
-                        const sub = row.original;
-                        return (
+                        )}
+                        {hasDeposit && (
                             <IconButton
-                                title="Modifica Risposte Form"
+                                title="Rimborsa Cauzione"
                                 color="primary"
+                                disabled={!canReimburseDeposit || reimbursementsRestricted}
                                 onClick={e => {
                                     e.stopPropagation();
-                                    onOpenEditAnswers(sub);
+                                    if (!reimbursementsRestricted) onOpenReimburseDeposits(sub);
                                 }}
+                                style={reimbursementsRestricted ? {opacity: 0.5, pointerEvents: 'none'} : {}}
                             >
-                                <EditNoteIcon/>
+                                <AddCardIcon/>
                             </IconButton>
-                        );
-                    }
-                });
-            }
+                        )}
+                    </>);
+                },
+            } : {
+                accessorKey: 'actions',
+                header: 'Azioni',
+                size: 120,
+                enableSorting: false,
+                enableColumnActions: false,
+                Cell: ({row}) => {
+                    const sub = row.original;
+                    return (
+                        <IconButton
+                            title="Modifica Risposte Form"
+                            color="primary"
+                            onClick={e => {
+                                e.stopPropagation();
+                                onOpenEditAnswers(sub);
+                            }}
+                        >
+                            <EditNoteIcon/>
+                        </IconButton>
+                    );
+                }
+            };
 
             // Copy column (sticky/pinned left) with header + row copy (Excel-safe '+')
             const copyColumn = {
@@ -520,7 +554,7 @@ export default memo(function EventListAccordions({
                             }
                             if (!values.length) {
                                 const visibleCells = row.getVisibleCells()
-                                    .filter(c => !['copy','profile_name','actions','mrt-row-select'].includes(c.column.id));
+                                    .filter(c => !['copy', 'profile_name', 'actions', 'mrt-row-select'].includes(c.column.id));
                                 values = visibleCells.map(cell => {
                                     // Format subscribed_at like the UI
                                     if (cell.column.id === 'subscribed_at') {
@@ -544,12 +578,12 @@ export default memo(function EventListAccordions({
                         }
                     };
                     return (
-                        <Box sx={{display:'flex', alignItems:'center'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center'}}>
                             <IconButton size="small" onClick={handleCopy} title="Copia riga (Excel)">
                                 {copied ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
                             </IconButton>
                             {copied && (
-                                <Typography variant="caption" color="success.main" sx={{ml:0.5}}>
+                                <Typography variant="caption" color="success.main" sx={{ml: 0.5}}>
                                     Copiato
                                 </Typography>
                             )}
@@ -559,8 +593,9 @@ export default memo(function EventListAccordions({
                 muiTableHeadCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 3}},
                 muiTableBodyCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 2}},
             };
-            // Insert at far left
+            // Insert Azioni right after the selection checkboxes and keep Copy next
             columns.unshift(copyColumn);
+            columns.unshift(actionsColumn);
 
             // Add a caption and toggles for form/aspect columns
             const formAspectCaption = (
@@ -714,26 +749,26 @@ export default memo(function EventListAccordions({
                 display: false,
                 initialState: {
                     showColumnFilters: false,
-                    pagination: { pageSize: 10, pageIndex: 0 },
+                    pagination: {pageSize: 5, pageIndex: 0},
                     columnVisibility: {id: false},
-                    columnPinning: { left: ['copy'] },
+                    columnPinning: {left: ['actions', 'copy']},
                 },
                 paginationDisplayMode: 'pages',
                 localization: MRT_Localization_IT,
-                muiTableBodyRowProps: ({ row }) => {
+                muiTableBodyRowProps: ({row}) => {
                     const profile = row.original.profile;
                     const matricolaExpiration = profile?.matricola_expiration;
                     const isExpired = matricolaExpiration && dayjs(matricolaExpiration).isBefore(dayjs(), 'day');
-                    
-                    const tooltipTitle = isExpired 
+
+                    const tooltipTitle = isExpired
                         ? `⚠️ Matricola scaduta il ${dayjs(matricolaExpiration).format('DD/MM/YYYY')}`
                         : '';
-                    
+
                     return {
                         sx: {
-                            backgroundColor: isExpired ? '#ffebee' : 'inherit', 
-                            '&:hover': {                                
-                                backgroundColor: isExpired ? '#ffcdd2' : 'rgba(0, 0, 0, 0.04)', 
+                            backgroundColor: isExpired ? '#ffebee' : 'inherit',
+                            '&:hover': {
+                                backgroundColor: isExpired ? '#ffcdd2' : 'rgba(0, 0, 0, 0.04)',
                             },
                         },
                         title: tooltipTitle,
@@ -843,9 +878,9 @@ export default memo(function EventListAccordions({
         const listObj = data.lists?.find(l => l.id === listId);
         let listLabel = null;
         if (listObj?.is_main_list) {
-            listLabel = <Chip label="Main List" color="primary" size="small" sx={{ml: 1}} />;
+            listLabel = <Chip label="Main List" color="primary" size="small" sx={{ml: 1}}/>;
         } else if (listObj?.is_waiting_list) {
-            listLabel = <Chip label="Waiting List" color="warning" size="small" sx={{ml: 1}} />;
+            listLabel = <Chip label="Waiting List" color="warning" size="small" sx={{ml: 1}}/>;
         }
         const isInfinite = capacity === 0;
         const occupancyPercentage = !isInfinite && capacity > 0 ? Math.round((subscription_count / capacity) * 100) : 0;

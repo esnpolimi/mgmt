@@ -1,13 +1,18 @@
 import {useEffect, useState, useRef} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
-import {Box, Container, Typography, CircularProgress, Alert, Button} from '@mui/material';
+import {Box, Container, Typography, CircularProgress, Alert} from '@mui/material';
 import {fetchCustom} from '../../api/api';
 
 export default function EventPayment() {
     const {id} = useParams();
     const location = useLocation();
     const navigate = useNavigate();
-    const {subscriptionId, assignedList, checkoutId} = location.state || {};
+    const {subscriptionId: stateSubId, assignedList: stateAssigned, checkoutId: stateCheckout} = location.state || {};
+    const search = new URLSearchParams(location.search);
+    const qpSubId = search.get('subscriptionId');
+    const subscriptionId = stateSubId || qpSubId;
+    const [assignedList] = useState(stateAssigned);
+    const [checkoutId, setCheckoutId] = useState(stateCheckout || null);
     const [status, setStatus] = useState('init'); // init | widget | processing | success | failed
     const [message, setMessage] = useState('');
     const sumupMountedRef = useRef(false);
@@ -23,11 +28,62 @@ export default function EventPayment() {
         });
 
     useEffect(() => {
-        if (!subscriptionId || !checkoutId) {
+        if (!subscriptionId) {
             setStatus('failed');
-            setMessage('Missing payment session.');
+            setMessage('Missing subscription reference.');
             return;
         }
+        // If we already have checkoutId from state proceed to widget loader (handled by other effect)
+        if (checkoutId) return;
+        let canceled = false;
+        (async () => {
+            try {
+                setStatus('init');
+                setMessage('Checking payment status...');
+                await fetchCustom('GET', `/subscription/${subscriptionId}/status/`, {
+                    auth: false,
+                    onSuccess: (data) => {
+                        if (canceled) return;
+                        if (data.overall_status === 'paid') {
+                            navigate(`/event/${id}/formresult`, {
+                                state: {subscriptionId, assignedList, paid: true}
+                            });
+                            return;
+                        }
+                        if (!data.sumup_checkout_id) {
+                            setStatus('failed');
+                            setMessage('No online payment session available.');
+                            return;
+                        }
+                        setCheckoutId(data.sumup_checkout_id);
+                        // proceed to script loading effect
+                    },
+                    onError: () => {
+                        if (canceled) return;
+                        setStatus('failed');
+                        setMessage('Unable to retrieve payment session.');
+                    }
+                });
+            } catch {
+                if (!canceled) {
+                    setStatus('failed');
+                    setMessage('Error preparing payment.');
+                }
+            }
+        })();
+        return () => {canceled = true;};
+    }, [subscriptionId, checkoutId, id, navigate, assignedList]);
+
+    useEffect(() => {
+        if (!checkoutId || !subscriptionId) return;
+        // existing script loader effect modified
+        if (status !== 'init' && status !== 'widget' && status !== 'failed') return;
+        // existing logic moved to separate effect below
+    }, [checkoutId, subscriptionId, status]);
+
+    useEffect(() => {
+        if (!checkoutId || !subscriptionId) return;
+        if (status !== 'init') return;
         let canceled = false;
         (async () => {
             try {
@@ -41,15 +97,17 @@ export default function EventPayment() {
                 }
                 setStatus('widget');
             } catch {
-                setStatus('failed');
-                setMessage('Failed to load payment resources.');
+                if (!canceled) {
+                    setStatus('failed');
+                    setMessage('Failed to load payment resources.');
+                }
             }
         })();
         return () => {canceled = true;};
-    }, [subscriptionId, checkoutId]);
+    }, [checkoutId, subscriptionId]);
 
     useEffect(() => {
-        if (status !== 'widget' || sumupMountedRef.current || !window.SumUpCard) return;
+        if (status !== 'widget' || sumupMountedRef.current || !window.SumUpCard || !checkoutId) return;
         try {
             window.SumUpCard.mount({
                 id: 'sumup-card',
@@ -97,13 +155,13 @@ export default function EventPayment() {
             sumupMountedRef.current = true;
         } catch (e) {
             setStatus('failed');
-            setMessage('Failed to initialize payment form.');
+            setMessage('Failed to initialize payment form: ' + e.message);
         }
     }, [status, checkoutId, subscriptionId, assignedList, id, navigate]);
 
-    const finish = () => navigate(`/event/${id}/formresult`, {
-        state: {subscriptionId, assignedList, paymentError: status === 'failed'}
-    });
+    //const finish = () => navigate(`/event/${id}/formresult`, {
+    //    state: {subscriptionId, assignedList, paymentError: status === 'failed'}
+    //});
 
     return (
         <Container maxWidth="sm" sx={{mt:8}}>
@@ -125,7 +183,7 @@ export default function EventPayment() {
             )}
             {status === 'failed' && (
                 <Alert severity="error" sx={{mt:2}}>
-                    {message} <Button size="small" onClick={finish}>Continue</Button>
+                    {message}
                 </Alert>
             )}
         </Container>

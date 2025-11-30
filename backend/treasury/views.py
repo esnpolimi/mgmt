@@ -46,7 +46,7 @@ def get_action_permissions(action, user):
     Returns True if the user is allowed to perform the given action.
     """
     if action in ['reimburse_deposits', 'reimburse_quota']:
-        return user_is_board(user)
+        return True  # user_is_board(user)
     if action == 'account_creation':
         return user_is_board(user)
     if action == 'account_detail_patch':
@@ -175,6 +175,7 @@ def esncard_detail(request, pk):
             esncard_serializer = ESNcardSerializer(esncard, data=update_data, partial=True)
             if esncard_serializer.is_valid():
                 esncard_serializer.save()
+                return Response(esncard_serializer.data, status=200)  # Return updated data
             else:
                 return Response(esncard_serializer.errors, status=400)
         else:
@@ -230,32 +231,34 @@ def transaction_add(request):
             return Response({'error': str(pe)}, status=403)
 
         # --- Email notification for manual deposit / withdrawal ---
-        if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
-            try:
-                executor_profile = getattr(tx.executor, 'profile', None)
-                executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
-                executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
-                receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
-                subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
-                local_dt = timezone.localtime(tx.created_at)
-                body = (
-                    f"Tipo: {transaction_type}\n"
-                    f"Importo: {tx.amount} EUR\n"
-                    f"Cassa: {tx.account.name}\n"
-                    f"Esecutore: {executor_name} ({executor_email})\n"
-                    f"Descrizione: {tx.description}\n"
-                    f"Data: {local_dt.strftime('%d/%m/%Y %H:%M')}\n"
-                    f"Ricevuta: {receipt_info}\n"
-                )
-                send_mail(
-                    subject=subject,
-                    message=body,
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                    recipient_list=['tesoriere@esnpolimi.it'],
-                    fail_silently=True
-                )
-            except Exception as mail_exc:
-                logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
+        if 'localhost' in settings.SCHEME_HOST:
+            print("Skipping email notification in localhost environment.")
+        else:
+            if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
+                try:
+                    executor_profile = getattr(tx.executor, 'profile', None)
+                    executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
+                    executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
+                    receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
+                    subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
+                    body = (
+                        f"Tipo: {transaction_type}\n"
+                        f"Importo: {tx.amount} EUR\n"
+                        f"Cassa: {tx.account.name}\n"
+                        f"Esecutore: {executor_name} ({executor_email})\n"
+                        f"Descrizione: {tx.description}\n"
+                        f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                        f"Ricevuta: {receipt_info}\n"
+                    )
+                    send_mail(
+                        subject=subject,
+                        message=body,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        recipient_list=['tesoriere@esnpolimi.it'],
+                        fail_silently=True
+                    )
+                except Exception as mail_exc:
+                    logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
 
         return Response(status=200)
     except Exception as e:
@@ -473,29 +476,31 @@ def reimbursement_request_creation(request):
         if serializer.is_valid():
             instance = serializer.save()
             # --- Email notification for reimbursement request creation ---
-            try:
-                profile = getattr(instance.user, 'profile', None)
-                user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
-                receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
-                subject = f"Nuova richiesta di rimborso #{instance.id}"
-                local_dt = timezone.localtime(instance.created_at)
-                body = (
-                    f"Richiedente: {user_name}\n"
-                    f"Importo: {instance.amount} EUR\n"
-                    f"Metodo pagamento: {instance.payment}\n"
-                    f"Descrizione: {instance.description}\n"
-                    f"Data richiesta: {local_dt.strftime('%d/%m/%Y %H:%M')}\n"
-                    f"Ricevuta: {receipt_info}\n"
-                )
-                send_mail(
-                    subject=subject,
-                    message=body,
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                    recipient_list=['tesoriere@esnpolimi.it'],
-                    fail_silently=True
-                )
-            except Exception as mail_exc:
-                logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
+            if 'localhost' in settings.SCHEME_HOST:
+                print("Skipping email notification in localhost environment.")
+            else:
+                try:
+                    profile = getattr(instance.user, 'profile', None)
+                    user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
+                    receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
+                    subject = f"Nuova richiesta di rimborso #{instance.id}"
+                    body = (
+                        f"Richiedente: {user_name}\n"
+                        f"Importo: {instance.amount} EUR\n"
+                        f"Metodo pagamento: {instance.payment}\n"
+                        f"Descrizione: {instance.description}\n"
+                        f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                        f"Ricevuta: {receipt_info}\n"
+                    )
+                    send_mail(
+                        subject=subject,
+                        message=body,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        recipient_list=['tesoriere@esnpolimi.it'],
+                        fail_silently=True
+                    )
+                except Exception as mail_exc:
+                    logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
 
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
@@ -626,6 +631,14 @@ def reimburse_deposits(request):
         account = Account.objects.get(id=account_id)
         subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
 
+        # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
+        if getattr(event, 'reimbursements_by_organizers_only', False):
+            is_board = user_is_board(request.user)
+            organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
+            user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+            if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
+                return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
+
         if not subscriptions.exists():
             return Response({'error': 'Nessuna iscrizione valida trovata.'}, status=400)
 
@@ -745,6 +758,14 @@ def reimburse_quota(request):
 
         # Use the subscription's owning event for quota metadata (cost, name, etc.)
         sub_event = sub.event
+
+        # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
+        if getattr(event, 'reimbursements_by_organizers_only', False):
+            is_board = user_is_board(request.user)
+            organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
+            user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+            if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
+                return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
 
         # Only allow if event is not free and subscription has a paid transaction
         if not sub_event.cost or float(sub_event.cost) <= 0:

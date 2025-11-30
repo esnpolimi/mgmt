@@ -46,7 +46,7 @@ export const fetchCustom = (method, path, options = {}) => {
     } = options;
 
     const accessToken = localStorage.getItem("accessToken");
-    const API_HOST = import.meta.env.VITE_API_HOST;
+    const API_HOST = window.API_HOST;
     const url = `${API_HOST}${path}`;
 
     if (auth && !accessToken) {

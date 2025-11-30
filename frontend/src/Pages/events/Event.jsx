@@ -83,7 +83,7 @@ export default function Event() {
                 setData(data);
             },
             onError: (responseOrError) => {
-                defaultErrorHandler(responseOrError, setPopup);
+                defaultErrorHandler(responseOrError, setPopup).then();
                 navigate('/events/');
             },
             onFinally: () => setLoading(false)
@@ -159,8 +159,9 @@ export default function Event() {
     };
 
     const handleEditSubscription = (subscriptionId) => {
-        setSelectedList(null);
-        setSubscription(data.subscriptions.find(sub => sub.id === subscriptionId) || null);
+        const subscription = data.subscriptions.find(sub => sub.id === subscriptionId) || null;
+        setSelectedList(subscription?.list_id || null); // Set the listId from the subscription
+        setSubscription(subscription);
         setSubscriptionIsEdit(true);
         setSubscriptionModalOpen(true);
     };
@@ -375,6 +376,22 @@ export default function Event() {
                                                 <Chip label="Iscrizione Esterni Consentita" color="success"
                                                       sx={{mr: 1, mb: 1}}/>
                                             )}
+                                            {/* Show yellow chip if reimbursements_by_organizers_only */}
+                                            {data.reimbursements_by_organizers_only && (
+                                                <Chip
+                                                    label="Rimborsi limitati agli Organizzatori"
+                                                    color="warning"
+                                                    sx={{mr: 1, mb: 1}}
+                                                />
+                                            )}
+                                            {/* Show yellow chip if visible_to_board_only */}
+                                            {data.visible_to_board_only && (
+                                                <Chip
+                                                    label="Solo Board Members"
+                                                    color="warning"
+                                                    sx={{mr: 1, mb: 1}}
+                                                />
+                                            )}
                                             {/* Show if event has a form */}
                                             {data.enable_form && (
                                                 <Box sx={{display: 'flex', alignItems: 'center', mr: 1, mb: 1}}>
@@ -482,7 +499,7 @@ export default function Event() {
                                         </Button>
                                         {!canEditEvent && (
                                             <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
-                                                Solo gli Organizzatori dell'evento e i Board Members possono modificare questo evento.
+                                                Solo gli Organizzatori dell&apos;evento e i Board Members possono modificare questo evento.
                                             </Typography>
                                         )}
                                     </Grid>
@@ -502,6 +519,7 @@ export default function Event() {
                                                 canChangeSubscription={canManageSubscriptions}
                                                 canChangeTransactions={canChangeTransactions}
                                                 isBoardMember={isBoardMember}
+                                                isOrganizer={isOrganizer}
                                             />
                                         </Box>
                                     </Grid>

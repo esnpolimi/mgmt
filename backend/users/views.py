@@ -19,8 +19,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from profiles.models import Profile
 from users.models import User
 from users.serializers import CustomTokenObtainPairSerializer
-from users.serializers import UserSerializer, LoginSerializer, UserReactSerializer, GroupListSerializer
 from users.serializers import FinancePermissionSerializer
+from users.serializers import UserSerializer, LoginSerializer, UserReactSerializer, GroupListSerializer
 
 logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
@@ -46,6 +46,17 @@ def get_action_permissions(action, user):
         return user_is_board(user)
     return True
 
+
+@permission_classes([IsAuthenticated])
+def userinfo(request, user):
+    print(f"OIDC userinfo requested for user {user} with request {request}")
+    """Return user info for DokuWiki OIDC"""
+    return {
+        "sub": str(user.id),
+        "email": user.profile.email,
+        "preferred_username": user.profile.email,
+        "name": f"{user.profile.name} {user.profile.surname}".strip(),
+    }
 
 @api_view(['POST'])
 def log_in(request):
