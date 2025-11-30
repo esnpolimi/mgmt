@@ -90,7 +90,7 @@ export default function ReimbursementRequestsList() {
     const handleCloseReimburseModal = (success) => {
         setReimburseModalOpen(false);
         if (success) {
-            setPopup({message: "Rimborso effettuato con successo!", state: "success", id: Date.now()});
+            setPopup({message: "Operazione effettuata con successo!", state: "success", id: Date.now()});
             refreshRequestsData();
         }
         setSelectedRequest(null);
@@ -220,6 +220,7 @@ export default function ReimbursementRequestsList() {
         enableGrouping: false,
         enableFacetedValues: true,
         enableRowActions: false,
+        enableSorting: false,
         enableRowSelection: false,
         enableExpandAll: false,
         initialState: {

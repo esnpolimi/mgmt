@@ -24,6 +24,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+import os
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import json
 
 from events.models import Event, Subscription
 from events.models import EventList, validate_field_data
@@ -37,6 +42,64 @@ from profiles.models import Profile
 from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
+
+# --- Allowed file types for 'link' form fields (mirrors treasury) ---
+FORM_UPLOAD_ALLOWED_MIMETYPES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/bmp',
+    'image/webp',
+    'image/tiff',
+    'image/heic',
+    'image/heif'
+]
+FORM_UPLOAD_ALLOWED_EXTENSIONS = [
+    '.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'
+]
+
+
+def _validate_form_upload(file_obj):
+    ext = os.path.splitext(file_obj.name)[1].lower()
+    if hasattr(file_obj, 'content_type') and file_obj.content_type not in FORM_UPLOAD_ALLOWED_MIMETYPES:
+        raise ValidationError("File must be an image or a PDF.")
+    if ext not in FORM_UPLOAD_ALLOWED_EXTENSIONS:
+        raise ValidationError("File must be an image or a PDF.")
+    return True
+
+
+def _upload_form_file_to_drive(file_obj, event_id, field_name):
+    """
+    Uploads file for form 'l' field to Drive and returns public link.
+    """
+    GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    service = build('drive', 'v3', credentials=credentials)
+    file_obj.seek(0)
+    mimetype = getattr(file_obj, 'content_type', 'application/octet-stream')
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    ext = os.path.splitext(file_obj.name)[1].lower()
+    safe_field = "".join(c for c in field_name if c.isalnum() or c in ('-', '_'))[:40]
+    filename = f"event{event_id}_form_{safe_field}_{timestamp}{ext}"
+    media = MediaIoBaseUpload(file_obj, mimetype=mimetype)
+    metadata = {'name': filename, 'parents': [GOOGLE_DRIVE_FOLDER_ID]}
+    created = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    service.permissions().create(
+        fileId=created['id'],
+        body={'role': 'reader', 'type': 'anyone'},
+        supportsAllDrives=True
+    ).execute()
+    return f"https://drive.google.com/file/d/{created['id']}/view?usp=sharing"
+
 
 # Merge phone/whatsapp prefixes into numbers in any dict/list payload
 def _combine_prefix_numbers(obj):
@@ -63,17 +126,20 @@ def _combine_prefix_numbers(obj):
         for it in obj:
             _combine_prefix_numbers(it)
 
-# --- Helper to auto-move from "Form List" to ML/WL after payment ---
+
+# --- Helper to auto-move from any non-ML/WL to ML/WL after payment ---
 def attempt_move_from_form_list(subscription):
     """
-    If the subscription is in 'Form List' and a quota or deposit transaction exists
+    If the subscription is in a non-main/waiting list and a quota or deposit transaction exists
     (or event has no cost/deposit), move it to Main List (priority) else Waiting List.
     Returns outcome dict or None if not applicable.
     """
     try:
         lst = subscription.list
-        if not lst or lst.name != 'Form List':
+        # Only attempt if current list is neither Main nor Waiting
+        if not lst or getattr(lst, 'is_main_list', False) or getattr(lst, 'is_waiting_list', False):
             return None
+
         event = subscription.event
         cost = Decimal(event.cost or 0)
         deposit = Decimal(event.deposit or 0)
@@ -149,7 +215,18 @@ def _subscription_recipient_email(subscription):
     if subscription.profile and getattr(subscription.profile, 'email', None):
         return subscription.profile.email
     ad = subscription.additional_data or {}
-    return ad.get('form_email')
+    return ad.get('form_email') or ad.get('external_email')
+
+
+def _get_bool(data, key, default=True):
+    v = data.get(key, None) if hasattr(data, 'get') else None
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ('true', '1', 'yes', 'y', 'on')
+    return bool(v)
 
 
 def _send_email(subject, html_content, to_email):
@@ -170,7 +247,7 @@ def _send_email(subject, html_content, to_email):
         return False
 
 
-def _send_form_subscription_email(subscription, assigned_label, payment_required):
+def _send_form_subscription_email(subscription, assigned_label, online_payment_required, payment_required):
     # Only for form-created subscriptions; send once
     if not getattr(subscription, 'created_by_form', False):
         return
@@ -182,25 +259,32 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
         return
 
     event = subscription.event
-    waiting = 'wait' in assigned_label.lower()
-
+    waiting = 'wait' in (assigned_label or '').lower()
+    notify_lists = getattr(event, 'notify_list', True)
     subject = f"{event.name} - Subscription received"
-
     html_parts = [
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>",
         "<p>We received your subscription!</p>",
-        # f"<p><b>Assigned list:</b> {assigned_label}</p>"
     ]
-    if waiting:
-        html_parts.append(
-            "<p style='color:#b06500'>You are on the Waiting List. We will contact you if a spot becomes available.</p>")
+
     if payment_required:
-        if event.allow_online_payment:
+        if online_payment_required:
+            base = settings.SCHEME_HOST
+            pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
+            html_parts.append("<p>Please complete your payment to be assigned a spot in a list.</p>")
+            # Hide concrete list hints if notify_list is False
+            if notify_lists:
+                if waiting:
+                    html_parts.append("<p style='color:#b06500'>Spots are only available in the Waiting List at the moment.</p>")
+                else:
+                    html_parts.append("<p style='color:#0a5db3'>Spots are available in the Main List at the moment.</p>")
             html_parts.append(
-                "<p>Payment is required. If you already paid online you will soon get a separate payment confirmation email.</p>")
+                "<p>Use the link below to complete your payment:<br/>"
+                f"<a href='{pay_link}' style='font-weight:bold;color:#0a5db3;'>{pay_link}</a></p>"
+            )
         else:
             html_parts.append(
-                "<p>Payment is required. Please follow the instructions sent on our channels.<br/>"
+                "<p>Payment is required. Please follow the instructions already sent on our channels.<br/>"
             )
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
@@ -214,11 +298,18 @@ def _send_form_subscription_email(subscription, assigned_label, payment_required
 
 
 def _send_payment_confirmation_email(subscription):
-    # Only for form-created subscriptions; send once when payment actually recorded
-    if not getattr(subscription, 'created_by_form', False):
-        return
     ad = subscription.additional_data or {}
+    recipient = _subscription_recipient_email(subscription)
+
+    # Allow sending if:
+    #  - subscription was created via public form (created_by_form)
+    #  - OR a recipient is available (profile email / form email / external_email)
+    if not (getattr(subscription, 'created_by_form', False) or recipient or (subscription.external_name and ad.get('external_email'))):
+        logger.debug(f"_send_payment_confirmation_email: no recipient and not form-created -> skipping for sub {subscription.pk}")
+        return
+
     if ad.get('payment_confirmation_email_sent'):
+        logger.debug(f"_send_payment_confirmation_email: already sent flag present for sub {subscription.pk}")
         return
 
     event = subscription.event
@@ -226,6 +317,7 @@ def _send_payment_confirmation_email(subscription):
     deposit = Decimal(event.deposit or 0)
     payment_required = (cost > 0) or (deposit > 0)
     if not payment_required:
+        logger.debug(f"_send_payment_confirmation_email: no payment required for event {event.id}, sub {subscription.pk}")
         return  # Nothing to confirm
 
     quota_tx = Transaction.objects.filter(subscription=subscription,
@@ -237,12 +329,14 @@ def _send_payment_confirmation_email(subscription):
     # - If cost > 0 -> require quota transaction
     # - Else if cost == 0 and deposit > 0 -> require deposit transaction
     if cost > 0 and not quota_tx:
+        logger.debug(f"_send_payment_confirmation_email: quota tx missing for sub {subscription.pk}")
         return
     if cost == 0 and deposit > 0 and not deposit_tx:
+        logger.debug(f"_send_payment_confirmation_email: deposit tx missing for sub {subscription.pk}")
         return
 
-    recipient = _subscription_recipient_email(subscription)
     if not recipient:
+        logger.debug(f"_send_payment_confirmation_email: recipient resolution failed for sub {subscription.pk}")
         return
 
     paid_parts = []
@@ -254,17 +348,28 @@ def _send_payment_confirmation_email(subscription):
 
     subject = f"{event.name} - Payment confirmed"
 
+    # Hide concrete list assignment if notify_list is False
+    if getattr(event, 'notify_list', True):
+        list_sentence = f"You have been assigned to the <b>{subscription.list.name if subscription.list else '(no list)'}</b>."
+    else:
+        list_sentence = "List of assignment to be determined, please wait for our confirmation."
+
     html_content = (
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
         f"<p>We have registered your <b>{paid_label}</b>.</p>"
+        f"<p>{list_sentence}</p>"
         "<p>Thank you,<br/>ESN Politecnico Milano</p>"
         "</body></html>"
     )
 
-    if _send_email(subject, html_content, recipient):
+    sent = _send_email(subject, html_content, recipient)
+    if sent:
         ad['payment_confirmation_email_sent'] = True
         subscription.additional_data = ad
         subscription.save(update_fields=['additional_data'])
+        logger.debug(f"_send_payment_confirmation_email: sent to {recipient} for sub {subscription.pk}")
+    else:
+        logger.warning(f"_send_payment_confirmation_email: failed to send to {recipient} for sub {subscription.pk}")
 
 
 def _upsert_transaction(*, subscription, tx_type, account_id, amount, description, executor):
@@ -298,11 +403,13 @@ def _remove_transaction(subscription, tx_type):
     Transaction.objects.filter(subscription=subscription, type=tx_type).delete()
 
 
-def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, executor, allow_delete=True):
+def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, executor, allow_delete=True,
+                           auto_move_on_payment=True, send_email_on_payment=True):
     """
     Apply payment statuses for quota & deposit using unified logic.
     quota_status / deposit_status: 'paid' | other (delete if allow_delete)
     Guaranteed: subscription is a saved instance (has .pk).
+    Returns move_info if auto-move executed, else None.
     """
     event_obj = subscription.event
     quota_amount = Decimal(event_obj.cost or 0)
@@ -335,7 +442,22 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
     elif allow_delete:
         _remove_transaction(subscription, Transaction.TransactionType.CAUZIONE)
 
-    _send_payment_confirmation_email(subscription)
+    # Determine if any payment is (now) registered
+    did_pay = Transaction.objects.filter(subscription=subscription,
+                                         type__in=[Transaction.TransactionType.SUBSCRIPTION,
+                                                   Transaction.TransactionType.CAUZIONE]).exists()
+    # print(f"DEBUG: did_pay={did_pay} for sub {subscription.pk}, auto_move={auto_move_on_payment}, send_email={send_email_on_payment}")
+    move_info = None
+    if auto_move_on_payment and did_pay:
+        try:
+            move_info = attempt_move_from_form_list(subscription)
+        except Exception as move_err:
+            logger.error(f"Auto-move after payment failed for sub {subscription.pk}: {move_err}")
+
+    if send_email_on_payment and did_pay:
+        _send_payment_confirmation_email(subscription)
+
+    return move_info
 
 
 # --------------------------------------------------------------------------------------
@@ -348,6 +470,10 @@ def events_list(request):
         return Response({'error': 'Non hai i permessi per visualizzare gli eventi.'}, status=403)
     try:
         events = Event.objects.all().order_by('-created_at')
+        # --- Filter out board-only events unless user is board member ---
+        if not request.user.groups.filter(name__in=['Board']).exists():
+            events = events.filter(visible_to_board_only=False)
+
         search = request.GET.get('search', '').strip()
         if search:
             events = events.filter(Q(name__icontains=search))
@@ -403,6 +529,9 @@ def event_creation(request):
 def event_detail(request, pk):
     try:
         event = Event.objects.get(pk=pk)
+        # --- Filter out board-only event unless user is board member ---
+        if event.visible_to_board_only and not request.user.groups.filter(name__in=['Board']).exists():
+            return Response({'error': 'Non hai i permessi per visualizzare questo evento.'}, status=403)
 
         if request.method == 'GET':
             if not get_action_permissions(request, 'event_detail_GET'):
@@ -490,15 +619,22 @@ def subscription_create(request):
                           or request.data.get('account')
                           or getattr(serializer, 'account', None)
                           or getattr(serializer, 'account_id', None))
-            _handle_payment_status(
+
+            # Extract send_payment_email from the request
+            auto_move = _get_bool(request.data, 'auto_move_after_payment', True)
+            send_email = _get_bool(request.data, 'send_payment_email', True)
+            # print(f"DEBUG: auto_move={auto_move}, send_email={send_email} for sub {subscription.pk}")
+            move_info = _handle_payment_status(
                 subscription=subscription,
                 account_id=account_id,
                 quota_status=status_quota,
                 deposit_status=status_cauzione,
                 executor=request.user,
-                allow_delete=False
+                allow_delete=False,
+                auto_move_on_payment=auto_move,
+                send_email_on_payment=send_email
             )
-            move_info = attempt_move_from_form_list(subscription)
+
             # Re-serialize to reflect possible list change
             data = SubscriptionSerializer(subscription).data
             if move_info:
@@ -561,65 +697,60 @@ def subscription_detail(request, pk):
 
             # otherwise return permission denied
             else:'''
-            if not get_action_permissions(request, 'subscription_detail_PATCH'):
-                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
             if quota_reimbursed or cauzione_reimbursed:
                 return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'},
                                 status=400)
-            if request.user.has_perm('events.change_subscription'):
-                # --- Sanitize nullable statuses ---
-                mutable_data = request.data.copy()
-                if mutable_data.get('status_quota', None) is None:
-                    mutable_data['status_quota'] = 'pending'
-                if mutable_data.get('status_cauzione', None) is None:
-                    mutable_data['status_cauzione'] = 'pending'
-                serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
-                serializer.is_valid(raise_exception=True)
-                with transaction.atomic():
-                    updated_sub = serializer.save()
-                    account_id = (mutable_data.get('account_id')
-                                  or mutable_data.get('account')
-                                  or getattr(serializer, 'account_id', None))
-                    
-                    # If account_id is not provided, try to get it from existing transactions
-                    if not account_id:
-                        existing_tx = Transaction.objects.filter(
-                            subscription=sub,
-                            type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
-                        ).first()
-                        if existing_tx:
-                            account_id = existing_tx.account.id
-                    
-                    status_quota = mutable_data.get('status_quota', 'pending')
-                    status_cauzione = mutable_data.get('status_cauzione', 'pending')
-                    _handle_payment_status(
-                        subscription=updated_sub,
-                        account_id=account_id,
-                        quota_status=status_quota,
-                        deposit_status=status_cauzione,
-                        executor=request.user,
-                        allow_delete=True
-                    )
-                    move_info = attempt_move_from_form_list(updated_sub)
-                # Re-serialize to reflect possible move
-                resp_data = SubscriptionSerializer(updated_sub).data
-                if move_info:
-                    if move_info.get('status') == 'moved':
-                        resp_data.update({
-                            'auto_move_status': 'moved',
-                            'auto_move_list': move_info.get('list'),
-                            'auto_move_reason': None
-                        })
-                    elif move_info.get('status') == 'stayed':
-                        resp_data.update({
-                            'auto_move_status': 'stayed',
-                            'auto_move_list': None,
-                            'auto_move_reason': move_info.get('reason')
-                        })
-                _combine_prefix_numbers(resp_data)  # merge prefixes into numbers
-                return Response(resp_data, status=200)
-            else:
+            if not get_action_permissions(request, 'subscription_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+            # --- Sanitize nullable statuses ---
+            mutable_data = request.data.copy()
+            if 'status_quota' not in mutable_data or mutable_data['status_quota'] is None:
+                return Response({'error': 'status_quota is required.'}, status=400)
+            if 'status_cauzione' not in mutable_data or mutable_data['status_cauzione'] is None:
+                return Response({'error': 'status_cauzione is required.'}, status=400)
+            serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            with transaction.atomic():
+                updated_sub = serializer.save()
+                account_id = (mutable_data.get('account_id')
+                              or mutable_data.get('account')
+                              or getattr(serializer, 'account_id', None))
+
+                status_quota = mutable_data['status_quota']
+                status_cauzione = mutable_data['status_cauzione']
+
+                # Ensure send_email_on_payment is properly handled
+                auto_move = _get_bool(mutable_data, 'auto_move_after_payment', True)
+                send_email = _get_bool(mutable_data, 'send_payment_email', True)
+
+                move_info = _handle_payment_status(
+                    subscription=updated_sub,
+                    account_id=account_id,
+                    quota_status=status_quota,
+                    deposit_status=status_cauzione,
+                    executor=request.user,
+                    allow_delete=True,
+                    auto_move_on_payment=auto_move,
+                    send_email_on_payment=send_email
+                )
+
+            # Re-serialize to reflect possible move
+            resp_data = SubscriptionSerializer(updated_sub).data
+            if move_info:
+                if move_info.get('status') == 'moved':
+                    resp_data.update({
+                        'auto_move_status': 'moved',
+                        'auto_move_list': move_info.get('list'),
+                        'auto_move_reason': None
+                    })
+                elif move_info.get('status') == 'stayed':
+                    resp_data.update({
+                        'auto_move_status': 'stayed',
+                        'auto_move_list': None,
+                        'auto_move_reason': move_info.get('reason')
+                    })
+            _combine_prefix_numbers(resp_data)  # merge prefixes into numbers
+            return Response(resp_data, status=200)
 
         elif request.method == "DELETE":
             if not get_action_permissions(request, 'subscription_detail_DELETE'):
@@ -1009,7 +1140,7 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
 def _ensure_sumup_transactions(subscription):
     """
     Idempotently create quota/deposit if paid remotely. Uses unified helpers.
-    Also moves subscription out of 'Form List' if payment succeeds and space exists.
+    Also moves subscription out of non-ML/WL if payment succeeds and space exists.
     """
     try:
         event_obj = subscription.event
@@ -1017,17 +1148,20 @@ def _ensure_sumup_transactions(subscription):
         deposit = Decimal(event_obj.deposit or 0)
         if cost <= 0 and deposit <= 0:
             return
+
         account = Account.objects.filter(name="SumUp").first()
+        # Defaults: auto-move and send email enabled for remote payments
         _handle_payment_status(
             subscription=subscription,
             account_id=account.id if account else None,
             quota_status='paid' if cost > 0 else 'pending',
             deposit_status='paid' if deposit > 0 else 'pending',
             executor=None,
-            allow_delete=False
+            allow_delete=False,
+            auto_move_on_payment=True,
+            send_email_on_payment=True
         )
-        # Auto-move after successful SumUp payment
-        attempt_move_from_form_list(subscription)
+
     except Exception as e:
         logger.error(f"Failed _ensure_sumup_transactions for sub {subscription.pk}: {e}")
 
@@ -1164,10 +1298,12 @@ def event_form_view(_, event_id):
 def event_form_status(_, event_id):
     """
     Public endpoint to check if the event is full.
+    Also checks for the status of the SumUp account.
     NOW: primary gate is the Form List capacity (Form List).
     Legacy fields (main_list_full / waiting_list_full) still returned for backward compatibility.
     """
     try:
+        sumup_account = Account.objects.filter(name="SumUp").first()
         event = Event.objects.get(pk=event_id)
         event_lists = EventList.objects.filter(event=event)
         main_list = event_lists.filter(is_main_list=True).first()
@@ -1196,6 +1332,7 @@ def event_form_status(_, event_id):
             form_message = "The Form List is full. No further online subscriptions are possible."
 
         return Response({
+            "account_status": sumup_account.status,
             "main_list_full": main_list_full,
             "waiting_list_full": waiting_list_full,
             "message": message,
@@ -1225,7 +1362,17 @@ def event_form_submit(request, event_id):
     """
     try:
         event = Event.objects.get(pk=event_id)
-        form_data = request.data.get("form_data", {}) or {}
+        form_data_raw = request.data.get("form_data", {}) or {}
+        # Support multipart where form_data may arrive as JSON string
+        if isinstance(form_data_raw, str):
+            try:
+                form_data = json.loads(form_data_raw)
+                if not isinstance(form_data, dict):
+                    form_data = {}
+            except Exception:
+                form_data = {}
+        else:
+            form_data = form_data_raw
         form_notes = request.data.get("form_notes", "") or ""
         email = (request.data.get("email") or "").strip()
 
@@ -1253,38 +1400,28 @@ def event_form_submit(request, event_id):
         if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
             return Response({"error": "Already subscribed to this event as external"}, status=400)
 
-        # Validate only form field data
+        # --- Handle file uploads for 'l' type fields BEFORE validation ---
+        link_fields = [f['name'] for f in event.form_fields if f.get('type') == 'l']
+        for fname in link_fields:
+            uploaded = request.FILES.get(fname)
+            if uploaded:
+                _validate_form_upload(uploaded)
+                try:
+                    link = _upload_form_file_to_drive(uploaded, event.id, fname)
+                except Exception as up_err:
+                    logger.error(f"Upload failed for field {fname}: {up_err}")
+                    return Response({"error": f"Upload failed for field {fname}"}, status=500)
+                form_data[fname] = link
+
+        # Validate only form field data (now includes generated links)
         errors = validate_field_data(event.fields, form_data, 'form')
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
-        # Determine target list (main, else waiting)
-        '''
-        event_lists = EventList.objects.filter(event=event)
-        main_list = event_lists.filter(is_main_list=True).first()
-        waiting_list = event_lists.filter(is_waiting_list=True).first()
-
-        def has_space(lst):
-            if not lst:
-                return False
-            if lst.capacity == 0:
-                return True
-            return lst.subscription_count < lst.capacity
-
-        if has_space(main_list):
-            assigned_list = main_list
-            assigned_label = "Main List"
-        elif has_space(waiting_list):
-            assigned_list = waiting_list
-            assigned_label = "Waiting List"
-        else:
-            return Response({"error": "No available list for subscription. All lists are full."}, status=400)
-        '''
         # Determine form list (always use form list; capacity not enforced here)
         form_list = event.lists.filter(name='Form List').first()
         if not form_list:
             return Response({"error": "Form list not configured for this event"}, status=400)
-        assigned_label = ''
 
         sub = Subscription.objects.create(
             profile=profile,
@@ -1311,9 +1448,32 @@ def event_form_submit(request, event_id):
                 print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
                 logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
 
-        payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error) or total_cost > 0
+        online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error)
+        payment_required = online_payment_required or total_cost > 0
 
-        _send_form_subscription_email(sub, assigned_label, payment_required)
+        assigned_label = ''
+
+        # Determine available list for only online payments (main, else waiting)
+        if online_payment_required:
+            event_lists = EventList.objects.filter(event=event)
+            main_list = event_lists.filter(is_main_list=True).first()
+            waiting_list = event_lists.filter(is_waiting_list=True).first()
+
+            def has_space(lst):
+                if not lst:
+                    return False
+                if lst.capacity == 0:
+                    return True
+                return lst.subscription_count < lst.capacity
+
+            if has_space(main_list):
+                assigned_label = "Main List"
+            elif has_space(waiting_list):
+                assigned_label = "Waiting List"
+            else:
+                return Response({"error": "No available spot for subscription. All lists are full."}, status=400)
+
+        _send_form_subscription_email(sub, assigned_label, online_payment_required, payment_required)
 
         return Response({
             "success": True,

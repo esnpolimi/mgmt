@@ -37,6 +37,7 @@ import customParseFormat from "dayjs/plugin/customParseFormat";
 
 dayjs.extend(customParseFormat);
 import countryCodes from "../../data/countryCodes.json";
+import ReceiptFileUpload from "../../Components/common/ReceiptFileUpload";
 
 export default function EventForm() {
     const {id} = useParams();
@@ -66,10 +67,18 @@ export default function EventForm() {
         Object.fromEntries(formFields.map(f => {
             if (f.type === "m") return [f.name, []];
             if (f.type === "b") return [f.name, null];
-            if (f.type === "e" && profileEsncardNumber) return [f.name, profileEsncardNumber]; // pre-fill ESNcard
+            if (f.type === "e" && profileEsncardNumber) return [f.name, profileEsncardNumber];
+            if (f.type === "l") return [f.name, ""]; // link placeholder (backend will fill after upload)
             return [f.name, ""];
         }))
     );
+    // Track files for link fields separately
+    const [linkFiles, setLinkFiles] = useState(() =>
+        Object.fromEntries(linkFields.map(f => [f.name, null]))
+    );
+    const handleLinkFileChange = (field, file) => {
+        setLinkFiles(prev => ({...prev, [field]: file}));
+    };
 
     const handleChange = (field, value) => {
         setFormValues(prev => ({...prev, [field]: value}));
@@ -104,6 +113,10 @@ export default function EventForm() {
             // No ESNcard returned; field is intentionally disabled & considered filled
             return true;
         }
+        if (fieldObj.type === "l") {
+            // Must have a file selected; value stored in linkFiles
+            return !!linkFiles[field];
+        }
         return formValues[field] !== undefined && formValues[field] !== null && formValues[field] !== "";
     };
 
@@ -129,13 +142,34 @@ export default function EventForm() {
         setShowMissingAlert(false);
         setBackendError("");
         setSubmitLoading(true);
-        fetchCustom("POST", `/event/${eventData.id}/formsubmit/`, {
-            body: {
+        // Build multipart if any link file selected
+        const useMultipart = linkFields.length > 0;
+        let bodyPayload;
+        if (useMultipart) {
+            const fd = new FormData();
+            fd.append('email', userEmail);
+            // Only send non-link fields inside form_data JSON
+            const nonLinkData = {...formValues};
+            linkFields.forEach(f => delete nonLinkData[f.name]);
+            fd.append('form_data', JSON.stringify(nonLinkData));
+            fd.append('form_notes', formNotes);
+            // Append files (field name must match backend expectation)
+            linkFields.forEach(f => {
+                const fileObj = linkFiles[f.name];
+                if (fileObj) fd.append(f.name, fileObj, fileObj.name);
+            });
+            bodyPayload = fd;
+        } else {
+            bodyPayload = {
                 email: userEmail,
                 form_data: formValues,
                 form_notes: formNotes
-            },
+            };
+        }
+        fetchCustom("POST", `/event/${eventData.id}/formsubmit/`, {
+            body: bodyPayload,
             auth: false,
+            // NOTE: fetchCustom should detect FormData and avoid JSON stringify / set content-type
             onSuccess: (data) => {
                 if (data.payment_error) {
                     const offlineMsg = "Online payment currently unavailable. Your subscription is recorded; please contact us for payment.";
@@ -143,23 +177,25 @@ export default function EventForm() {
                         state: {
                             subscriptionId: data.subscription_id,
                             assignedList: data.assigned_list,
-                            noPayment: true,
+                            noPayment: false,
                             paymentError: true,
                             paymentErrorMessage: offlineMsg
-                        }   
-                    });
-                    return;
-                }
-                if (data.payment_required && data.checkout_id) {
-                    navigate(`/event/${eventData.id}/pay`, {
-                        state: {
-                            subscriptionId: data.subscription_id,
-                            assignedList: data.assigned_list,
-                            checkoutId: data.checkout_id
                         }
                     });
                     return;
                 }
+                if (data.payment_required && data.checkout_id) {
+                    // Do NOT redirect to widget now; user will use email link
+                    navigate(`/event/${eventData.id}/formresult`, {
+                        state: {
+                            subscriptionId: data.subscription_id,
+                            assignedList: data.assigned_list,
+                            paymentRequired: true
+                        }
+                    });
+                    return;
+                }
+                // No payment required at all
                 navigate(`/event/${eventData.id}/formresult`, {
                     state: {
                         subscriptionId: data.subscription_id,
@@ -313,6 +349,21 @@ export default function EventForm() {
                             </Typography>
                             {formFields.map(field => {
                                 switch (field.type) {
+                                    case "l":
+                                        return (
+                                            <Box key={field.name} sx={{mt: 1}}>
+                                                <Typography variant="subtitle1" color="text.secondary" sx={{mb: 0.5}}>
+                                                    {field.name}{field.required && ' *'}
+                                                </Typography>
+                                                <ReceiptFileUpload
+                                                    file={linkFiles[field.name]}
+                                                    onFileChange={(f) => handleLinkFileChange(field.name, f)}
+                                                    label={`Upload File`}
+                                                    dense={false}
+                                                    helperText="Accepted: PDF or image files"
+                                                />
+                                            </Box>
+                                        );
                                     case "t":
                                         return (
                                             <TextField
@@ -559,9 +610,9 @@ export default function EventForm() {
                     >
                         {submitLoading
                             ? "Processing..."
-                            : (eventData.allow_online_payment && (Number(eventData.cost) + Number(eventData.deposit)) > 0
-                                ? "Proceed to Payment"
-                                : "Submit (no payment required)")}
+                            : ((eventData.allow_online_payment && (Number(eventData.cost) + Number(eventData.deposit)) > 0)
+                                ? "Submit Registration"
+                                : "Submit")}
                     </Button>
                 </Box>
             </Box>

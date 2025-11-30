@@ -55,17 +55,32 @@ export const AuthProvider = ({children}) => {
             clearTimeout(refreshTimer.current);
             refreshTimer.current = null;
         }
-        if (!skipApiCall && refreshToken) {
+
+        let isRefreshExpired = false;
+        if (refreshToken) {
+            try {
+                const {exp} = jwtDecode(refreshToken);
+                const now = Math.floor(Date.now() / 1000);
+                if (exp < now) {
+                    console.log("Refresh token expired)");
+                    isRefreshExpired = true;
+                }
+            } catch (e) {
+                Sentry.captureException(e);
+                isRefreshExpired = true;
+            }
+        }
+        if (!skipApiCall && refreshToken && !isRefreshExpired) {
             fetchCustom("POST", "/logout/", {
                 auth: false,
                 body: {refresh: refreshToken} // Send refresh token for blacklisting
             });
         }
         localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken"); // NEW
+        localStorage.removeItem("refreshToken");
         localStorage.removeItem("user");
         setAccessToken(null);
-        setRefreshToken(null); // NEW
+        setRefreshToken(null);
         setUser(null);
         console.log("Logged out successfully");
     }, [refreshToken]);

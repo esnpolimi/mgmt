@@ -33,7 +33,7 @@ import {defaultErrorHandler, fetchCustom} from "../api/api";
 export default function ContentManager() {
     const [sections, setSections] = useState([]);
     const [popup, setPopup] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [, setLoading] = useState(false);
 
     // Link Dialog
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);

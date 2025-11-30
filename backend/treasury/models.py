@@ -90,7 +90,7 @@ class Transaction(BaseEntity):
     executor = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True)
     account = models.ForeignKey('Account', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=9, decimal_places=2)
-    description = models.CharField(max_length=256)
+    description = models.TextField(max_length=1024)
 
     # Reference to an Event for manual deposit/withdrawal operations
     event_reference_manual = models.ForeignKey('events.Event', null=True, blank=True, on_delete=models.SET_NULL)
@@ -148,13 +148,16 @@ class Transaction(BaseEntity):
                     old_acc.save(update_fields=['balance'])
                     # 2. Apply full effect on new account
                     self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
+                    logger.info(f"Log: moved transaction of €{self.amount} from account {old_acc.name} to {self.account.name}, new balance: €{self.account.balance}")
                 else:
                     # Same account: only apply difference
                     amount_difference = Decimal(str(self.amount)) - Decimal(str(original_transaction.amount))
                     self.account.balance = Decimal(str(self.account.balance)) + amount_difference
+                    logger.info(f"Log: updated transaction of €{self.amount} on account {self.account.name}, new balance: €{self.account.balance}")
             else:
                 # New transaction
                 self.account.balance = Decimal(str(self.account.balance)) + Decimal(str(self.amount))
+                logger.info(f"Log: new transaction of €{self.amount} on account {self.account.name}, new balance: €{self.account.balance}")
             self.account.save(update_fields=['balance'])
             super(Transaction, self).save(*args, **kwargs)
 
@@ -175,7 +178,7 @@ class ReimbursementRequest(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=9, decimal_places=2)
     payment = models.CharField(max_length=16, choices=PAYMENT_CHOICES)
-    description = models.CharField(max_length=512)
+    description = models.TextField(max_length=1024)
     receipt_link = models.URLField(max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     account = models.ForeignKey('Account', null=True, blank=True, on_delete=models.SET_NULL)

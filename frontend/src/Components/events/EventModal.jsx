@@ -38,6 +38,7 @@ import StatusBanner from "../StatusBanner";
 import ProfileSearch from '../ProfileSearch';
 import SharedListsSelector from './SharedListsSelector';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
+import {useAuth} from "../../Context/AuthContext";
 
 export default function EventModal({open, event, isEdit, onClose}) {
     const errorsRef = React.useRef({
@@ -52,6 +53,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
         listItems: [],
         form: ''
     });
+
+    // --- Add board member detection ---
+    const {user} = useAuth();
+    const isBoardMember = user.groups[0] === "Board";
+    const currentProfileId = user?.profile?.id ?? user?.profile_id ?? user?.id;
+    const isOrganizer = Array.isArray(event?.organizers) && event.organizers.some(o => o.profile === currentProfileId);
 
     /* General event information block, at the top of the modal */
     const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef, onSubscriptionWindowChange}) {
@@ -272,32 +279,38 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             }
                         />
                     </Grid>
-                    <Grid size={{xs: 12, md: 3}}>
-                        <FormControlLabel
-                            label="Visibile solo ai Board Members"
-                            control={
-                                <Switch
-                                    checked={!!localData.visible_to_board_only}
-                                    onChange={handleInputChange}
-                                    name="visible_to_board_only"
-                                    color="primary"
-                                />
-                            }
-                        />
-                    </Grid>
-                    <Grid size={{xs: 12, md: 3}}>
-                        <FormControlLabel
-                            label="Rimborsi limitati agli Organizzatori"
-                            control={
-                                <Switch
-                                    checked={!!localData.reimbursements_by_organizers_only}
-                                    onChange={handleInputChange}
-                                    name="reimbursements_by_organizers_only"
-                                    color="primary"
-                                />
-                            }
-                        />
-                    </Grid>
+                    {/* --- Reimbursements by organizers only toggle --- */}
+                    {(isBoardMember || isOrganizer || !isEdit) && (
+                        <Grid size={{xs: 12, md: 3}}>
+                            <FormControlLabel
+                                label="Rimborsi limitati agli Organizzatori"
+                                control={
+                                    <Switch
+                                        checked={!!localData.reimbursements_by_organizers_only}
+                                        onChange={handleInputChange}
+                                        name="reimbursements_by_organizers_only"
+                                        color="warning"
+                                    />
+                                }
+                            />
+                        </Grid>
+                    )}
+                    {/* --- Board-only visibility toggle --- */}
+                    {isBoardMember && (
+                        <Grid size={{xs: 12, md: 3}}>
+                            <FormControlLabel
+                                label="Visibile solo ai Board Members"
+                                control={
+                                    <Switch
+                                        checked={!!localData.visible_to_board_only}
+                                        onChange={handleInputChange}
+                                        name="visible_to_board_only"
+                                        color="warning"
+                                    />
+                                }
+                            />
+                        </Grid>
+                    )}
                 </Grid>
             </Box>
         );
@@ -767,7 +780,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
             {value: 'b', label: 'Sì/No'},
             {value: 'd', label: 'Data'},
             {value: 'e', label: 'ESNcard'},
-            {value: 'p', label: 'Telefono'}
+            {value: 'p', label: 'Telefono'},
+            {value: 'l', label: 'File Upload'},
         ];
 
         const needsChoices = ['c', 'm', 's'].includes(field.type);

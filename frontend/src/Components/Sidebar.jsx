@@ -75,7 +75,7 @@ export default function Sidebar() {
              role="presentation"
              onClick={toggleDrawer(false)}
              onKeyDown={toggleDrawer(false)}
-             onMouseLeave={() => toggleDrawer(false)()}
+             // onMouseLeave={() => toggleDrawer(false)()}
         >
             <Box sx={{flexGrow: 1}}>
                 {menuItems.map((item) => (

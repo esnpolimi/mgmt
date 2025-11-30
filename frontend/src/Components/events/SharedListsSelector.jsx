@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
     Box,
     Button,
@@ -19,18 +19,18 @@ import {
     ListItemText,
     Divider
 } from '@mui/material';
-import { ContentCopy as CopyIcon, Event as EventIcon } from '@mui/icons-material';
-import { fetchCustom, defaultErrorHandler } from '../../api/api';
+import {ContentCopy as CopyIcon, Event as EventIcon} from '@mui/icons-material';
+import {fetchCustom} from '../../api/api';
 
 /**
  * Component to select an existing event and copy its lists to the current event
- * 
+ *
  * Props:
  * - open: Boolean - controls dialog visibility
  * - onClose: Function - called when dialog closes
  * - onSelectEvent: Function(eventId, eventName, lists) - called when event is confirmed
  */
-export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
+export default function SharedListsSelector({open, onClose, onSelectEvent}) {
     const [loading, setLoading] = useState(false);
     const [availableEvents, setAvailableEvents] = useState([]);
     const [selectedEventId, setSelectedEventId] = useState('');
@@ -47,7 +47,7 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
     const fetchAvailableEvents = () => {
         setLoading(true);
         setError('');
-        
+
         fetchCustom('GET', '/available-for-sharing/', {
             auth: true,
             onSuccess: (data) => {
@@ -64,7 +64,7 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
 
     const handleEventSelect = (eventId) => {
         setSelectedEventId(eventId);
-        
+
         // Find the selected event data
         const eventData = availableEvents.find(e => e.id === eventId);
         setSelectedEventData(eventData);
@@ -97,15 +97,15 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
     };
 
     return (
-        <Dialog 
-            open={open} 
+        <Dialog
+            open={open}
             onClose={handleClose}
             maxWidth="md"
             fullWidth
         >
             <DialogTitle>
                 <Box display="flex" alignItems="center">
-                    <CopyIcon sx={{ mr: 1 }} />
+                    <CopyIcon sx={{mr: 1}}/>
                     Usa Liste da Evento Esistente
                 </Box>
             </DialogTitle>
@@ -113,25 +113,25 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
             <DialogContent>
                 {loading ? (
                     <Box display="flex" justifyContent="center" p={3}>
-                        <CircularProgress />
+                        <CircularProgress/>
                     </Box>
                 ) : (
                     <>
                         {error && (
-                            <Alert severity="error" sx={{ mb: 2 }}>
+                            <Alert severity="error" sx={{mb: 2}}>
                                 {error}
                             </Alert>
                         )}
 
-                        <Alert severity="info" sx={{ mb: 2 }}>
+                        <Alert severity="info" sx={{mb: 2}}>
                             <Typography variant="body2">
                                 Seleziona un evento esistente per utilizzare le sue liste.
-                                Le liste saranno <strong>condivise</strong>: modifiche e capacità 
+                                Le liste saranno <strong>condivise</strong>: modifiche e capacità
                                 saranno sincronizzate tra tutti gli eventi.
                             </Typography>
                         </Alert>
 
-                        <FormControl fullWidth sx={{ mb: 3 }}>
+                        <FormControl fullWidth sx={{mb: 3}}>
                             <InputLabel>Seleziona Evento</InputLabel>
                             <Select
                                 value={selectedEventId}
@@ -141,14 +141,14 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
                                 {availableEvents.map((event) => (
                                     <MenuItem key={event.id} value={event.id}>
                                         <Box display="flex" alignItems="center" width="100%">
-                                            <EventIcon sx={{ mr: 1, fontSize: '1.2rem' }} />
-                                            <Typography variant="body1" sx={{ flexGrow: 1 }}>
+                                            <EventIcon sx={{mr: 1, fontSize: '1.2rem'}}/>
+                                            <Typography variant="body1" sx={{flexGrow: 1}}>
                                                 {event.name}
                                             </Typography>
-                                            <Chip 
-                                                label={`${event.lists_count} liste`} 
-                                                size="small" 
-                                                sx={{ ml: 1 }}
+                                            <Chip
+                                                label={`${event.lists_count} liste`}
+                                                size="small"
+                                                sx={{ml: 1}}
                                             />
                                         </Box>
                                     </MenuItem>
@@ -157,10 +157,10 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
                         </FormControl>
 
                         {selectedEventData && (
-                            <Box 
-                                sx={{ 
-                                    border: '1px solid #e0e0e0', 
-                                    borderRadius: 1, 
+                            <Box
+                                sx={{
+                                    border: '1px solid #e0e0e0',
+                                    borderRadius: 1,
                                     p: 2,
                                     backgroundColor: '#f9f9f9'
                                 }}
@@ -173,25 +173,25 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
                                     Evento: <strong>{selectedEventData.name}</strong>
                                 </Typography>
 
-                                <Box sx={{ mb: 2 }}>
-                                    <Chip 
+                                <Box sx={{mb: 2}}>
+                                    <Chip
                                         label={`${selectedEventData.lists_count} liste totali`}
                                         color="primary"
                                         size="small"
-                                        sx={{ mr: 1 }}
+                                        sx={{mr: 1}}
                                     />
-                                    <Chip 
+                                    <Chip
                                         label={`${getTotalCapacity(selectedEventData.lists)} posti totali`}
                                         size="small"
-                                        sx={{ mr: 1 }}
+                                        sx={{mr: 1}}
                                     />
-                                    <Chip 
+                                    <Chip
                                         label={`${getTotalSubscriptions(selectedEventData.lists)} iscrizioni`}
                                         size="small"
                                     />
                                 </Box>
 
-                                <Divider sx={{ my: 2 }} />
+                                <Divider sx={{my: 2}}/>
 
                                 <List dense>
                                     {selectedEventData.lists.map((list, index) => (
@@ -203,19 +203,19 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
                                                             {list.name}
                                                         </Typography>
                                                         {list.is_main_list && (
-                                                            <Chip 
-                                                                label="Main" 
-                                                                size="small" 
+                                                            <Chip
+                                                                label="Main"
+                                                                size="small"
                                                                 color="success"
-                                                                sx={{ ml: 1, height: 20 }}
+                                                                sx={{ml: 1, height: 20}}
                                                             />
                                                         )}
                                                         {list.is_waiting_list && (
-                                                            <Chip 
-                                                                label="Waiting" 
-                                                                size="small" 
+                                                            <Chip
+                                                                label="Waiting"
+                                                                size="small"
                                                                 color="warning"
-                                                                sx={{ ml: 1, height: 20 }}
+                                                                sx={{ml: 1, height: 20}}
                                                             />
                                                         )}
                                                     </Box>
@@ -232,9 +232,9 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
                                     ))}
                                 </List>
 
-                                <Alert severity="warning" sx={{ mt: 2 }}>
+                                <Alert severity="warning" sx={{mt: 2}}>
                                     <Typography variant="body2">
-                                        ⚠️ Le liste saranno <strong>condivise</strong> tra gli eventi. 
+                                        ⚠️ Le liste saranno <strong>condivise</strong> tra gli eventi.
                                         Le iscrizioni e la capacità saranno comuni.
                                     </Typography>
                                 </Alert>
@@ -248,11 +248,11 @@ export default function SharedListsSelector({ open, onClose, onSelectEvent }) {
                 <Button onClick={handleClose}>
                     Annulla
                 </Button>
-                <Button 
+                <Button
                     onClick={handleConfirm}
                     variant="contained"
                     disabled={!selectedEventId || loading}
-                    startIcon={<CopyIcon />}
+                    startIcon={<CopyIcon/>}
                 >
                     Usa Queste Liste
                 </Button>
