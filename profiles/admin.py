@@ -10,7 +10,7 @@ from .models import Profile, Document
 class DocumentAdmin(admin.ModelAdmin):
     list_display = ('number', 'profile', 'type', 'expiration', 'is_valid', 'is_enabled')
     search_fields = ('number', 'profile__name', 'type')
-    list_filter = ('type', 'expiration')
+    list_filter = ('type', 'expiration', 'enabled')
 
     def is_valid(self, obj):
         return obj.is_valid
@@ -36,7 +36,7 @@ class ProfileAdminForm(forms.ModelForm):
         optional_fields = [
             'whatsapp_prefix', 'whatsapp_number',
             'phone_prefix', 'phone_number',
-            'domicile', 'matricola_number',
+            'domicile', 'matricola_number', 'person_code',
             'matricola_expiration', 'course'
         ]
 
@@ -57,7 +57,11 @@ class ProfileAdmin(admin.ModelAdmin):
         'created_at', 'updated_at',
         'enabled', 'email_is_verified'
     ]
-    search_fields = ('email', 'name', 'surname', 'person_code')
+    search_fields = ('email', 'name', 'surname', 'birthdate',
+                     'phone_number', 'whatsapp_number',
+                     'country', 'domicile',
+                     'course', 'person_code', 'matricola_number', 'matricola_expiration',
+                     'created_at', 'updated_at')
     list_filter = ('is_esner', 'enabled', 'email_is_verified')
     ordering = ('-created_at',)
 
@@ -78,6 +82,7 @@ class ProfileAdmin(admin.ModelAdmin):
             groups = obj.user.groups.all()
             return ", ".join([group.name for group in groups])
         return "-"
+
     get_groups.short_description = "Groups"
 
     def get_queryset(self, request):
