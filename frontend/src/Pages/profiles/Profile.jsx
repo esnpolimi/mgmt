@@ -51,10 +51,17 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
     Erasmus: {hideFields: ['group']}
+};
+
+const PAYMENT_CONFIGS = {
+    cash: {label: "Contanti", color: 'success'},
+    paypal: {label: "PayPal", color: 'info'},
+    bonifico: {label: "Bonifico", color: 'warning'}
 };
 
 export default function Profile() {
@@ -76,6 +83,9 @@ export default function Profile() {
     const [organizedEvents, setOrganizedEvents] = useState([]);
     const [showSubscriptions, setShowSubscriptions] = useState(false);
     const [showOrganizedEvents, setShowOrganizedEvents] = useState(false);
+    const [reimbursementRequests, setReimbursementRequests] = useState([]);
+    const [showReimbursements, setShowReimbursements] = useState(false);
+    const [reimbursementsLoading, setReimbursementsLoading] = useState(false);
     const [financePerms, setFinancePerms] = useState(null); // new
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [deletingProfile, setDeletingProfile] = useState(false);
@@ -212,6 +222,15 @@ export default function Profile() {
         fetchCustom("GET", `/profile_events/${id}/`, {
             onSuccess: (data) => setOrganizedEvents(data),
             onError: () => setOrganizedEvents([]),
+        });
+    };
+
+    const fetchReimbursementRequests = () => {
+        setReimbursementsLoading(true);
+        fetchCustom("GET", `/reimbursement_requests/?profile=${id}`, {
+            onSuccess: (data) => setReimbursementRequests(data?.results || data || []),
+            onError: () => setReimbursementRequests([]),
+            onFinally: () => setReimbursementsLoading(false)
         });
     };
 
@@ -683,6 +702,107 @@ export default function Profile() {
     const organizedEventsTable = useMaterialReactTable({
         columns: organizedEventsColumns,
         data: organizedEvents,
+        enablePagination: false,
+        enableSorting: false,
+        enableColumnActions: false,
+        enableColumnFilters: false,
+        enableGlobalFilter: false,
+        initialState: {showColumnFilters: false, showGlobalFilter: false},
+        muiTableBodyRowProps: {hover: false},
+        localization: MRT_Localization_IT,
+    });
+
+    const reimbursementsColumns = useMemo(() => [
+        {
+            accessorKey: 'created_at',
+            header: "Data",
+            size: 120,
+            Cell: ({cell}) => {
+                const date = new Date(cell.getValue());
+                return new Intl.DateTimeFormat('it-IT', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                }).format(date);
+            }
+        },
+        {
+            accessorKey: 'amount',
+            header: "Importo",
+            size: 100,
+            Cell: ({cell}) => (
+                <Box>
+                    {cell.getValue() !== null ? (
+                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                        <Chip label="N/A" color="warning"/>) }
+                </Box>
+            )
+        },
+        {
+            accessorKey: 'payment',
+            header: "Metodo",
+            size: 120,
+            Cell: ({cell}) => {
+                const payment = cell.getValue();
+                const config = PAYMENT_CONFIGS[payment] || {label: payment, color: 'default'};
+                return (
+                    <Chip
+                        label={config.label}
+                        color={config.color}
+                        variant="outlined"
+                    />
+                );
+            }
+        },
+        {
+            accessorKey: 'description',
+            header: "Descrizione",
+            size: 200,
+            Cell: ({cell}) => (
+                <Box component="span" fontStyle="italic">
+                    {cell.getValue()}
+                </Box>
+            )
+        },
+        {
+            accessorKey: 'receipt_link',
+            header: "Ricevuta",
+            size: 120,
+            Cell: ({cell}) => cell.getValue() ? (
+                <span>
+                    <Button variant="text"
+                            color="primary"
+                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                            endIcon={<OpenInNewIcon fontSize="small"/>}
+                            onClick={() => window.open(cell.getValue(), '_blank', 'noopener,noreferrer')}>
+                        Link Drive
+                    </Button>
+                </span>
+            ) : ("-")
+        },
+        {
+            accessorKey: 'is_reimbursed',
+            header: "Rimborsato",
+            size: 120,
+            Cell: ({row, cell}) => {
+                const isReimbursed = cell.getValue();
+                const account = row.original.account;
+                return (
+                    <Chip
+                        label={
+                            isReimbursed
+                                ? `Sì${account && account.name ? ` (${account.name})` : ""}`
+                                : "No"
+                        }
+                        color={isReimbursed ? "success" : "error"}
+                        variant="outlined"/>
+                );
+            }
+        }
+    ], []);
+
+    const reimbursementsTable = useMaterialReactTable({
+        columns: reimbursementsColumns,
+        data: reimbursementRequests,
         enablePagination: false,
         enableSorting: false,
         enableColumnActions: false,
@@ -1238,9 +1358,10 @@ export default function Profile() {
                                     </Collapse>
                                 </Card>
                             </Grid>
+
                             {profileType === "ESNer" && (<>
                                     <Grid size={{xs: 12}}><Divider variant="middle" sx={{my: 1, mt: -5}}/></Grid>
-                                    <Grid size={{xs: 12}} sx={{mb: 5, mt: -5}}>
+                                    <Grid size={{xs: 12}} sx={{mb: 0, mt: -5}}>
                                         <Card sx={{p: 2}}>
                                             <Box
                                                 sx={{
@@ -1274,6 +1395,31 @@ export default function Profile() {
                                     </Grid>
                                 </>
                             )}
+                            <Grid size={{xs: 12}} sx={{mb: 5}}>
+                                <Card sx={{p: 2}}>
+                                    <Box
+                                        sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
+                                        onClick={() => setShowReimbursements(v => !v)}
+                                    >
+                                        <ReceiptLongIcon sx={{color: 'primary.main'}}/>
+                                        <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Richieste Rimborso</Typography>
+                                        <IconButton size="small" aria-label="toggle rimborsi"
+                                                    onClick={() => setShowReimbursements(v => !v)}>
+                                            <ExpandMoreIcon
+                                                sx={{
+                                                    transform: showReimbursements ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                    transition: 'transform 0.2s'
+                                                }}
+                                            />
+                                        </IconButton>
+                                    </Box>
+                                    <Collapse in={showReimbursements} timeout="auto" unmountOnExit>
+                                        <Box sx={{mt: 1}}>
+                                            {reimbursementsLoading ? <Loader/> : <MRT_Table table={reimbursementsTable}/>}
+                                        </Box>
+                                    </Collapse>
+                                </Card>
+                            </Grid>
                         </Grid>
                         {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </Box>

@@ -1150,6 +1150,147 @@ export default function EventModal({open, event, isEdit, onClose}) {
         )
     }
 
+    /* Optional paid services */
+    const ServicesBlock = function ServicesBlock({dataRef, isEdit, hasSubscriptions}) {
+        const [localData, setLocalData] = useState(dataRef.current)
+
+        const makeServiceId = () => `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+        const onAdd = () => {
+            const newService = {
+                id: makeServiceId(),
+                name: '',
+                description: '',
+                price: ''
+            };
+            setLocalData({
+                ...localData,
+                services: [...(localData.services || []), newService]
+            });
+            dataRef.current.services = [...(dataRef.current.services || []), newService];
+        };
+
+        const onDelete = (index) => {
+            setLocalData({
+                ...localData,
+                services: (localData.services || []).filter((_, i) => i !== index)
+            });
+            dataRef.current.services = (dataRef.current.services || []).filter((_, i) => i !== index);
+        };
+
+        const onUpdate = (index, update) => {
+            const updated = {
+                ...(localData.services || [])[index],
+                ...update
+            };
+            const next = [
+                ...(localData.services || []).slice(0, index),
+                updated,
+                ...(localData.services || []).slice(index + 1)
+            ];
+            setLocalData({
+                ...localData,
+                services: next
+            });
+            dataRef.current.services = next;
+        };
+
+        const onMoveUp = (index) => {
+            if (index === 0) return;
+            const next = [...(localData.services || [])];
+            [next[index - 1], next[index]] = [next[index], next[index - 1]];
+            setLocalData({
+                ...localData,
+                services: next
+            });
+            dataRef.current.services = next;
+        };
+
+        const onMoveDown = (index) => {
+            const list = localData.services || [];
+            if (index === list.length - 1) return;
+            const next = [...list];
+            [next[index], next[index + 1]] = [next[index + 1], next[index]];
+            setLocalData({
+                ...localData,
+                services: next
+            });
+            dataRef.current.services = next;
+        };
+
+        const services = localData.services || [];
+
+        return (
+            <>
+                <Box sx={{display: 'flex', alignItems: 'center'}}>
+                    <Typography variant="h6">Servizi aggiuntivi (a pagamento)</Typography>
+                    <Tooltip title={`Aggiungi`}>
+                        <span>
+                            <IconButton onClick={onAdd} disabled={isEdit && hasSubscriptions}>
+                                <AddIcon/>
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
+                    Configura i servizi opzionali acquistabili durante l'iscrizione.
+                </Typography>
+                <Paper elevation={1} sx={{p: 2, mb: 3}}>
+                    {services.length === 0 ? (
+                        <Typography color="text.secondary">Nessun servizio configurato</Typography>
+                    ) : (
+                        services.map((svc, i) => (
+                            <Box key={svc.id || i} sx={{mb: 2, borderBottom: '1px solid #eee', pb: 2}}>
+                                <Grid container spacing={2} alignItems="center">
+                                    <Grid size={{xs: 12, md: 4}}>
+                                        <TextField
+                                            fullWidth
+                                            label="Nome servizio"
+                                            value={svc.name || ''}
+                                            onChange={(e) => onUpdate(i, {name: e.target.value})}
+                                            disabled={isEdit && hasSubscriptions}
+                                        />
+                                    </Grid>
+                                    <Grid size={{xs: 12, md: 2}}>
+                                        <TextField
+                                            fullWidth
+                                            label="Prezzo"
+                                            type="number"
+                                            slotProps={{htmlInput: {min: "0", step: "0.01"}}}
+                                            value={svc.price ?? ''}
+                                            onChange={(e) => onUpdate(i, {price: e.target.value})}
+                                            disabled={isEdit && hasSubscriptions}
+                                        />
+                                    </Grid>
+                                    <Grid size={{xs: 12}}>
+                                        <TextField
+                                            fullWidth
+                                            label="Descrizione"
+                                            value={svc.description || ''}
+                                            onChange={(e) => onUpdate(i, {description: e.target.value})}
+                                            disabled={isEdit && hasSubscriptions}
+                                        />
+                                    </Grid>
+                                    <Grid size={{xs: 12}} sx={{display: 'flex', justifyContent: 'flex-end', gap: 1}}>
+                                        <IconButton onClick={() => onMoveUp(i)} disabled={isEdit && hasSubscriptions || i === 0}>
+                                            <ArrowUpwardIcon fontSize="small" />
+                                        </IconButton>
+                                        <IconButton onClick={() => onMoveDown(i)} disabled={isEdit && hasSubscriptions || i === services.length - 1}>
+                                            <ArrowDownwardIcon fontSize="small" />
+                                        </IconButton>
+                                        <IconButton onClick={() => onDelete(i)} disabled={isEdit && hasSubscriptions}>
+                                            <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                    </Grid>
+                                </Grid>
+                            </Box>
+                        ))
+                    )}
+                </Paper>
+            </>
+        );
+    }
+
     /* Form block */
     const FormBlock = function FormBlock({dataRef, errorsRef, hasSubscriptions, isEdit}) {
 
@@ -1484,6 +1625,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         lists: [{id: '', name: 'Main List', capacity: '', is_main_list: true}], // set default as Main List type
         profile_fields: [],
         fields: [],
+        services: [],
         enable_form: false,
         form_note: '',
         form_programmed_open_time: dayjs(),
@@ -1506,6 +1648,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 ...event,
                 profile_fields: Array.isArray(event.profile_fields) ? event.profile_fields : ['name', 'surname'],
                 fields: Array.isArray(event.fields) ? event.fields : [],
+                services: Array.isArray(event.services) ? event.services : [],
                 enable_form: Boolean(event.enable_form),
                 form_note: typeof event.form_note === 'string' ? event.form_note : '',
                 organizers: Array.isArray(event.organizers)
@@ -1534,6 +1677,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 fields: [
                     {field_type: 'form', name: 'Vegetarian?', type: 'b', required: true}
                 ],
+                services: [],
             }
             // Safety: ensure created_at never slips in
             dataRef.current.profile_fields = dataRef.current.profile_fields.filter(f => f !== 'created_at');
@@ -1578,6 +1722,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
             visible_to_board_only: !!rest.visible_to_board_only,
             reimbursements_by_organizers_only: !!rest.reimbursements_by_organizers_only,
             fields: rest.fields ?? [],
+            services: (rest.services || []).map(s => ({
+                id: (s.id || s.service_id || '').toString(),
+                name: (s.name || '').trim(),
+                description: s.description || '',
+                price: Number(s.price || 0)
+            })),
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,
             form_note: typeof rest.form_note === 'string' ? rest.form_note : '',
@@ -1640,6 +1790,32 @@ export default function EventModal({open, event, isEdit, onClose}) {
         return true;
     };
 
+    const validateServices = () => {
+        const services = dataRef.current.services || [];
+        const seen = new Set();
+        for (let i = 0; i < services.length; i++) {
+            const s = services[i] || {};
+            const name = (s.name || '').trim();
+            if (!name) {
+                errorsRef.current.form = `Ogni servizio deve avere un nome (manca al servizio #${i + 1}).`;
+                return false;
+            }
+            const key = name.toLowerCase();
+            if (seen.has(key)) {
+                errorsRef.current.form = `Nome servizio duplicato: "${name}".`;
+                return false;
+            }
+            seen.add(key);
+            const price = Number(s.price || 0);
+            if (Number.isNaN(price) || price < 0) {
+                errorsRef.current.form = `Prezzo non valido per il servizio "${name}".`;
+                return false;
+            }
+        }
+        errorsRef.current.form = '';
+        return true;
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -1667,6 +1843,15 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 scrollUp();
                 return;
             }
+        }
+
+        if (!validateServices()) {
+            setStatusMessage({
+                message: errorsRef.current.form || 'Errore nei servizi aggiuntivi.',
+                state: 'error'
+            });
+            scrollUp();
+            return;
         }
 
         // Prevent submit if form is enabled but no form_programmed_open_time is set
@@ -1754,6 +1939,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
+                        <ServicesBlock dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
                         <FormBlock
                             key={subscriptionWindowVersion} // force remount so minDate updates when subscription start date changes
                             dataRef={dataRef}

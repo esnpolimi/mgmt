@@ -127,6 +127,97 @@ def _combine_prefix_numbers(obj):
             _combine_prefix_numbers(it)
 
 
+def _normalize_event_services(event):
+    services = event.services or []
+    normalized = []
+    for s in services:
+        if not isinstance(s, dict):
+            continue
+        sid = (s.get('id') or s.get('service_id') or '').strip()
+        name = (s.get('name') or '').strip()
+        if not name:
+            continue
+        try:
+            price = Decimal(str(s.get('price') or 0))
+        except Exception:
+            price = Decimal('0')
+        normalized.append({
+            'id': sid,
+            'name': name,
+            'description': s.get('description', ''),
+            'price': price
+        })
+    return normalized
+
+
+def _build_selected_services(event, selected_services_raw):
+    if not selected_services_raw:
+        return [], []
+    if not isinstance(selected_services_raw, list):
+        return [], ["selected_services must be a list"]
+    available = _normalize_event_services(event)
+    by_id = {s['id']: s for s in available if s.get('id')}
+    by_name = {s['name']: s for s in available if s.get('name')}
+    errors = []
+    normalized = []
+    for idx, item in enumerate(selected_services_raw):
+        if not isinstance(item, dict):
+            errors.append(f"Invalid selected service at index {idx}")
+            continue
+        service_id = (item.get('service_id') or item.get('id') or '').strip()
+        name = (item.get('name') or '').strip()
+        try:
+            quantity = int(item.get('quantity') or 1)
+        except (TypeError, ValueError):
+            quantity = 0
+        if quantity <= 0:
+            errors.append(f"Invalid quantity for service at index {idx}")
+            continue
+        svc = by_id.get(service_id) if service_id else None
+        if not svc and name:
+            svc = by_name.get(name)
+        if not svc:
+            errors.append(f"Unknown service selection at index {idx}")
+            continue
+        normalized.append({
+            'service_id': svc.get('id') or service_id or svc.get('name'),
+            'name': svc.get('name'),
+            'price_at_purchase': str(svc.get('price') or 0),
+            'quantity': quantity
+        })
+    return normalized, errors
+
+
+def _parse_selected_services(raw_value):
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, list):
+        return raw_value
+    if isinstance(raw_value, str):
+        try:
+            parsed = json.loads(raw_value)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
+
+
+def _services_total(selected_services):
+    total = Decimal('0')
+    for s in (selected_services or []):
+        try:
+            price = Decimal(str(s.get('price_at_purchase') or s.get('price') or 0))
+        except Exception:
+            price = Decimal('0')
+        try:
+            qty = int(s.get('quantity') or 1)
+        except Exception:
+            qty = 1
+        if qty > 0:
+            total += (price * qty)
+    return total
+
+
 # --- Helper to auto-move from any non-ML/WL to ML/WL after payment ---
 def attempt_move_from_form_list(subscription):
     """
@@ -143,6 +234,7 @@ def attempt_move_from_form_list(subscription):
         event = subscription.event
         cost = Decimal(event.cost or 0)
         deposit = Decimal(event.deposit or 0)
+        services_total = _services_total(subscription.selected_services or [])
 
         quota_tx_exists = Transaction.objects.filter(
             subscription=subscription,
@@ -153,7 +245,12 @@ def attempt_move_from_form_list(subscription):
             type=Transaction.TransactionType.CAUZIONE
         ).exists()
 
-        paid_flag = quota_tx_exists or deposit_tx_exists or (cost <= 0 and deposit <= 0)
+        service_tx_exists = Transaction.objects.filter(
+            subscription=subscription,
+            type=Transaction.TransactionType.SERVICE
+        ).exists()
+
+        paid_flag = quota_tx_exists or deposit_tx_exists or service_tx_exists or (cost <= 0 and deposit <= 0 and services_total <= 0)
         if not paid_flag:
             return {'status': 'stayed', 'reason': 'not_paid'}
 
@@ -315,7 +412,8 @@ def _send_payment_confirmation_email(subscription):
     event = subscription.event
     cost = Decimal(event.cost or 0)
     deposit = Decimal(event.deposit or 0)
-    payment_required = (cost > 0) or (deposit > 0)
+    services_total = _services_total(subscription.selected_services or [])
+    payment_required = (cost > 0) or (deposit > 0) or (services_total > 0)
     if not payment_required:
         logger.debug(f"_send_payment_confirmation_email: no payment required for event {event.id}, sub {subscription.pk}")
         return  # Nothing to confirm
@@ -324,6 +422,8 @@ def _send_payment_confirmation_email(subscription):
                                           type=Transaction.TransactionType.SUBSCRIPTION).exists()
     deposit_tx = Transaction.objects.filter(subscription=subscription,
                                             type=Transaction.TransactionType.CAUZIONE).exists()
+    services_tx = Transaction.objects.filter(subscription=subscription,
+                                             type=Transaction.TransactionType.SERVICE).exists()
 
     # Conditions:
     # - If cost > 0 -> require quota transaction
@@ -333,6 +433,9 @@ def _send_payment_confirmation_email(subscription):
         return
     if cost == 0 and deposit > 0 and not deposit_tx:
         logger.debug(f"_send_payment_confirmation_email: deposit tx missing for sub {subscription.pk}")
+        return
+    if services_total > 0 and not services_tx:
+        logger.debug(f"_send_payment_confirmation_email: services tx missing for sub {subscription.pk}")
         return
 
     if not recipient:
@@ -344,6 +447,8 @@ def _send_payment_confirmation_email(subscription):
         paid_parts.append(f"fee ({cost} EUR)")
     if deposit_tx and deposit > 0:
         paid_parts.append(f"deposit ({deposit} EUR)")
+    if services_tx and services_total > 0:
+        paid_parts.append(f"services ({services_total} EUR)")
     paid_label = " and ".join(paid_parts) if paid_parts else "payment"
 
     subject = f"{event.name} - Payment confirmed"
@@ -403,8 +508,50 @@ def _remove_transaction(subscription, tx_type):
     Transaction.objects.filter(subscription=subscription, type=tx_type).delete()
 
 
-def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, executor, allow_delete=True,
-                           auto_move_on_payment=True, send_email_on_payment=True):
+def _sync_service_transactions(*, subscription, account_id, executor, allow_delete=True):
+    existing_qs = Transaction.objects.filter(subscription=subscription, type=Transaction.TransactionType.SERVICE)
+    if existing_qs.exists():
+        if allow_delete:
+            existing_qs.delete()
+        else:
+            return
+    if not account_id:
+        return
+    selected_services = subscription.selected_services or []
+    payer_name = None
+    if subscription.profile:
+        payer_name = f"{subscription.profile.name} {subscription.profile.surname}"
+    elif subscription.external_name:
+        payer_name = subscription.external_name
+
+    for svc in selected_services:
+        try:
+            price = Decimal(str(svc.get('price_at_purchase') or svc.get('price') or 0))
+        except Exception:
+            price = Decimal('0')
+        try:
+            qty = int(svc.get('quantity') or 1)
+        except Exception:
+            qty = 1
+        if qty <= 0:
+            continue
+        amount = price * qty
+        if amount <= 0:
+            continue
+        name = svc.get('name') or 'Servizio'
+        person_label = payer_name or 'Partecipante'
+        Transaction.objects.create(
+            type=Transaction.TransactionType.SERVICE,
+            account_id=account_id,
+            subscription=subscription,
+            executor=executor,
+            amount=amount,
+            description=f"Servizio {name} x{qty} - {person_label} - {subscription.event.name}"
+        )
+
+
+def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, services_status=None,
+                           executor, allow_delete=True, auto_move_on_payment=True, send_email_on_payment=True):
     """
     Apply payment statuses for quota & deposit using unified logic.
     quota_status / deposit_status: 'paid' | other (delete if allow_delete)
@@ -442,10 +589,23 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
     elif allow_delete:
         _remove_transaction(subscription, Transaction.TransactionType.CAUZIONE)
 
+    # Services
+    services_total = _services_total(subscription.selected_services or [])
+    if services_status == 'paid' and services_total > 0 and account_id:
+        _sync_service_transactions(
+            subscription=subscription,
+            account_id=account_id,
+            executor=executor,
+            allow_delete=allow_delete
+        )
+    elif allow_delete:
+        _remove_transaction(subscription, Transaction.TransactionType.SERVICE)
+
     # Determine if any payment is (now) registered
     did_pay = Transaction.objects.filter(subscription=subscription,
                                          type__in=[Transaction.TransactionType.SUBSCRIPTION,
-                                                   Transaction.TransactionType.CAUZIONE]).exists()
+                                                   Transaction.TransactionType.CAUZIONE,
+                                                   Transaction.TransactionType.SERVICE]).exists()
     # print(f"DEBUG: did_pay={did_pay} for sub {subscription.pk}, auto_move={auto_move_on_payment}, send_email={send_email_on_payment}")
     move_info = None
     if auto_move_on_payment and did_pay:
@@ -609,12 +769,23 @@ def subscription_create(request):
             else:
                 return Response({'error': "Seleziona un profilo per l'iscrizione."}, status=400)
 
-        serializer = SubscriptionCreateSerializer(data=request.data)
+        # Normalize selected services (if any)
+        raw_selected = _parse_selected_services(request.data.get('selected_services'))
+        normalized_selected, sel_errors = _build_selected_services(event, raw_selected)
+        if sel_errors:
+            return Response({'error': 'Invalid selected services', 'details': sel_errors}, status=400)
+
+        mutable_data = request.data.copy()
+        if normalized_selected:
+            mutable_data['selected_services'] = normalized_selected
+
+        serializer = SubscriptionCreateSerializer(data=mutable_data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
             subscription = serializer.save()
             status_quota = request.data.get('status_quota', 'pending')
             status_cauzione = request.data.get('status_cauzione', 'pending')
+            status_services = request.data.get('status_services', 'pending')
             account_id = (request.data.get('account_id')
                           or request.data.get('account')
                           or getattr(serializer, 'account', None)
@@ -629,6 +800,7 @@ def subscription_create(request):
                 account_id=account_id,
                 quota_status=status_quota,
                 deposit_status=status_cauzione,
+                services_status=status_services,
                 executor=request.user,
                 allow_delete=False,
                 auto_move_on_payment=auto_move,
@@ -671,11 +843,13 @@ def subscription_detail(request, pk):
     try:
         sub = Subscription.objects.get(pk=pk)
 
-        # Check if quota or cauzione is reimbursed
+        # Check if quota, cauzione or services are reimbursed
         quota_reimbursed = Transaction.objects.filter(subscription=sub,
                                                       type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
         cauzione_reimbursed = Transaction.objects.filter(subscription=sub,
                                                          type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+        services_reimbursed = Transaction.objects.filter(subscription=sub,
+                                 type=Transaction.TransactionType.RIMBORSO_SERVICE).exists()
 
         if request.method == 'GET':
             if not get_action_permissions(request, 'subscription_detail_GET'):
@@ -697,8 +871,8 @@ def subscription_detail(request, pk):
 
             # otherwise return permission denied
             else:'''
-            if quota_reimbursed or cauzione_reimbursed:
-                return Response({'error': 'Non è possibile modificare una iscrizione con quota o cauzione rimborsata.'},
+            if quota_reimbursed or cauzione_reimbursed or services_reimbursed:
+                return Response({'error': 'Non è possibile modificare una iscrizione con quota, cauzione o servizi rimborsati.'},
                                 status=400)
             if not get_action_permissions(request, 'subscription_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
@@ -708,6 +882,16 @@ def subscription_detail(request, pk):
                 return Response({'error': 'status_quota is required.'}, status=400)
             if 'status_cauzione' not in mutable_data or mutable_data['status_cauzione'] is None:
                 return Response({'error': 'status_cauzione is required.'}, status=400)
+            if 'status_services' not in mutable_data or mutable_data['status_services'] is None:
+                mutable_data['status_services'] = 'pending'
+
+            # Normalize selected services if present
+            raw_selected = _parse_selected_services(mutable_data.get('selected_services'))
+            normalized_selected, sel_errors = _build_selected_services(sub.event, raw_selected)
+            if sel_errors:
+                return Response({'error': 'Invalid selected services', 'details': sel_errors}, status=400)
+            if 'selected_services' in mutable_data:
+                mutable_data['selected_services'] = normalized_selected
             serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
             serializer.is_valid(raise_exception=True)
             with transaction.atomic():
@@ -718,6 +902,7 @@ def subscription_detail(request, pk):
 
                 status_quota = mutable_data['status_quota']
                 status_cauzione = mutable_data['status_cauzione']
+                status_services = mutable_data.get('status_services', 'pending')
 
                 # Ensure send_email_on_payment is properly handled
                 auto_move = _get_bool(mutable_data, 'auto_move_after_payment', True)
@@ -728,6 +913,7 @@ def subscription_detail(request, pk):
                     account_id=account_id,
                     quota_status=status_quota,
                     deposit_status=status_cauzione,
+                    services_status=status_services,
                     executor=request.user,
                     allow_delete=True,
                     auto_move_on_payment=auto_move,
@@ -755,13 +941,14 @@ def subscription_detail(request, pk):
         elif request.method == "DELETE":
             if not get_action_permissions(request, 'subscription_detail_DELETE'):
                 return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
-            if quota_reimbursed or cauzione_reimbursed:
-                return Response({'error': 'Non è possibile eliminare una iscrizione con quota o cauzione rimborsata.'},
+            if quota_reimbursed or cauzione_reimbursed or services_reimbursed:
+                return Response({'error': 'Non è possibile eliminare una iscrizione con quota, cauzione o servizi rimborsati.'},
                                 status=400)
             if request.user.has_perm('events.delete_subscription'):
                 related_transactions = Transaction.objects.filter(
                     subscription=sub,
-                    type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE]
+                    type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE,
+                              Transaction.TransactionType.SERVICE]
                 )
                 for t in related_transactions:
                     t.delete()
@@ -799,14 +986,27 @@ def move_subscriptions(request):
         if not subscription_ids or not target_list_id:
             return Response({'error': "ID iscrizioni o ID lista di destinazione mancanti"}, status=400)
 
-        if not target_event_id:
-            return Response({'error': "ID evento di destinazione mancante"}, status=400)
-
         # Fetch the target list and validate its existence
         try:
             target_list = EventList.objects.get(id=target_list_id)
         except EventList.DoesNotExist:
             return Response({'error': "Lista di destinazione inesistente"}, status=400)
+
+        # Fetch the subscriptions to be moved
+        subscriptions = (Subscription.objects
+                                  .select_related('profile', 'event')
+                                  .filter(id__in=subscription_ids))
+
+        if subscriptions.count() != len(subscription_ids):
+            return Response({'error': "Alcune iscrizioni selezionate non esistono più"}, status=400)
+
+        # If target_event_id is missing (older clients), infer it from subscriptions when possible
+        if not target_event_id:
+            distinct_event_ids = list(subscriptions.values_list('event_id', flat=True).distinct())
+            if len(distinct_event_ids) == 1:
+                target_event_id = distinct_event_ids[0]
+            else:
+                return Response({'error': "ID evento di destinazione mancante"}, status=400)
 
         try:
             target_event = Event.objects.get(id=target_event_id)
@@ -818,19 +1018,11 @@ def move_subscriptions(request):
             return Response({'error': "La lista selezionata non appartiene all'evento indicato"}, status=400)
 
         # Check if moving the subscriptions would exceed the target list's capacity
-        current_count = Subscription.objects.filter(list=target_list).count()
+        current_count = Subscription.objects.filter(list=target_list, event=target_event).count()
         if target_list.capacity > 0 and current_count + len(subscription_ids) > target_list.capacity:
             return Response(
                 {'error': "Numero di iscrizioni in eccesso per la capacità libera nella lista di destinazione"},
                 status=400)
-
-        # Fetch the subscriptions to be moved
-        subscriptions = (Subscription.objects
-                                  .select_related('profile', 'event')
-                                  .filter(id__in=subscription_ids))
-
-        if subscriptions.count() != len(subscription_ids):
-            return Response({'error': "Alcune iscrizioni selezionate non esistono più"}, status=400)
 
         # Update the list for each subscription
         with transaction.atomic():
@@ -873,8 +1065,12 @@ def move_subscriptions(request):
                     account_id=account_id,
                     quota_status=quota_status,
                     deposit_status=cauzione_status,
+                    services_status='paid' if Transaction.objects.filter(subscription=subscription,
+                                                                         type=Transaction.TransactionType.SERVICE).exists() else 'pending',
                     executor=request.user,
-                    allow_delete=False
+                    allow_delete=False,
+                    auto_move_on_payment=False,
+                    send_email_on_payment=False
                 )
 
         return Response({'message': "Iscrizioni spostate con successo"}, status=200)
@@ -1146,7 +1342,8 @@ def _ensure_sumup_transactions(subscription):
         event_obj = subscription.event
         cost = Decimal(event_obj.cost or 0)
         deposit = Decimal(event_obj.deposit or 0)
-        if cost <= 0 and deposit <= 0:
+        services_total = _services_total(subscription.selected_services or [])
+        if cost <= 0 and deposit <= 0 and services_total <= 0:
             return
 
         account = Account.objects.filter(name="SumUp").first()
@@ -1156,6 +1353,7 @@ def _ensure_sumup_transactions(subscription):
             account_id=account.id if account else None,
             quota_status='paid' if cost > 0 else 'pending',
             deposit_status='paid' if deposit > 0 else 'pending',
+            services_status='paid' if services_total > 0 else 'pending',
             executor=None,
             allow_delete=False,
             auto_move_on_payment=True,
@@ -1283,6 +1481,7 @@ def event_form_view(_, event_id):
             'date': event.date,
             'cost': event.cost,
             'deposit': event.deposit,
+            'services': event.services,
             'form_fields': event.form_fields,
             'is_form_open': event.is_form_open,
             'form_programmed_open_time': event.form_programmed_open_time,
@@ -1305,7 +1504,7 @@ def event_form_status(_, event_id):
     try:
         sumup_account = Account.objects.filter(name="SumUp").first()
         event = Event.objects.get(pk=event_id)
-        event_lists = EventList.objects.filter(event=event)
+        event_lists = EventList.objects.filter(events=event)
         main_list = event_lists.filter(is_main_list=True).first()
         waiting_list = event_lists.filter(is_waiting_list=True).first()
         form_list = event_lists.filter(name='Form List').first()
@@ -1375,6 +1574,7 @@ def event_form_submit(request, event_id):
             form_data = form_data_raw
         form_notes = request.data.get("form_notes", "") or ""
         email = (request.data.get("email") or "").strip()
+        raw_selected_services = _parse_selected_services(request.data.get("selected_services"))
 
         if not email:
             return Response({"error": "Missing email"}, status=400)
@@ -1418,6 +1618,11 @@ def event_form_submit(request, event_id):
         if errors:
             return Response({"error": "Validation error", "fields": errors}, status=400)
 
+        # Validate selected services
+        normalized_selected, sel_errors = _build_selected_services(event, raw_selected_services)
+        if sel_errors:
+            return Response({"error": "Invalid selected services", "details": sel_errors}, status=400)
+
         # Determine form list (always use form list; capacity not enforced here)
         form_list = event.lists.filter(name='Form List').first()
         if not form_list:
@@ -1431,12 +1636,13 @@ def event_form_submit(request, event_id):
             form_data=form_data,
             form_notes=form_notes,
             additional_data={'form_email': email},
+            selected_services=normalized_selected,
             created_by_form=True
         )
 
         # --- SumUp integration (widget-only) ---
         payment_error = None
-        total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0'))
+        total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0')) + _services_total(normalized_selected)
 
         if event.allow_online_payment and total_cost > 0:
             try:
@@ -1455,7 +1661,7 @@ def event_form_submit(request, event_id):
 
         # Determine available list for only online payments (main, else waiting)
         if online_payment_required:
-            event_lists = EventList.objects.filter(event=event)
+            event_lists = EventList.objects.filter(events=event)
             main_list = event_lists.filter(is_main_list=True).first()
             waiting_list = event_lists.filter(is_waiting_list=True).first()
 
@@ -1504,18 +1710,21 @@ def subscription_payment_status(_, pk):
     from treasury.models import Transaction as T
     cost_needed = bool(sub.event.cost and Decimal(sub.event.cost) > 0)
     dep_needed = bool(sub.event.deposit and Decimal(sub.event.deposit) > 0)
+    services_needed = _services_total(sub.selected_services or []) > 0
 
     quota_paid = cost_needed and T.objects.filter(subscription=sub, type=T.TransactionType.SUBSCRIPTION).exists()
     dep_paid = dep_needed and T.objects.filter(subscription=sub, type=T.TransactionType.CAUZIONE).exists()
+    services_paid = services_needed and T.objects.filter(subscription=sub, type=T.TransactionType.SERVICE).exists()
 
     quota_status = 'paid' if quota_paid else ('pending' if cost_needed else 'n/a')
     deposit_status = 'paid' if dep_paid else ('pending' if dep_needed else 'n/a')
+    services_status = 'paid' if services_paid else ('pending' if services_needed else 'n/a')
 
     if sub.additional_data.get('payment_failed'):
         overall = 'failed'
-    elif not cost_needed and not dep_needed:
+    elif not cost_needed and not dep_needed and not services_needed:
         overall = 'none'
-    elif (not cost_needed or quota_paid) and (not dep_needed or dep_paid):
+    elif (not cost_needed or quota_paid) and (not dep_needed or dep_paid) and (not services_needed or services_paid):
         overall = 'paid'
     elif sub.sumup_checkout_id:
         overall = 'pending'
@@ -1527,6 +1736,7 @@ def subscription_payment_status(_, pk):
         "overall_status": overall,
         "quota_status": quota_status,
         "deposit_status": deposit_status,
+        "services_status": services_status,
         "sumup_checkout_id": sub.sumup_checkout_id,
         "sumup_transaction_id": sub.sumup_transaction_id,
     }, status=200)
@@ -1589,13 +1799,14 @@ def sumup_webhook(request):
     if not sub:
         return Response({"status": "ignored", "reason": "unknown_subscription"}, status=200)
 
-    # If already has both transactions assume processed
+    # If already has payment transactions assume processed
     already_paid = Transaction.objects.filter(
         subscription=sub,
-        type=Transaction.TransactionType.SUBSCRIPTION
-    ).exists() or Transaction.objects.filter(
-        subscription=sub,
-        type=Transaction.TransactionType.CAUZIONE
+        type__in=[
+            Transaction.TransactionType.SUBSCRIPTION,
+            Transaction.TransactionType.CAUZIONE,
+            Transaction.TransactionType.SERVICE
+        ]
     ).exists()
 
     try:

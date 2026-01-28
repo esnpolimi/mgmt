@@ -13,6 +13,7 @@ import {
     FormHelperText,
     CircularProgress,
     Alert,
+    Checkbox,
 } from "@mui/material";
 import {Switch, FormControlLabel, Paper, IconButton, Grid} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -58,6 +59,8 @@ export default function SubscriptionModal({
         notes: '',
         status_quota: subscription?.status_quota || 'pending',
         status_cauzione: subscription?.status_cauzione || 'pending',
+        status_services: subscription?.status_services || 'pending',
+        selected_services: subscription?.selected_services || [],
         send_payment_email: true,
         auto_move_after_payment: true
     });
@@ -86,6 +89,58 @@ export default function SubscriptionModal({
     const getQuotaImport = () => toAmount(event?.cost);
     const getCauzioneImport = () => toAmount(event?.deposit);
 
+    const eventServices = useMemo(() => (Array.isArray(event?.services) ? event.services : []), [event]);
+
+    const getServicesTotal = () => {
+        const list = data.selected_services || [];
+        return list.reduce((sum, s) => {
+            const price = toAmount(s.price_at_purchase ?? s.price);
+            const qty = Math.max(0, Number.parseInt(s.quantity || 1, 10) || 0);
+            return sum + (price * qty);
+        }, 0);
+    };
+
+    const toggleService = (svc) => {
+        const serviceId = svc.id || svc.name;
+        setData(d => {
+            const existing = (d.selected_services || []).find(x => (x.service_id || x.id || x.name) === serviceId);
+            if (existing) {
+                const nextList = (d.selected_services || []).filter(x => (x.service_id || x.id || x.name) !== serviceId);
+                return {
+                    ...d,
+                    selected_services: nextList,
+                    status_services: nextList.length > 0 ? d.status_services : 'pending'
+                };
+            }
+            return {
+                ...d,
+                selected_services: [
+                    ...(d.selected_services || []),
+                    {
+                        service_id: serviceId,
+                        name: svc.name,
+                        price_at_purchase: svc.price,
+                        quantity: 1
+                    }
+                ],
+                status_services: d.status_services || 'pending'
+            };
+        });
+    };
+
+    const updateServiceQty = (svc, qtyRaw) => {
+        const serviceId = svc.id || svc.name;
+        const qty = Math.max(1, Number.parseInt(qtyRaw || 1, 10) || 1);
+        setData(d => ({
+            ...d,
+            selected_services: (d.selected_services || []).map(x => {
+                const key = (x.service_id || x.id || x.name);
+                if (key !== serviceId) return x;
+                return {...x, quantity: qty};
+            })
+        }));
+    };
+
     const fieldsToValidate = useMemo(() => {
         let arr = [];
         if (!data.profile_id && !data.external_name) {
@@ -103,7 +158,7 @@ export default function SubscriptionModal({
                 message: "Inserire una email valida"
             });
         }
-        if (data.status_quota === 'paid') {
+        if (data.status_quota === 'paid' || data.status_services === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) {
             arr.push({field: 'account_id', value: data.account_id, message: "Selezionare una Cassa"});
         }
         return arr;
@@ -131,6 +186,8 @@ export default function SubscriptionModal({
                 external_email: (subscription.additional_data && subscription.additional_data.external_email) || '',
                 notes: subscription.notes || '',
                 list_id: subscription.list_id || '', // Ensure list_id is set for editing
+                selected_services: Array.isArray(subscription.selected_services) ? subscription.selected_services : [],
+                status_services: subscription.status_services || 'pending',
                 list_name: event.lists.find(list => list.id === subscription.list_id)?.name || 'Lista non trovata'
             }));
          } else {
@@ -165,12 +222,13 @@ export default function SubscriptionModal({
         let total = 0;
         if (data.status_quota === 'paid') total += getQuotaImport();
         if (event.deposit > 0 && data.status_cauzione === 'paid') total += getCauzioneImport();
+        if (data.status_services === 'paid') total += getServicesTotal();
         return total;
     };
 
     const hasAnyPayment = useMemo(() =>
-            data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid'),
-        [data.status_quota, data.status_cauzione, event.deposit]
+            data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid') || data.status_services === 'paid',
+        [data.status_quota, data.status_cauzione, data.status_services, event.deposit]
     );
 
     // Helper to detect status changes for quota/cauzione
@@ -179,7 +237,9 @@ export default function SubscriptionModal({
         const quotaChangedToPending = isEdit && subscription?.status_quota === 'paid' && data.status_quota === 'pending';
         const cauzioneChangedToPaid = event.deposit > 0 && data.status_cauzione === 'paid' && (!isEdit || subscription?.status_cauzione !== 'paid');
         const cauzioneChangedToPending = isEdit && subscription?.status_cauzione === 'paid' && data.status_cauzione === 'pending';
-        return {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending};
+        const servicesChangedToPaid = data.status_services === 'paid' && (!isEdit || subscription?.status_services !== 'paid');
+        const servicesChangedToPending = isEdit && subscription?.status_services === 'paid' && data.status_services === 'pending';
+        return {quotaChangedToPaid, quotaChangedToPending, cauzioneChangedToPaid, cauzioneChangedToPending, servicesChangedToPaid, servicesChangedToPending};
     };
 
     // Helper to show confirm dialog message for payment changes
@@ -188,17 +248,22 @@ export default function SubscriptionModal({
             quotaChangedToPaid,
             quotaChangedToPending,
             cauzioneChangedToPaid,
-            cauzioneChangedToPending
+            cauzioneChangedToPending,
+            servicesChangedToPaid,
+            servicesChangedToPending
         } = getStatusChanges();
         const accountObj = accounts.find(acc => acc.id === data.account_id);
         const accountName = accountObj ? accountObj.name : 'N/A';
 
         // Check both toggled to paid first
-        if (quotaChangedToPaid && cauzioneChangedToPaid) {
+        if (quotaChangedToPaid && cauzioneChangedToPaid && servicesChangedToPaid) {
+            return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
+        }
+        if ((quotaChangedToPaid || cauzioneChangedToPaid || servicesChangedToPaid) && !(quotaChangedToPending || cauzioneChangedToPending || servicesChangedToPending)) {
             return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
         }
         // Check both toggled to pending first
-        if (quotaChangedToPending && cauzioneChangedToPending) {
+        if (quotaChangedToPending && cauzioneChangedToPending && servicesChangedToPending) {
             return `Confermi la rimozione di entrambi i pagamenti (quota + cauzione) per un totale di €${getTotalImport().toFixed(2)}? Verranno stornati dalla cassa.`;
         }
         // Then single checks
@@ -208,14 +273,20 @@ export default function SubscriptionModal({
         if (cauzioneChangedToPaid) {
             return `Confermi il pagamento della cauzione di €${getCauzioneImport().toFixed(2)} in cassa ${accountName}?`;
         }
+        if (servicesChangedToPaid) {
+            return `Confermi il pagamento dei servizi di €${getServicesTotal().toFixed(2)} in cassa ${accountName}?`;
+        }
         if (quotaChangedToPending) {
             return `Confermi la rimozione del pagamento della quota di €${getQuotaImport().toFixed(2)}? Verrà stornato dalla cassa.`;
         }
         if (cauzioneChangedToPending) {
             return `Confermi la rimozione del pagamento della cauzione di €${getCauzioneImport().toFixed(2)}? Verrà stornato dalla cassa.`;
         }
+        if (servicesChangedToPending) {
+            return `Confermi la rimozione del pagamento dei servizi di €${getServicesTotal().toFixed(2)}? Verrà stornato dalla cassa.`;
+        }
         // Default: if either is paid
-        if (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) {
+        if (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid') || data.status_services === 'paid') {
             return `Confermi un pagamento totale di €${getTotalImport().toFixed(2)} in cassa ${accountName}?`;
         }
         return '';
@@ -239,11 +310,13 @@ export default function SubscriptionModal({
             quotaChangedToPaid,
             quotaChangedToPending,
             cauzioneChangedToPaid,
-            cauzioneChangedToPending
+            cauzioneChangedToPending,
+            servicesChangedToPaid,
+            servicesChangedToPending
         } = getStatusChanges();
         const accountChanged = isEdit && subscription?.account_id !== data.account_id;
 
-        if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending || accountChanged) {
+        if (quotaChangedToPaid || quotaChangedToPending || cauzioneChangedToPaid || cauzioneChangedToPending || servicesChangedToPaid || servicesChangedToPending || accountChanged) {
             setConfirmDialog({
                 open: true,
                 action: () => doSubmit(),
@@ -252,7 +325,7 @@ export default function SubscriptionModal({
             return;
         }
         // For new subscriptions, show confirm only if either is paid
-        if (!isEdit && (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid'))) {
+        if (!isEdit && (data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid') || data.status_services === 'paid')) {
             setConfirmDialog({
                 open: true,
                 action: () => doSubmit(),
@@ -264,7 +337,7 @@ export default function SubscriptionModal({
     };
 
     const statusChanges = getStatusChanges();
-    const paymentBeingRegistered = statusChanges.quotaChangedToPaid || statusChanges.cauzioneChangedToPaid || (!isEdit && hasAnyPayment);
+    const paymentBeingRegistered = statusChanges.quotaChangedToPaid || statusChanges.cauzioneChangedToPaid || statusChanges.servicesChangedToPaid || (!isEdit && hasAnyPayment);
 
     const doSubmit = () => {
         setConfirmDialog({open: false, action: null, message: ''});
@@ -279,6 +352,8 @@ export default function SubscriptionModal({
                 notes: data.notes,
                 status_quota: data.status_quota || 'pending',
                 status_cauzione: (event.deposit > 0 ? (data.status_cauzione || 'pending') : 'pending'),
+                status_services: (data.selected_services && data.selected_services.length > 0) ? (data.status_services || 'pending') : 'pending',
+                selected_services: data.selected_services || [],
                 external_name: data.external_name || undefined,
                 email: (!data.profile_id && data.external_email) ? data.external_email : undefined,
                 // Apply only when a payment is being newly registered
@@ -301,7 +376,8 @@ export default function SubscriptionModal({
                 // If it's a creation and there are fields to edit, open EditAnswersModal instead of closing now
                 if (!isEdit) {
                     const hasAnyEditableFields = Array.isArray(event?.fields) && event.fields.some(f => f.field_type === 'form' || f.field_type === 'additional');
-                    if (hasAnyEditableFields) {
+                    const canEditAnswers = Boolean(event?.enable_form) && hasAnyEditableFields;
+                    if (canEditAnswers) {
                         setCreatedSubscription(resp);
                         setPostCreateMessage(baseMsg);
                         setOpenEditAnswers(true);
@@ -351,7 +427,7 @@ export default function SubscriptionModal({
     };
 
     // Helper to check if either quota or cauzione is reimbursed
-    const isReimbursed = data.status_quota === 'reimbursed' || data.status_cauzione === 'reimbursed';
+    const isReimbursed = data.status_quota === 'reimbursed' || data.status_cauzione === 'reimbursed' || data.status_services === 'reimbursed';
 
     return (
         <Modal open={open}
@@ -482,6 +558,49 @@ export default function SubscriptionModal({
                                     />
                                 </Grid>
                             )}
+                            {/* Services selection */}
+                            {eventServices.length > 0 && (
+                                <Grid size={{xs: 12}}>
+                                    <Paper elevation={1} sx={{p: 1.5, mb: 1}}>
+                                        <Typography variant="subtitle2" sx={{mb: 1}}>Servizi aggiuntivi</Typography>
+                                        {eventServices.map((svc) => {
+                                            const key = svc.id || svc.name;
+                                            const selected = (data.selected_services || []).find(x => (x.service_id || x.id || x.name) === key);
+                                            const priceLabel = toAmount(svc.price).toFixed(2);
+                                            return (
+                                                <Box key={key} sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
+                                                    <FormControlLabel
+                                                        control={
+                                                            <Checkbox
+                                                                checked={!!selected}
+                                                                onChange={() => toggleService(svc)}
+                                                                disabled={isReimbursed}
+                                                                size="small"
+                                                            />
+                                                        }
+                                                        label={`${svc.name} (€${priceLabel})`}
+                                                    />
+                                                    <TextField
+                                                        label="Qtà"
+                                                        type="number"
+                                                        size="small"
+                                                        sx={{width: 90}}
+                                                        value={selected?.quantity || 1}
+                                                        onChange={(e) => updateServiceQty(svc, e.target.value)}
+                                                        disabled={!selected || isReimbursed}
+                                                        slotProps={{htmlInput: {min: 1, step: 1}}}
+                                                    />
+                                                </Box>
+                                            );
+                                        })}
+                                        {data.selected_services && data.selected_services.length > 0 && (
+                                            <Typography variant="body2" sx={{mt: 1}}>
+                                                Totale servizi: €{getServicesTotal().toFixed(2)}
+                                            </Typography>
+                                        )}
+                                    </Paper>
+                                </Grid>
+                            )}
                             {/* Quota status toggle */}
                             {event.cost > 0 && (
                                 <Grid size={{xs: 12}}>
@@ -556,8 +675,45 @@ export default function SubscriptionModal({
                                     </Paper>
                                 </Grid>
                             )}
+                            {/* Services status toggle */}
+                            {data.selected_services && data.selected_services.length > 0 && (
+                                <Grid size={{xs: 12}}>
+                                    <Paper
+                                        elevation={1}
+                                        sx={{
+                                            p: 1.5,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            bgcolor: data.status_services === 'paid' ? '#e3f2fd' : 'inherit',
+                                            transition: 'background-color 0.8s',
+                                            mb: 0
+                                        }}
+                                    >
+                                        <Typography variant="subtitle2" sx={{ml: 1}}>Stato Servizi</Typography>
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    sx={{ml: 1}}
+                                                    checked={data.status_services === 'paid'}
+                                                    onChange={() => setData(d => ({
+                                                        ...d,
+                                                        status_services: d.status_services === 'paid' ? 'pending' : 'paid'
+                                                    }))}
+                                                    color="primary"
+                                                    disabled={isReimbursed}
+                                                    size="small"
+                                                />
+                                            }
+                                            label={data.status_services === 'paid' ? "Pagati" : data.status_services === 'reimbursed' ? "Rimborsati" : "In attesa"}
+                                            labelPlacement="start"
+                                            sx={{mr: 1}}
+                                        />
+                                    </Paper>
+                                </Grid>
+                            )}
                             {/* Show total import and cassa select if either is paid */}
-                            {(data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid')) && (
+                            {(data.status_quota === 'paid' || (event.deposit > 0 && data.status_cauzione === 'paid') || data.status_services === 'paid') && (
                                 <>
                                     <Grid size={{xs: 12}} sx={{mt: 0}}>
                                         <Typography variant="subtitle1" gutterBottom>

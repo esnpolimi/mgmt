@@ -183,6 +183,7 @@ export default function Event() {
         setReimburseQuotaModalOpen(true);
     };
 
+
     const handleOpenPrintableLibetatorie = (listId) => {
         setPrintableLiberatorieListId(listId);
         setPrintableLiberatorieModalOpen(true);
@@ -222,6 +223,7 @@ export default function Event() {
         }
         setSingleSubToReimburseQuota(null);
     };
+
 
     const handleCloseEditAnswersModal = (success, message) => {
         setEditAnswersModalOpen(false);

@@ -67,5 +67,7 @@ export const transactionDisplayNames = {
         reimbursement: 'Richiesta Rimborso',
         rimborso_cauzione: 'Rimborso Cauzione Evento',
         rimborso_quota: 'Rimborso Quota Evento',
+        service: 'Acquisto Servizio',
+        rimborso_service: 'Rimborso Servizio',
     },
 }

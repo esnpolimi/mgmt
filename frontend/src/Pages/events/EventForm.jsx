@@ -49,6 +49,7 @@ export default function EventForm() {
     const formFields = eventData.form_fields || [];
     const linkFields = formFields.filter(f => f.type === 'l');
     const formNote = eventData.form_note || "";
+    const eventServices = Array.isArray(eventData.services) ? eventData.services : [];
 
     // Redirect if missing essentials
     useEffect(() => {
@@ -72,6 +73,7 @@ export default function EventForm() {
             return [f.name, ""];
         }))
     );
+    const [selectedServices, setSelectedServices] = useState([]);
     // Track files for link fields separately
     const [linkFiles, setLinkFiles] = useState(() =>
         Object.fromEntries(linkFields.map(f => [f.name, null]))
@@ -90,6 +92,36 @@ export default function EventForm() {
                 ? {...prev, [field]: arr.filter(v => v !== choice)}
                 : {...prev, [field]: [...arr, choice]};
         });
+    };
+
+    const toggleService = (svc) => {
+        const serviceId = svc.id || svc.name;
+        setSelectedServices(prev => {
+            const existing = prev.find(x => (x.service_id || x.name) === serviceId);
+            if (existing) {
+                return prev.filter(x => (x.service_id || x.name) !== serviceId);
+            }
+            return [...prev, {service_id: serviceId, name: svc.name, quantity: 1}];
+        });
+    };
+
+    const updateServiceQty = (svc, qtyRaw) => {
+        const serviceId = svc.id || svc.name;
+        const qty = Math.max(1, Number.parseInt(qtyRaw || 1, 10) || 1);
+        setSelectedServices(prev => prev.map(x => {
+            const key = (x.service_id || x.name);
+            if (key !== serviceId) return x;
+            return {...x, quantity: qty};
+        }));
+    };
+
+    const getServicesTotal = () => {
+        return selectedServices.reduce((sum, s) => {
+            const svc = eventServices.find(es => (es.id || es.name) === (s.service_id || s.name));
+            const price = Number.parseFloat(svc?.price || 0) || 0;
+            const qty = Math.max(1, Number.parseInt(s.quantity || 1, 10) || 1);
+            return sum + (price * qty);
+        }, 0);
     };
 
     // Validation states
@@ -142,6 +174,11 @@ export default function EventForm() {
         setShowMissingAlert(false);
         setBackendError("");
         setSubmitLoading(true);
+        const selectedPayload = selectedServices.map(s => ({
+            service_id: s.service_id,
+            name: s.name,
+            quantity: s.quantity
+        }));
         // Build multipart if any link file selected
         const useMultipart = linkFields.length > 0;
         let bodyPayload;
@@ -153,6 +190,7 @@ export default function EventForm() {
             linkFields.forEach(f => delete nonLinkData[f.name]);
             fd.append('form_data', JSON.stringify(nonLinkData));
             fd.append('form_notes', formNotes);
+            fd.append('selected_services', JSON.stringify(selectedPayload));
             // Append files (field name must match backend expectation)
             linkFields.forEach(f => {
                 const fileObj = linkFiles[f.name];
@@ -163,7 +201,8 @@ export default function EventForm() {
             bodyPayload = {
                 email: userEmail,
                 form_data: formValues,
-                form_notes: formNotes
+                form_notes: formNotes,
+                selected_services: selectedPayload
             };
         }
         fetchCustom("POST", `/event/${eventData.id}/formsubmit/`, {
@@ -335,6 +374,47 @@ export default function EventForm() {
                         </Grid>
                     </Grid>
                 </Paper>
+                {/* Optional services */}
+                {eventServices.length > 0 && (
+                    <Paper elevation={2} sx={{p: 2, mt: 2, width: '100%'}}>
+                        <Typography variant="h6" gutterBottom>
+                            Servizi aggiuntivi
+                        </Typography>
+                        {eventServices.map((svc) => {
+                            const key = svc.id || svc.name;
+                            const selected = selectedServices.find(s => (s.service_id || s.name) === key);
+                            return (
+                                <Box key={key} sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 1}}>
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                checked={!!selected}
+                                                onChange={() => toggleService(svc)}
+                                            />
+                                        }
+                                        label={`${svc.name} (€${Number(svc.price || 0).toFixed(2)})`}
+                                    />
+                                    <TextField
+                                        label="Qtà"
+                                        type="number"
+                                        size="small"
+                                        sx={{width: 90}}
+                                        value={selected?.quantity || 1}
+                                        onChange={(e) => updateServiceQty(svc, e.target.value)}
+                                        disabled={!selected}
+                                        slotProps={{htmlInput: {min: 1, step: 1}}}
+                                    />
+                                </Box>
+                            );
+                        })}
+                        <Typography variant="body2" sx={{mt: 1}}>
+                            Totale servizi: €{getServicesTotal().toFixed(2)}
+                        </Typography>
+                        <Typography variant="subtitle2" sx={{mt: 1}}>
+                            Totale complessivo: €{(Number(eventData.cost || 0) + Number(eventData.deposit || 0) + getServicesTotal()).toFixed(2)}
+                        </Typography>
+                    </Paper>
+                )}
                 <Box component="form" onSubmit={handleSubmit} sx={{mt: 3, width: '100%'}}>
                     {/* Added subscription email display */}
                     <Paper elevation={1} sx={{p: 2, mb: 3}}>

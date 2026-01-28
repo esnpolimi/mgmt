@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {
-    Modal, Box, Typography, Button, IconButton, Grid, TextField, MenuItem, CircularProgress
+    Modal, Box, Typography, Button, IconButton, Grid, TextField, MenuItem, CircularProgress, FormControlLabel, Checkbox
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import Loader from "../Loader";
@@ -17,6 +17,15 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
     const [submitting, setSubmitting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
     const [popup, setPopup] = useState(null);
+    const [includeServices, setIncludeServices] = useState(false);
+    const quotaAlreadyReimbursed = subscription?.status_quota === 'reimbursed';
+
+    const servicesTotal = (subscription?.selected_services || []).reduce((sum, s) => {
+        const price = Number(s?.price_at_purchase ?? s?.price ?? 0);
+        const qty = Number(s?.quantity ?? 1);
+        if (!Number.isFinite(price) || !Number.isFinite(qty) || qty <= 0) return sum;
+        return sum + (price * qty);
+    }, 0);
 
     useEffect(() => {
         if (!open) return;
@@ -24,12 +33,13 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
         setPopup(null);
         setSelectedAccount('');
         setNotes('');
+        setIncludeServices(quotaAlreadyReimbursed ? servicesTotal > 0 : false);
         fetchCustom("GET", "/accounts/", {
             onSuccess: (results) => setAccounts(results || []),
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)
         });
-    }, [open]);
+    }, [open, quotaAlreadyReimbursed, servicesTotal]);
 
     const handleSubmit = () => {
         setPopup(null);
@@ -41,8 +51,10 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
             setPopup({message: "Iscrizione non trovata.", state: "error", id: Date.now()});
             return;
         }
-        const quotaAmount = Number(event.cost || 0);
-        const message = `Confermi di voler rimborsare €${quotaAmount.toFixed(2)} a ${subscription.profile_name} dalla cassa ${accounts.find(acc => acc.id === selectedAccount)?.name || "N/A"}?`;
+        const quotaAmount = quotaAlreadyReimbursed ? 0 : Number(event.cost || 0);
+        const extraServices = includeServices && servicesTotal > 0 ? servicesTotal : 0;
+        const totalAmount = quotaAmount + extraServices;
+        const message = `Confermi di voler rimborsare €${totalAmount.toFixed(2)} a ${subscription.profile_name} dalla cassa ${accounts.find(acc => acc.id === selectedAccount)?.name || "N/A"}?`;
         setConfirmDialog({
             open: true,
             action: () => doSubmit(),
@@ -58,7 +70,8 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
                 event: event.id,
                 subscription_id: subscription.id,
                 account: selectedAccount,
-                notes
+                notes,
+                include_services: includeServices
             },
             onSuccess: () => onClose(true, 'Rimborso quota effettuato con successo'),
             onError: (err) => defaultErrorHandler(err, setPopup),
@@ -80,9 +93,29 @@ export default function ReimburseQuotaModal({open, onClose, event, subscription}
                         <Grid container spacing={1} sx={{mt: 1}}>
                             <Grid size={{xs: 12}}>
                                 <Typography>
-                                    <b>Importo Quota:</b> €{Number(event.cost || 0).toFixed(2)}
+                                    <b>Importo Quota:</b> €{(quotaAlreadyReimbursed ? 0 : Number(event.cost || 0)).toFixed(2)}
                                 </Typography>
+                                {quotaAlreadyReimbursed && (
+                                    <Typography variant="body2" color="text.secondary">
+                                        Quota già rimborsata
+                                    </Typography>
+                                )}
                             </Grid>
+                            {servicesTotal > 0 && (
+                                <Grid size={{xs: 12}}>
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                checked={includeServices}
+                                                onChange={(e) => setIncludeServices(e.target.checked)}
+                                                color="primary"
+                                                disabled={quotaAlreadyReimbursed}
+                                            />
+                                        }
+                                        label={`Rimborsa anche servizi (+€${servicesTotal.toFixed(2)})`}
+                                    />
+                                </Grid>
+                            )}
                             <Grid size={{xs: 12}}>
                                 <Typography>
                                     <b>Ricevente:</b> {subscription?.profile_name}
