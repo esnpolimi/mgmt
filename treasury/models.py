@@ -82,6 +82,8 @@ class Transaction(BaseEntity):
         CAUZIONE = "cauzione", _("Cauzione")  # Subscription deposit (cauzione)
         RIMBORSO_CAUZIONE = "rimborso_cauzione", _("Rimborso Cauzione"),
         RIMBORSO_QUOTA = "rimborso_quota", _("Rimborso Quota")
+        SERVICE = "service", _("Service")
+        RIMBORSO_SERVICE = "rimborso_service", _("Rimborso Service")
 
     id = models.AutoField(primary_key=True)
     type = models.CharField(max_length=30, choices=TransactionType.choices, default=TransactionType.DEPOSIT)
@@ -102,6 +104,10 @@ class Transaction(BaseEntity):
         # Validate fields based on transaction type
         if self.type == self.TransactionType.SUBSCRIPTION and not self.subscription:
             raise ValueError("Le transazioni di Iscrizione devono avere un'Iscrizione.")
+        if self.type == self.TransactionType.SERVICE and not self.subscription:
+            raise ValueError("Le transazioni di Servizi devono avere un'Iscrizione.")
+        if self.type == self.TransactionType.RIMBORSO_SERVICE and not self.subscription:
+            raise ValueError("Le transazioni di Rimborso Servizi devono avere un'Iscrizione.")
         if self.type == self.TransactionType.ESNCARD and not self.esncard:
             raise ValueError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
         if self.type == self.TransactionType.CAUZIONE:
