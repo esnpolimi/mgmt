@@ -1,5 +1,6 @@
 import json
 import os
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
@@ -160,6 +161,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     )
     profile_fields = serializers.ListField(required=False, default=list)
     fields = serializers.ListField(required=False, default=list)  # Unified fields
+    services = serializers.ListField(required=False, default=list)
     enable_form = serializers.BooleanField(required=False, default=False)
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
@@ -175,7 +177,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         fields = [
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'enable_form',
+            'profile_fields', 'fields', 'services', 'enable_form',
             'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
             'notify_list',
             'visible_to_board_only',
@@ -427,6 +429,22 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                     'deposit': "Non è possibile modificare la cauzione se l'evento ha delle iscrizioni"
                 })
 
+        # Validate services haven't changed (allow only adding new services)
+        if 'services' in validated_data:
+            existing_services = instance.services or []
+            new_services = validated_data['services'] or []
+            existing_keys = set()
+            for s in existing_services:
+                key = (s.get('id') or s.get('name') or '').strip()
+                if key:
+                    existing_keys.add(key)
+            only_new = []
+            for s in new_services:
+                key = (s.get('id') or s.get('name') or '').strip()
+                if key and key not in existing_keys:
+                    only_new.append(s)
+            validated_data['services'] = list(existing_services) + only_new
+
         # Validate subscription end date
         if 'subscription_end_date' in validated_data:
             from django.utils import timezone
@@ -570,7 +588,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields',
+            'profile_fields', 'fields', 'services',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
             'notify_list',
@@ -670,6 +688,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     quota_reimbursement_transaction_id = serializers.SerializerMethodField()
     status_quota = serializers.SerializerMethodField()
     status_cauzione = serializers.SerializerMethodField()
+    status_services = serializers.SerializerMethodField()
+    services_total = serializers.SerializerMethodField()
     subscribed_at = serializers.DateTimeField(source='created_at', read_only=True)
     event_name = serializers.CharField(source='event.name', read_only=True)
     event_id = serializers.IntegerField(source='event.id', read_only=True)
@@ -680,6 +700,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     is_external = serializers.SerializerMethodField()
     form_data = serializers.DictField(read_only=True)
     additional_data = serializers.DictField(read_only=True)
+    selected_services = serializers.ListField(read_only=True)
     form_notes = serializers.CharField(read_only=True)
     profile = SubscriptionProfileInlineSerializer(read_only=True)  # NEW inline data for columns
     sumup_checkout_id = serializers.CharField(read_only=True)
@@ -695,12 +716,14 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'account_id', 'account_name',
             'deposit_reimbursement_transaction_id',
             'quota_reimbursement_transaction_id',
-            'status_quota', 'status_cauzione',
+            'status_quota', 'status_cauzione', 'status_services',
+            'services_total',
             'subscribed_at',
             'external_name',
             'is_external',
             'form_data',
             'additional_data',
+            'selected_services',
             'form_notes',
             'profile',
             'sumup_checkout_id',
@@ -785,6 +808,33 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         return None
 
     @staticmethod
+    def get_status_services(obj):
+        if obj.selected_services:
+            if Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.RIMBORSO_SERVICE).exists():
+                return 'reimbursed'
+            elif Transaction.objects.filter(subscription=obj, type=Transaction.TransactionType.SERVICE).exists():
+                return 'paid'
+            else:
+                return 'pending'
+        return None
+
+    @staticmethod
+    def get_services_total(obj):
+        total = Decimal('0')
+        for s in (obj.selected_services or []):
+            try:
+                price = Decimal(str(s.get('price_at_purchase') or s.get('price') or 0))
+            except Exception:
+                price = Decimal('0')
+            try:
+                qty = int(s.get('quantity') or 1)
+            except Exception:
+                qty = 1
+            if qty > 0:
+                total += (price * qty)
+        return total
+
+    @staticmethod
     def get_is_external(obj):
         return bool(obj.external_name)
 
@@ -798,11 +848,13 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
+    selected_services = serializers.ListField(required=False, default=list)
+    status_services = serializers.CharField(write_only=True, required=False, default='pending')
 
     class Meta:
         model = Subscription
         fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione',
-                  'external_name', 'email', 'form_data', 'additional_data']
+                  'status_services', 'external_name', 'email', 'form_data', 'additional_data', 'selected_services']
 
     def validate(self, attrs):
         event = attrs.get('event')
@@ -828,6 +880,7 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         self.pay_deposit = attrs.pop('pay_deposit', True)
         self.status_quota = attrs.pop('status_quota', 'pending')
         self.status_cauzione = attrs.pop('status_cauzione', 'pending')
+        self.status_services = attrs.pop('status_services', 'pending')
         # POP the temporary write_only field so it is not passed to model
         attrs.pop('email', None)
         return attrs
@@ -841,12 +894,14 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     email = serializers.EmailField(write_only=True, required=False, allow_blank=True)  # NEW
     form_data = serializers.DictField(required=False, default=dict)
     additional_data = serializers.DictField(required=False, default=dict)
+    selected_services = serializers.ListField(required=False, default=list)
+    status_services = serializers.CharField(write_only=True, required=False, default='pending')
     event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all(), required=False)
 
     class Meta:
         model = Subscription
         fields = ['event', 'list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione',
-                  'external_name', 'email', 'form_data', 'additional_data']
+                  'status_services', 'external_name', 'email', 'form_data', 'additional_data', 'selected_services']
 
     def validate(self, attrs):
         instance = self.instance
@@ -854,6 +909,7 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
         self.account_id = attrs.get('account_id', instance and getattr(instance, 'account_id', None))
         self.status_quota = attrs.pop('status_quota', 'pending')
         self.status_cauzione = attrs.pop('status_cauzione', 'pending')
+        self.status_services = attrs.pop('status_services', 'pending')
         attrs.pop('account_id', None)
 
         new_event = attrs.get('event', instance.event if instance else None)
@@ -905,7 +961,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'profile_fields', 'fields', 'enable_form',
+            'profile_fields', 'fields', 'services', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
             'notify_list',

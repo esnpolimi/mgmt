@@ -103,6 +103,7 @@ export default memo(function EventListAccordions({
 
         return data.lists.map(list => {
             const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
+            const eventServices = Array.isArray(data?.services) ? data.services : [];
 
             const profileFieldSet = new Set(baseProfileFields);
             listSubscriptions.forEach(sub => {
@@ -264,6 +265,40 @@ export default memo(function EventListAccordions({
                 ...additionalFieldColumns
             ];
 
+            const serviceStatusColumns = eventServices.map((svc, idx) => {
+                const rawKey = (svc?.id || svc?.name || idx);
+                const safeKey = String(rawKey).replace(/\W+/g, '_');
+                return {
+                    accessorKey: `service_status_${safeKey}`,
+                    header: `Stato servizio ${svc?.name || `Servizio ${idx + 1}`}`,
+                    size: 60,
+                    Cell: ({row}) => {
+                        const sub = row.original;
+                        const selected = (sub?.selected_services || []).find(s => {
+                            const key = s?.service_id || s?.id || s?.name;
+                            return key === (svc?.id || svc?.name) || (s?.name && svc?.name && s.name === svc.name);
+                        });
+                        if (!selected) return '';
+                        const status = sub?.status_services;
+                        let label, color;
+                        if (status === 'pending') {
+                            label = 'In attesa';
+                            color = 'error';
+                        } else if (status === 'paid') {
+                            label = 'Pagato';
+                            color = 'success';
+                        } else if (status === 'reimbursed') {
+                            label = 'Rimborsato';
+                            color = 'warning';
+                        } else {
+                            label = status || '';
+                            color = 'default';
+                        }
+                        return <Chip label={label} color={color}/>;
+                    }
+                };
+            });
+
             const listSubscriptionsColumns = [
                 {
                     accessorKey: 'id',
@@ -349,6 +384,7 @@ export default memo(function EventListAccordions({
                         return <Chip label={label} color={color}/>;
                     }
                 },
+                ...serviceStatusColumns,
                 data.is_allow_external && {
                     accessorKey: 'is_external',
                     header: 'Esterno',
@@ -394,7 +430,8 @@ export default memo(function EventListAccordions({
                 enableColumnActions: false,
                 Cell: ({row}) => {
                     const sub = row.original;
-                    const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
+                    const canReimburseQuota = (hasQuota && sub.status_quota === 'paid') ||
+                        (sub.status_quota === 'reimbursed' && sub.status_services === 'paid');
                     const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
 
                     // --- Disable reimbursement if event.reimbursements_by_organizers_only is true and user is not allowed ---
@@ -593,9 +630,9 @@ export default memo(function EventListAccordions({
                 muiTableHeadCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 3}},
                 muiTableBodyCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 2}},
             };
-            // Insert Azioni right after the selection checkboxes and keep Copy next
+            // Keep Copy first, and move Azioni to the last column
             columns.unshift(copyColumn);
-            columns.unshift(actionsColumn);
+            columns = [...columns, actionsColumn];
 
             // Add a caption and toggles for form/aspect columns
             const formAspectCaption = (
@@ -751,7 +788,7 @@ export default memo(function EventListAccordions({
                     showColumnFilters: false,
                     pagination: {pageSize: 5, pageIndex: 0},
                     columnVisibility: {id: false},
-                    columnPinning: {left: ['actions', 'copy']},
+                    columnPinning: {left: ['copy']},
                 },
                 paginationDisplayMode: 'pages',
                 localization: MRT_Localization_IT,

@@ -567,13 +567,24 @@ def reimbursement_request_detail(request, pk):
 def reimbursement_requests_list(request):
     try:
         requests = ReimbursementRequest.objects.all().order_by('-created_at')
+        profile_id = request.GET.get('profile')
+        if profile_id:
+            try:
+                profile_id_int = int(profile_id)
+            except ValueError:
+                return Response({'error': 'Parametro profile non valido.'}, status=400)
+            # Allow only board or the profile owner
+            req_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+            if not user_is_board(request.user) and req_profile_id != profile_id_int:
+                return Response({'error': 'Non autorizzato.'}, status=403)
+            requests = requests.filter(user__profile__id=profile_id_int)
         search = request.GET.get('search', '').strip()
         if search:
             requests = requests.filter(
                 Q(description__icontains=search) |
                 Q(user__profile__name__icontains=search) |
                 Q(user__profile__surname__icontains=search) |
-                Q(user__email__icontains=search)
+                Q(user__profile__email__icontains=search)
             )
         # Filtering by payment (multi)
         payments = request.GET.getlist('payment')
@@ -733,7 +744,7 @@ def reimbursable_deposits(request):
 def reimburse_quota(request):
     """
     Reimburse the main event cost ("Quota") for a subscription.
-    Expects: { "event": <event_id>, "subscription_id": <id>, "account": <account_id>, "notes": <optional> }
+    Expects: { "event": <event_id>, "subscription_id": <id>, "account": <account_id>, "notes": <optional>, "include_services": <optional bool> }
     """
     try:
         if not get_action_permissions('reimburse_quota', request.user):
@@ -743,6 +754,16 @@ def reimburse_quota(request):
         subscription_id = request.data.get('subscription_id')
         account_id = request.data.get('account')
         notes = request.data.get('notes', '')
+        include_services_raw = request.data.get('include_services', False)
+
+        def _as_bool(val):
+            if isinstance(val, bool):
+                return val
+            if val is None:
+                return False
+            return str(val).strip().lower() in ['1', 'true', 'yes', 'y', 'on']
+
+        include_services = _as_bool(include_services_raw)
 
         if not event_id or not subscription_id or not account_id:
             return Response({'error': 'Dati mancanti.'}, status=400)
@@ -774,8 +795,11 @@ def reimburse_quota(request):
             return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'},
                             status=400)
 
-        # Check if already reimbursed
-        if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
+        quota_already_reimbursed = Transaction.objects.filter(
+            subscription=sub,
+            type=Transaction.TransactionType.RIMBORSO_QUOTA
+        ).exists()
+        if quota_already_reimbursed and not include_services:
             return Response({'error': 'Quota già rimborsata.'}, status=400)
 
         quota_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).first()
@@ -785,7 +809,33 @@ def reimburse_quota(request):
         if account.status == "closed":
             return Response({'error': 'La cassa è chiusa.'}, status=400)
 
-        if account.balance < sub_event.cost:
+        services_total = Decimal('0')
+        if include_services:
+            selected_services = sub.selected_services or []
+            if not selected_services:
+                return Response({'error': 'Nessun servizio selezionato per questa iscrizione.'}, status=400)
+            if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SERVICE).exists():
+                return Response({'error': 'I servizi possono essere rimborsati solo se è stato effettuato il pagamento.'},
+                                status=400)
+            if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_SERVICE).exists():
+                return Response({'error': 'Servizi già rimborsati.'}, status=400)
+            for s in selected_services:
+                try:
+                    price = Decimal(str(s.get('price_at_purchase') or s.get('price') or 0))
+                except Exception:
+                    price = Decimal('0')
+                try:
+                    qty = int(s.get('quantity') or 1)
+                except Exception:
+                    qty = 1
+                if qty > 0:
+                    services_total += (price * qty)
+            if services_total <= 0:
+                return Response({'error': 'Importo servizi non valido.'}, status=400)
+
+        quota_amount = Decimal(str(sub_event.cost)) if not quota_already_reimbursed else Decimal('0')
+        total_refund = quota_amount + services_total
+        if account.balance < total_refund:
             return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
         # Fix: handle external subscriptions for description
@@ -797,16 +847,31 @@ def reimburse_quota(request):
             sub_name = "Esterno"
 
         with transaction.atomic():
-            tx = Transaction.objects.create(
-                type=Transaction.TransactionType.RIMBORSO_QUOTA,
-                subscription=sub,
-                executor=request.user,
-                account=account,
-                amount=-sub_event.cost,
-                description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
-            )
-            serializer = TransactionViewSerializer(tx)
-            return Response(serializer.data, status=201)
+            quota_tx = None
+            if not quota_already_reimbursed:
+                quota_tx = Transaction.objects.create(
+                    type=Transaction.TransactionType.RIMBORSO_QUOTA,
+                    subscription=sub,
+                    executor=request.user,
+                    account=account,
+                    amount=-sub_event.cost,
+                    description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
+                )
+            services_tx = None
+            if include_services and services_total > 0:
+                services_tx = Transaction.objects.create(
+                    type=Transaction.TransactionType.RIMBORSO_SERVICE,
+                    subscription=sub,
+                    executor=request.user,
+                    account=account,
+                    amount=-services_total,
+                    description=f"Rimborso servizi {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
+                )
+            payload = {
+                'quota': TransactionViewSerializer(quota_tx).data if quota_tx else None,
+                'services': TransactionViewSerializer(services_tx).data if services_tx else None
+            }
+            return Response(payload, status=201)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -818,7 +883,7 @@ def reimburse_quota(request):
 def transactions_export(request):
     """
     Export filtered transactions with columns:
-    Esecuzione | Attività | Descrizione | Descrizione (gestionale) | Importo | Cassa | Commenti
+    Esecuzione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale)
     """
 
     # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
@@ -852,7 +917,7 @@ def transactions_export(request):
     ws.title = "Bilancio"
 
     # Updated headers: inserted computed "Descrizione" and renamed original.
-    headers = ["Esecuzione", "Attività", "Descrizione", "Descrizione (gestionale)", "Importo", "Cassa", "Commenti"]
+    headers = ["Esecuzione", "Esecuzione", "Attività", "Descrizione", "Importo", "Cassa", "Commenti", "Descrizione (gestionale)"]
     header_font = Font(bold=True)
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -909,7 +974,9 @@ def transactions_export(request):
             Transaction.TransactionType.SUBSCRIPTION: "iscrizione",
             Transaction.TransactionType.CAUZIONE: "cauzione",
             Transaction.TransactionType.RIMBORSO_QUOTA: "rimborso iscrizione",
-            Transaction.TransactionType.RIMBORSO_CAUZIONE: "rimborso cauzione"
+            Transaction.TransactionType.RIMBORSO_CAUZIONE: "rimborso cauzione",
+            Transaction.TransactionType.SERVICE: "servizio",
+            Transaction.TransactionType.RIMBORSO_SERVICE: "rimborso servizio"
         }
         label = mapping.get(tx_obj.type)
         if not label:
@@ -937,14 +1004,15 @@ def transactions_export(request):
         else:
             # Fallback to current timezone if zoneinfo unavailable
             local_dt = timezone.localtime(tx.created_at)
-        ws.cell(row=row_idx, column=1, value=local_dt.strftime('%d/%m/%Y %H:%M'))
-        ws.cell(row=row_idx, column=2, value=build_attivita(tx))
-        ws.cell(row=row_idx, column=3, value=build_descrizione(tx))
-        ws.cell(row=row_idx, column=4, value=tx.description)
+        ws.cell(row=row_idx, column=1, value=local_dt.strftime('%d/%m/%Y %H:%M:%S'))
+        ws.cell(row=row_idx, column=2, value=local_dt.strftime('%d/%m/%Y %H:%M:%S'))
+        ws.cell(row=row_idx, column=3, value=build_attivita(tx))
+        ws.cell(row=row_idx, column=4, value=build_descrizione(tx))
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
         amt_cell.number_format = '#,##0.00 €'
         ws.cell(row=row_idx, column=6, value=tx.account.name if tx.account else '')
         ws.cell(row=row_idx, column=7, value=build_commenti(tx))
+        ws.cell(row=row_idx, column=8, value=tx.description)
         row_idx += 1
 
     # Auto width

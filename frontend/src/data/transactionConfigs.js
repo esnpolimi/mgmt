@@ -9,5 +9,7 @@ export const TRANSACTION_CONFIGS = {
     cauzione: {label: names.tran_type["cauzione"], color: 'warning'},
     rimborso_cauzione: {label: names.tran_type["rimborso_cauzione"], color: 'default'},
     rimborso_quota: {label: names.tran_type["rimborso_quota"], color: 'default'},
+    service: {label: names.tran_type["service"], color: 'primary'},
+    rimborso_service: {label: names.tran_type["rimborso_service"], color: 'default'},
 };
 
