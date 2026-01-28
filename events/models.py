@@ -69,6 +69,79 @@ unified_fields_schema = {
     }
 }
 
+# Schema for optional paid services linked to an event
+# Example: [{"id":"svc-1","name":"Noleggio Sci","price":25.0,"description":"..."}]
+services_schema = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "price": {"type": "number", "minimum": 0}
+        },
+        "required": ["name", "price"],
+        "additionalProperties": True
+    }
+}
+
+
+def _normalize_services(services):
+    normalized = []
+    for s in services or []:
+        if not isinstance(s, dict):
+            continue
+        service_id = (s.get('id') or s.get('service_id') or '').strip()
+        name = (s.get('name') or '').strip()
+        if not name:
+            continue
+        price = s.get('price', 0)
+        try:
+            price_val = float(price)
+        except (TypeError, ValueError):
+            price_val = 0
+        normalized.append({
+            'id': service_id,
+            'name': name,
+            'description': s.get('description', ''),
+            'price': price_val
+        })
+    return normalized
+
+
+def validate_selected_services(event_services, selected_services):
+    errors = []
+    if not selected_services:
+        return errors
+    if not isinstance(selected_services, list):
+        return ["Invalid selected_services format (expected list)"]
+
+    normalized_services = _normalize_services(event_services or [])
+    by_id = {s['id']: s for s in normalized_services if s.get('id')}
+    by_name = {s['name']: s for s in normalized_services if s.get('name')}
+
+    for idx, item in enumerate(selected_services):
+        if not isinstance(item, dict):
+            errors.append(f"Invalid selected service at index {idx}")
+            continue
+        service_id = (item.get('service_id') or item.get('id') or '').strip()
+        name = (item.get('name') or '').strip()
+        try:
+            quantity = int(item.get('quantity') or 1)
+        except (TypeError, ValueError):
+            quantity = 0
+        if quantity <= 0:
+            errors.append(f"Invalid quantity for service at index {idx}")
+            continue
+        svc = by_id.get(service_id) if service_id else None
+        if not svc and name:
+            svc = by_name.get(name)
+        if not svc:
+            errors.append(f"Unknown service for selection at index {idx}")
+            continue
+    return errors
+
 
 def validate_field_data(field_config, data_dict, field_type_filter=None):
     errors = []
@@ -161,6 +234,9 @@ class Event(BaseEntity):
     # Unified fields (replaces form_fields and additional_fields)
     fields = models.JSONField(default=list, blank=True)
 
+    # Optional paid services linked to the event
+    services = models.JSONField(default=list, blank=True)
+
     # Manage via event modla toggle, to notify to the Erasmus via confirmation email the assigned list
     notify_list = models.BooleanField(default=True)
 
@@ -179,6 +255,20 @@ class Event(BaseEntity):
             validate(instance=self.profile_fields, schema=profile_fields_schema)
         if self.fields is not None:
             validate(instance=self.fields, schema=unified_fields_schema)
+        if self.services is not None:
+            validate(instance=self.services, schema=services_schema)
+            # Ensure unique service names / ids
+            names = []
+            ids = []
+            for s in _normalize_services(self.services):
+                if s.get('name'):
+                    names.append(s['name'])
+                if s.get('id'):
+                    ids.append(s['id'])
+            if len(set(names)) != len(names):
+                raise ValidationError({'services': 'Service names must be unique.'})
+            if ids and len(set(ids)) != len(ids):
+                raise ValidationError({'services': 'Service ids must be unique.'})
 
         # Validate that form_programmed_open_time is after subscription_start_date
         if (self.form_programmed_open_time and self.subscription_start_date and
@@ -359,6 +449,9 @@ class Subscription(BaseEntity):
     form_notes = models.TextField(blank=True, null=True)
     additional_data = models.JSONField(blank=True, default=dict)
 
+    # Optional paid services selected for this subscription
+    selected_services = models.JSONField(blank=True, default=list)
+
     # --- SumUp integration fields ---
     sumup_checkout_id = models.CharField(max_length=255, blank=True, null=True)
     sumup_transaction_id = models.CharField(max_length=255, blank=True, null=True)
@@ -386,6 +479,10 @@ class Subscription(BaseEntity):
         # Validate additional data using unified fields
         if self.additional_data:
             errors = validate_field_data(self.event.fields, self.additional_data, 'additional')
+            if errors:
+                raise ValidationError('; '.join(errors))
+        if self.selected_services:
+            errors = validate_selected_services(self.event.services, self.selected_services)
             if errors:
                 raise ValidationError('; '.join(errors))
 
