@@ -154,6 +154,7 @@ jobs:
       working-directory: backend
       env:
         DJANGO_SETTINGS_MODULE: backend.settings_test
+        PYTHONPATH: ${{ github.workspace }}/backend
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
       run: |
         python manage.py test --verbosity=2
