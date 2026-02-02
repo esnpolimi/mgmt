@@ -229,13 +229,13 @@ class Event(BaseEntity):
     is_refa_done = models.BooleanField(default=False)
 
     # Profile fields columns (i.e. name, surname, email) to be shown in the event list tables
-    profile_fields = models.JSONField(default=list, blank=True)
+    profile_fields = models.JSONField(default=lambda: [], blank=True)
 
     # Unified fields (replaces form_fields and additional_fields)
-    fields = models.JSONField(default=list, blank=True)
+    fields = models.JSONField(default=lambda: [], blank=True)
 
     # Optional paid services linked to the event
-    services = models.JSONField(default=list, blank=True)
+    services = models.JSONField(default=lambda: [], blank=True)
 
     # Manage via event modla toggle, to notify to the Erasmus via confirmation email the assigned list
     notify_list = models.BooleanField(default=True)
@@ -445,12 +445,12 @@ class Subscription(BaseEntity):
     enable_refund = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
     created_by_form = models.BooleanField(default=False)
-    form_data = models.JSONField(blank=True, default=dict)
+    form_data = models.JSONField(blank=True, default=lambda: {})
     form_notes = models.TextField(blank=True, null=True)
-    additional_data = models.JSONField(blank=True, default=dict)
+    additional_data = models.JSONField(blank=True, default=lambda: {})
 
     # Optional paid services selected for this subscription
-    selected_services = models.JSONField(blank=True, default=list)
+    selected_services = models.JSONField(blank=True, default=lambda: [])
 
     # --- SumUp integration fields ---
     sumup_checkout_id = models.CharField(max_length=255, blank=True, null=True)
