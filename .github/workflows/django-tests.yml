@@ -41,7 +41,7 @@ jobs:
 
     - name: Create Django test settings
       run: |
-        cat > backend/settings_test.py << 'EOF'
+        cat > backend/settings/test.py << 'EOF'
         import os
         from pathlib import Path
         import django
@@ -153,7 +153,7 @@ jobs:
     - name: Run Backend Tests
       working-directory: backend
       env:
-        DJANGO_SETTINGS_MODULE: backend.settings_test
+        DJANGO_ENV: test
         PYTHONPATH: ${{ github.workspace }}/backend
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
       run: |
