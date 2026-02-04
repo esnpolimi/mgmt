@@ -50,7 +50,7 @@ export default function ErasmusForm() {
         surname: '',
         email: '',
         email_confirm: '',
-        birthdate: dayjs(),
+        birthdate: null,
         country: '',
         phone_prefix: '+39',
         phone_number: '',
@@ -61,11 +61,12 @@ export default function ErasmusForm() {
         course: '',
         document_type: 'ID Card',
         document_number: '',
-        document_expiration: dayjs(),
+        document_expiration: null,
         matricola_number: '',
         matricola_expiration: dayjs(),
         is_esner: false,
-        mobility_semesters: 1
+        mobility_semesters: 1,
+        starting_semester: 'autumn' // 'autumn' or 'spring'
     });
 
     /*const [formData, setFormData] = React.useState({
@@ -244,29 +245,48 @@ export default function ErasmusForm() {
     };
 
     // Compute exchange end date based on academic anchor dates (Feb 15, Jul 15)
-    const computeExchangeEndDate = (semesters) => {
+    const computeExchangeEndDate = (semesters, startingSemester) => {
         const s = Number(semesters);
-        const anchorCount = Math.min(s, 3); // 3 or more -> third anchor
         const now = dayjs();
 
-        // Pre-build anchor dates (Feb 15, Jul 15) for current and next 2 years
+        // Autumn semester: Sep-Jan (ends Feb 15)
+        // Spring semester: Feb-Jul (ends Jul 15)
+        const isAutumn = startingSemester === 'autumn';
+        
+        // Build anchor dates alternating Feb/Jul for the next 3 years
         const anchors = [];
-        for (let y = now.year(); y <= now.year() + 2; y++) {
+        for (let y = now.year(); y <= now.year() + 3; y++) {
             anchors.push(dayjs(`${y}-02-15`));
             anchors.push(dayjs(`${y}-07-15`));
         }
 
-        const futureAnchors = anchors
-            .filter(d => d.isAfter(now))
-            .sort((a, b) => a.valueOf() - b.valueOf());
+        // Filter only future anchors
+        const futureAnchors = anchors.filter(d => d.isAfter(now));
+        
+        // Find the starting anchor based on semester type
+        let startIndex = -1;
+        for (let i = 0; i < futureAnchors.length; i++) {
+            const month = futureAnchors[i].month(); // 0-indexed: Jan=0, Feb=1, Jul=6
+            if (isAutumn && month === 1) { // Looking for February
+                startIndex = i;
+                break;
+            } else if (!isAutumn && month === 6) { // Looking for July
+                startIndex = i;
+                break;
+            }
+        }
 
-        return futureAnchors[anchorCount - 1] || futureAnchors[futureAnchors.length - 1];
+        // Calculate target index: start + (semesters - 1)
+        // Each semester alternates between Feb and Jul
+        const targetIndex = startIndex + (s - 1);
+        
+        return futureAnchors[targetIndex] || futureAnchors[futureAnchors.length - 1];
     };
 
     const handleSemestersChange = (_e, value) => {
         if (!value) return;
         const semesters = value === 'more' ? 4 : value; // 4 for backend; logic caps at 3
-        const computed = computeExchangeEndDate(semesters);
+        const computed = computeExchangeEndDate(semesters, formData.starting_semester);
         setFormData(prev => ({
             ...prev,
             mobility_semesters: semesters,
@@ -275,17 +295,27 @@ export default function ErasmusForm() {
         setFormErrors(prev => ({...prev, matricola_expiration: [false, '']}));
     };
 
+    const handleStartingSemesterChange = (_e, value) => {
+        if (!value) return;
+        const computed = computeExchangeEndDate(formData.mobility_semesters, value);
+        setFormData(prev => ({
+            ...prev,
+            starting_semester: value,
+            matricola_expiration: computed
+        }));
+    };
+
     // Initialize computed date if not yet aligned
     React.useEffect(() => {
         setFormData(prev => ({
             ...prev,
-            matricola_expiration: computeExchangeEndDate(prev.mobility_semesters || 1)
+            matricola_expiration: computeExchangeEndDate(prev.mobility_semesters || 1, prev.starting_semester)
         }));
     }, []);
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const computedEnd = computeExchangeEndDate(formData.mobility_semesters);
+        const computedEnd = computeExchangeEndDate(formData.mobility_semesters, formData.starting_semester);
         if (!formData.matricola_expiration || !dayjs(formData.matricola_expiration).isSame(computedEnd, 'day')) {
             setFormData(prev => ({...prev, matricola_expiration: computedEnd}));
         }
@@ -411,7 +441,13 @@ export default function ErasmusForm() {
                             value={formData.birthdate}
                             onChange={(date) => handleDateChange('birthdate', date)}
                             maxDate={dayjs()}
-                            slotProps={{textField: {variant: 'outlined'}}}/>
+                            slotProps={{
+                                textField: {
+                                    variant: 'outlined',
+                                    error: formErrors.birthdate[0],
+                                    helperText: formErrors.birthdate[1]
+                                }
+                            }}/>
                     </LocalizationProvider>
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
@@ -614,14 +650,20 @@ export default function ErasmusForm() {
                             label="Expiration Date *"
                             value={formData.document_expiration}
                             onChange={(date) => handleDateChange('document_expiration', date)}
-                            slotProps={{textField: {variant: 'outlined'}}}/>
+                            slotProps={{
+                                textField: {
+                                    variant: 'outlined',
+                                    error: formErrors.document_expiration[0],
+                                    helperText: formErrors.document_expiration[1]
+                                }
+                            }}/>
                     </LocalizationProvider>
                 </Grid>
             </Grid>
 
             <Typography variant="h5" align="center" gutterBottom my={4}>Exchange Information</Typography>
             <Grid container spacing={3}>
-                <Grid size={{xs: 12, sm: 6}}>
+                <Grid size={{xs: 12}}>
                     <FormControl fullWidth required>
                         <InputLabel id="course-label">Field of Study</InputLabel>
                         <Select
@@ -638,7 +680,47 @@ export default function ErasmusForm() {
                         </Select>
                     </FormControl>
                 </Grid>
-                {/* Compact semester selector aligned with Field of Study */}
+                
+                {/* Starting Semester selector */}
+                <Grid size={{xs: 12, sm: 6}} sx={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                    <FormControl component="fieldset"
+                                 sx={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                        <FormLabel
+                            component="legend"
+                            sx={{
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                color: 'text.secondary',
+                                mb: 0.5,
+                                textAlign: 'center',
+                                width: '100%'
+                            }}>
+                            Starting Semester *
+                        </FormLabel>
+                        <ToggleButtonGroup
+                            exclusive
+                            size="small"
+                            value={formData.starting_semester}
+                            onChange={handleStartingSemesterChange}
+                            aria-label="starting semester"
+                            sx={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                width: '100%',
+                                '& .MuiToggleButton-root': {
+                                    px: 2,
+                                    py: 0.6,
+                                    fontSize: '0.8rem'
+                                }
+                            }}>
+                            <ToggleButton value="autumn">Autumn (Sep-Jan)</ToggleButton>
+                            <ToggleButton value="spring">Spring (Feb-Jul)</ToggleButton>
+                        </ToggleButtonGroup>
+                    </FormControl>
+                </Grid>
+                
+                {/* Number of semesters selector */}
                 <Grid size={{xs: 12, sm: 6}} sx={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                     <FormControl component="fieldset"
                                  sx={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>

@@ -170,6 +170,10 @@ export default function Profile() {
         return rules.hideFields.includes(fieldName);
     };
 
+    const isBoardMember = user?.groups?.includes('Board');
+    const isProfileOwner = user?.profile?.id === profile?.id;
+    const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
+
     const fetchFinancePerms = (email) => {
         fetchCustom("GET", `/users/finance-permissions/?email=${encodeURIComponent(email)}`, {
                 onSuccess: (data) => setFinancePerms(data),
@@ -193,6 +197,9 @@ export default function Profile() {
                 setProfileType(data.is_esner ? "ESNer" : "Erasmus");
                 fetchSubscriptions();
                 fetchGroups();
+                if ((user?.groups?.includes('Board') || user?.profile?.id === data.id) && data.is_esner) {
+                    fetchReimbursementRequests();
+                }
                 if (data.is_esner) {
                     fetchOrganizedEvents();
                     // Fetch finance perms only for ESNers (Aspiranti toggle case)
@@ -1395,31 +1402,33 @@ export default function Profile() {
                                     </Grid>
                                 </>
                             )}
-                            <Grid size={{xs: 12}} sx={{mb: 5}}>
-                                <Card sx={{p: 2}}>
-                                    <Box
-                                        sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
-                                        onClick={() => setShowReimbursements(v => !v)}
-                                    >
-                                        <ReceiptLongIcon sx={{color: 'primary.main'}}/>
-                                        <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Richieste Rimborso</Typography>
-                                        <IconButton size="small" aria-label="toggle rimborsi"
-                                                    onClick={() => setShowReimbursements(v => !v)}>
-                                            <ExpandMoreIcon
-                                                sx={{
-                                                    transform: showReimbursements ? 'rotate(180deg)' : 'rotate(0deg)',
-                                                    transition: 'transform 0.2s'
-                                                }}
-                                            />
-                                        </IconButton>
-                                    </Box>
-                                    <Collapse in={showReimbursements} timeout="auto" unmountOnExit>
-                                        <Box sx={{mt: 1}}>
-                                            {reimbursementsLoading ? <Loader/> : <MRT_Table table={reimbursementsTable}/>}
+                            {canViewReimbursements && (
+                                <Grid size={{xs: 12}} sx={{mb: 5}}>
+                                    <Card sx={{p: 2}}>
+                                        <Box
+                                            sx={{display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.5}}
+                                            onClick={() => setShowReimbursements(v => !v)}
+                                        >
+                                            <ReceiptLongIcon sx={{color: 'primary.main'}}/>
+                                            <Typography variant="h6" sx={{flexGrow: 1, ml: 1}}>Richieste Rimborso</Typography>
+                                            <IconButton size="small" aria-label="toggle rimborsi"
+                                                        onClick={() => setShowReimbursements(v => !v)}>
+                                                <ExpandMoreIcon
+                                                    sx={{
+                                                        transform: showReimbursements ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                        transition: 'transform 0.2s'
+                                                    }}
+                                                />
+                                            </IconButton>
                                         </Box>
-                                    </Collapse>
-                                </Card>
-                            </Grid>
+                                        <Collapse in={showReimbursements} timeout="auto" unmountOnExit>
+                                            <Box sx={{mt: 1}}>
+                                                {reimbursementsLoading ? <Loader/> : <MRT_Table table={reimbursementsTable}/>}
+                                            </Box>
+                                        </Collapse>
+                                    </Card>
+                                </Grid>
+                            )}
                         </Grid>
                         {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </Box>
