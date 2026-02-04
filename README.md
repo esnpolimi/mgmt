@@ -12,8 +12,15 @@ Please refer to the [LICENSE](LICENSE) file for more details.
 
 ## Main Branches
 
+* **`development`**: Development area for new features and fixes. All work is mainly done here by the developer members.
+* **`staging`**: Staging area for manual tests after passing the automatic tests. The branch is dedicated for testing members.
 * **`main`**: Stable, production-ready code. Only tested and approved code is merged here.
-* **`development`**: Staging area for new features and fixes. All work is merged here before moving to `main`.
+
+---
+## Pull Requests workflow
+1- **`Development -> Staging`**: During PR there are automatic tests that check the whole project + CodeQL Analysis tool results + CodeRabbit CodeQL Analysis tool results.
+
+2- **`Staging -> Main`**: During the PR, it's mandatory to pass the automatic tests. With the analysis tools, there are more rules to verify the PR.
 
 ## Branches for New Work
 
