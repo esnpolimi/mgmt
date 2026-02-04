@@ -64,14 +64,9 @@ jobs:
     
     - name: Deploy Backend to deploy-backend branch
       run: |
-        # Push del subtree backend su deploy-backend (senza force)
+        # Push del subtree backend su deploy-backend
         git subtree split --prefix backend -b temp-backend
-        
-        # Fetch per controllare se il branch esiste
-        git fetch origin deploy-backend:deploy-backend 2>/dev/null || echo "Branch deploy-backend non esiste, verrà creato"
-        
-        # Push normale (fallisce se ci sono conflitti, proteggendo da perdita dati)
-        git push origin temp-backend:deploy-backend
+        git push origin temp-backend:deploy-backend --force
         git branch -D temp-backend
     
     - name: Tag deploy-backend with release version
@@ -120,14 +115,9 @@ jobs:
     
     - name: Deploy Frontend to deploy-frontend branch
       run: |
-        # Push del subtree frontend/build su deploy-frontend (senza force)
+        # Push del subtree frontend/build su deploy-frontend
         git subtree split --prefix frontend/build -b temp-frontend
-        
-        # Fetch per controllare se il branch esiste
-        git fetch origin deploy-frontend:deploy-frontend 2>/dev/null || echo "Branch deploy-frontend non esiste, verrà creato"
-        
-        # Push normale (fallisce se ci sono conflitti, proteggendo da perdita dati)
-        git push origin temp-frontend:deploy-frontend
+        git push origin temp-frontend:deploy-frontend --force
         git branch -D temp-frontend
     
     - name: Tag deploy-frontend with release version
