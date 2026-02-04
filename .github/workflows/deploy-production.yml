@@ -1,0 +1,161 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main  # Si attiva quando pushhi su main (dopo merge da staging)
+
+jobs:
+  create-release-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Necessario per leggere tutti i tag
+    
+    - name: Get latest tag and increment
+      id: tag_version
+      run: |
+        # Prendi l'ultimo tag (es. v1.2.3)
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag: $LATEST_TAG"
+        
+        # Estrai versione (rimuovi 'v')
+        VERSION=${LATEST_TAG#v}
+        
+        # Split in MAJOR.MINOR.PATCH
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+        
+        # Incrementa PATCH
+        PATCH=$((PATCH + 1))
+        
+        # Nuova versione
+        NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+        echo "New tag: $NEW_TAG"
+        echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+    
+    - name: Create and push tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a ${{ steps.tag_version.outputs.new_tag }} -m "Release ${{ steps.tag_version.outputs.new_tag }}"
+        git push origin ${{ steps.tag_version.outputs.new_tag }}
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: create-release-tag
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Serve per git subtree
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: Deploy Backend to deploy-backend branch
+      run: |
+        # Push del subtree backend su deploy-backend
+        git subtree split --prefix backend -b temp-backend
+        git push origin temp-backend:deploy-backend --force
+        git branch -D temp-backend
+    
+    - name: Tag deploy-backend with release version
+      run: |
+        git push origin :refs/tags/${{ needs.create-release-tag.outputs.new_tag }}-backend || true
+        git tag -a ${{ needs.create-release-tag.outputs.new_tag }}-backend -m "Backend release ${{ needs.create-release-tag.outputs.new_tag }}"
+        git push origin ${{ needs.create-release-tag.outputs.new_tag }}-backend
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: create-release-tag
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'  # O la tua versione Node
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm ci
+        npm run build
+        cd ..
+    
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: Ensure LF line endings (not CRLF)
+      run: |
+        find frontend/build -type f -exec dos2unix {} \; 2>/dev/null || true
+        # Se non hai dos2unix, usa sed:
+        find frontend/build -type f -print0 | xargs -0 sed -i 's/\r$//'
+    
+    - name: Commit build files
+      run: |
+        git add -f frontend/build
+        git commit -m "Build frontend for release ${{ needs.create-release-tag.outputs.new_tag }}" || echo "No changes to commit"
+    
+    - name: Deploy Frontend to deploy-frontend branch
+      run: |
+        # Push del subtree frontend/build su deploy-frontend
+        git subtree split --prefix frontend/build -b temp-frontend
+        git push origin temp-frontend:deploy-frontend --force
+        git branch -D temp-frontend
+    
+    - name: Tag deploy-frontend with release version
+      run: |
+        git push origin :refs/tags/${{ needs.create-release-tag.outputs.new_tag }}-frontend || true
+        git tag -a ${{ needs.create-release-tag.outputs.new_tag }}-frontend -m "Frontend release ${{ needs.create-release-tag.outputs.new_tag }}"
+        git push origin ${{ needs.create-release-tag.outputs.new_tag }}-frontend
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: [create-release-tag, deploy-backend, deploy-frontend]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.create-release-tag.outputs.new_tag }}
+        release_name: Release ${{ needs.create-release-tag.outputs.new_tag }}
+        body: |
+          ## Release ${{ needs.create-release-tag.outputs.new_tag }}
+          
+          ### Deploy automatico completato
+          - ✅ Backend deployato su `deploy-backend`
+          - ✅ Frontend buildato e deployato su `deploy-frontend`
+          
+          ### Tag creati
+          - `${{ needs.create-release-tag.outputs.new_tag }}` (main)
+          - `${{ needs.create-release-tag.outputs.new_tag }}-backend`
+          - `${{ needs.create-release-tag.outputs.new_tag }}-frontend`
+          
+          ### Prossimi passi manuali (se necessario)
+          1. Accedi a cPanel terminal
+          2. Esegui: `./gitpull_backend.sh` e `./gitpull_frontend.sh`
+          3. Riavvia Python App da cPanel
+          
+          _Deploy automatico by GitHub Actions_
+        draft: false
+        prerelease: false
