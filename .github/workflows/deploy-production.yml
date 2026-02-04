@@ -5,6 +5,9 @@ on:
     branches:
       - main  # Si attiva quando pushhi su main (dopo merge da staging)
 
+permissions:
+  contents: write  # Necessario per push di tag e branches
+
 jobs:
   create-release-tag:
     runs-on: ubuntu-latest
