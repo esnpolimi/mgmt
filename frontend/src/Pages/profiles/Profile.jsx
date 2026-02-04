@@ -172,7 +172,7 @@ export default function Profile() {
 
     const isBoardMember = user?.groups?.includes('Board');
     const isProfileOwner = user?.profile?.id === profile?.id;
-    const canViewReimbursements = isBoardMember || isProfileOwner;
+    const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
 
     const fetchFinancePerms = (email) => {
         fetchCustom("GET", `/users/finance-permissions/?email=${encodeURIComponent(email)}`, {
@@ -197,7 +197,7 @@ export default function Profile() {
                 setProfileType(data.is_esner ? "ESNer" : "Erasmus");
                 fetchSubscriptions();
                 fetchGroups();
-                if (user?.groups?.includes('Board') || user?.profile?.id === data.id) {
+                if ((user?.groups?.includes('Board') || user?.profile?.id === data.id) && data.is_esner) {
                     fetchReimbursementRequests();
                 }
                 if (data.is_esner) {
