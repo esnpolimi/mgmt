@@ -12,8 +12,9 @@ Please refer to the [LICENSE](LICENSE) file for more details.
 
 ## Main Branches
 
+* **`development`**: Development area for new features and fixes. All work is mainly done here by the developer members.
+* **`Staging`**: Staging area for manual tests after passing the automatic tests. The branch is dedicated for testing members.
 * **`main`**: Stable, production-ready code. Only tested and approved code is merged here.
-* **`development`**: Staging area for new features and fixes. All work is merged here before moving to `main`.
 
 ## Branches for New Work
 
