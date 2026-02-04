@@ -6,6 +6,16 @@ from django.utils import timezone
 
 from profiles.models import Profile, BaseEntity
 
+
+# Default functions for JSONField defaults (must be defined before usage)
+def default_empty_list():
+    return []
+
+
+def default_empty_dict():
+    return {}
+
+
 # In the database, the form fields, profile fields and additional fields are stored using json
 # for convenience and for not complicating the model too much. ( Perhaps some may think that using json
 # schema is more complicated. Maybe yes :) )
@@ -229,13 +239,13 @@ class Event(BaseEntity):
     is_refa_done = models.BooleanField(default=False)
 
     # Profile fields columns (i.e. name, surname, email) to be shown in the event list tables
-    profile_fields = models.JSONField(default=lambda: [], blank=True)
+    profile_fields = models.JSONField(default=default_empty_list, blank=True)
 
     # Unified fields (replaces form_fields and additional_fields)
-    fields = models.JSONField(default=lambda: [], blank=True)
+    fields = models.JSONField(default=default_empty_list, blank=True)
 
     # Optional paid services linked to the event
-    services = models.JSONField(default=lambda: [], blank=True)
+    services = models.JSONField(default=default_empty_list, blank=True)
 
     # Manage via event modla toggle, to notify to the Erasmus via confirmation email the assigned list
     notify_list = models.BooleanField(default=True)
@@ -445,12 +455,12 @@ class Subscription(BaseEntity):
     enable_refund = models.BooleanField(default=False)
     notes = models.TextField(blank=True, null=True)
     created_by_form = models.BooleanField(default=False)
-    form_data = models.JSONField(blank=True, default=lambda: {})
+    form_data = models.JSONField(blank=True, default=default_empty_dict)
     form_notes = models.TextField(blank=True, null=True)
-    additional_data = models.JSONField(blank=True, default=lambda: {})
+    additional_data = models.JSONField(blank=True, default=default_empty_dict)
 
     # Optional paid services selected for this subscription
-    selected_services = models.JSONField(blank=True, default=lambda: [])
+    selected_services = models.JSONField(blank=True, default=default_empty_list)
 
     # --- SumUp integration fields ---
     sumup_checkout_id = models.CharField(max_length=255, blank=True, null=True)

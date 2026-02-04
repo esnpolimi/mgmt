@@ -34,8 +34,8 @@ jobs:
         
         # Incrementa PATCH - MINOR - MAJOR
         PATCH=$((PATCH + 0))
-        MINOR=$((MINOR + 0))
-        MAJOR=$((MAJOR + 1))
+        MINOR=$((MINOR + 1))
+        MAJOR=$((MAJOR + 0))
         
         # Nuova versione
         NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
