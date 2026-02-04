@@ -52,7 +52,7 @@ def userinfo(request, user):
     print(f"OIDC userinfo requested for user {user} with request {request}")
     """Return user info for DokuWiki OIDC"""
     return {
-        "sub": str(user.id),
+        "sub": user.profile.email,  # User model has profile as PK, no id field
         "email": user.profile.email,
         "preferred_username": user.profile.email,
         "name": f"{user.profile.name} {user.profile.surname}".strip(),
