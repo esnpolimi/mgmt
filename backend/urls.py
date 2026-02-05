@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from users import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -8,11 +9,8 @@ urlpatterns = [
     path("backend/", include('treasury.urls')),
     path("backend/", include('events.urls')),
     path("backend/content/", include('content.urls')),
-    # TODO: Install django-oidc-provider and configure before enabling
-    # path('openid/', include('oidc_provider.urls', namespace='oidc_provider')),
-    # This gives us endpoints like:
-    #   https://mgmt.esnpolimi.it/openid/authorize/
-    #   https://mgmt.esnpolimi.it/openid/token/
-    #   https://mgmt.esnpolimi.it/openid/userinfo/
 
+    # Dokuwiki integration
+    path('openid/', include('oidc_provider.urls', namespace='oidc_provider')),
+    path('login_for_oauth/', views.login_for_oauth, name='login'),
 ]
