@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - ESN Politecnico Milano</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .login-card {
+            background: #ffffff;
+            padding: 2.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #e9ecef;
+        }
+
+        .header-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #212529;
+            margin-bottom: 0.25rem;
+        }
+
+        .header-subtitle {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 2rem;
+            line-height: 1.4;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-control {
+            padding: 0.75rem;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            margin-bottom: 1rem;
+        }
+
+        .btn-login {
+            background-color: #212529; /* Neutral Dark */
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 0.5rem;
+            transition: opacity 0.2s;
+        }
+
+        .btn-login:hover {
+            opacity: 0.9;
+            color: white;
+        }
+
+        .error-msg {
+            font-size: 0.85rem;
+            color: #dc3545;
+            background: #fff8f8;
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            border: 1px solid #f5c2c7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-card">
+    <div class="text-center">
+        <h1 class="header-title">DokuWiki Login</h1>
+        <p class="header-subtitle">Management System<br>ESN Politecnico di Milano</p>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div>
+            <label for="username" class="form-label">Email</label>
+            <input type="text" class="form-control" id="username" name="username" required autofocus>
+        </div>
+
+        <div>
+            <label for="password" class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+
+        {% if error %}
+            <div class="error-msg">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-login">Sign In</button>
+    </form>
+</div>
+
+</body>
+</html>
