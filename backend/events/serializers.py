@@ -184,6 +184,24 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'reimbursements_by_organizers_only',
         ]
 
+    @staticmethod
+    def _validate_not_reserved_form_list_name(list_name):
+        """
+        Helper method to validate that 'Form List' name is not used manually.
+        Raises ValidationError if the name is reserved.
+        
+        Args:
+            list_name: The list name to validate (will be stripped and checked case-insensitively)
+        
+        Raises:
+            serializers.ValidationError: If the name is 'Form List'
+        """
+        normalized_name = (list_name or '').strip().lower()
+        if normalized_name == 'form list':
+            raise serializers.ValidationError({
+                'lists': "Il nome 'Form List' è riservato e non può essere usato manualmente. Questa lista viene creata automaticamente quando si attiva il form di iscrizione."
+            })
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         # Ensure global ordering of profile_fields
@@ -202,12 +220,11 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
             # Validate that manual creation of 'Form List' is not allowed
             for list_data in lists_data:
-                list_name = (list_data.get('name') or '').strip()
                 # Skip validation for existing lists (they have an id)
-                if not list_data.get('id') and list_name and list_name.lower() == 'form list':
-                    raise serializers.ValidationError({
-                        'lists': "Il nome 'Form List' è riservato e non può essere usato manualmente. Questa lista viene creata automaticamente quando si attiva il form di iscrizione."
-                    })
+                if not list_data.get('id'):
+                    list_name = list_data.get('name')
+                    if list_name:
+                        self._validate_not_reserved_form_list_name(list_name)
         # If form not enabled, nullify programmed open time to avoid date constraints
         if not attrs.get('enable_form', False):
             attrs['form_programmed_open_time'] = None
@@ -305,11 +322,9 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                     event_list.events.add(*event_ids)
             else:
                 # Validate that manual creation of Form List is not allowed
-                list_name = (list_data.get('name') or '').strip()
-                if list_name and list_name.lower() == 'form list':
-                    raise serializers.ValidationError({
-                        'lists': "Il nome 'Form List' è riservato e non può essere usato manualmente. Questa lista viene creata automaticamente quando si attiva il form di iscrizione."
-                    })
+                list_name = list_data.get('name')
+                if list_name:
+                    self._validate_not_reserved_form_list_name(list_name)
                 # Create a brand-new list for this event
                 event_list = EventList.objects.create(**list_data)
                 event_list.events.add(event)
@@ -495,22 +510,24 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                         'lists': f"Non è possibile impostare una capacità lista minore del numero di iscrizioni presenti ({subscription_count})"
                     })
 
+        # Validate Form List deletion before saving (if enable_form is being disabled)
+        if 'enable_form' in validated_data and not validated_data['enable_form']:
+            form_list = instance.lists.filter(name='Form List').first()
+            if form_list and form_list.subscriptions.exists():
+                raise serializers.ValidationError({
+                    'enable_form': "Non è possibile disattivare il form quando ci sono iscrizioni nella Form List. Spostare prima le iscrizioni in un'altra lista."
+                })
+
         # Update the instance with the remaining data
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Delete Form List if enable_form is being disabled
+        # Delete Form List if enable_form was disabled (validation already passed)
         if 'enable_form' in validated_data and not validated_data['enable_form']:
             form_list = instance.lists.filter(name='Form List').first()
             if form_list:
-                # Only delete if there are no subscriptions in the Form List
-                if not form_list.subscriptions.exists():
-                    form_list.delete()
-                else:
-                    raise serializers.ValidationError({
-                        'enable_form': "Non è possibile disattivare il form quando ci sono iscrizioni nella Form List. Spostare prima le iscrizioni in un'altra lista."
-                    })
+                form_list.delete()
 
         if lists_data is not None:
             existing_lists = {lst.id: lst for lst in instance.lists.all()}
@@ -541,10 +558,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                             el.save()
                 else:
                     if list_name:
-                        if list_name.lower() == 'form list':
-                            raise serializers.ValidationError({
-                                'lists': "Il nome 'Form List' è riservato e non può essere usato manualmente. Questa lista viene creata automaticamente quando si attiva il form di iscrizione."
-                            })
+                        self._validate_not_reserved_form_list_name(list_name)
                         new_list = EventList.objects.create(
                             name=list_name,
                             capacity=list_data.get('capacity', 0),

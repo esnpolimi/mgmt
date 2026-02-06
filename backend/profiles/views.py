@@ -533,14 +533,36 @@ def search_profiles(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def profile_subscriptions(_, pk):
+def profile_subscriptions(request, pk):
     """
     Returns all subscriptions for a given profile, with event and list info.
+    Requires object-level permission: user must be the profile owner, staff, or Board member.
     """
     try:
+        profile = Profile.objects.get(pk=pk)
+        
+        # Object-level permission check: requester must be owner, staff, or Board member
+        is_owner = False
+        try:
+            requester_profile = request.user.profile
+            is_owner = (requester_profile.id == profile.id)
+        except (AttributeError, Profile.DoesNotExist):
+            pass
+        
+        is_staff = request.user.is_staff
+        is_board = request.user.groups.filter(name='Board').exists()
+        
+        if not (is_owner or is_staff or is_board):
+            return Response(
+                {'error': 'Non hai i permessi per visualizzare le iscrizioni di questo profilo.'},
+                status=403
+            )
+        
         subs = Subscription.objects.filter(profile_id=pk).select_related('event', 'list')
         serializer = SubscriptionSerializer(subs, many=True)
         return Response(serializer.data, status=200)
+    except Profile.DoesNotExist:
+        return Response({'error': 'Profilo non trovato.'}, status=404)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
