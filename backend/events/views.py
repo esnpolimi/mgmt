@@ -332,8 +332,9 @@ def get_action_permissions(request, action, default_perm=None):
     """
     Returns True if the user has the required permission for the action.
     You can customize this mapping per view/action.
+    All actions must be explicitly mapped - no permissive default.
     """
-    # Example: define permissions per action
+    # Define permissions per action
     perms_map = {
         'event_detail_GET': 'events.view_event',
         'event_detail_PATCH': 'events.change_event',
@@ -345,17 +346,31 @@ def get_action_permissions(request, action, default_perm=None):
         'subscription_create_POST': 'events.add_subscription',
         'move_subscriptions_POST': 'events.change_subscription',
         'events_list_GET': 'events.view_event',
+        'generate_liberatorie_pdf_POST': None,  # Special case: Board only (handled below)
+        'printable_liberatorie_GET': None,  # Special case: Board only (handled below)
+        'link_event_to_lists_POST': 'events.change_event',
+        'available_events_for_sharing_GET': 'events.view_event',
     }
-    perm = perms_map.get(action, default_perm)
-
+    
     # Special case: allow Board group for liberatorie actions
     if action in ['generate_liberatorie_pdf_POST', 'printable_liberatorie_GET']:
         if request.user.groups.filter(name='Board').exists():
             return True
-
+        return False
+    
+    # Get permission from map or use provided default
+    perm = perms_map.get(action, default_perm)
+    
     if perm:
         return request.user.has_perm(perm)
-    return True  # If no specific permission, allow
+    
+    # If action not in map and no default provided, deny access (secure default)
+    if action not in perms_map:
+        logger.warning(f"Unknown action '{action}' in get_action_permissions - access denied")
+        return False
+    
+    # If action is in map but perm is None and not a special case, deny
+    return False
 
 
 def _subscription_recipient_email(subscription):
@@ -1648,7 +1663,7 @@ def event_form_submit(request, event_id):
                 # Collect external user data
                 external_first_name = request.data.get('external_first_name', '').strip()
                 external_last_name = request.data.get('external_last_name', '').strip()
-                external_has_esncard = request.data.get('external_has_esncard')
+                external_has_esncard = _get_bool(request.data, 'external_has_esncard', False)
                 external_esncard_number = request.data.get('external_esncard_number', '').strip() if external_has_esncard else None
                 external_whatsapp_number = request.data.get('external_whatsapp_number', '').strip()
                 
@@ -2062,6 +2077,9 @@ def link_event_to_lists(request):
         ]
     }
     """
+    if not get_action_permissions(request, 'link_event_to_lists_POST'):
+        return Response({'error': 'Non hai i permessi per linkare liste agli eventi.'}, status=403)
+    
     source_id = request.data.get('source_event_id')
     target_id = request.data.get('target_event_id')
 
@@ -2124,6 +2142,9 @@ def available_events_for_sharing(request):
         }
     ]
     """
+    if not get_action_permissions(request, 'available_events_for_sharing_GET'):
+        return Response({'error': 'Non hai i permessi per visualizzare gli eventi disponibili per la condivisione.'}, status=403)
+    
     # Get all events that have at least one list
     events_with_lists = Event.objects.prefetch_related('lists').annotate(
         lists_count=Count('lists')
