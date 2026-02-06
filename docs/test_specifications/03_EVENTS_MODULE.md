@@ -542,7 +542,7 @@ class SubscriptionDeleteTestCase(BaseTestCase):
 
 ---
 
-### 13. POST `/backend/submit_form/<event_pk>/`
+### 13. POST `/backend/event/<event_pk>/formsubmit/`
 **Descrizione**: Sottomissione form pubblico (Erasmus self-registration)
 **Autenticazione**: No (pubblico)
 
@@ -598,7 +598,7 @@ class SubmitFormTestCase(TestCase):
             email_is_verified=True, enabled=True
         )
         
-        response = self.client.post(f'/backend/submit_form/{event.pk}/', {
+        response = self.client.post(f'/backend/event/{event.pk}/formsubmit/', {
             'email': 'erasmus@test.com',
             'list_id': event_list.pk,
             'form_data': {'tshirt': 'M'}
@@ -941,7 +941,7 @@ class ErasmusSubscriptionFlowTestCase(TestCase):
         )
         
         # 3. Submit form iscrizione
-        response = self.client.post(f'/backend/submit_form/{event.pk}/', {
+        response = self.client.post(f'/backend/event/{event.pk}/formsubmit/', {
             'email': 'student@university.edu',
             'list_id': event_list.pk,
             'form_data': {'diet': 'Vegetarian'}
