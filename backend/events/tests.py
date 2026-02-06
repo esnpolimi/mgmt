@@ -199,6 +199,50 @@ class EventCreationTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(Event.objects.filter(name="New Event").exists())
 
+	def test_cannot_create_list_with_form_list_name(self):
+		"""Creating a list with reserved 'Form List' name should fail."""
+		profile = _create_profile("creator@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_add_event)
+		self.authenticate(user)
+
+		response = self.client.post("/backend/event/", {
+			"name": "New Event",
+			"date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"lists": [
+				{"name": "Main List", "capacity": 100, "is_main_list": True},
+				{"name": "Form List", "capacity": 50},  # Reserved name
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("riservato", response.data["lists"][0].lower())
+
+	def test_cannot_rename_list_to_form_list(self):
+		"""Renaming an existing list to 'Form List' should fail."""
+		profile = _create_profile("editor@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_add_event, self.perm_change_event)
+		self.authenticate(user)
+
+		# Create event with a list
+		event = _create_event()
+		regular_list = _create_event_list(event, name="Regular List", is_main_list=False)
+		main_list = _create_event_list(event, name="Main List", is_main_list=True)
+
+		# Try to rename to Form List
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"lists": [
+				{"id": main_list.pk, "name": "Main List", "capacity": 100, "is_main_list": True},
+				{"id": regular_list.pk, "name": "Form List", "capacity": 50},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("riservato", response.data["lists"][0].lower())
+
 
 class EventDetailTests(EventsBaseTestCase):
 	"""Tests for event detail endpoint."""
@@ -576,7 +620,7 @@ class EventFormTests(EventsBaseTestCase):
 		}, format="json")
 
 		self.assertEqual(response.status_code, 404)
-		self.assertIn("Profile not found", response.data["error"])
+		self.assertIn("Profilo non trovato", response.data["error"])
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_missing_email(self):
