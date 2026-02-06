@@ -756,12 +756,12 @@ class ProfileSubscriptionsTests(ProfilesBaseTestCase):
 		viewer = _create_user(viewer_profile)
 		self.authenticate(viewer)
 
-		profile = _create_profile("erasmus@uni.it", is_esner=False)
+		# Create subscription for the viewer's own profile
 		event = _create_event()
 		event_list = _create_event_list(event)
-		Subscription.objects.create(profile=profile, event=event, list=event_list)
+		Subscription.objects.create(profile=viewer_profile, event=event, list=event_list)
 
-		response = self.client.get(f"/backend/profile_subscriptions/{profile.pk}/")
+		response = self.client.get(f"/backend/profile_subscriptions/{viewer_profile.pk}/")
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data), 1)
