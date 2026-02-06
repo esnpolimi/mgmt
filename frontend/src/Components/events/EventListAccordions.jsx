@@ -103,7 +103,7 @@ export default memo(function EventListAccordions({
                     case 'surname':
                         return sub?.external_last_name || '';
                     case 'email':
-                        return sub?.additional_data?.form_email || sub?.external_name || '';
+                        return sub?.additional_data?.form_email || '';
                     case 'latest_esncard':
                         return sub?.external_has_esncard ? sub?.external_esncard_number || '' : '';
                     case 'whatsapp_number':
