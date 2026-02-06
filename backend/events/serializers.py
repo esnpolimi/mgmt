@@ -646,10 +646,19 @@ class FormSubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.Mo
     additional_data = serializers.DictField(required=False, default=dict)
     external_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     form_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    
+    # External user fields
+    external_first_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    external_last_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    external_has_esncard = serializers.BooleanField(required=False, allow_null=True)
+    external_esncard_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    external_whatsapp_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Subscription
-        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'external_name', 'form_notes']
+        fields = ['profile', 'event', 'enable_refund', 'list', 'form_data', 'additional_data', 'external_name', 
+                  'form_notes', 'external_first_name', 'external_last_name', 'external_has_esncard', 
+                  'external_esncard_number', 'external_whatsapp_number']
 
     def create(self, validated_data):
         validated_data['additional_data'] = validated_data.get('additional_data', {})
@@ -758,6 +767,11 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'profile',
             'sumup_checkout_id',
             'sumup_transaction_id',
+            'external_first_name',
+            'external_last_name',
+            'external_has_esncard',
+            'external_esncard_number',
+            'external_whatsapp_number',
         ]
 
     def create(self, validated_data):

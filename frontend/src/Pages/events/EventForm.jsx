@@ -45,6 +45,7 @@ export default function EventForm() {
     const navigate = useNavigate();
     const eventData = location.state?.eventData || {};
     const userEmail = location.state?.email || ""; // email passed from login
+    const isExternal = location.state?.isExternal || false; // Flag to indicate external user
     const profileEsncardNumber = location.state?.esncardNumber || ""; // ESNcard from profile if available
     const formFields = eventData.form_fields || [];
     const linkFields = formFields.filter(f => f.type === 'l');
@@ -73,6 +74,15 @@ export default function EventForm() {
             return [f.name, ""];
         }))
     );
+    
+    // External user fields
+    const [externalFirstName, setExternalFirstName] = useState("");
+    const [externalLastName, setExternalLastName] = useState("");
+    const [externalHasEsncard, setExternalHasEsncard] = useState(false);
+    const [externalEsncardNumber, setExternalEsncardNumber] = useState("");
+    const [externalWhatsappNumber, setExternalWhatsappNumber] = useState("");
+    const [externalWhatsappPrefix, setExternalWhatsappPrefix] = useState("+39");
+    
     const [selectedServices, setSelectedServices] = useState([]);
     // Track files for link fields separately
     const [linkFiles, setLinkFiles] = useState(() =>
@@ -164,6 +174,15 @@ export default function EventForm() {
         requiredFormFields.forEach(f => {
             if (!isFormFieldFilled(f)) missing.push(f);
         });
+        
+        // Validate external user fields if external
+        if (isExternal) {
+            if (!externalFirstName.trim()) missing.push('First Name');
+            if (!externalLastName.trim()) missing.push('Last Name');
+            if (!externalWhatsappNumber.trim()) missing.push('WhatsApp Number');
+            if (externalHasEsncard && !externalEsncardNumber.trim()) missing.push('ESNcard Number');
+        }
+        
         if (missing.length > 0) {
             setMissingFields(missing);
             setShowMissingAlert(true);
@@ -191,6 +210,21 @@ export default function EventForm() {
             fd.append('form_data', JSON.stringify(nonLinkData));
             fd.append('form_notes', formNotes);
             fd.append('selected_services', JSON.stringify(selectedPayload));
+            
+            // Add external user fields if external
+            if (isExternal) {
+                fd.append('external_first_name', externalFirstName);
+                fd.append('external_last_name', externalLastName);
+                fd.append('external_has_esncard', externalHasEsncard);
+                if (externalHasEsncard) {
+                    fd.append('external_esncard_number', externalEsncardNumber);
+                }
+                const combinedWhatsapp = externalWhatsappPrefix && externalWhatsappNumber 
+                    ? `${externalWhatsappPrefix} ${externalWhatsappNumber}` 
+                    : externalWhatsappNumber;
+                fd.append('external_whatsapp_number', combinedWhatsapp);
+            }
+            
             // Append files (field name must match backend expectation)
             linkFields.forEach(f => {
                 const fileObj = linkFiles[f.name];
@@ -204,6 +238,20 @@ export default function EventForm() {
                 form_notes: formNotes,
                 selected_services: selectedPayload
             };
+            
+            // Add external user fields if external
+            if (isExternal) {
+                bodyPayload.external_first_name = externalFirstName;
+                bodyPayload.external_last_name = externalLastName;
+                bodyPayload.external_has_esncard = externalHasEsncard;
+                if (externalHasEsncard) {
+                    bodyPayload.external_esncard_number = externalEsncardNumber;
+                }
+                const combinedWhatsapp = externalWhatsappPrefix && externalWhatsappNumber 
+                    ? `${externalWhatsappPrefix} ${externalWhatsappNumber}` 
+                    : externalWhatsappNumber;
+                bodyPayload.external_whatsapp_number = combinedWhatsapp;
+            }
         }
         fetchCustom("POST", `/event/${eventData.id}/formsubmit/`, {
             body: bodyPayload,
@@ -428,6 +476,92 @@ export default function EventForm() {
                         <Typography variant="subtitle2" color="text.secondary">Subscription Email</Typography>
                         <Typography variant="body1" sx={{mt: 0.5}}>{userEmail}</Typography>
                     </Paper>
+                    
+                    {/* External User Fields */}
+                    {isExternal && (
+                        <Paper elevation={3} sx={{p: 2, mb: 3}}>
+                            <Typography variant="h6" gutterBottom>
+                                Personal Information
+                            </Typography>
+                            <Alert severity="info" sx={{mb: 2}}>
+                                Since you are not registered in our system, please fill in the following fields.
+                            </Alert>
+                            
+                            <TextField
+                                label="First Name"
+                                fullWidth
+                                margin="normal"
+                                value={externalFirstName}
+                                onChange={(e) => setExternalFirstName(e.target.value)}
+                                required
+                            />
+                            
+                            <TextField
+                                label="Last Name"
+                                fullWidth
+                                margin="normal"
+                                value={externalLastName}
+                                onChange={(e) => setExternalLastName(e.target.value)}
+                                required
+                            />
+                            
+                            <FormControl margin="normal" fullWidth>
+                                <FormLabel>Do you have an ESNcard?</FormLabel>
+                                <RadioGroup
+                                    row
+                                    value={externalHasEsncard ? "yes" : "no"}
+                                    onChange={(e) => setExternalHasEsncard(e.target.value === "yes")}
+                                >
+                                    <FormControlLabel value="yes" control={<Radio/>} label="Yes"/>
+                                    <FormControlLabel value="no" control={<Radio/>} label="No"/>
+                                </RadioGroup>
+                            </FormControl>
+                            
+                            {externalHasEsncard && (
+                                <TextField
+                                    label="ESNcard Number"
+                                    fullWidth
+                                    margin="normal"
+                                    value={externalEsncardNumber}
+                                    onChange={(e) => setExternalEsncardNumber(e.target.value)}
+                                    required
+                                    helperText="e.g. ITA-POL-12345-24"
+                                />
+                            )}
+                            
+                            <Box sx={{mt: 2}}>
+                                <Typography variant="subtitle2" sx={{mb: 1}}>
+                                    WhatsApp Number *
+                                </Typography>
+                                <Box sx={{display: 'flex', gap: 1}}>
+                                    <TextField
+                                        select
+                                        label="Prefix"
+                                        value={externalWhatsappPrefix}
+                                        onChange={(e) => setExternalWhatsappPrefix(e.target.value)}
+                                        sx={{width: 140}}
+                                        required
+                                    >
+                                        {countryCodes.filter((c, idx, arr) => 
+                                            arr.findIndex(x => x.dial === c.dial) === idx
+                                        ).map(entry => (
+                                            <MenuItem key={entry.dial} value={entry.dial}>
+                                                {entry.dial}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+                                    <TextField
+                                        label="Number"
+                                        value={externalWhatsappNumber}
+                                        onChange={(e) => setExternalWhatsappNumber(e.target.value)}
+                                        fullWidth
+                                        required
+                                    />
+                                </Box>
+                            </Box>
+                        </Paper>
+                    )}
+                    
                     {/* Only form fields section now */}
                     {formFields.length > 0 && (
                         <Paper elevation={3} sx={{p: 2, mb: 3}}>
