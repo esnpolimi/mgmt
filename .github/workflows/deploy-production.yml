@@ -112,11 +112,10 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
     
-    - name: Ensure LF line endings (not CRLF)
+    - name: Ensure LF line endings for text files only (not CRLF)
       run: |
-        find frontend/build -type f -exec dos2unix {} \; 2>/dev/null || true
-        # Se non hai dos2unix, usa sed:
-        find frontend/build -type f -print0 | xargs -0 sed -i 's/\r$//'
+        # Converti solo file di testo, NON i file binari come immagini
+        find frontend/build -type f \( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.xml" -o -name "*.txt" -o -name "*.md" \) -exec sed -i 's/\r$//' {} \;
     
     - name: Commit build files
       run: |
