@@ -1635,12 +1635,27 @@ def event_form_submit(request, event_id):
 
         profile = None
         external_name = None
+        external_first_name = None
+        external_last_name = None
+        external_has_esncard = None
+        external_esncard_number = None
+        external_whatsapp_number = None
+        
         try:
             profile = Profile.objects.get(email=email)
         except Profile.DoesNotExist:
             if event.is_allow_external:
-                # No profile data collected anymore, use name + surname as external label
-                external_name = form_data.get('name', '').strip() + ' ' + form_data.get('surname', '').strip()
+                # Collect external user data
+                external_first_name = request.data.get('external_first_name', '').strip()
+                external_last_name = request.data.get('external_last_name', '').strip()
+                external_has_esncard = request.data.get('external_has_esncard')
+                external_esncard_number = request.data.get('external_esncard_number', '').strip() if external_has_esncard else None
+                external_whatsapp_number = request.data.get('external_whatsapp_number', '').strip()
+                
+                if not external_first_name or not external_last_name:
+                    return Response({"error": "Nome e cognome sono obbligatori per utenti esterni"}, status=400)
+                
+                external_name = f"{external_first_name} {external_last_name}"
             else:
                 return Response({"error": "Profile not found"}, status=404)
 
@@ -1687,7 +1702,12 @@ def event_form_submit(request, event_id):
             form_notes=form_notes,
             additional_data={'form_email': email},
             selected_services=normalized_selected,
-            created_by_form=True
+            created_by_form=True,
+            external_first_name=external_first_name,
+            external_last_name=external_last_name,
+            external_has_esncard=external_has_esncard,
+            external_esncard_number=external_esncard_number,
+            external_whatsapp_number=external_whatsapp_number
         )
 
         # --- SumUp integration (widget-only) ---
