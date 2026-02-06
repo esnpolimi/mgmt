@@ -1151,13 +1151,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
     }
 
     /* Optional paid services */
-    const ServicesBlock = function ServicesBlock({dataRef, isEdit, hasSubscriptions}) {
+    const ServicesBlock = function ServicesBlock({dataRef, isEdit, hasSubscriptions, servicesVersion}) {
         const [localData, setLocalData] = useState(dataRef.current)
 
-        // Sync localData when dataRef.current.services changes
+        // Sync localData when services change (tracked via servicesVersion)
         useEffect(() => {
             setLocalData(dataRef.current);
-        }, [dataRef.current.services]);
+        }, [servicesVersion]);
 
         const makeServiceId = () => `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -1173,6 +1173,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 services: [...(localData.services || []), newService]
             });
             dataRef.current.services = [...(dataRef.current.services || []), newService];
+            setServicesVersion(v => v + 1);
         };
 
         const onDelete = (index) => {
@@ -1181,6 +1182,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 services: (localData.services || []).filter((_, i) => i !== index)
             });
             dataRef.current.services = (dataRef.current.services || []).filter((_, i) => i !== index);
+            setServicesVersion(v => v + 1);
         };
 
         const onUpdate = (index, update) => {
@@ -1198,6 +1200,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 services: next
             });
             dataRef.current.services = next;
+            setServicesVersion(v => v + 1);
         };
 
         const onMoveUp = (index) => {
@@ -1209,6 +1212,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 services: next
             });
             dataRef.current.services = next;
+            setServicesVersion(v => v + 1);
         };
 
         const onMoveDown = (index) => {
@@ -1221,6 +1225,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 services: next
             });
             dataRef.current.services = next;
+            setServicesVersion(v => v + 1);
         };
 
         const services = localData.services || [];
@@ -1646,6 +1651,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [, setSeed] = useState(0); // Used to trigger re-renders when displaying errors
     const [subscriptionWindowVersion, setSubscriptionWindowVersion] = useState(0); // triggers FormBlock remount on subscription window changes
+    const [servicesVersion, setServicesVersion] = useState(0); // triggers ServicesBlock sync when services change
 
     useEffect(() => {
         if (isEdit) {
@@ -1939,7 +1945,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             isEdit={isEdit}
                             onSubscriptionWindowChange={() => setSubscriptionWindowVersion(v => v + 1)}
                         />
-                        <ServicesBlock dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
+                        <ServicesBlock dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions} servicesVersion={servicesVersion}/>
                         <Description dataRef={dataRef}/>
                         <Organizers dataRef={dataRef}/>
                         <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
