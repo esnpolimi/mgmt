@@ -1652,7 +1652,7 @@ def event_form_submit(request, event_id):
         external_name = None
         external_first_name = None
         external_last_name = None
-        external_has_esncard = None
+        external_has_esncard = False  # Default to False to avoid NOT NULL constraint
         external_esncard_number = None
         external_whatsapp_number = None
         
@@ -1672,7 +1672,7 @@ def event_form_submit(request, event_id):
                 
                 external_name = f"{external_first_name} {external_last_name}"
             else:
-                return Response({"error": "Profile not found"}, status=404)
+                return Response({"error": "Profilo non trovato"}, status=404)
 
         # Duplicate checks
         if profile and Subscription.objects.filter(profile=profile, event=event).exists():
