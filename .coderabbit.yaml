@@ -1,0 +1,6 @@
+reviews:
+  review_details: true
+  auto_review:
+    drafts: true
+    base_branches:
+      - staging
