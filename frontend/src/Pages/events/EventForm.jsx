@@ -378,40 +378,47 @@ export default function EventForm() {
                 {eventServices.length > 0 && (
                     <Paper elevation={2} sx={{p: 2, mt: 2, width: '100%'}}>
                         <Typography variant="h6" gutterBottom>
-                            Servizi aggiuntivi
+                            Additional Services
                         </Typography>
                         {eventServices.map((svc) => {
                             const key = svc.id || svc.name;
                             const selected = selectedServices.find(s => (s.service_id || s.name) === key);
                             return (
-                                <Box key={key} sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 1}}>
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={!!selected}
-                                                onChange={() => toggleService(svc)}
-                                            />
-                                        }
-                                        label={`${svc.name} (€${Number(svc.price || 0).toFixed(2)})`}
-                                    />
-                                    <TextField
-                                        label="Qtà"
-                                        type="number"
-                                        size="small"
-                                        sx={{width: 90}}
-                                        value={selected?.quantity || 1}
-                                        onChange={(e) => updateServiceQty(svc, e.target.value)}
-                                        disabled={!selected}
-                                        slotProps={{htmlInput: {min: 1, step: 1}}}
-                                    />
+                                <Box key={key} sx={{mb: 2}}>
+                                    <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={!!selected}
+                                                    onChange={() => toggleService(svc)}
+                                                />
+                                            }
+                                            label={`${svc.name} (€${Number(svc.price || 0).toFixed(2)})`}
+                                        />
+                                        <TextField
+                                            label="Qty"
+                                            type="number"
+                                            size="small"
+                                            sx={{width: 90}}
+                                            value={selected?.quantity || 1}
+                                            onChange={(e) => updateServiceQty(svc, e.target.value)}
+                                            disabled={!selected}
+                                            slotProps={{htmlInput: {min: 1, step: 1}}}
+                                        />
+                                    </Box>
+                                    {svc.description && (
+                                        <Typography variant="body2" color="text.secondary" sx={{ml: 4, fontStyle: 'italic'}}>
+                                            {svc.description}
+                                        </Typography>
+                                    )}
                                 </Box>
                             );
                         })}
                         <Typography variant="body2" sx={{mt: 1}}>
-                            Totale servizi: €{getServicesTotal().toFixed(2)}
+                            Services Total: €{getServicesTotal().toFixed(2)}
                         </Typography>
                         <Typography variant="subtitle2" sx={{mt: 1}}>
-                            Totale complessivo: €{(Number(eventData.cost || 0) + Number(eventData.deposit || 0) + getServicesTotal()).toFixed(2)}
+                            Grand Total: €{(Number(eventData.cost || 0) + Number(eventData.deposit || 0) + getServicesTotal()).toFixed(2)}
                         </Typography>
                     </Paper>
                 )}

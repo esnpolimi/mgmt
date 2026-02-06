@@ -568,28 +568,35 @@ export default function SubscriptionModal({
                                             const selected = (data.selected_services || []).find(x => (x.service_id || x.id || x.name) === key);
                                             const priceLabel = toAmount(svc.price).toFixed(2);
                                             return (
-                                                <Box key={key} sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
-                                                    <FormControlLabel
-                                                        control={
-                                                            <Checkbox
-                                                                checked={!!selected}
-                                                                onChange={() => toggleService(svc)}
-                                                                disabled={isReimbursed}
-                                                                size="small"
-                                                            />
-                                                        }
-                                                        label={`${svc.name} (€${priceLabel})`}
-                                                    />
-                                                    <TextField
-                                                        label="Qtà"
-                                                        type="number"
-                                                        size="small"
-                                                        sx={{width: 90}}
-                                                        value={selected?.quantity || 1}
-                                                        onChange={(e) => updateServiceQty(svc, e.target.value)}
-                                                        disabled={!selected || isReimbursed}
-                                                        slotProps={{htmlInput: {min: 1, step: 1}}}
-                                                    />
+                                                <Box key={key} sx={{mb: 1.5}}>
+                                                    <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
+                                                        <FormControlLabel
+                                                            control={
+                                                                <Checkbox
+                                                                    checked={!!selected}
+                                                                    onChange={() => toggleService(svc)}
+                                                                    disabled={isReimbursed}
+                                                                    size="small"
+                                                                />
+                                                            }
+                                                            label={`${svc.name} (€${priceLabel})`}
+                                                        />
+                                                        <TextField
+                                                            label="Qtà"
+                                                            type="number"
+                                                            size="small"
+                                                            sx={{width: 90}}
+                                                            value={selected?.quantity || 1}
+                                                            onChange={(e) => updateServiceQty(svc, e.target.value)}
+                                                            disabled={!selected || isReimbursed}
+                                                            slotProps={{htmlInput: {min: 1, step: 1}}}
+                                                        />
+                                                    </Box>
+                                                    {svc.description && (
+                                                        <Typography variant="body2" color="text.secondary" sx={{ml: 4, fontSize: '0.875rem', fontStyle: 'italic'}}>
+                                                            {svc.description}
+                                                        </Typography>
+                                                    )}
                                                 </Box>
                                             );
                                         })}
