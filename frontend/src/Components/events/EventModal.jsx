@@ -1154,6 +1154,11 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const ServicesBlock = function ServicesBlock({dataRef, isEdit, hasSubscriptions}) {
         const [localData, setLocalData] = useState(dataRef.current)
 
+        // Sync localData when dataRef.current.services changes
+        useEffect(() => {
+            setLocalData(dataRef.current);
+        }, [dataRef.current.services]);
+
         const makeServiceId = () => `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const onAdd = () => {
@@ -1934,12 +1939,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             isEdit={isEdit}
                             onSubscriptionWindowChange={() => setSubscriptionWindowVersion(v => v + 1)}
                         />
+                        <ServicesBlock dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
                         <Description dataRef={dataRef}/>
                         <Organizers dataRef={dataRef}/>
                         <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
-                        <ServicesBlock dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
                         <FormBlock
                             key={subscriptionWindowVersion} // force remount so minDate updates when subscription start date changes
                             dataRef={dataRef}

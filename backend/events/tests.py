@@ -631,21 +631,67 @@ class EventFormTests(EventsBaseTestCase):
 	def test_event_form_submit_external_allowed(self):
 		"""External submissions should be allowed when event permits external."""
 		event = _create_event(enable_form=True, is_allow_external=True)
-		# Configure form fields for name and surname
-		event.fields = [
-			{"name": "name", "type": "t", "field_type": "form", "required": True},
-			{"name": "surname", "type": "t", "field_type": "form", "required": True},
-		]
+		event.fields = []
 		event.save()
 		_create_event_list(event, name="Form List", is_main_list=False)
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
 			"email": "external@domain.com",
-			"form_data": {"name": "John", "surname": "Doe"},
+			"form_data": {},
+			"external_first_name": "John",
+			"external_last_name": "Doe",
 		}, format="json")
 
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(response.data["success"])
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	def test_event_form_submit_external_with_full_details(self):
+		"""External submissions should save all external user fields."""
+		event = _create_event(enable_form=True, is_allow_external=True)
+		event.fields = []
+		event.save()
+		_create_event_list(event, name="Form List", is_main_list=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": "external@domain.com",
+			"form_data": {},
+			"external_first_name": "John",
+			"external_last_name": "Doe",
+			"external_has_esncard": True,
+			"external_esncard_number": "ITA-POL-12345-24",
+			"external_whatsapp_number": "+39 3331234567",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["success"])
+		
+		# Verify subscription was created with external fields
+		sub = Subscription.objects.get(event=event)
+		self.assertEqual(sub.external_first_name, "John")
+		self.assertEqual(sub.external_last_name, "Doe")
+		self.assertEqual(sub.external_has_esncard, True)
+		self.assertEqual(sub.external_esncard_number, "ITA-POL-12345-24")
+		self.assertEqual(sub.external_whatsapp_number, "+39 3331234567")
+		self.assertEqual(sub.external_name, "John Doe")
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	def test_event_form_submit_external_missing_required_fields(self):
+		"""External submissions should require first name and last name."""
+		event = _create_event(enable_form=True, is_allow_external=True)
+		event.fields = []
+		event.save()
+		_create_event_list(event, name="Form List", is_main_list=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": "external@domain.com",
+			"form_data": {},
+			"external_first_name": "John",
+			# Missing external_last_name
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("Nome e cognome", response.data["error"])
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_form_list_missing(self):

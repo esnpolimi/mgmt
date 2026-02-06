@@ -67,7 +67,7 @@ export default function EventFormLogin() {
                 // Handle specific error cases first
                 if (data?.error === 'email_not_found') {
                     if (eventData?.is_allow_external) {
-                        navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
+                        navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: '', isExternal: true}});
                     } else {
                         setStatusMessage({
                             message: data.message || "This email does not belong to a registered Erasmus user.",
@@ -82,10 +82,10 @@ export default function EventFormLogin() {
                 } else if (data && Object.keys(data).length > 0 && !data.error) {
                     // Valid profile found - extract possible ESNcard number fields
                     const esncardNumber = data?.esncard_number || '';
-                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber}});
+                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber, isExternal: false}});
                 } else if (eventData?.is_allow_external) {
                     // Fallback for external users
-                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
+                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: '', isExternal: true}});
                 } else {
                     setStatusMessage({
                         message: "This email does not belong to a registered Erasmus user.",
@@ -97,7 +97,7 @@ export default function EventFormLogin() {
             onError: (errorResponse) => {
                 // Generic error handling
                 if (eventData?.is_allow_external) {
-                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: ''}});
+                    navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber: '', isExternal: true}});
                 } else {
                     setStatusMessage({message: "Error checking email: " + (errorResponse?.error || 'Unknown error'), state: "error"});
                 }
