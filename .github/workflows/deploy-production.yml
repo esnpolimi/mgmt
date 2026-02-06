@@ -142,6 +142,36 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Necessario per leggere tutti i commits
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Trova il tag precedente
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.create-release-tag.outputs.new_tag }}^ 2>/dev/null || echo "")
+        
+        # Genera il changelog
+        if [ -z "$PREVIOUS_TAG" ]; then
+          # Primo release: prendi tutti i commits
+          CHANGELOG=$(git log --pretty=format:"- %s (%h) - @%an" --no-merges)
+        else
+          # Prendi i commits dall'ultimo tag
+          CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --pretty=format:"- %s (%h) - @%an" --no-merges)
+        fi
+        
+        # Salva in una variabile di output (gestendo multiline)
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Conta i commits
+        if [ -z "$PREVIOUS_TAG" ]; then
+          COMMIT_COUNT=$(git rev-list --count HEAD --no-merges)
+        else
+          COMMIT_COUNT=$(git rev-list --count ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --no-merges)
+        fi
+        echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
     
     - name: Create GitHub Release
       uses: actions/create-release@v1
@@ -162,10 +192,13 @@ jobs:
           - `${{ needs.create-release-tag.outputs.new_tag }}-backend`
           - `${{ needs.create-release-tag.outputs.new_tag }}-frontend`
           
-          ### Prossimi passi manuali (se necessario)
-          1. Accedi a cPanel terminal
-          2. Esegui: `./gitpull_backend.sh` e `./gitpull_frontend.sh`
-          3. Riavvia Python App da cPanel
+          ---
+          
+          ### 📝 Changelog (${{ steps.changelog.outputs.commit_count }} commits)
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ---
           
           _Deploy automatico by GitHub Actions_
         draft: false
