@@ -35,7 +35,11 @@ class UserManager(BaseUserManager):
 
         return self.create_user(profile, password, **extra_fields)
 
-    def make_random_password(self, length=10,
+    def get_by_natural_key(self, email):
+        return self.get(profile__email=email)
+
+    @staticmethod
+    def make_random_password(length=10,
                              allowed_chars='abcdefghjkmnpqrstuvwxyz'
                                            'ABCDEFGHJKLMNPQRSTUVWXYZ'
                                            '23456789'):

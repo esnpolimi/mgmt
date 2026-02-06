@@ -756,12 +756,70 @@ class ProfileSubscriptionsTests(ProfilesBaseTestCase):
 		viewer = _create_user(viewer_profile)
 		self.authenticate(viewer)
 
-		profile = _create_profile("erasmus@uni.it", is_esner=False)
+		# Create subscription for the viewer's own profile
 		event = _create_event()
 		event_list = _create_event_list(event)
-		Subscription.objects.create(profile=profile, event=event, list=event_list)
+		Subscription.objects.create(profile=viewer_profile, event=event, list=event_list)
 
-		response = self.client.get(f"/backend/profile_subscriptions/{profile.pk}/")
+		response = self.client.get(f"/backend/profile_subscriptions/{viewer_profile.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data), 1)
+
+	def test_profile_subscriptions_non_owner_denied(self):
+		"""Non-owner, non-staff, non-Board user should receive 403."""
+		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		self.authenticate(viewer)
+
+		# Create a different profile with subscriptions
+		other_profile = _create_profile("other@esnpolimi.it", is_esner=True)
+		event = _create_event()
+		event_list = _create_event_list(event)
+		Subscription.objects.create(profile=other_profile, event=event, list=event_list)
+
+		# Try to access other user's subscriptions
+		response = self.client.get(f"/backend/profile_subscriptions/{other_profile.pk}/")
+
+		self.assertEqual(response.status_code, 403)
+		self.assertIn("permessi", response.data["error"].lower())
+
+	def test_profile_subscriptions_staff_allowed(self):
+		"""Staff users should be allowed to view any profile's subscriptions."""
+		staff_profile = _create_profile("staff@esnpolimi.it", is_esner=True)
+		staff_user = _create_user(staff_profile)
+		staff_user.is_staff = True
+		staff_user.save()
+		self.authenticate(staff_user)
+
+		# Create a different profile with subscriptions
+		other_profile = _create_profile("other@esnpolimi.it", is_esner=True)
+		event = _create_event()
+		event_list = _create_event_list(event)
+		Subscription.objects.create(profile=other_profile, event=event, list=event_list)
+
+		# Staff should be able to access
+		response = self.client.get(f"/backend/profile_subscriptions/{other_profile.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data), 1)
+
+	def test_profile_subscriptions_board_allowed(self):
+		"""Board members should be allowed to view any profile's subscriptions."""
+		board_profile = _create_profile("board@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_group, _ = Group.objects.get_or_create(name="Board")
+		board_user.groups.add(board_group)
+		self.authenticate(board_user)
+
+		# Create a different profile with subscriptions
+		other_profile = _create_profile("other@esnpolimi.it", is_esner=True)
+		event = _create_event()
+		event_list = _create_event_list(event)
+		Subscription.objects.create(profile=other_profile, event=event, list=event_list)
+
+		# Board member should be able to access
+		response = self.client.get(f"/backend/profile_subscriptions/{other_profile.pk}/")
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data), 1)

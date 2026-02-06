@@ -34,8 +34,8 @@ jobs:
         
         # Incrementa PATCH - MINOR - MAJOR
         PATCH=$((PATCH + 0))
-        MINOR=$((MINOR + 1))
-        MAJOR=$((MAJOR + 0))
+        MINOR=$((MINOR + 0))
+        MAJOR=$((MAJOR + 1))
         
         # Nuova versione
         NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
@@ -112,11 +112,10 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
     
-    - name: Ensure LF line endings (not CRLF)
+    - name: Ensure LF line endings for text files only (not CRLF)
       run: |
-        find frontend/build -type f -exec dos2unix {} \; 2>/dev/null || true
-        # Se non hai dos2unix, usa sed:
-        find frontend/build -type f -print0 | xargs -0 sed -i 's/\r$//'
+        # Converti solo file di testo, NON i file binari come immagini
+        find frontend/build -type f \( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.xml" -o -name "*.txt" -o -name "*.md" \) -exec sed -i 's/\r$//' {} \;
     
     - name: Commit build files
       run: |
@@ -142,6 +141,36 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Necessario per leggere tutti i commits
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Trova il tag precedente
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.create-release-tag.outputs.new_tag }}^ 2>/dev/null || echo "")
+        
+        # Genera il changelog
+        if [ -z "$PREVIOUS_TAG" ]; then
+          # Primo release: prendi tutti i commits
+          CHANGELOG=$(git log --pretty=format:"- %s (%h) - @%an" --no-merges)
+        else
+          # Prendi i commits dall'ultimo tag
+          CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --pretty=format:"- %s (%h) - @%an" --no-merges)
+        fi
+        
+        # Salva in una variabile di output (gestendo multiline)
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Conta i commits
+        if [ -z "$PREVIOUS_TAG" ]; then
+          COMMIT_COUNT=$(git rev-list --count HEAD --no-merges)
+        else
+          COMMIT_COUNT=$(git rev-list --count ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --no-merges)
+        fi
+        echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
     
     - name: Create GitHub Release
       uses: actions/create-release@v1
@@ -162,10 +191,13 @@ jobs:
           - `${{ needs.create-release-tag.outputs.new_tag }}-backend`
           - `${{ needs.create-release-tag.outputs.new_tag }}-frontend`
           
-          ### Prossimi passi manuali (se necessario)
-          1. Accedi a cPanel terminal
-          2. Esegui: `./gitpull_backend.sh` e `./gitpull_frontend.sh`
-          3. Riavvia Python App da cPanel
+          ---
+          
+          ### 📝 Changelog (${{ steps.changelog.outputs.commit_count }} commits)
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ---
           
           _Deploy automatico by GitHub Actions_
         draft: false

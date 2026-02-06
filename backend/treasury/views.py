@@ -883,7 +883,7 @@ def reimburse_quota(request):
 def transactions_export(request):
     """
     Export filtered transactions with columns:
-    Esecuzione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale)
+    Registrazione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale)
     """
 
     # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
@@ -917,7 +917,7 @@ def transactions_export(request):
     ws.title = "Bilancio"
 
     # Updated headers: inserted computed "Descrizione" and renamed original.
-    headers = ["Esecuzione", "Esecuzione", "Attività", "Descrizione", "Importo", "Cassa", "Commenti", "Descrizione (gestionale)"]
+    headers = ["Registrazione", "Esecuzione", "Attività", "Descrizione", "Importo", "Cassa", "Commenti", "Descrizione (gestionale)"]
     header_font = Font(bold=True)
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -1005,7 +1005,7 @@ def transactions_export(request):
             # Fallback to current timezone if zoneinfo unavailable
             local_dt = timezone.localtime(tx.created_at)
         ws.cell(row=row_idx, column=1, value=local_dt.strftime('%d/%m/%Y %H:%M:%S'))
-        ws.cell(row=row_idx, column=2, value=local_dt.strftime('%d/%m/%Y %H:%M:%S'))
+        ws.cell(row=row_idx, column=2, value=local_dt.strftime('%d/%m/%Y'))
         ws.cell(row=row_idx, column=3, value=build_attivita(tx))
         ws.cell(row=row_idx, column=4, value=build_descrizione(tx))
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)

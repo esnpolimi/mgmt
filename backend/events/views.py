@@ -68,9 +68,54 @@ def _validate_form_upload(file_obj):
     return True
 
 
-def _upload_form_file_to_drive(file_obj, event_id, field_name):
+def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id, event_date=None):
+    """
+    Gets or creates a folder for the event inside the parent folder.
+    Returns the folder ID.
+    """
+    # Sanitize event name for folder name
+    safe_event_name = "".join(c for c in event_name if c.isalnum() or c in (' ', '-', '_'))[:100]
+    
+    # Include event date in folder name if available
+    if event_date:
+        date_str = event_date.strftime('%Y-%m-%d')
+        folder_name = f"{safe_event_name} ({date_str})"
+    else:
+        folder_name = f"{safe_event_name} (ID_{event_id})"
+    
+    # Check if folder already exists
+    query = f"name='{folder_name}' and '{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(
+        q=query,
+        spaces='drive',
+        fields='files(id, name)',
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+    
+    items = results.get('files', [])
+    if items:
+        return items[0]['id']
+    
+    # Create new folder if it doesn't exist
+    folder_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_folder_id]
+    }
+    folder = service.files().create(
+        body=folder_metadata,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    
+    return folder['id']
+
+
+def _upload_form_file_to_drive(file_obj, event_id, field_name, event_name=None, event_date=None):
     """
     Uploads file for form 'l' field to Drive and returns public link.
+    Creates a dedicated folder for the event if event_name is provided.
     """
     GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
     SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
@@ -79,14 +124,19 @@ def _upload_form_file_to_drive(file_obj, event_id, field_name):
         scopes=['https://www.googleapis.com/auth/drive']
     )
     service = build('drive', 'v3', credentials=credentials)
+    
+    # Get or create event-specific folder
+    if event_name:
+        target_folder_id = _get_or_create_event_folder(service, GOOGLE_DRIVE_FOLDER_ID, event_name, event_id, event_date)
+    else:
+        target_folder_id = GOOGLE_DRIVE_FOLDER_ID
+    
     file_obj.seek(0)
     mimetype = getattr(file_obj, 'content_type', 'application/octet-stream')
-    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
-    ext = os.path.splitext(file_obj.name)[1].lower()
-    safe_field = "".join(c for c in field_name if c.isalnum() or c in ('-', '_'))[:40]
-    filename = f"event{event_id}_form_{safe_field}_{timestamp}{ext}"
+    # Use original filename
+    filename = file_obj.name
     media = MediaIoBaseUpload(file_obj, mimetype=mimetype)
-    metadata = {'name': filename, 'parents': [GOOGLE_DRIVE_FOLDER_ID]}
+    metadata = {'name': filename, 'parents': [target_folder_id]}
     created = service.files().create(
         body=metadata,
         media_body=media,
@@ -282,8 +332,9 @@ def get_action_permissions(request, action, default_perm=None):
     """
     Returns True if the user has the required permission for the action.
     You can customize this mapping per view/action.
+    All actions must be explicitly mapped - no permissive default.
     """
-    # Example: define permissions per action
+    # Define permissions per action
     perms_map = {
         'event_detail_GET': 'events.view_event',
         'event_detail_PATCH': 'events.change_event',
@@ -295,17 +346,31 @@ def get_action_permissions(request, action, default_perm=None):
         'subscription_create_POST': 'events.add_subscription',
         'move_subscriptions_POST': 'events.change_subscription',
         'events_list_GET': 'events.view_event',
+        'generate_liberatorie_pdf_POST': None,  # Special case: Board only (handled below)
+        'printable_liberatorie_GET': None,  # Special case: Board only (handled below)
+        'link_event_to_lists_POST': 'events.change_event',
+        'available_events_for_sharing_GET': 'events.view_event',
     }
-    perm = perms_map.get(action, default_perm)
-
+    
     # Special case: allow Board group for liberatorie actions
     if action in ['generate_liberatorie_pdf_POST', 'printable_liberatorie_GET']:
         if request.user.groups.filter(name='Board').exists():
             return True
-
+        return False
+    
+    # Get permission from map or use provided default
+    perm = perms_map.get(action, default_perm)
+    
     if perm:
         return request.user.has_perm(perm)
-    return True  # If no specific permission, allow
+    
+    # If action not in map and no default provided, deny access (secure default)
+    if action not in perms_map:
+        logger.warning(f"Unknown action '{action}' in get_action_permissions - access denied")
+        return False
+    
+    # If action is in map but perm is None and not a special case, deny
+    return False
 
 
 def _subscription_recipient_email(subscription):
@@ -1585,14 +1650,29 @@ def event_form_submit(request, event_id):
 
         profile = None
         external_name = None
+        external_first_name = None
+        external_last_name = None
+        external_has_esncard = False  # Default to False to avoid NOT NULL constraint
+        external_esncard_number = None
+        external_whatsapp_number = None
+        
         try:
             profile = Profile.objects.get(email=email)
         except Profile.DoesNotExist:
             if event.is_allow_external:
-                # No profile data collected anymore, use name + surname as external label
-                external_name = form_data.get('name', '').strip() + ' ' + form_data.get('surname', '').strip()
+                # Collect external user data
+                external_first_name = request.data.get('external_first_name', '').strip()
+                external_last_name = request.data.get('external_last_name', '').strip()
+                external_has_esncard = _get_bool(request.data, 'external_has_esncard', False)
+                external_esncard_number = request.data.get('external_esncard_number', '').strip() if external_has_esncard else None
+                external_whatsapp_number = request.data.get('external_whatsapp_number', '').strip()
+                
+                if not external_first_name or not external_last_name:
+                    return Response({"error": "Nome e cognome sono obbligatori per utenti esterni"}, status=400)
+                
+                external_name = f"{external_first_name} {external_last_name}"
             else:
-                return Response({"error": "Profile not found"}, status=404)
+                return Response({"error": "Profilo non trovato"}, status=404)
 
         # Duplicate checks
         if profile and Subscription.objects.filter(profile=profile, event=event).exists():
@@ -1607,7 +1687,7 @@ def event_form_submit(request, event_id):
             if uploaded:
                 _validate_form_upload(uploaded)
                 try:
-                    link = _upload_form_file_to_drive(uploaded, event.id, fname)
+                    link = _upload_form_file_to_drive(uploaded, event.id, fname, event.name, event.date)
                 except Exception as up_err:
                     logger.error(f"Upload failed for field {fname}: {up_err}")
                     return Response({"error": f"Upload failed for field {fname}"}, status=500)
@@ -1637,7 +1717,12 @@ def event_form_submit(request, event_id):
             form_notes=form_notes,
             additional_data={'form_email': email},
             selected_services=normalized_selected,
-            created_by_form=True
+            created_by_form=True,
+            external_first_name=external_first_name,
+            external_last_name=external_last_name,
+            external_has_esncard=external_has_esncard,
+            external_esncard_number=external_esncard_number,
+            external_whatsapp_number=external_whatsapp_number
         )
 
         # --- SumUp integration (widget-only) ---
@@ -1992,6 +2077,9 @@ def link_event_to_lists(request):
         ]
     }
     """
+    if not get_action_permissions(request, 'link_event_to_lists_POST'):
+        return Response({'error': 'Non hai i permessi per linkare liste agli eventi.'}, status=403)
+    
     source_id = request.data.get('source_event_id')
     target_id = request.data.get('target_event_id')
 
@@ -2054,6 +2142,9 @@ def available_events_for_sharing(request):
         }
     ]
     """
+    if not get_action_permissions(request, 'available_events_for_sharing_GET'):
+        return Response({'error': 'Non hai i permessi per visualizzare gli eventi disponibili per la condivisione.'}, status=403)
+    
     # Get all events that have at least one list
     events_with_lists = Event.objects.prefetch_related('lists').annotate(
         lists_count=Count('lists')
