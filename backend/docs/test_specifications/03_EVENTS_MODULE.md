@@ -64,7 +64,7 @@ class EventList(models.Model):
 ```python
 class Subscription(models.Model):
     id = AutoField(primary_key=True)
-    profile = ForeignKey(Profile)
+    profile = ForeignKey(Profile, null=True)   # Nullable per utenti esterni
     event = ForeignKey(Event)
     list = ForeignKey(EventList)
     selected_services = JSONField(null=True)   # Servizi selezionati
@@ -78,6 +78,15 @@ class Subscription(models.Model):
     liberatoria = BooleanField(default=False)
     notes = TextField(null=True)
     subscription_date = DateTimeField(auto_now_add=True)
+    
+    # Campi per utenti esterni (external users)
+    external_name = CharField(max_length=255, null=True)
+    external_email = EmailField(null=True)
+    external_first_name = CharField(max_length=100, null=True)
+    external_last_name = CharField(max_length=100, null=True)
+    external_has_esncard = BooleanField(default=False)
+    external_esncard_number = CharField(max_length=50, null=True)
+    external_whatsapp_number = CharField(max_length=50, null=True)
 ```
 
 ### EventOrganizer
@@ -533,7 +542,7 @@ class SubscriptionDeleteTestCase(BaseTestCase):
 
 ---
 
-### 13. POST `/backend/submit_form/<event_pk>/`
+### 13. POST `/backend/event/<event_pk>/formsubmit/`
 **Descrizione**: Sottomissione form pubblico (Erasmus self-registration)
 **Autenticazione**: No (pubblico)
 
@@ -560,6 +569,10 @@ class SubscriptionDeleteTestCase(BaseTestCase):
 | E-SF-004 | Submit già iscritto | profile già iscritto | Errore | 400 |
 | E-SF-005 | Submit form required mancanti | manca campo required | Errore validazione | 400 |
 | E-SF-006 | Submit evento senza form | evento form=null | Solo lista | 200 |
+| E-SF-007 | Submit utente esterno completo | tutti campi esterni | Iscrizione creata con dati esterni | 200 |
+| E-SF-008 | Submit utente esterno campi mancanti | manca first_name o last_name | Errore validazione | 400 |
+| E-SF-009 | Submit utente esterno con ESNcard | has_esncard=True + numero | ESNcard salvata | 200 |
+| E-SF-010 | Submit utente esterno senza ESNcard | has_esncard=False | Campo numero null | 200 |
 
 ```python
 class SubmitFormTestCase(TestCase):
@@ -585,7 +598,7 @@ class SubmitFormTestCase(TestCase):
             email_is_verified=True, enabled=True
         )
         
-        response = self.client.post(f'/backend/submit_form/{event.pk}/', {
+        response = self.client.post(f'/backend/event/{event.pk}/formsubmit/', {
             'email': 'erasmus@test.com',
             'list_id': event_list.pk,
             'form_data': {'tshirt': 'M'}
@@ -593,6 +606,68 @@ class SubmitFormTestCase(TestCase):
         
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)  # Confirmation email
+    
+    def test_submit_form_external_user_with_full_details(self):
+        """E-SF-007: Submit form utente esterno con tutti i campi"""
+        from django.core import mail
+        from events.models import Event, EventList, Subscription
+        
+        event = Event.objects.create(
+            name='Party',
+            date='2025-06-01',
+            enable_form=True,
+            is_allow_external=True
+        )
+        event_list = EventList.objects.create(
+            name='Form List', capacity=100, is_main_list=False, is_open=True
+        )
+        event_list.events.add(event)
+        
+        response = self.client.post(f'/backend/event/{event.pk}/formsubmit/', {
+            'email': 'external@domain.com',
+            'form_data': {},
+            'external_first_name': 'John',
+            'external_last_name': 'Doe',
+            'external_has_esncard': True,
+            'external_esncard_number': 'ITA-POL-12345-24',
+            'external_whatsapp_number': '+39 3331234567'
+        }, format='json')
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['success'])
+        
+        # Verify subscription created with external fields
+        subscription = Subscription.objects.get(event=event)
+        self.assertEqual(subscription.external_first_name, 'John')
+        self.assertEqual(subscription.external_last_name, 'Doe')
+        self.assertEqual(subscription.external_has_esncard, True)
+        self.assertEqual(subscription.external_esncard_number, 'ITA-POL-12345-24')
+        self.assertEqual(subscription.external_whatsapp_number, '+39 3331234567')
+    
+    def test_submit_form_external_user_missing_required_fields(self):
+        """E-SF-008: Submit form utente esterno con campi mancanti ritorna errore"""
+        from events.models import Event, EventList
+        
+        event = Event.objects.create(
+            name='Party',
+            date='2025-06-01',
+            enable_form=True,
+            is_allow_external=True
+        )
+        event_list = EventList.objects.create(
+            name='Form List', capacity=100, is_main_list=False, is_open=True
+        )
+        event_list.events.add(event)
+        
+        response = self.client.post(f'/backend/event/{event.pk}/formsubmit/', {
+            'email': 'external@domain.com',
+            'form_data': {},
+            'external_first_name': 'John'
+            # Missing external_last_name
+        }, format='json')
+        
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Nome e cognome', response.data['error'])
 ```
 
 ---
@@ -866,7 +941,7 @@ class ErasmusSubscriptionFlowTestCase(TestCase):
         )
         
         # 3. Submit form iscrizione
-        response = self.client.post(f'/backend/submit_form/{event.pk}/', {
+        response = self.client.post(f'/backend/event/{event.pk}/formsubmit/', {
             'email': 'student@university.edu',
             'list_id': event_list.pk,
             'form_data': {'diet': 'Vegetarian'}
@@ -964,6 +1039,10 @@ class PaymentFlowTestCase(TestCase):
 - [x] Validazione campi required
 - [x] Email conferma inviata
 - [x] Profilo non esistente
+- [x] Submit utente esterno con dati completi (first_name, last_name, ESNcard, WhatsApp)
+- [x] Submit utente esterno con campi mancanti (validazione)
+- [x] Submit utente esterno con ESNcard
+- [x] Submit utente esterno senza ESNcard
 
 ### SumUp Integration (MOCK)
 - [x] Crea checkout

@@ -199,6 +199,50 @@ class EventCreationTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(Event.objects.filter(name="New Event").exists())
 
+	def test_cannot_create_list_with_form_list_name(self):
+		"""Creating a list with reserved 'Form List' name should fail."""
+		profile = _create_profile("creator@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_add_event)
+		self.authenticate(user)
+
+		response = self.client.post("/backend/event/", {
+			"name": "New Event",
+			"date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"lists": [
+				{"name": "Main List", "capacity": 100, "is_main_list": True},
+				{"name": "Form List", "capacity": 50},  # Reserved name
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("riservato", response.data["lists"][0].lower())
+
+	def test_cannot_rename_list_to_form_list(self):
+		"""Renaming an existing list to 'Form List' should fail."""
+		profile = _create_profile("editor@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_add_event, self.perm_change_event)
+		self.authenticate(user)
+
+		# Create event with a list
+		event = _create_event()
+		regular_list = _create_event_list(event, name="Regular List", is_main_list=False)
+		main_list = _create_event_list(event, name="Main List", is_main_list=True)
+
+		# Try to rename to Form List
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"lists": [
+				{"id": main_list.pk, "name": "Main List", "capacity": 100, "is_main_list": True},
+				{"id": regular_list.pk, "name": "Form List", "capacity": 50},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("riservato", response.data["lists"][0].lower())
+
 
 class EventDetailTests(EventsBaseTestCase):
 	"""Tests for event detail endpoint."""
@@ -576,7 +620,7 @@ class EventFormTests(EventsBaseTestCase):
 		}, format="json")
 
 		self.assertEqual(response.status_code, 404)
-		self.assertIn("Profile not found", response.data["error"])
+		self.assertIn("Profilo non trovato", response.data["error"])
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_missing_email(self):
@@ -631,21 +675,67 @@ class EventFormTests(EventsBaseTestCase):
 	def test_event_form_submit_external_allowed(self):
 		"""External submissions should be allowed when event permits external."""
 		event = _create_event(enable_form=True, is_allow_external=True)
-		# Configure form fields for name and surname
-		event.fields = [
-			{"name": "name", "type": "t", "field_type": "form", "required": True},
-			{"name": "surname", "type": "t", "field_type": "form", "required": True},
-		]
+		event.fields = []
 		event.save()
 		_create_event_list(event, name="Form List", is_main_list=False)
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
 			"email": "external@domain.com",
-			"form_data": {"name": "John", "surname": "Doe"},
+			"form_data": {},
+			"external_first_name": "John",
+			"external_last_name": "Doe",
 		}, format="json")
 
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(response.data["success"])
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	def test_event_form_submit_external_with_full_details(self):
+		"""External submissions should save all external user fields."""
+		event = _create_event(enable_form=True, is_allow_external=True)
+		event.fields = []
+		event.save()
+		_create_event_list(event, name="Form List", is_main_list=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": "external@domain.com",
+			"form_data": {},
+			"external_first_name": "John",
+			"external_last_name": "Doe",
+			"external_has_esncard": True,
+			"external_esncard_number": "ITA-POL-12345-24",
+			"external_whatsapp_number": "+39 3331234567",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["success"])
+		
+		# Verify subscription was created with external fields
+		sub = Subscription.objects.get(event=event)
+		self.assertEqual(sub.external_first_name, "John")
+		self.assertEqual(sub.external_last_name, "Doe")
+		self.assertEqual(sub.external_has_esncard, True)
+		self.assertEqual(sub.external_esncard_number, "ITA-POL-12345-24")
+		self.assertEqual(sub.external_whatsapp_number, "+39 3331234567")
+		self.assertEqual(sub.external_name, "John Doe")
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	def test_event_form_submit_external_missing_required_fields(self):
+		"""External submissions should require first name and last name."""
+		event = _create_event(enable_form=True, is_allow_external=True)
+		event.fields = []
+		event.save()
+		_create_event_list(event, name="Form List", is_main_list=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": "external@domain.com",
+			"form_data": {},
+			"external_first_name": "John",
+			# Missing external_last_name
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("Nome e cognome", response.data["error"])
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_form_list_missing(self):
@@ -1085,6 +1175,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Missing params should return 400."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='change_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		response = self.client.post("/backend/link-lists/", {}, format="json")
@@ -1096,6 +1190,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Source event without lists should return 400."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='change_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		source = _create_event(name="Source")
@@ -1113,6 +1211,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Lists should be linked from source to target event."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='change_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		source = _create_event(name="Source")
@@ -1131,6 +1233,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Endpoint should return events with lists."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='view_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		event = _create_event(name="Share Event")

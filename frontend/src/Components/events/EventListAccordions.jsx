@@ -94,10 +94,25 @@ export default memo(function EventListAccordions({
             if (sub?.profile && sub.profile[field] !== undefined && sub.profile[field] !== null) {
                 return sub.profile[field];
             }
-            // External (no profile) -> expose stored email
-            if (field === 'email') {
-                return sub?.additional_data?.form_email || '';
+            
+            // External user (no profile) -> use external fields
+            if (!sub?.profile) {
+                switch (field) {
+                    case 'name':
+                        return sub?.external_first_name || '';
+                    case 'surname':
+                        return sub?.external_last_name || '';
+                    case 'email':
+                        return sub?.additional_data?.form_email || sub?.external_email || '';
+                    case 'latest_esncard':
+                        return sub?.external_has_esncard ? sub?.external_esncard_number || '' : '';
+                    case 'whatsapp_number':
+                        return sub?.external_whatsapp_number || '';
+                    default:
+                        return '';
+                }
             }
+            
             return '';
         };
 
@@ -197,7 +212,7 @@ export default memo(function EventListAccordions({
                     if (field.type === 'l') {
                         if (val) {
                             return (
-                                <span>
+                                <span data-copy-value={val}>
                                     <Button variant="text"
                                             color="primary"
                                             sx={{textTransform: 'none', padding: 0, minWidth: 0}}
@@ -237,7 +252,7 @@ export default memo(function EventListAccordions({
                     if (field.type === 'l') {
                         if (val) {
                             return (
-                                <span>
+                                <span data-copy-value={val}>
                                     <Button variant="text"
                                             color="primary"
                                             sx={{textTransform: 'none', padding: 0, minWidth: 0}}
@@ -323,7 +338,7 @@ export default memo(function EventListAccordions({
                     Cell: ({row}) => {
                         const sub = row.original;
                         if (sub.external_name) {
-                            return <span>{sub.external_name} ({sub.additional_data.external_email})</span>;
+                            return <span>{sub.external_name}</span>;
                         }
                         return (
                             <span>
@@ -585,7 +600,14 @@ export default memo(function EventListAccordions({
                                         if (td.querySelector('button[title="Modifica Risposte Form"]')) return false; // Azioni
                                         return true;
                                     })
-                                    .map(td => td.innerText.replace(/\s+/g, ' ').trim())
+                                    .map(td => {
+                                        // Check if there's a data-copy-value attribute (for drive links)
+                                        const copyValueElement = td.querySelector('[data-copy-value]');
+                                        if (copyValueElement) {
+                                            return copyValueElement.getAttribute('data-copy-value');
+                                        }
+                                        return td.innerText.replace(/\s+/g, ' ').trim();
+                                    })
                                     // Excel-safe transform
                                     .map(toExcelSafe);
                             }

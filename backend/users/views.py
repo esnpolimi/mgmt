@@ -2,7 +2,6 @@ import logging
 
 import sentry_sdk
 from django.conf import settings
-from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
@@ -15,6 +14,9 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from profiles.models import Profile
 from users.models import User
@@ -47,16 +49,38 @@ def get_action_permissions(action, user):
     return True
 
 
-@permission_classes([IsAuthenticated])
-def userinfo(request, user):
-    print(f"OIDC userinfo requested for user {user} with request {request}")
+def userinfo(claims, user):
     """Return user info for DokuWiki OIDC"""
-    return {
-        "sub": user.profile.email,  # User model has profile as PK, no id field
+    ret = {
+        "sub": str(user.id),
         "email": user.profile.email,
         "preferred_username": user.profile.email,
         "name": f"{user.profile.name} {user.profile.surname}".strip(),
+        "groups": list(user.groups.values_list('name', flat=True)),
+
     }
+    # print(f"OIDC userinfo requested for user {user} with returned data {ret}")
+    return ret
+
+
+def login_for_oauth(request):  # Login for DokuWiki OIDC
+    next_url = request.GET.get('next', '/')
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        if user:
+            login(request, user)
+            # Security: only redirect to allowed URLs
+            if url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
+                return redirect(next_url)
+            return redirect('/')
+        else:
+            context = {'error': 'Invalid credentials', 'next': next_url}
+            return render(request, 'login.html', context)
+
+    return render(request, 'login.html', {'next': next_url})
+
 
 @api_view(['POST'])
 def log_in(request):
