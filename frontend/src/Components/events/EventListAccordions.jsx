@@ -197,7 +197,7 @@ export default memo(function EventListAccordions({
                     if (field.type === 'l') {
                         if (val) {
                             return (
-                                <span>
+                                <span data-copy-value={val}>
                                     <Button variant="text"
                                             color="primary"
                                             sx={{textTransform: 'none', padding: 0, minWidth: 0}}
@@ -237,7 +237,7 @@ export default memo(function EventListAccordions({
                     if (field.type === 'l') {
                         if (val) {
                             return (
-                                <span>
+                                <span data-copy-value={val}>
                                     <Button variant="text"
                                             color="primary"
                                             sx={{textTransform: 'none', padding: 0, minWidth: 0}}
@@ -585,7 +585,14 @@ export default memo(function EventListAccordions({
                                         if (td.querySelector('button[title="Modifica Risposte Form"]')) return false; // Azioni
                                         return true;
                                     })
-                                    .map(td => td.innerText.replace(/\s+/g, ' ').trim())
+                                    .map(td => {
+                                        // Check if there's a data-copy-value attribute (for drive links)
+                                        const copyValueElement = td.querySelector('[data-copy-value]');
+                                        if (copyValueElement) {
+                                            return copyValueElement.getAttribute('data-copy-value');
+                                        }
+                                        return td.innerText.replace(/\s+/g, ' ').trim();
+                                    })
                                     // Excel-safe transform
                                     .map(toExcelSafe);
                             }
