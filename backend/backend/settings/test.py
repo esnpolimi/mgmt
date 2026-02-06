@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "content",
     'rest_framework_simplejwt.token_blacklist',
     'csp',
+    'oidc_provider',
 ]
 
 # Middleware
