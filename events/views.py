@@ -68,9 +68,54 @@ def _validate_form_upload(file_obj):
     return True
 
 
-def _upload_form_file_to_drive(file_obj, event_id, field_name):
+def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id, event_date=None):
+    """
+    Gets or creates a folder for the event inside the parent folder.
+    Returns the folder ID.
+    """
+    # Sanitize event name for folder name
+    safe_event_name = "".join(c for c in event_name if c.isalnum() or c in (' ', '-', '_'))[:100]
+    
+    # Include event date in folder name if available
+    if event_date:
+        date_str = event_date.strftime('%Y-%m-%d')
+        folder_name = f"{safe_event_name} ({date_str})"
+    else:
+        folder_name = f"{safe_event_name} (ID_{event_id})"
+    
+    # Check if folder already exists
+    query = f"name='{folder_name}' and '{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(
+        q=query,
+        spaces='drive',
+        fields='files(id, name)',
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+    
+    items = results.get('files', [])
+    if items:
+        return items[0]['id']
+    
+    # Create new folder if it doesn't exist
+    folder_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_folder_id]
+    }
+    folder = service.files().create(
+        body=folder_metadata,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    
+    return folder['id']
+
+
+def _upload_form_file_to_drive(file_obj, event_id, field_name, event_name=None, event_date=None):
     """
     Uploads file for form 'l' field to Drive and returns public link.
+    Creates a dedicated folder for the event if event_name is provided.
     """
     GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
     SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
@@ -79,14 +124,19 @@ def _upload_form_file_to_drive(file_obj, event_id, field_name):
         scopes=['https://www.googleapis.com/auth/drive']
     )
     service = build('drive', 'v3', credentials=credentials)
+    
+    # Get or create event-specific folder
+    if event_name:
+        target_folder_id = _get_or_create_event_folder(service, GOOGLE_DRIVE_FOLDER_ID, event_name, event_id, event_date)
+    else:
+        target_folder_id = GOOGLE_DRIVE_FOLDER_ID
+    
     file_obj.seek(0)
     mimetype = getattr(file_obj, 'content_type', 'application/octet-stream')
-    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
-    ext = os.path.splitext(file_obj.name)[1].lower()
-    safe_field = "".join(c for c in field_name if c.isalnum() or c in ('-', '_'))[:40]
-    filename = f"event{event_id}_form_{safe_field}_{timestamp}{ext}"
+    # Use original filename
+    filename = file_obj.name
     media = MediaIoBaseUpload(file_obj, mimetype=mimetype)
-    metadata = {'name': filename, 'parents': [GOOGLE_DRIVE_FOLDER_ID]}
+    metadata = {'name': filename, 'parents': [target_folder_id]}
     created = service.files().create(
         body=metadata,
         media_body=media,
@@ -1607,7 +1657,7 @@ def event_form_submit(request, event_id):
             if uploaded:
                 _validate_form_upload(uploaded)
                 try:
-                    link = _upload_form_file_to_drive(uploaded, event.id, fname)
+                    link = _upload_form_file_to_drive(uploaded, event.id, fname, event.name, event.date)
                 except Exception as up_err:
                     logger.error(f"Upload failed for field {fname}: {up_err}")
                     return Response({"error": f"Upload failed for field {fname}"}, status=500)
