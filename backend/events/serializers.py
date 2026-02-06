@@ -3,6 +3,7 @@ import os
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 
 from events.models import Event, EventList, Subscription, EventOrganizer
@@ -380,6 +381,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             # Any unexpected error in checks => deny gracefully instead of 500
             return False
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         # Authorization check
         if not self._user_can_edit(instance):
@@ -495,22 +497,24 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                         'lists': f"Non è possibile impostare una capacità lista minore del numero di iscrizioni presenti ({subscription_count})"
                     })
 
+        # Validate Form List deletion BEFORE saving if enable_form is being disabled
+        if 'enable_form' in validated_data and not validated_data['enable_form']:
+            form_list = instance.lists.filter(name='Form List').first()
+            if form_list and form_list.subscriptions.exists():
+                raise serializers.ValidationError({
+                    'enable_form': "Non è possibile disattivare il form quando ci sono iscrizioni nella Form List. Spostare prima le iscrizioni in un'altra lista."
+                })
+
         # Update the instance with the remaining data
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Delete Form List if enable_form is being disabled
+        # Delete Form List if enable_form is being disabled (validation already passed)
         if 'enable_form' in validated_data and not validated_data['enable_form']:
             form_list = instance.lists.filter(name='Form List').first()
             if form_list:
-                # Only delete if there are no subscriptions in the Form List
-                if not form_list.subscriptions.exists():
-                    form_list.delete()
-                else:
-                    raise serializers.ValidationError({
-                        'enable_form': "Non è possibile disattivare il form quando ci sono iscrizioni nella Form List. Spostare prima le iscrizioni in un'altra lista."
-                    })
+                form_list.delete()
 
         if lists_data is not None:
             existing_lists = {lst.id: lst for lst in instance.lists.all()}
