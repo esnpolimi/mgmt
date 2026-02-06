@@ -883,7 +883,7 @@ def reimburse_quota(request):
 def transactions_export(request):
     """
     Export filtered transactions with columns:
-    Esecuzione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale)
+    Registrazione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale)
     """
 
     # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
