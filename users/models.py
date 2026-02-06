@@ -24,3 +24,27 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.profile.email
+
+    @property
+    def email(self):
+        return self.profile.email
+
+    @property
+    def id(self):
+        # return the primary key (profile email) to keep parity with default expectations
+        return getattr(self, "pk", getattr(getattr(self, "profile", None), "email", None))
+
+    # DokuWiki related methods
+    def get_full_name(self):
+        """Return the user's full name (fallback to email)."""
+        name = getattr(self.profile, 'name', '')
+        surname = getattr(self.profile, 'surname', '')
+        full_name = f"{name} {surname}".strip()
+        return full_name or self.profile.email
+
+    def get_short_name(self):
+        """Return a short identifier for the user."""
+        name = getattr(self.profile, 'name', None)
+        if name:
+            return name
+        return self.profile.email.split('@')[0]
