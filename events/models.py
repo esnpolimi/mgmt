@@ -469,7 +469,7 @@ class Subscription(BaseEntity):
     # --- External user fields (when profile is null and event allows external) ---
     external_first_name = models.CharField(max_length=128, blank=True, null=True)
     external_last_name = models.CharField(max_length=128, blank=True, null=True)
-    external_has_esncard = models.BooleanField(default=False, blank=True, null=True)
+    external_has_esncard = models.BooleanField(default=False)
     external_esncard_number = models.CharField(max_length=64, blank=True, null=True)
     external_whatsapp_number = models.CharField(max_length=32, blank=True, null=True)
 
