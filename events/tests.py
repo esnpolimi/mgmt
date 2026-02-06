@@ -1131,6 +1131,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Missing params should return 400."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='change_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		response = self.client.post("/backend/link-lists/", {}, format="json")
@@ -1142,6 +1146,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Source event without lists should return 400."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='change_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		source = _create_event(name="Source")
@@ -1159,6 +1167,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Lists should be linked from source to target event."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='change_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		source = _create_event(name="Source")
@@ -1177,6 +1189,10 @@ class SharingListsTests(EventsBaseTestCase):
 		"""Endpoint should return events with lists."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
+		# Add necessary permission
+		user.user_permissions.add(
+			Permission.objects.get(codename='view_event', content_type__app_label='events')
+		)
 		self.authenticate(user)
 
 		event = _create_event(name="Share Event")
