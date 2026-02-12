@@ -150,14 +150,27 @@ jobs:
         # Trova il tag precedente
         PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.create-release-tag.outputs.new_tag }}^ 2>/dev/null || echo "")
         
-        # Genera il changelog
+        # Genera il changelog con username GitHub
         if [ -z "$PREVIOUS_TAG" ]; then
           # Primo release: prendi tutti i commits
-          CHANGELOG=$(git log --pretty=format:"- %s (%h) - @%an" --no-merges)
+          COMMITS=$(git log --pretty=format:"%H|%s" --no-merges)
         else
           # Prendi i commits dall'ultimo tag
-          CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --pretty=format:"- %s (%h) - @%an" --no-merges)
+          COMMITS=$(git log ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --pretty=format:"%H|%s" --no-merges)
         fi
+        
+        # Costruisci il changelog con username GitHub usando l'API
+        CHANGELOG=""
+        while IFS='|' read -r HASH SUBJECT; do
+          # Ottieni lo username GitHub dal commit usando l'API
+          USERNAME=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${HASH}" | \
+            jq -r '.author.login // .commit.author.name')
+          
+          # Aggiungi al changelog
+          SHORT_HASH=${HASH:0:7}
+          CHANGELOG="${CHANGELOG}- ${SUBJECT} (${SHORT_HASH}) - @${USERNAME}"$'\n'
+        done <<< "$COMMITS"
         
         # Salva in una variabile di output (gestendo multiline)
         echo "changelog<<EOF" >> $GITHUB_OUTPUT
