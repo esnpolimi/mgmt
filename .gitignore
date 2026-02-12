@@ -13,3 +13,4 @@ __pycache__/
 .vscode
 backend/events/migrations/*
 backend/treasury/migrations/*
+scripts
