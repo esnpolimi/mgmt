@@ -883,7 +883,7 @@ def reimburse_quota(request):
 def transactions_export(request):
     """
     Export filtered transactions with columns:
-    Registrazione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale)
+    Registrazione | Esecuzione | Attività | Descrizione | Importo | Cassa | Eseguito da | Commenti | Descrizione (gestionale)
     """
 
     # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
@@ -917,7 +917,17 @@ def transactions_export(request):
     ws.title = "Bilancio"
 
     # Updated headers: inserted computed "Descrizione" and renamed original.
-    headers = ["Registrazione", "Esecuzione", "Attività", "Descrizione", "Importo", "Cassa", "Commenti", "Descrizione (gestionale)"]
+    headers = [
+        "Registrazione",
+        "Esecuzione",
+        "Attività",
+        "Descrizione",
+        "Importo",
+        "Cassa",
+        "Commenti",
+        "Descrizione (gestionale)",
+        "Eseguito da"
+    ]
     header_font = Font(bold=True)
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -987,9 +997,17 @@ def transactions_export(request):
         if getattr(tx_obj, 'subscription_id', None) and getattr(tx_obj.subscription, 'profile', None):
             p = tx_obj.subscription.profile
             return f"{p.name} {p.surname}"
+        if getattr(tx_obj, 'subscription_id', None) and getattr(tx_obj.subscription, 'external_name', None):
+            return tx_obj.subscription.external_name
         if getattr(tx_obj, 'esncard_id', None) and getattr(tx_obj.esncard, 'profile', None):
             p = tx_obj.esncard.profile
             return f"{p.name} {p.surname}"
+        if getattr(tx_obj, 'executor_id', None) and getattr(tx_obj.executor, 'profile', None):
+            p = tx_obj.executor.profile
+            return f"{p.name} {p.surname}"
+        return ""
+
+    def build_eseguito_da(tx_obj):
         if getattr(tx_obj, 'executor_id', None) and getattr(tx_obj.executor, 'profile', None):
             p = tx_obj.executor.profile
             return f"{p.name} {p.surname}"
@@ -1013,6 +1031,7 @@ def transactions_export(request):
         ws.cell(row=row_idx, column=6, value=tx.account.name if tx.account else '')
         ws.cell(row=row_idx, column=7, value=build_commenti(tx))
         ws.cell(row=row_idx, column=8, value=tx.description)
+        ws.cell(row=row_idx, column=9, value=build_eseguito_da(tx))
         row_idx += 1
 
     # Auto width
