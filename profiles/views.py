@@ -354,6 +354,41 @@ def verify_email_and_enable_profile(request, uid, token):
     return Response({'error': 'Errore interno del server.'}, status=500)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def manual_verify_erasmus_profile(request, pk):
+    """
+    Board-only endpoint to manually mark Erasmus profiles as email-verified and enabled.
+    Useful when users do not complete email verification flow.
+    """
+    try:
+        if not user_is_board(request.user):
+            return Response({'error': 'Solo Board può attivare manualmente i profili Erasmus.'}, status=403)
+
+        try:
+            profile = Profile.objects.get(pk=pk)
+        except Profile.DoesNotExist:
+            return Response({'error': 'Il profilo non esiste.'}, status=404)
+
+        if profile.is_esner:
+            return Response({'error': 'Attivazione manuale disponibile solo per profili Erasmus.'}, status=400)
+
+        if profile.enabled and profile.email_is_verified:
+            return Response({'message': 'Profilo già attivo e email già verificata.'}, status=200)
+
+        with transaction.atomic():
+            profile.enabled = True
+            profile.email_is_verified = True
+            profile.save(update_fields=['enabled', 'email_is_verified'])
+            Document.objects.filter(profile=profile).update(enabled=True)
+
+        return Response({'message': 'Profilo Erasmus attivato e email verificata manualmente.'}, status=200)
+    except Exception as e:
+        logger.error(str(e))
+        sentry_sdk.capture_exception(e)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
 # Endpoint to view in detail, edit, delete a profile
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])

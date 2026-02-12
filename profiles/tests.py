@@ -1164,3 +1164,67 @@ class ProfileDetailEdgeCaseTests(ProfilesBaseTestCase):
 		response = self.client.delete("/backend/profile/99999/")
 
 		self.assertEqual(response.status_code, 404)
+
+
+class ManualErasmusVerificationTests(ProfilesBaseTestCase):
+	"""Tests for board manual activation/verification of Erasmus profiles."""
+
+	def test_manual_verify_erasmus_requires_board(self):
+		"""Non-board users cannot manually verify Erasmus profiles."""
+		requester_profile = _create_profile("user@esnpolimi.it", is_esner=True)
+		requester = _create_user(requester_profile)
+		self.authenticate(requester)
+
+		target_profile = _create_profile("erasmus@uni.it", is_esner=False, verified=False, enabled=False)
+		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_manual_verify_erasmus_success(self):
+		"""Board can manually activate and verify an Erasmus profile."""
+		board_profile = _create_profile("board-manual@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		target_profile = _create_profile("erasmus2@uni.it", is_esner=False, verified=False, enabled=False)
+		doc = Document.objects.create(
+			profile=target_profile,
+			type="Passport",
+			number="DOCMANUAL001",
+			expiration="2030-01-01",
+			enabled=False,
+		)
+
+		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 200)
+		target_profile.refresh_from_db()
+		doc.refresh_from_db()
+		self.assertTrue(target_profile.enabled)
+		self.assertTrue(target_profile.email_is_verified)
+		self.assertTrue(doc.enabled)
+
+	def test_manual_verify_erasmus_rejects_esner_target(self):
+		"""Manual verify endpoint is only for Erasmus profiles."""
+		board_profile = _create_profile("board-manual-2@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		esner_target = _create_profile("esner-target@esnpolimi.it", is_esner=True, verified=False, enabled=False)
+		response = self.client.post(f"/backend/profile/{esner_target.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 400)
+
+	def test_manual_verify_erasmus_already_active_returns_200(self):
+		"""Already active Erasmus profile should return 200."""
+		board_profile = _create_profile("board-manual-3@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		target_profile = _create_profile("erasmus3@uni.it", is_esner=False, verified=True, enabled=True)
+		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 200)
