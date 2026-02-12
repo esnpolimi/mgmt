@@ -7,6 +7,7 @@ urlpatterns = [
     path('profile/initiate-creation/', views.initiate_profile_creation),  # creates a profile
     path('api/profile/verify-email/<str:uid>/<str:token>/', views.verify_email_and_enable_profile),
     path('profile/<str:pk>/', views.profile_detail),  # returns detailed profile, including esncards, documents and matricole
+    path('profile/<str:pk>/manual-verify-email/', views.manual_verify_erasmus_profile),
     path('profile_subscriptions/<str:pk>/', views.profile_subscriptions),  # subscriptions for profile
     path('profile_events/<str:pk>/', views.profile_organized_events),  # events organized by an ESNer
     path('document/', views.document_creation),  # creates a new document
