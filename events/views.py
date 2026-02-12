@@ -589,6 +589,8 @@ def _sync_service_transactions(*, subscription, account_id, executor, allow_dele
     elif subscription.external_name:
         payer_name = subscription.external_name
 
+    event_label = f"{subscription.event.name} (ID {subscription.event.id})"
+
     for svc in selected_services:
         try:
             price = Decimal(str(svc.get('price_at_purchase') or svc.get('price') or 0))
@@ -611,7 +613,7 @@ def _sync_service_transactions(*, subscription, account_id, executor, allow_dele
             subscription=subscription,
             executor=executor,
             amount=amount,
-            description=f"Servizio {name} x{qty} - {person_label} - {subscription.event.name}"
+            description=f"Servizio {name} x{qty} - {person_label} - {event_label}"
         )
 
 
@@ -627,6 +629,8 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
     quota_amount = Decimal(event_obj.cost or 0)
     deposit_amount = Decimal(event_obj.deposit or 0)
     payer = subscription.profile.name + " " + subscription.profile.surname if subscription.profile else subscription.external_name
+    payer_label = payer or "Partecipante"
+    event_label = f"{event_obj.name} (ID {event_obj.id})"
 
     # Quota
     if quota_status == 'paid' and quota_amount > 0 and account_id:
@@ -635,7 +639,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
             tx_type=Transaction.TransactionType.SUBSCRIPTION,
             account_id=account_id,
             amount=quota_amount,
-            description=f"Quota {payer} - {event_obj.name}",
+            description=f"Quota {payer_label} - {event_label}",
             executor=executor
         )
     elif allow_delete:
@@ -648,7 +652,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
             tx_type=Transaction.TransactionType.CAUZIONE,
             account_id=account_id,
             amount=deposit_amount,
-            description=f"Cauzione {payer} - {event_obj.name}",
+            description=f"Cauzione {payer_label} - {event_label}",
             executor=executor
         )
     elif allow_delete:
@@ -1380,11 +1384,18 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
             "Content-Type": "application/json"
         }
 
+    if subscription.profile:
+        payer_label = f"{subscription.profile.name} {subscription.profile.surname}"
+    elif subscription.external_name:
+        payer_label = subscription.external_name
+    else:
+        payer_label = "Partecipante"
+
     payload = {
         "checkout_reference": str(subscription.pk),
         "amount": float(total_amount),
         "currency": currency,
-        "description": f"Subscription {subscription.event.name} #{subscription.pk}",
+        "description": f"Subscription {subscription.event.name} (ID {subscription.event.id}) - {payer_label} - SUB#{subscription.pk}",
     }
     payload.update(_sumup_destination_fields())
     headers = _sumup_headers()
