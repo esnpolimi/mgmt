@@ -440,10 +440,10 @@ export default function Profile() {
 
     const handleSave = () => {
         setSaving(true);
-        if (updatedData.matricola_number && !/^\d{6}$/.test(updatedData.matricola_number)) {
+        if (updatedData.matricola_number && !/^(?:\d{6}|[A-Za-z]\d{5})$/.test(updatedData.matricola_number)) {
             setErrors((prevErrors) => ({
                 ...prevErrors,
-                matricola_number: [true, 'La Matricola deve essere composta da 6 cifre'],
+                matricola_number: [true, 'La Matricola deve avere 6 cifre oppure 1 lettera seguita da 5 cifre'],
             }));
             setSaving(false);
             return false;
