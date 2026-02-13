@@ -1081,9 +1081,9 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		wb = load_workbook(filename=BytesIO(response.content))
 		ws = wb.active
 
-		# Column 7 = "Eseguito da" and column 8 = "Commenti".
-		self.assertEqual(ws.cell(row=2, column=7).value, "Mario Rossi")
-		self.assertEqual(ws.cell(row=2, column=8).value, "John External")
+		# Column 7 = "Commenti" and column 9 = "Eseguito da".
+		self.assertEqual(ws.cell(row=2, column=7).value, "John External")
+		self.assertEqual(ws.cell(row=2, column=9).value, "Mario Rossi")
 
 
 class AccountModelTests(TreasuryBaseTestCase):

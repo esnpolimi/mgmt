@@ -516,6 +516,28 @@ class SubscriptionDetailTests(EventsBaseTestCase):
 
 		self.assertEqual(response.status_code, 403)
 
+	def test_subscription_detail_uses_phone_when_whatsapp_missing(self):
+		"""GET should expose phone number as whatsapp fallback when whatsapp is missing."""
+		profile = _create_profile("viewer-wa-fallback@esnpolimi.it")
+		profile.phone_prefix = "+39"
+		profile.phone_number = "3331234567"
+		profile.whatsapp_prefix = ""
+		profile.whatsapp_number = ""
+		profile.save(update_fields=["phone_prefix", "phone_number", "whatsapp_prefix", "whatsapp_number"])
+
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_subscription)
+		self.authenticate(user)
+
+		event = _create_event()
+		list_main = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+
+		response = self.client.get(f"/backend/subscription/{sub.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["profile"]["whatsapp_number"], "+39 3331234567")
+
 
 class MoveSubscriptionsTests(EventsBaseTestCase):
 	"""Tests for move subscriptions endpoint."""
