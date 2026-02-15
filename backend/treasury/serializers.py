@@ -22,7 +22,7 @@ def find_or_create_drive_folder(service, folder_name, parent_id):
     """
     # Search for existing folder
     # Sanitize folder_name by escaping single quotes for Drive query syntax
-    escaped_folder_name = folder_name.replace("'", "''")
+    escaped_folder_name = folder_name.replace("'", "\\'")
     query = f"name='{escaped_folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
     results = service.files().list(
         q=query,
@@ -100,7 +100,7 @@ def upload_reimbursement_receipt_to_drive(receipt_file, user, instance_time, eve
     service = build('drive', 'v3', credentials=credentials)
     
     # Create folder structure: {Year}/Rimborsi/{rimborsi generici or EventName_EventDate}
-    current_year = datetime.now().year
+    current_year = instance_time.year
     
     # Find or create year folder (e.g., "2026")
     year_folder_id = find_or_create_drive_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)

@@ -1218,7 +1218,6 @@ export default function Profile() {
                                             onChange={handleChange}
                                             sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
                                             type="text"
-                                            inputMode="numeric"
                                             slotProps={{input: {readOnly: readOnly.matricola_number}}}
                                             fullWidth/>
                                     </Grid>

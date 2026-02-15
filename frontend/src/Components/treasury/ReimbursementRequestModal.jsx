@@ -48,6 +48,23 @@ export default function ReimbursementRequestModal({open, onClose}) {
         }
     }, [isEventRelated]);
 
+    // Reset form when modal closes
+    useEffect(() => {
+        if (!open) {
+            setData({
+                amount: "",
+                payment: "",
+                description: ""
+            });
+            setReceiptFile(null);
+            setIsEventRelated(false);
+            setSelectedEventId("");
+            setEvents([]);
+            setErrors({});
+            setEventError("");
+        }
+    }, [open]);
+
     const resetErrors = () => setErrors({});
 
     const validate = () => {
