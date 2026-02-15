@@ -415,9 +415,16 @@ export default function Profile() {
     };
 
     const handleChange = (e) => {
+        let { name, value } = e.target;
+        
+        // Limit matricola_number to 6 characters
+        if (name === 'matricola_number' && value.length > 6) {
+            value = value.slice(0, 6);
+        }
+        
         setUpdatedData({
             ...updatedData,
-            [e.target.name]: e.target.value,
+            [name]: value,
         });
     };
 
@@ -445,10 +452,10 @@ export default function Profile() {
 
     const handleSave = () => {
         setSaving(true);
-        if (updatedData.matricola_number && !/^(?:\d{6}|[A-Za-z]\d{5})$/.test(updatedData.matricola_number)) {
+        if (updatedData.matricola_number && !/^.{6}$/.test(updatedData.matricola_number)) {
             setErrors((prevErrors) => ({
                 ...prevErrors,
-                matricola_number: [true, 'La Matricola deve avere 6 cifre oppure 1 lettera seguita da 5 cifre'],
+                matricola_number: [true, 'La Matricola deve avere esattamente 6 caratteri'],
             }));
             setSaving(false);
             return false;

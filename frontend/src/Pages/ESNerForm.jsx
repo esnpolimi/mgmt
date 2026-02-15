@@ -21,6 +21,7 @@ import logo from '../assets/esnpolimi-logo.png';
 
 export default function ESNerForm() {
     const [isSubmitted, setSubmitted] = React.useState(false)
+    const [sameWAasPhone, setSameWAasPhone] = React.useState(true);
     const [statusMessage, setStatusMessage] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [capsLockActive, setCapsLockActive] = useState({password: false, password_confirm: false});
@@ -34,15 +35,17 @@ export default function ESNerForm() {
         'password_confirm': '',
         'name': '',
         'surname': '',
-        'birthdate': dayjs(),
+        'birthdate': null,
         'country': 'IT',
         'phone_prefix': '+39',
         'phone_number': '',
+        'whatsapp_prefix': '+39',
+        'whatsapp_number': '',
         'person_code': '',
         'domicile': '',
         'document_type': 'ID Card',
         'document_number': '',
-        'document_expiration': dayjs(),
+        'document_expiration': null,
         'matricola_number': '',
         'is_esner': true
     });
@@ -78,6 +81,8 @@ export default function ESNerForm() {
         country: [false, ''],
         phone_prefix: [false, ''],
         phone_number: [false, ''],
+        whatsapp_prefix: [false, ''],
+        whatsapp_number: [false, ''],
         person_code: [false, ''],
         domicile: [false, ''],
         document_type: [false, ''],
@@ -157,10 +162,10 @@ export default function ESNerForm() {
             valid = false;
         }
 
-        // Validate matricola (6 digits OR 1 letter + 5 digits)
-        const matricolaRegex = /^(?:\d{6}|[A-Za-z]\d{5})$/;
+        // Validate matricola (exactly 6 digits)
+        const matricolaRegex = /^\d{6}$/;
         if (!matricolaRegex.test(formData.matricola_number)) {
-            newErrors.matricola_number = [true, 'La Matricola deve avere 6 cifre oppure 1 lettera seguita da 5 cifre'];
+            newErrors.matricola_number = [true, 'La Matricola deve essere di 6 cifre numeriche'];
             valid = false;
         } else newErrors.matricola_number = [false, ''];
 
@@ -227,12 +232,8 @@ export default function ESNerForm() {
             if (value.length > 8) value = value.slice(0, 8);
         }
         if (name === 'matricola_number') {
-            value = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            if (/^[A-Z]/.test(value)) {
-                value = value[0] + value.slice(1).replace(/\D/g, '');
-            } else {
-                value = value.replace(/\D/g, '');
-            }
+            // Only accept numeric digits, max 6
+            value = value.replace(/\D/g, '');
             if (value.length > 6) value = value.slice(0, 6);
         }
         setFormData({
@@ -284,6 +285,17 @@ export default function ESNerForm() {
         }));
     };
 
+    const handleSameNumberChange = (e) => {
+        setSameWAasPhone(e.target.checked);
+        if (e.target.checked) {
+            setFormData({
+                ...formData,
+                whatsapp_prefix: formData.phone_prefix,
+                whatsapp_number: formData.phone_number,
+            });
+        }
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -298,9 +310,10 @@ export default function ESNerForm() {
 
         let body = {
             ...formData,
+            whatsapp_prefix: sameWAasPhone ? formData.phone_prefix : formData.whatsapp_prefix,
+            whatsapp_number: sameWAasPhone ? formData.phone_number : formData.whatsapp_number,
             birthdate: formatDateString(formData.birthdate),
             document_expiration: formatDateString(formData.document_expiration),
-            matricola_expiration: formatDateString(formData.matricola_expiration),
             password: formData.password
         };
 
@@ -606,6 +619,55 @@ export default function ESNerForm() {
                         error={formErrors.phone_number[0]}
                         helperText={formErrors.phone_number[1]}/>
                 </Grid>
+                <Grid size={{xs: 12, sm: 6}}>
+                    <FormControlLabel
+                        control={
+                            <Checkbox
+                                checked={sameWAasPhone}
+                                onChange={handleSameNumberChange}
+                                name="sameAsPhone"
+                                color="primary"/>
+                        }
+                        label="Stesso numero per WhatsApp"
+                    />
+                </Grid>
+                {!sameWAasPhone && (<>
+                    <Grid size={{xs: 4, sm: 2}}>
+                        <FormControl fullWidth required>
+                            <InputLabel id="whatsapp-prefix-label">Prefisso</InputLabel>
+                            <Select
+                                variant="outlined"
+                                labelId="whatsapp-prefix-label"
+                                id="whatsapp-prefix"
+                                name="whatsapp_prefix"
+                                value={formData.whatsapp_prefix}
+                                onChange={handleChange}
+                                label="Prefisso"
+                                required
+                                renderValue={(value) => value}
+                                error={formErrors.whatsapp_prefix[0]}>
+                                {countryCodes.map((country) => (
+                                    <MenuItem key={country.code} value={country.dial}>
+                                        {country.dial} ({country.name})
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    <Grid size={{xs: 8, sm: 4}}>
+                        <TextField
+                            label="Numero Whatsapp"
+                            variant="outlined"
+                            name="whatsapp_number"
+                            type="number"
+                            value={formData.whatsapp_number}
+                            onChange={handleChange}
+                            fullWidth
+                            required
+                            error={formErrors.whatsapp_number[0]}
+                            helperText={formErrors.whatsapp_number[1]}/>
+                    </Grid>
+                </>)}
             </Grid>
 
             <Typography variant="h5" align="center" gutterBottom my={4}>Informazioni Documento</Typography>
