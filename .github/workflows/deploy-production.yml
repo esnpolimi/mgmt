@@ -162,14 +162,23 @@ jobs:
         # Costruisci il changelog con username GitHub usando l'API
         CHANGELOG=""
         while IFS='|' read -r HASH SUBJECT; do
-          # Ottieni lo username GitHub dal commit usando l'API
-          USERNAME=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/commits/${HASH}" | \
-            jq -r '.author.login // .commit.author.name')
+          # Ottieni lo username GitHub e il nome dal commit usando l'API
+          COMMIT_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${HASH}")
+          
+          LOGIN=$(echo "$COMMIT_INFO" | jq -r '.author.login // empty')
+          NAME=$(echo "$COMMIT_INFO" | jq -r '.commit.author.name // empty')
+          
+          # Costruisci il display name: usa @login se esiste, altrimenti il nome semplice
+          if [ -n "$LOGIN" ] && [ "$LOGIN" != "null" ]; then
+            DISPLAY_NAME="@${LOGIN}"
+          else
+            DISPLAY_NAME="${NAME}"
+          fi
           
           # Aggiungi al changelog
           SHORT_HASH=${HASH:0:7}
-          CHANGELOG="${CHANGELOG}- ${SUBJECT} (${SHORT_HASH}) - @${USERNAME}"$'\n'
+          CHANGELOG="${CHANGELOG}- ${SUBJECT} (${SHORT_HASH}) - ${DISPLAY_NAME}"$'\n'
         done <<< "$COMMITS"
         
         # Salva in una variabile di output (gestendo multiline)
