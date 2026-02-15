@@ -29,6 +29,7 @@ export default function ReimbursementRequestModal({open, onClose}) {
     const [events, setEvents] = useState([]);
     const [loadingEvents, setLoadingEvents] = useState(false);
     const [errors, setErrors] = useState({});
+    const [eventError, setEventError] = useState("");
     const [popup, setPopup] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
@@ -54,6 +55,15 @@ export default function ReimbursementRequestModal({open, onClose}) {
         if (!data.amount) newErrors.amount = "Importo richiesto obbligatorio";
         if (!data.payment) newErrors.payment = "Metodo di rimborso obbligatorio";
         if (!data.description) newErrors.description = "Descrizione obbligatoria";
+        
+        // Validate event selection when isEventRelated is checked
+        if (isEventRelated && !selectedEventId) {
+            setEventError("Devi selezionare un evento");
+            newErrors.event = "Devi selezionare un evento";
+        } else {
+            setEventError("");
+        }
+        
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -176,6 +186,7 @@ export default function ReimbursementRequestModal({open, onClose}) {
                                     checked={isEventRelated}
                                     onChange={(e) => {
                                         setIsEventRelated(e.target.checked);
+                                        setEventError("");
                                         if (!e.target.checked) {
                                             setSelectedEventId("");
                                         }
@@ -187,14 +198,17 @@ export default function ReimbursementRequestModal({open, onClose}) {
                     </Grid>
                     {isEventRelated && (
                         <Grid size={{xs: 12}}>
-                            <FormControl fullWidth>
+                            <FormControl fullWidth required error={!!eventError}>
                                 <InputLabel id="event-label">Seleziona Evento</InputLabel>
                                 <Select
                                     labelId="event-label"
                                     variant="outlined"
                                     value={selectedEventId}
                                     label="Seleziona Evento"
-                                    onChange={(e) => setSelectedEventId(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedEventId(e.target.value);
+                                        setEventError("");
+                                    }}
                                     disabled={loadingEvents}
                                 >
                                     {loadingEvents ? (
@@ -209,6 +223,7 @@ export default function ReimbursementRequestModal({open, onClose}) {
                                         ))
                                     )}
                                 </Select>
+                                {eventError && <FormHelperText>{eventError}</FormHelperText>}
                             </FormControl>
                         </Grid>
                     )}

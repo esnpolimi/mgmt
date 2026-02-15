@@ -21,7 +21,9 @@ def find_or_create_drive_folder(service, folder_name, parent_id):
     Returns the folder ID.
     """
     # Search for existing folder
-    query = f"name='{folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    # Sanitize folder_name by escaping single quotes for Drive query syntax
+    escaped_folder_name = folder_name.replace("'", "''")
+    query = f"name='{escaped_folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
     results = service.files().list(
         q=query,
         spaces='drive',
