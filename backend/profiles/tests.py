@@ -286,10 +286,10 @@ class InitiateProfileCreationTests(ProfilesBaseTestCase):
 		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
 		SCHEME_HOST="http://testserver",
 	)
-	def test_create_profile_accepts_letter_digit_matricola(self):
-		"""Creation should accept matricola with 1 letter + 5 digits."""
+	def test_create_profile_rejects_letter_digit_matricola(self):
+		"""Creation should reject matricola with 1 letter + 5 digits (only pure 6 digits allowed)."""
 		response = self.client.post("/backend/profile/initiate-creation/", {
-			"email": "matricola-ok@esnpolimi.it",
+			"email": "matricola-ko@esnpolimi.it",
 			"name": "John",
 			"surname": "Doe",
 			"is_esner": False,
@@ -299,9 +299,8 @@ class InitiateProfileCreationTests(ProfilesBaseTestCase):
 			"document_expiration": "2030-01-01",
 		}, format="json")
 
-		self.assertEqual(response.status_code, 201)
-		profile = Profile.objects.get(email="matricola-ok@esnpolimi.it")
-		self.assertEqual(profile.matricola_number, "A12345")
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("matricola_number", response.data)
 
 	@override_settings(
 		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
@@ -328,7 +327,7 @@ class InitiateProfileCreationTests(ProfilesBaseTestCase):
 		SCHEME_HOST="http://testserver",
 	)
 	def test_create_profile_rejects_multiple_invalid_matricola_formats(self):
-		"""Creation should reject several invalid matricola formats."""
+		"""Creation should reject several invalid matricola formats (only 6 pure digits allowed)."""
 		invalid_values = [
 			"12345",    # too short
 			"1234567",  # too long
@@ -338,6 +337,7 @@ class InitiateProfileCreationTests(ProfilesBaseTestCase):
 			"ABCDEF",   # all letters
 			"1A2345",   # starts with digit then letter
 			"A-2345",   # special char
+			"A12345",   # letter + 5 digits (no longer valid for registration)
 		]
 
 		for idx, matricola in enumerate(invalid_values):
@@ -529,7 +529,7 @@ class ProfileDetailTests(ProfilesBaseTestCase):
 		self.assertIsNone(target_profile.person_code)
 
 	def test_profile_detail_patch_accepts_letter_digit_matricola(self):
-		"""PATCH should accept matricola with 1 letter + 5 digits."""
+		"""PATCH should accept matricola with 1 letter + 5 digits (any 6 characters allowed)."""
 		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
 		viewer = _create_user(viewer_profile)
 		viewer.user_permissions.add(self.perm_change_profile)
@@ -544,8 +544,34 @@ class ProfileDetailTests(ProfilesBaseTestCase):
 		target_profile.refresh_from_db()
 		self.assertEqual(target_profile.matricola_number, "B12345")
 
+	def test_profile_detail_patch_accepts_various_6char_matricola(self):
+		"""PATCH should accept any 6 character matricola format."""
+		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		viewer.user_permissions.add(self.perm_change_profile)
+		self.authenticate(viewer)
+
+		valid_values = [
+			"123456",   # 6 digits
+			"A12345",   # 1 letter + 5 digits
+			"12A345",   # mixed
+			"ABCDEF",   # 6 letters
+			"1A2B3C",   # alternating
+		]
+
+		for idx, matricola in enumerate(valid_values):
+			with self.subTest(matricola=matricola):
+				target_profile = _create_profile(f"target-valid-{idx}@uni.it", is_esner=False)
+				response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+					"matricola_number": matricola,
+				})
+
+				self.assertEqual(response.status_code, 200)
+				target_profile.refresh_from_db()
+				self.assertEqual(target_profile.matricola_number, matricola.upper())
+
 	def test_profile_detail_patch_rejects_invalid_matricola_format(self):
-		"""PATCH should reject invalid matricola format."""
+		"""PATCH should reject matricola with invalid length."""
 		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
 		viewer = _create_user(viewer_profile)
 		viewer.user_permissions.add(self.perm_change_profile)
@@ -553,28 +579,22 @@ class ProfileDetailTests(ProfilesBaseTestCase):
 
 		target_profile = _create_profile("target@uni.it", is_esner=False)
 		response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
-			"matricola_number": "12A345",
+			"matricola_number": "12345",  # too short
 		})
 
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("matricola_number", response.data)
 
 	def test_profile_detail_patch_rejects_multiple_invalid_matricola_formats(self):
-		"""PATCH should reject several invalid matricola formats."""
+		"""PATCH should reject matricola with wrong length only."""
 		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
 		viewer = _create_user(viewer_profile)
 		viewer.user_permissions.add(self.perm_change_profile)
 		self.authenticate(viewer)
 
 		invalid_values = [
-			"12345",
-			"1234567",
-			"12A345",
-			"AA2345",
-			"A12B45",
-			"ABCDEF",
-			"1A2345",
-			"A-2345",
+			"12345",     # too short (5 chars)
+			"1234567",   # too long (7 chars)
 		]
 
 		for idx, matricola in enumerate(invalid_values):
@@ -586,6 +606,22 @@ class ProfileDetailTests(ProfilesBaseTestCase):
 
 				self.assertEqual(response.status_code, 400)
 				self.assertIn("matricola_number", response.data)
+		
+		# Valid values for profile editing (any 6 chars or empty)
+		valid_values = [
+			"A12345",    # letter + 5 digits
+			"AB-123",    # letters and special chars
+			"",          # empty (will be converted to None)
+		]
+		
+		for idx, matricola in enumerate(valid_values):
+			with self.subTest(matricola=matricola):
+				target_profile = _create_profile(f"target-valid-{idx}@uni.it", is_esner=False)
+				response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+					"matricola_number": matricola,
+				})
+
+				self.assertEqual(response.status_code, 200)
 
 	def test_profile_detail_delete_requires_board(self):
 		"""DELETE should be restricted to Board users."""

@@ -116,7 +116,8 @@ class ZeroPlaceholderMixin:
         'person_code': 8,
         'matricola_number': 6,
     }
-    MATRICOLA_REGEX = re.compile(r'^(?:\d{6}|[A-Za-z]\d{5})$')
+    # Default regex for registration: only 6 numeric digits
+    MATRICOLA_REGEX = re.compile(r'^\d{6}$')
 
     def _normalize_zero_placeholders(self, attrs):
         for field, length in self.PLACEHOLDERS.items():
@@ -140,7 +141,7 @@ class ZeroPlaceholderMixin:
         normalized = value.strip().upper()
         if not self.MATRICOLA_REGEX.fullmatch(normalized):
             raise serializers.ValidationError({
-                'matricola_number': 'La Matricola deve avere 6 caratteri: 6 cifre oppure 1 lettera seguita da 5 cifre.'
+                'matricola_number': 'La Matricola deve essere di 6 cifre numeriche.'
             })
 
         attrs['matricola_number'] = normalized
@@ -155,6 +156,27 @@ class ProfileFullEditSerializer(ZeroPlaceholderMixin, serializers.ModelSerialize
             'person_code': {'required': False, 'allow_blank': True},
             'matricola_number': {'required': False, 'allow_blank': True},
         }
+
+    def _validate_and_normalize_matricola(self, attrs):
+        """Override to accept any 6 characters for profile editing."""
+        if 'matricola_number' not in attrs:
+            return attrs
+
+        value = attrs.get('matricola_number')
+        if value in (None, ''):
+            return attrs
+
+        if not isinstance(value, str):
+            value = str(value)
+
+        normalized = value.strip().upper()
+        if len(normalized) != 6:
+            raise serializers.ValidationError({
+                'matricola_number': 'La Matricola deve avere esattamente 6 caratteri.'
+            })
+
+        attrs['matricola_number'] = normalized
+        return attrs
 
     def validate(self, attrs):
         attrs = self._normalize_zero_placeholders(attrs)
