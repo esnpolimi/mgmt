@@ -34,8 +34,8 @@ jobs:
         
         # Incrementa PATCH - MINOR - MAJOR
         PATCH=$((PATCH + 0))
-        MINOR=$((MINOR + 0))
-        MAJOR=$((MAJOR + 1))
+        MINOR=$((MINOR + 1))
+        MAJOR=$((MAJOR + 0))
         
         # Nuova versione
         NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
@@ -150,14 +150,36 @@ jobs:
         # Trova il tag precedente
         PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.create-release-tag.outputs.new_tag }}^ 2>/dev/null || echo "")
         
-        # Genera il changelog
+        # Genera il changelog con username GitHub
         if [ -z "$PREVIOUS_TAG" ]; then
           # Primo release: prendi tutti i commits
-          CHANGELOG=$(git log --pretty=format:"- %s (%h) - @%an" --no-merges)
+          COMMITS=$(git log --pretty=format:"%H|%s" --no-merges)
         else
           # Prendi i commits dall'ultimo tag
-          CHANGELOG=$(git log ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --pretty=format:"- %s (%h) - @%an" --no-merges)
+          COMMITS=$(git log ${PREVIOUS_TAG}..${{ needs.create-release-tag.outputs.new_tag }} --pretty=format:"%H|%s" --no-merges)
         fi
+        
+        # Costruisci il changelog con username GitHub usando l'API
+        CHANGELOG=""
+        while IFS='|' read -r HASH SUBJECT; do
+          # Ottieni lo username GitHub e il nome dal commit usando l'API
+          COMMIT_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${HASH}")
+          
+          LOGIN=$(echo "$COMMIT_INFO" | jq -r '.author.login // empty')
+          NAME=$(echo "$COMMIT_INFO" | jq -r '.commit.author.name // empty')
+          
+          # Costruisci il display name: usa @login se esiste, altrimenti il nome semplice
+          if [ -n "$LOGIN" ] && [ "$LOGIN" != "null" ]; then
+            DISPLAY_NAME="@${LOGIN}"
+          else
+            DISPLAY_NAME="${NAME}"
+          fi
+          
+          # Aggiungi al changelog
+          SHORT_HASH=${HASH:0:7}
+          CHANGELOG="${CHANGELOG}- ${SUBJECT} (${SHORT_HASH}) - ${DISPLAY_NAME}"$'\n'
+        done <<< "$COMMITS"
         
         # Salva in una variabile di output (gestendo multiline)
         echo "changelog<<EOF" >> $GITHUB_OUTPUT

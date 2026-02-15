@@ -173,6 +173,11 @@ export default function Profile() {
     const isBoardMember = user?.groups?.includes('Board');
     const isProfileOwner = user?.profile?.id === profile?.id;
     const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
+    const canManualVerifyErasmus =
+        isBoardMember &&
+        profileType === 'Erasmus' &&
+        !!profile &&
+        (!profile.enabled || !profile.email_is_verified);
 
     const fetchFinancePerms = (email) => {
         fetchCustom("GET", `/users/finance-permissions/?email=${encodeURIComponent(email)}`, {
@@ -440,10 +445,10 @@ export default function Profile() {
 
     const handleSave = () => {
         setSaving(true);
-        if (updatedData.matricola_number && !/^\d{6}$/.test(updatedData.matricola_number)) {
+        if (updatedData.matricola_number && !/^(?:\d{6}|[A-Za-z]\d{5})$/.test(updatedData.matricola_number)) {
             setErrors((prevErrors) => ({
                 ...prevErrors,
-                matricola_number: [true, 'La Matricola deve essere composta da 6 cifre'],
+                matricola_number: [true, 'La Matricola deve avere 6 cifre oppure 1 lettera seguita da 5 cifre'],
             }));
             setSaving(false);
             return false;
@@ -492,6 +497,23 @@ export default function Profile() {
         setSubscriptionEvent(null);
         if (success) refreshProfileData();
         if (success && msg) setPopup({message: msg, state: "success", id: Date.now()});
+    };
+
+    const handleManualVerifyErasmus = () => {
+        if (!profile?.id) return;
+        setSaving(true);
+        fetchCustom("POST", `/profile/${profile.id}/manual-verify-email/`, {
+            onSuccess: (res) => {
+                setPopup({
+                    message: res?.message || "Profilo Erasmus attivato manualmente.",
+                    state: "success",
+                    id: Date.now()
+                });
+                refreshProfileData();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSaving(false)
+        });
     };
 
     const toggleFinancePerms = () => {
@@ -1195,7 +1217,7 @@ export default function Profile() {
                                             helperText={errors.matricola_number[1]}
                                             onChange={handleChange}
                                             sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
-                                            type="number"
+                                            type="text"
                                             slotProps={{input: {readOnly: readOnly.matricola_number}}}
                                             fullWidth/>
                                     </Grid>
@@ -1252,6 +1274,20 @@ export default function Profile() {
                                     <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
                                         Iscrivi ad Evento
                                     </Button>
+                                    {canManualVerifyErasmus && (
+                                        <Tooltip
+                                            title="Attiva manualmente il profilo e marca l'email come verificata"
+                                            arrow>
+                                            <Button
+                                                variant="contained"
+                                                color="warning"
+                                                onClick={handleManualVerifyErasmus}
+                                                disabled={saving}
+                                            >
+                                                Attiva / Verifica Email
+                                            </Button>
+                                        </Tooltip>
+                                    )}
                                     {/* Finance permission toggle (Board → ESNer Aspiranti) */}
                                     {user?.groups?.includes('Board') && profileType === 'ESNer' && profile?.group === 'Aspiranti' && (
                                         <Tooltip

@@ -828,6 +828,7 @@ export default function EventForm() {
                         fullWidth
                         disabled={submitLoading}
                         startIcon={submitLoading ? <CircularProgress size={18}/> : null}
+                        sx={{mb: 4}}
                     >
                         {submitLoading
                             ? "Processing..."

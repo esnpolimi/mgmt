@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import timedelta
+from datetime import timedelta, datetime
 from decimal import Decimal
 from io import BytesIO
 
@@ -68,11 +68,53 @@ def _validate_form_upload(file_obj):
     return True
 
 
-def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id, event_date=None):
+def _find_or_create_drive_folder(service, folder_name, parent_id):
     """
-    Gets or creates a folder for the event inside the parent folder.
+    Find or create a folder with the given name in the specified parent folder.
     Returns the folder ID.
     """
+    # Search for existing folder
+    query = f"name='{folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(
+        q=query,
+        spaces='drive',
+        fields='files(id, name)',
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+    
+    folders = results.get('files', [])
+    if folders:
+        return folders[0]['id']
+    
+    # Create folder if it doesn't exist
+    folder_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+    folder = service.files().create(
+        body=folder_metadata,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    return folder['id']
+
+
+def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id, event_date=None):
+    """
+    Gets or creates a folder for the event with structure: {Anno}/Viaggi/{NomeEvento_Data}
+    Returns the folder ID.
+    """
+    # Create folder structure: {Anno}/Viaggi/{NomeEvento}
+    current_year = datetime.now().year
+    
+    # Find or create year folder
+    year_folder_id = _find_or_create_drive_folder(service, str(current_year), parent_folder_id)
+    
+    # Find or create "Viaggi" folder
+    viaggi_folder_id = _find_or_create_drive_folder(service, "Viaggi", year_folder_id)
+    
     # Sanitize event name for folder name
     safe_event_name = "".join(c for c in event_name if c.isalnum() or c in (' ', '-', '_'))[:100]
     
@@ -83,33 +125,10 @@ def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id,
     else:
         folder_name = f"{safe_event_name} (ID_{event_id})"
     
-    # Check if folder already exists
-    query = f"name='{folder_name}' and '{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    results = service.files().list(
-        q=query,
-        spaces='drive',
-        fields='files(id, name)',
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
+    # Find or create event folder inside Viaggi
+    event_folder_id = _find_or_create_drive_folder(service, folder_name, viaggi_folder_id)
     
-    items = results.get('files', [])
-    if items:
-        return items[0]['id']
-    
-    # Create new folder if it doesn't exist
-    folder_metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-        'parents': [parent_folder_id]
-    }
-    folder = service.files().create(
-        body=folder_metadata,
-        fields='id',
-        supportsAllDrives=True
-    ).execute()
-    
-    return folder['id']
+    return event_folder_id
 
 
 def _upload_form_file_to_drive(file_obj, event_id, field_name, event_name=None, event_date=None):
@@ -589,6 +608,8 @@ def _sync_service_transactions(*, subscription, account_id, executor, allow_dele
     elif subscription.external_name:
         payer_name = subscription.external_name
 
+    event_label = f"{subscription.event.name} (ID {subscription.event.id})"
+
     for svc in selected_services:
         try:
             price = Decimal(str(svc.get('price_at_purchase') or svc.get('price') or 0))
@@ -611,7 +632,7 @@ def _sync_service_transactions(*, subscription, account_id, executor, allow_dele
             subscription=subscription,
             executor=executor,
             amount=amount,
-            description=f"Servizio {name} x{qty} - {person_label} - {subscription.event.name}"
+            description=f"Servizio {name} x{qty} - {person_label} - {event_label}"
         )
 
 
@@ -627,6 +648,8 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
     quota_amount = Decimal(event_obj.cost or 0)
     deposit_amount = Decimal(event_obj.deposit or 0)
     payer = subscription.profile.name + " " + subscription.profile.surname if subscription.profile else subscription.external_name
+    payer_label = payer or "Partecipante"
+    event_label = f"{event_obj.name} (ID {event_obj.id})"
 
     # Quota
     if quota_status == 'paid' and quota_amount > 0 and account_id:
@@ -635,7 +658,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
             tx_type=Transaction.TransactionType.SUBSCRIPTION,
             account_id=account_id,
             amount=quota_amount,
-            description=f"Quota {payer} - {event_obj.name}",
+            description=f"Quota {payer_label} - {event_label}",
             executor=executor
         )
     elif allow_delete:
@@ -648,7 +671,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
             tx_type=Transaction.TransactionType.CAUZIONE,
             account_id=account_id,
             amount=deposit_amount,
-            description=f"Cauzione {payer} - {event_obj.name}",
+            description=f"Cauzione {payer_label} - {event_label}",
             executor=executor
         )
     elif allow_delete:
@@ -1380,11 +1403,18 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
             "Content-Type": "application/json"
         }
 
+    if subscription.profile:
+        payer_label = f"{subscription.profile.name} {subscription.profile.surname}"
+    elif subscription.external_name:
+        payer_label = subscription.external_name
+    else:
+        payer_label = "Partecipante"
+
     payload = {
         "checkout_reference": str(subscription.pk),
         "amount": float(total_amount),
         "currency": currency,
-        "description": f"Subscription {subscription.event.name} #{subscription.pk}",
+        "description": f"Subscription {subscription.event.name} (ID {subscription.event.id}) - {payer_label} - SUB#{subscription.pk}",
     }
     payload.update(_sumup_destination_fields())
     headers = _sumup_headers()

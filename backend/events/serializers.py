@@ -726,7 +726,10 @@ class SubscriptionProfileInlineSerializer(serializers.ModelSerializer):
         return self._combine(obj.phone_prefix, obj.phone_number)
 
     def get_whatsapp_number(self, obj):
-        return self._combine(obj.whatsapp_prefix, obj.whatsapp_number)
+        whatsapp_number = self._combine(obj.whatsapp_prefix, obj.whatsapp_number)
+        if whatsapp_number:
+            return whatsapp_number
+        return self._combine(obj.phone_prefix, obj.phone_number)
 
     @staticmethod
     def get_latest_esncard(obj):
