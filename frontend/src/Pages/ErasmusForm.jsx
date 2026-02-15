@@ -137,10 +137,10 @@ export default function ErasmusForm() {
             }
         });
 
-        // Validate matricola (exactly 6 digits)
-        const matricolaRegex = /^\d{6}$/;
+        // Validate matricola (6 digits OR 1 letter + 5 digits)
+        const matricolaRegex = /^(?:\d{6}|[A-Za-z]\d{5})$/;
         if (!matricolaRegex.test(formData.matricola_number)) {
-            newErrors.matricola_number = [true, 'Matricola must be exactly 6 digits'];
+            newErrors.matricola_number = [true, 'Matricola must be 6 digits or 1 letter followed by 5 digits'];
             valid = false;
         } else newErrors.matricola_number = [false, ''];
 
@@ -194,10 +194,18 @@ export default function ErasmusForm() {
     const handleChange = (e) => {
         let { name, value } = e.target;
         // Preserve leading zeros and enforce length for codes
-        if (name === 'person_code' || name === 'matricola_number') {
+        if (name === 'person_code') {
             value = value.replace(/\D/g, '');
-            const maxLen = name === 'person_code' ? 8 : 6;
-            if (value.length > maxLen) value = value.slice(0, maxLen);
+            if (value.length > 8) value = value.slice(0, 8);
+        }
+        if (name === 'matricola_number') {
+            value = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (/^[A-Z]/.test(value)) {
+                value = value[0] + value.slice(1).replace(/\D/g, '');
+            } else {
+                value = value.replace(/\D/g, '');
+            }
+            if (value.length > 6) value = value.slice(0, 6);
         }
         setFormData({
             ...formData,
@@ -776,7 +784,7 @@ export default function ErasmusForm() {
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
-                        label="Matricola (6 digits)"
+                        label="Matricola (6 digits or 1 letter + 5 digits)"
                         variant="outlined"
                         name="matricola_number"
                         type="text"

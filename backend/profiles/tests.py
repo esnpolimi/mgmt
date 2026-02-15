@@ -282,6 +282,80 @@ class InitiateProfileCreationTests(ProfilesBaseTestCase):
 		self.assertIn("name", response.data)
 		self.assertIn("surname", response.data)
 
+	@override_settings(
+		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+		SCHEME_HOST="http://testserver",
+	)
+	def test_create_profile_accepts_letter_digit_matricola(self):
+		"""Creation should accept matricola with 1 letter + 5 digits."""
+		response = self.client.post("/backend/profile/initiate-creation/", {
+			"email": "matricola-ok@esnpolimi.it",
+			"name": "John",
+			"surname": "Doe",
+			"is_esner": False,
+			"matricola_number": "a12345",
+			"document_type": "Passport",
+			"document_number": "P1234567",
+			"document_expiration": "2030-01-01",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 201)
+		profile = Profile.objects.get(email="matricola-ok@esnpolimi.it")
+		self.assertEqual(profile.matricola_number, "A12345")
+
+	@override_settings(
+		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+		SCHEME_HOST="http://testserver",
+	)
+	def test_create_profile_rejects_invalid_matricola_format(self):
+		"""Creation should reject matricola not matching allowed formats."""
+		response = self.client.post("/backend/profile/initiate-creation/", {
+			"email": "matricola-ko@esnpolimi.it",
+			"name": "John",
+			"surname": "Doe",
+			"is_esner": False,
+			"matricola_number": "12A345",
+			"document_type": "Passport",
+			"document_number": "P9999999",
+			"document_expiration": "2030-01-01",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("matricola_number", response.data)
+
+	@override_settings(
+		EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+		SCHEME_HOST="http://testserver",
+	)
+	def test_create_profile_rejects_multiple_invalid_matricola_formats(self):
+		"""Creation should reject several invalid matricola formats."""
+		invalid_values = [
+			"12345",    # too short
+			"1234567",  # too long
+			"12A345",   # letter not first
+			"AA2345",   # two letters
+			"A12B45",   # letter in middle
+			"ABCDEF",   # all letters
+			"1A2345",   # starts with digit then letter
+			"A-2345",   # special char
+		]
+
+		for idx, matricola in enumerate(invalid_values):
+			with self.subTest(matricola=matricola):
+				response = self.client.post("/backend/profile/initiate-creation/", {
+					"email": f"matricola-multi-{idx}@esnpolimi.it",
+					"name": "John",
+					"surname": "Doe",
+					"is_esner": False,
+					"matricola_number": matricola,
+					"document_type": "Passport",
+					"document_number": f"PMULTI{idx}",
+					"document_expiration": "2030-01-01",
+				}, format="json")
+
+				self.assertEqual(response.status_code, 400)
+				self.assertIn("matricola_number", response.data)
+
 
 class VerifyEmailTests(ProfilesBaseTestCase):
 	"""Tests for email verification endpoint."""
@@ -453,6 +527,65 @@ class ProfileDetailTests(ProfilesBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		target_profile.refresh_from_db()
 		self.assertIsNone(target_profile.person_code)
+
+	def test_profile_detail_patch_accepts_letter_digit_matricola(self):
+		"""PATCH should accept matricola with 1 letter + 5 digits."""
+		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		viewer.user_permissions.add(self.perm_change_profile)
+		self.authenticate(viewer)
+
+		target_profile = _create_profile("target@uni.it", is_esner=False)
+		response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+			"matricola_number": "b12345",
+		})
+
+		self.assertEqual(response.status_code, 200)
+		target_profile.refresh_from_db()
+		self.assertEqual(target_profile.matricola_number, "B12345")
+
+	def test_profile_detail_patch_rejects_invalid_matricola_format(self):
+		"""PATCH should reject invalid matricola format."""
+		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		viewer.user_permissions.add(self.perm_change_profile)
+		self.authenticate(viewer)
+
+		target_profile = _create_profile("target@uni.it", is_esner=False)
+		response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+			"matricola_number": "12A345",
+		})
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("matricola_number", response.data)
+
+	def test_profile_detail_patch_rejects_multiple_invalid_matricola_formats(self):
+		"""PATCH should reject several invalid matricola formats."""
+		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		viewer.user_permissions.add(self.perm_change_profile)
+		self.authenticate(viewer)
+
+		invalid_values = [
+			"12345",
+			"1234567",
+			"12A345",
+			"AA2345",
+			"A12B45",
+			"ABCDEF",
+			"1A2345",
+			"A-2345",
+		]
+
+		for idx, matricola in enumerate(invalid_values):
+			with self.subTest(matricola=matricola):
+				target_profile = _create_profile(f"target-multi-{idx}@uni.it", is_esner=False)
+				response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+					"matricola_number": matricola,
+				})
+
+				self.assertEqual(response.status_code, 400)
+				self.assertIn("matricola_number", response.data)
 
 	def test_profile_detail_delete_requires_board(self):
 		"""DELETE should be restricted to Board users."""
@@ -1031,3 +1164,67 @@ class ProfileDetailEdgeCaseTests(ProfilesBaseTestCase):
 		response = self.client.delete("/backend/profile/99999/")
 
 		self.assertEqual(response.status_code, 404)
+
+
+class ManualErasmusVerificationTests(ProfilesBaseTestCase):
+	"""Tests for board manual activation/verification of Erasmus profiles."""
+
+	def test_manual_verify_erasmus_requires_board(self):
+		"""Non-board users cannot manually verify Erasmus profiles."""
+		requester_profile = _create_profile("user@esnpolimi.it", is_esner=True)
+		requester = _create_user(requester_profile)
+		self.authenticate(requester)
+
+		target_profile = _create_profile("erasmus@uni.it", is_esner=False, verified=False, enabled=False)
+		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_manual_verify_erasmus_success(self):
+		"""Board can manually activate and verify an Erasmus profile."""
+		board_profile = _create_profile("board-manual@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		target_profile = _create_profile("erasmus2@uni.it", is_esner=False, verified=False, enabled=False)
+		doc = Document.objects.create(
+			profile=target_profile,
+			type="Passport",
+			number="DOCMANUAL001",
+			expiration="2030-01-01",
+			enabled=False,
+		)
+
+		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 200)
+		target_profile.refresh_from_db()
+		doc.refresh_from_db()
+		self.assertTrue(target_profile.enabled)
+		self.assertTrue(target_profile.email_is_verified)
+		self.assertTrue(doc.enabled)
+
+	def test_manual_verify_erasmus_rejects_esner_target(self):
+		"""Manual verify endpoint is only for Erasmus profiles."""
+		board_profile = _create_profile("board-manual-2@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		esner_target = _create_profile("esner-target@esnpolimi.it", is_esner=True, verified=False, enabled=False)
+		response = self.client.post(f"/backend/profile/{esner_target.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 400)
+
+	def test_manual_verify_erasmus_already_active_returns_200(self):
+		"""Already active Erasmus profile should return 200."""
+		board_profile = _create_profile("board-manual-3@esnpolimi.it", is_esner=True)
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		target_profile = _create_profile("erasmus3@uni.it", is_esner=False, verified=True, enabled=True)
+		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
+
+		self.assertEqual(response.status_code, 200)

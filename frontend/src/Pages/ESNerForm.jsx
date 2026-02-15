@@ -157,10 +157,10 @@ export default function ESNerForm() {
             valid = false;
         }
 
-        // Validate matricola (exactly 6 digits)
-        const matricolaRegex = /^\d{6}$/;
+        // Validate matricola (6 digits OR 1 letter + 5 digits)
+        const matricolaRegex = /^(?:\d{6}|[A-Za-z]\d{5})$/;
         if (!matricolaRegex.test(formData.matricola_number)) {
-            newErrors.matricola_number = [true, 'La Matricola deve essere di 6 cifre'];
+            newErrors.matricola_number = [true, 'La Matricola deve avere 6 cifre oppure 1 lettera seguita da 5 cifre'];
             valid = false;
         } else newErrors.matricola_number = [false, ''];
 
@@ -222,10 +222,18 @@ export default function ESNerForm() {
 
     const handleChange = (e) => {
         let { name, value } = e.target;
-        if (name === 'person_code' || name === 'matricola_number') {
+        if (name === 'person_code') {
             value = value.replace(/\D/g, '');
-            const maxLen = name === 'person_code' ? 8 : 6;
-            if (value.length > maxLen) value = value.slice(0, maxLen);
+            if (value.length > 8) value = value.slice(0, 8);
+        }
+        if (name === 'matricola_number') {
+            value = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (/^[A-Z]/.test(value)) {
+                value = value[0] + value.slice(1).replace(/\D/g, '');
+            } else {
+                value = value.replace(/\D/g, '');
+            }
+            if (value.length > 6) value = value.slice(0, 6);
         }
         setFormData({
             ...formData,

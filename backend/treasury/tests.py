@@ -1,6 +1,7 @@
 """Tests for treasury module endpoints and behaviors."""
 
 import unittest
+from io import BytesIO
 from datetime import timedelta
 from decimal import Decimal
 
@@ -8,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.test import override_settings
 from django.utils import timezone
+from openpyxl import load_workbook
 from rest_framework.test import APITestCase
 
 from events.models import Event, EventList, Subscription, EventOrganizer
@@ -1043,6 +1045,45 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertIn("application/vnd.openxmlformats", response["Content-Type"])
+
+		wb = load_workbook(filename=BytesIO(response.content))
+		ws = wb.active
+		headers = [ws.cell(row=1, column=i).value for i in range(1, 10)]
+		self.assertIn("Eseguito da", headers)
+
+	def test_transactions_export_commenti_uses_external_name_for_external_subscription(self):
+		"""Commenti column should show external subscriber name, not executor name."""
+		executor_profile = _create_profile("board@esnpolimi.it", name="Mario", surname="Rossi")
+		executor_user = _create_user(executor_profile)
+		self.authenticate(executor_user)
+
+		event = _create_event(name="Trip")
+		list_main = _create_event_list(event)
+		account = _create_account("Main", user=executor_user)
+		sub = Subscription.objects.create(
+			profile=None,
+			external_name="John External",
+			event=event,
+			list=list_main,
+		)
+		Transaction.objects.create(
+			subscription=sub,
+			account=account,
+			executor=executor_user,
+			type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=Decimal("10.00"),
+			description="Quota esterno",
+		)
+
+		response = self.client.get("/backend/transactions_export/")
+		self.assertEqual(response.status_code, 200)
+
+		wb = load_workbook(filename=BytesIO(response.content))
+		ws = wb.active
+
+		# Column 7 = "Commenti" and column 9 = "Eseguito da".
+		self.assertEqual(ws.cell(row=2, column=7).value, "John External")
+		self.assertEqual(ws.cell(row=2, column=9).value, "Mario Rossi")
 
 
 class AccountModelTests(TreasuryBaseTestCase):

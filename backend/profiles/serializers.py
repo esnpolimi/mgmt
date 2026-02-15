@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 from django_countries.serializer_fields import CountryField
 from rest_framework.fields import SerializerMethodField
@@ -114,6 +116,7 @@ class ZeroPlaceholderMixin:
         'person_code': 8,
         'matricola_number': 6,
     }
+    MATRICOLA_REGEX = re.compile(r'^(?:\d{6}|[A-Za-z]\d{5})$')
 
     def _normalize_zero_placeholders(self, attrs):
         for field, length in self.PLACEHOLDERS.items():
@@ -121,6 +124,26 @@ class ZeroPlaceholderMixin:
             if isinstance(val, str):
                 if val == '' or (len(val) == length and set(val) == {'0'}):
                     attrs[field] = None
+        return attrs
+
+    def _validate_and_normalize_matricola(self, attrs):
+        if 'matricola_number' not in attrs:
+            return attrs
+
+        value = attrs.get('matricola_number')
+        if value in (None, ''):
+            return attrs
+
+        if not isinstance(value, str):
+            value = str(value)
+
+        normalized = value.strip().upper()
+        if not self.MATRICOLA_REGEX.fullmatch(normalized):
+            raise serializers.ValidationError({
+                'matricola_number': 'La Matricola deve avere 6 caratteri: 6 cifre oppure 1 lettera seguita da 5 cifre.'
+            })
+
+        attrs['matricola_number'] = normalized
         return attrs
 
 
@@ -135,6 +158,7 @@ class ProfileFullEditSerializer(ZeroPlaceholderMixin, serializers.ModelSerialize
 
     def validate(self, attrs):
         attrs = self._normalize_zero_placeholders(attrs)
+        attrs = self._validate_and_normalize_matricola(attrs)
         return super().validate(attrs)
 
 
@@ -149,6 +173,7 @@ class ProfileCreateSerializer(ZeroPlaceholderMixin, serializers.ModelSerializer)
 
     def validate(self, attrs):
         attrs = self._normalize_zero_placeholders(attrs)
+        attrs = self._validate_and_normalize_matricola(attrs)
         return super().validate(attrs)
 
 
