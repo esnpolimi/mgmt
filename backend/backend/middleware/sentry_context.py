@@ -1,7 +1,8 @@
 import uuid
-
+import logging
 import sentry_sdk
 
+logger = logging.getLogger(__name__)
 
 class SentryRequestContextMiddleware:
     """
@@ -37,7 +38,7 @@ class SentryRequestContextMiddleware:
                 },
             )
         except Exception:
-            pass
+            logger.exception("Failed to enrich Sentry scope")
 
         response = self.get_response(request)
         response['X-Request-ID'] = request_id
