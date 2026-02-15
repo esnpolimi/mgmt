@@ -183,7 +183,7 @@ export default function SubscriptionModal({
                 ...subscription,
                 account_id: subscription.account_id || '',
                 external_name: subscription.external_name || '',
-                external_email: (subscription.additional_data && subscription.additional_data.external_email) || '',
+                external_email: subscription.external_email || subscription.additional_data?.external_email || subscription.additional_data?.form_email || '',
                 notes: subscription.notes || '',
                 list_id: subscription.list_id || '', // Ensure list_id is set for editing
                 selected_services: Array.isArray(subscription.selected_services) ? subscription.selected_services : [],

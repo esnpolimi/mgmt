@@ -431,6 +431,41 @@ class SubscriptionCreateTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
 
+	def test_subscription_create_paid_adds_payer_and_event_id_in_descriptions(self):
+		"""Paid transactions should include payer name and event id in descriptions."""
+		editor_profile = _create_profile("editor@esnpolimi.it")
+		editor = _create_user(editor_profile)
+		editor.user_permissions.add(self.perm_add_subscription)
+		self.authenticate(editor)
+
+		attendee = _create_profile("attendee@uni.it", is_esner=False, name="Alice", surname="Bianchi")
+		event = _create_event(name="Welcome Party", cost=20, deposit=10)
+		list_main = _create_event_list(event)
+		account = _create_account("Cassa Eventi", user=editor)
+
+		response = self.client.post("/backend/subscription/", {
+			"profile": attendee.pk,
+			"event": event.pk,
+			"list": list_main.pk,
+			"account_id": account.pk,
+			"status_quota": "paid",
+			"status_cauzione": "paid",
+			"status_services": "pending",
+			"send_payment_email": False,
+			"auto_move_after_payment": False,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+
+		sub = Subscription.objects.get(profile=attendee, event=event)
+		quota_tx = Transaction.objects.get(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION)
+		deposit_tx = Transaction.objects.get(subscription=sub, type=Transaction.TransactionType.CAUZIONE)
+
+		self.assertIn("Alice Bianchi", quota_tx.description)
+		self.assertIn(f"(ID {event.pk})", quota_tx.description)
+		self.assertIn("Alice Bianchi", deposit_tx.description)
+		self.assertIn(f"(ID {event.pk})", deposit_tx.description)
+
 
 class SubscriptionDetailTests(EventsBaseTestCase):
 	"""Tests for subscription detail endpoint."""
@@ -480,6 +515,28 @@ class SubscriptionDetailTests(EventsBaseTestCase):
 		response = self.client.delete(f"/backend/subscription/{sub.pk}/")
 
 		self.assertEqual(response.status_code, 403)
+
+	def test_subscription_detail_uses_phone_when_whatsapp_missing(self):
+		"""GET should expose phone number as whatsapp fallback when whatsapp is missing."""
+		profile = _create_profile("viewer-wa-fallback@esnpolimi.it")
+		profile.phone_prefix = "+39"
+		profile.phone_number = "3331234567"
+		profile.whatsapp_prefix = ""
+		profile.whatsapp_number = ""
+		profile.save(update_fields=["phone_prefix", "phone_number", "whatsapp_prefix", "whatsapp_number"])
+
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_subscription)
+		self.authenticate(user)
+
+		event = _create_event()
+		list_main = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+
+		response = self.client.get(f"/backend/subscription/{sub.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["profile"]["whatsapp_number"], "+39 3331234567")
 
 
 class MoveSubscriptionsTests(EventsBaseTestCase):

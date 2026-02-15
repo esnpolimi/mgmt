@@ -1,5 +1,5 @@
-import {useState} from "react";
-import {Modal, Box, Typography, TextField, Button, Select, MenuItem, InputLabel, FormControl, FormHelperText, Grid} from "@mui/material";
+import {useState, useEffect} from "react";
+import {Modal, Box, Typography, TextField, Button, Select, MenuItem, InputLabel, FormControl, FormHelperText, Grid, Checkbox, FormControlLabel} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import {styleESNcardModal as style} from "../../utils/sharedStyles";
@@ -24,10 +24,46 @@ export default function ReimbursementRequestModal({open, onClose}) {
         description: ""
     });
     const [receiptFile, setReceiptFile] = useState(null);
+    const [isEventRelated, setIsEventRelated] = useState(false);
+    const [selectedEventId, setSelectedEventId] = useState("");
+    const [events, setEvents] = useState([]);
+    const [loadingEvents, setLoadingEvents] = useState(false);
     const [errors, setErrors] = useState({});
+    const [eventError, setEventError] = useState("");
     const [popup, setPopup] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
+
+    // Fetch events when checkbox is checked
+    useEffect(() => {
+        if (isEventRelated && events.length === 0) {
+            setLoadingEvents(true);
+            fetchCustom('GET', '/events/', {
+                onSuccess: (response) => {
+                    setEvents(response.results || response || []);
+                },
+                onError: (err) => defaultErrorHandler(err, setPopup),
+                onFinally: () => setLoadingEvents(false)
+            });
+        }
+    }, [isEventRelated]);
+
+    // Reset form when modal closes
+    useEffect(() => {
+        if (!open) {
+            setData({
+                amount: "",
+                payment: "",
+                description: ""
+            });
+            setReceiptFile(null);
+            setIsEventRelated(false);
+            setSelectedEventId("");
+            setEvents([]);
+            setErrors({});
+            setEventError("");
+        }
+    }, [open]);
 
     const resetErrors = () => setErrors({});
 
@@ -36,6 +72,15 @@ export default function ReimbursementRequestModal({open, onClose}) {
         if (!data.amount) newErrors.amount = "Importo richiesto obbligatorio";
         if (!data.payment) newErrors.payment = "Metodo di rimborso obbligatorio";
         if (!data.description) newErrors.description = "Descrizione obbligatoria";
+        
+        // Validate event selection when isEventRelated is checked
+        if (isEventRelated && !selectedEventId) {
+            setEventError("Devi selezionare un evento");
+            newErrors.event = "Devi selezionare un evento";
+        } else {
+            setEventError("");
+        }
+        
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -80,12 +125,18 @@ export default function ReimbursementRequestModal({open, onClose}) {
             body.append('payment', data.payment);
             body.append('description', data.description);
             body.append('receiptFile', receiptFile);
+            if (isEventRelated && selectedEventId) {
+                body.append('event_id', selectedEventId);
+            }
         } else {
             body = {
                 amount: parseFloat(data.amount),
                 payment: data.payment,
                 description: data.description,
             };
+            if (isEventRelated && selectedEventId) {
+                body.event_id = selectedEventId;
+            }
         }
 
         fetchCustom('POST', '/reimbursement_request/', {
@@ -145,6 +196,54 @@ export default function ReimbursementRequestModal({open, onClose}) {
                             removable
                         />
                     </Grid>
+                    <Grid size={{xs: 12}}>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={isEventRelated}
+                                    onChange={(e) => {
+                                        setIsEventRelated(e.target.checked);
+                                        setEventError("");
+                                        if (!e.target.checked) {
+                                            setSelectedEventId("");
+                                        }
+                                    }}
+                                />
+                            }
+                            label="Rimborso relativo a un evento?"
+                        />
+                    </Grid>
+                    {isEventRelated && (
+                        <Grid size={{xs: 12}}>
+                            <FormControl fullWidth required error={!!eventError}>
+                                <InputLabel id="event-label">Seleziona Evento</InputLabel>
+                                <Select
+                                    labelId="event-label"
+                                    variant="outlined"
+                                    value={selectedEventId}
+                                    label="Seleziona Evento"
+                                    onChange={(e) => {
+                                        setSelectedEventId(e.target.value);
+                                        setEventError("");
+                                    }}
+                                    disabled={loadingEvents}
+                                >
+                                    {loadingEvents ? (
+                                        <MenuItem disabled>
+                                            <CircularProgress size={20} />
+                                        </MenuItem>
+                                    ) : (
+                                        events.map((event) => (
+                                            <MenuItem key={event.id} value={event.id}>
+                                                {event.name} {event.date ? `- ${new Date(event.date).toLocaleDateString('it-IT')}` : ''}
+                                            </MenuItem>
+                                        ))
+                                    )}
+                                </Select>
+                                {eventError && <FormHelperText>{eventError}</FormHelperText>}
+                            </FormControl>
+                        </Grid>
+                    )}
                     {(data.payment === "paypal" || data.payment === "bonifico") && (
                         <Grid size={{xs: 12}}>
                             <Typography variant="body2" color="warning.main" sx={{mb: 1}}>
