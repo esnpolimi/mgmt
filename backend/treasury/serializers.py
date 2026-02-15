@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 from django.conf import settings
 from django.contrib.auth.models import Group
@@ -10,6 +11,41 @@ from rest_framework import serializers
 
 from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
+from events.models import Event
+
+
+# --- Helper function to find or create a folder in Google Drive ---
+def find_or_create_drive_folder(service, folder_name, parent_id):
+    """
+    Find or create a folder with the given name in the specified parent folder.
+    Returns the folder ID.
+    """
+    # Search for existing folder
+    query = f"name='{folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(
+        q=query,
+        spaces='drive',
+        fields='files(id, name)',
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+    
+    folders = results.get('files', [])
+    if folders:
+        return folders[0]['id']
+    
+    # Create folder if it doesn't exist
+    folder_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+    folder = service.files().create(
+        body=folder_metadata,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    return folder['id']
 
 
 # --- Shared Drive upload helper for receipts (transactions + reimbursements) ---
@@ -40,6 +76,68 @@ def upload_receipt_to_drive(receipt_file, user, instance_time, prefix):
         body={'role': 'reader', 'type': 'anyone'},
         supportsAllDrives=True
     ).execute()
+    return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
+
+
+# --- Specific upload helper for reimbursement receipts with folder structure ---
+def upload_reimbursement_receipt_to_drive(receipt_file, user, instance_time, event=None):
+    """
+    Upload reimbursement receipt to Google Drive with organized folder structure:
+    {Year}/Rimborsi/rimborsi generici  (if no event)
+    {Year}/Rimborsi/{EventName_EventDate}  (if event specified)
+    """
+    if not receipt_file:
+        return None
+    
+    GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    service = build('drive', 'v3', credentials=credentials)
+    
+    # Create folder structure: {Year}/Rimborsi/{rimborsi generici or EventName_EventDate}
+    current_year = datetime.now().year
+    
+    # Find or create year folder (e.g., "2026")
+    year_folder_id = find_or_create_drive_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)
+    
+    # Find or create "Rimborsi" folder
+    rimborsi_folder_id = find_or_create_drive_folder(service, "Rimborsi", year_folder_id)
+    
+    # Determine final folder based on event
+    if event:
+        # Format: EventName_EventDate (e.g., "Winter Trip_2026-02-15")
+        event_date_str = event.date.strftime('%Y-%m-%d') if event.date else 'NoDate'
+        event_folder_name = f"{event.name}_{event_date_str}"
+        final_folder_id = find_or_create_drive_folder(service, event_folder_name, rimborsi_folder_id)
+    else:
+        # Use "rimborsi generici" folder
+        final_folder_id = find_or_create_drive_folder(service, "rimborsi generici", rimborsi_folder_id)
+    
+    # Upload file to the final folder
+    receipt_file.seek(0)
+    mimetype = getattr(receipt_file, 'content_type', 'application/octet-stream')
+    media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
+    ext = os.path.splitext(receipt_file.name)[1].lower()
+    filename = f"rimborso_{user.profile.name}_{user.profile.surname}_{instance_time.strftime('%Y%m%d_%H%M%S')}{ext}"
+    
+    metadata = {'name': filename, 'parents': [final_folder_id]}
+    uploaded = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    
+    # Make file readable by anyone with the link
+    service.permissions().create(
+        fileId=uploaded['id'],
+        body={'role': 'reader', 'type': 'anyone'},
+        supportsAllDrives=True
+    ).execute()
+    
     return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
 
 
@@ -278,6 +376,7 @@ class AccountEditSerializer(serializers.ModelSerializer):
 
 class ReimbursementRequestSerializer(serializers.ModelSerializer):
     receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
+    event_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)  # Not saved to DB, used for folder organization
     is_reimbursed = serializers.SerializerMethodField()
     account = serializers.PrimaryKeyRelatedField(queryset=Account.objects.all(), required=False, allow_null=True)
     amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
@@ -285,22 +384,18 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReimbursementRequest
         fields = ['id', 'user', 'amount', 'payment', 'description', 'receipt_link', 'created_at', 'receiptFile',
-                  'is_reimbursed', 'account']
+                  'event_id', 'is_reimbursed', 'account']
         read_only_fields = ['id', 'user', 'created_at', 'receipt_link']
 
     @staticmethod
     def validate_receiptFile(file):
         return validate_receipt_file(file)
 
-    @staticmethod
-    def _upload_receipt_to_drive(receipt_file, user, instance_creation_time):
-        # Reuse shared helper (prefix 'rimborso')
-        return upload_receipt_to_drive(receipt_file, user, instance_creation_time, "rimborso")
-
     def create(self, validated_data):
         user = self.context['request'].user
-        # Explicitly remove receiptFile from validated_data if it's None
+        # Extract receiptFile and event_id (not saved to DB)
         receipt_file = validated_data.pop('receiptFile', None)
+        event_id = validated_data.pop('event_id', None)
         # Remove user from validated_data if present
         validated_data.pop('user', None)
 
@@ -310,14 +405,25 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
                 **validated_data
             )
             if receipt_file:
-                # Use instance.created_at for filename (now available)
-                receipt_link = self._upload_receipt_to_drive(receipt_file, user, instance.created_at)
+                # Get event if event_id was provided
+                event = None
+                if event_id:
+                    try:
+                        event = Event.objects.get(id=event_id)
+                    except Event.DoesNotExist:
+                        pass  # If event not found, upload to generic folder
+                
+                # Upload with organized folder structure
+                receipt_link = upload_reimbursement_receipt_to_drive(
+                    receipt_file, user, instance.created_at, event=event
+                )
                 instance.receipt_link = receipt_link
                 instance.save(update_fields=['receipt_link'])
         return instance
 
     def update(self, instance, validated_data):
         receipt_file = validated_data.pop('receiptFile', None)
+        event_id = validated_data.pop('event_id', None)  # Remove event_id (not saved to DB)
         description = validated_data.get('description')
         receipt_link = validated_data.get('receipt_link')
         account = validated_data.get('account', None)
@@ -331,7 +437,17 @@ class ReimbursementRequestSerializer(serializers.ModelSerializer):
             if amount is not None:
                 instance.amount = amount
             if receipt_file:
-                new_receipt_link = self._upload_receipt_to_drive(receipt_file, instance.user, instance.created_at)
+                # Get event if event_id was provided
+                event = None
+                if event_id:
+                    try:
+                        event = Event.objects.get(id=event_id)
+                    except Event.DoesNotExist:
+                        pass
+                
+                new_receipt_link = upload_reimbursement_receipt_to_drive(
+                    receipt_file, instance.user, instance.created_at, event=event
+                )
                 instance.receipt_link = new_receipt_link
             elif receipt_link is not None:
                 instance.receipt_link = receipt_link
