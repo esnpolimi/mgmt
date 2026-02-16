@@ -170,6 +170,19 @@ export default function Profile() {
         return rules.hideFields.includes(fieldName);
     };
 
+    // Helper function to check if matricola is expired
+    const isMatricolaExpired = () => {
+        if (!updatedData.matricola_expiration) return false;
+        const expirationDate = new Date(updatedData.matricola_expiration);
+        const today = new Date();
+        return expirationDate < today;
+    };
+
+    // Helper function to check if field is missing (null or empty)
+    const isFieldMissing = (fieldValue) => {
+        return !fieldValue || (typeof fieldValue === 'string' && fieldValue.trim() === '');
+    };
+
     const isBoardMember = user?.groups?.includes('Board');
     const isProfileOwner = user?.profile?.id === profile?.id;
     const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
@@ -1186,11 +1199,20 @@ export default function Profile() {
                                             label={names.person_code}
                                             name='person_code'
                                             value={updatedData.person_code || ''}
-                                            error={errors.person_code[0]}
-                                            helperText={errors.person_code[1]}
+                                            error={errors.person_code[0] || (profileType === 'Erasmus' && isFieldMissing(updatedData.person_code))}
+                                            helperText={errors.person_code[1] || (profileType === 'Erasmus' && isFieldMissing(updatedData.person_code) ? 'Campo mancante' : '')}
                                             onChange={handleChange}
                                             slotProps={{input: {readOnly: readOnly.person_code}}}
-                                            sx={{backgroundColor: readOnly.person_code ? 'grey.200' : 'white'}}
+                                            sx={{
+                                                '& .MuiOutlinedInput-root': {
+                                                    backgroundColor: readOnly.person_code ? 'grey.200' : 'white',
+                                                    ...(profileType === 'Erasmus' && isFieldMissing(updatedData.person_code) ? {
+                                                        '& fieldset': { borderColor: 'red', borderWidth: 2 },
+                                                        '&:hover fieldset': { borderColor: 'red' },
+                                                        '&.Mui-focused fieldset': { borderColor: 'red' }
+                                                    } : {})
+                                                }
+                                            }}
                                             fullWidth/>
                                     </Grid>
                                 )}
@@ -1220,10 +1242,19 @@ export default function Profile() {
                                             label={names.matricola_number}
                                             name='matricola_number'
                                             value={updatedData.matricola_number || ''}
-                                            error={errors.matricola_number[0]}
-                                            helperText={errors.matricola_number[1]}
+                                            error={errors.matricola_number[0] || (profileType === 'Erasmus' && isFieldMissing(updatedData.matricola_number))}
+                                            helperText={errors.matricola_number[1] || (profileType === 'Erasmus' && isFieldMissing(updatedData.matricola_number) ? 'Campo mancante' : '')}
                                             onChange={handleChange}
-                                            sx={{backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white'}}
+                                            sx={{
+                                                '& .MuiOutlinedInput-root': {
+                                                    backgroundColor: readOnly.matricola_number ? 'grey.200' : 'white',
+                                                    ...(profileType === 'Erasmus' && isFieldMissing(updatedData.matricola_number) ? {
+                                                        '& fieldset': { borderColor: 'red', borderWidth: 2 },
+                                                        '&:hover fieldset': { borderColor: 'red' },
+                                                        '&.Mui-focused fieldset': { borderColor: 'red' }
+                                                    } : {})
+                                                }
+                                            }}
                                             type="text"
                                             slotProps={{input: {readOnly: readOnly.matricola_number}}}
                                             fullWidth/>
@@ -1237,8 +1268,23 @@ export default function Profile() {
                                                 value={updatedData.matricola_expiration ? dayjs(updatedData.matricola_expiration, 'YYYY-MM-DD') : null}
                                                 readOnly={readOnly.matricola_expiration}
                                                 onChange={(date) => handleDateChange('matricola_expiration', date)}
-                                                sx={{backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white'}}
-                                                slotProps={{textField: {variant: 'outlined'}}}/>
+                                                sx={{
+                                                    '& .MuiOutlinedInput-root': {
+                                                        backgroundColor: readOnly.matricola_expiration ? 'grey.200' : 'white',
+                                                        ...(profileType === 'Erasmus' && isMatricolaExpired() ? {
+                                                            '& fieldset': { borderColor: 'red', borderWidth: 2 },
+                                                            '&:hover fieldset': { borderColor: 'red' },
+                                                            '&.Mui-focused fieldset': { borderColor: 'red' }
+                                                        } : {})
+                                                    }
+                                                }}
+                                                slotProps={{
+                                                    textField: {
+                                                        variant: 'outlined',
+                                                        error: profileType === 'Erasmus' && isMatricolaExpired(),
+                                                        helperText: profileType === 'Erasmus' && isMatricolaExpired() ? 'Matricola scaduta' : ''
+                                                    }
+                                                }}/>
                                         </LocalizationProvider>
                                     </Grid>
                                 )}
