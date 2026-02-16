@@ -2,6 +2,7 @@ import json
 import logging
 from pathlib import Path
 from threading import local
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
@@ -54,8 +55,11 @@ def _serialize_instance(instance) -> dict:
 
 
 def _write_event(payload: dict) -> None:
+    timezone_name = getattr(settings, "DB_AUDIT_TIMEZONE", "Europe/Rome")
+    event_time = timezone.now().astimezone(ZoneInfo(timezone_name)).isoformat()
+
     entry = {
-        "timestamp": timezone.now().isoformat(),
+        "timestamp": event_time,
         "actor": get_audit_actor_context(),
         **payload,
     }
