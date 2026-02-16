@@ -66,6 +66,7 @@ export default function SubscriptionModal({
     });
 
     const [profileHasEsncard, setProfileHasEsncard] = useState(null);
+    const [matricolaStatus, setMatricolaStatus] = useState({ isMissing: false, isExpired: false });
 
     // Reusable empty errors shape
     const emptyErrors = {
@@ -197,6 +198,21 @@ export default function SubscriptionModal({
                     profile_id: profileId,
                     profile_name: profileName || ''
                 }));
+                // Fetch profile data to check matricola status
+                fetchCustom("GET", `/profile/${profileId}/`, {
+                    onSuccess: (profileData) => {
+                        if (!profileData.is_esner) {
+                            const matricolaMissing = !profileData.matricola_number || !profileData.person_code;
+                            const matricolaExpired = profileData.matricola_expiration ? 
+                                new Date(profileData.matricola_expiration) < new Date() : false;
+                            setMatricolaStatus({
+                                isMissing: matricolaMissing,
+                                isExpired: matricolaExpired
+                            });
+                        }
+                    },
+                    onError: () => {}
+                });
             }
             if (event.selectedList) {
                 setData(d => ({
@@ -549,6 +565,19 @@ export default function SubscriptionModal({
                                             });
                                             // derive ESNcard presence from the selected option (no extra API call)
                                             setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
+                                            
+                                            // Check matricola status
+                                            if (newValue && !newValue.is_esner) {
+                                                const matricolaMissing = !newValue.matricola_number || !newValue.person_code;
+                                                const matricolaExpired = newValue.matricola_expiration ? 
+                                                    new Date(newValue.matricola_expiration) < new Date() : false;
+                                                setMatricolaStatus({
+                                                    isMissing: matricolaMissing,
+                                                    isExpired: matricolaExpired
+                                                });
+                                            } else {
+                                                setMatricolaStatus({ isMissing: false, isExpired: false });
+                                            }
                                         }}
                                         error={errors.profile_id && errors.profile_id[0]}
                                         helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
@@ -811,6 +840,17 @@ export default function SubscriptionModal({
                             <Alert severity="error" sx={{mt: 2}}>
                                 Attenzione! Il profilo selezionato non ha una ESNcard attiva. Contatta gli organizzatori per
                                 verificare la situazione.
+                            </Alert>
+                        )}
+
+                        {/* Alert: matricola expired or missing */}
+                        {data.profile_id && (matricolaStatus.isMissing || matricolaStatus.isExpired) && (
+                            <Alert severity="warning" sx={{mt: 2}}>
+                                {matricolaStatus.isMissing && matricolaStatus.isExpired 
+                                    ? 'Attenzione: la matricola è mancante e scaduta'
+                                    : matricolaStatus.isMissing 
+                                        ? 'Attenzione: la matricola o il codice persona è mancante'
+                                        : 'Attenzione: la matricola è scaduta'}
                             </Alert>
                         )}
 
