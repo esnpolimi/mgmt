@@ -209,9 +209,11 @@ export default function SubscriptionModal({
                                 isMissing: matricolaMissing,
                                 isExpired: matricolaExpired
                             });
+                        } else {
+                            setMatricolaStatus({ isMissing: false, isExpired: false });
                         }
                     },
-                    onError: () => {}
+                    onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup)
                 });
             }
             if (event.selectedList) {
