@@ -478,6 +478,123 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
         subscription.save(update_fields=['additional_data'])
 
 
+def _subscription_payment_already_registered(subscription):
+    event = subscription.event
+    cost = Decimal(event.cost or 0)
+    deposit = Decimal(event.deposit or 0)
+    services_total = _services_total(subscription.selected_services or [])
+
+    quota_paid = cost <= 0 or Transaction.objects.filter(
+        subscription=subscription,
+        type=Transaction.TransactionType.SUBSCRIPTION
+    ).exists()
+    deposit_paid = deposit <= 0 or Transaction.objects.filter(
+        subscription=subscription,
+        type=Transaction.TransactionType.CAUZIONE
+    ).exists()
+    services_paid = services_total <= 0 or Transaction.objects.filter(
+        subscription=subscription,
+        type=Transaction.TransactionType.SERVICE
+    ).exists()
+
+    return quota_paid and deposit_paid and services_paid
+
+
+def _send_online_payment_link_email(subscription):
+    recipient = _subscription_recipient_email(subscription)
+    if not recipient or not subscription.sumup_checkout_id:
+        return False
+
+    event = subscription.event
+    total_cost = (Decimal(event.cost or 0)
+                  + Decimal(event.deposit or 0)
+                  + _services_total(subscription.selected_services or []))
+    if total_cost <= 0:
+        return False
+
+    ad = subscription.additional_data or {}
+    if ad.get('online_payment_link_email_sent'):
+        return False
+
+    pay_link = f"{settings.SCHEME_HOST}/event/{event.id}/pay?subscriptionId={subscription.id}"
+    subject = f"{event.name} - Online payment link"
+
+    list_sentence = ""
+    if getattr(event, 'notify_list', True):
+        list_name = subscription.list.name if subscription.list else "(no list)"
+        list_sentence = f"<p>Your current list is: <b>{list_name}</b>.</p>"
+
+    html_content = (
+        "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
+        "<p>Online payment has been enabled for your subscription.</p>"
+        f"<p>Amount due: <b>{total_cost} EUR</b></p>"
+        f"{list_sentence}"
+        "<p>Use this link to complete your payment:<br/>"
+        f"<a href='{pay_link}' style='font-weight:bold;color:#0a5db3;'>{pay_link}</a></p>"
+        "<p>Thank you,<br/>ESN Politecnico Milano</p>"
+        "</body></html>"
+    )
+
+    if _send_email(subject, html_content, recipient):
+        ad['online_payment_link_email_sent'] = True
+        subscription.additional_data = ad
+        subscription.save(update_fields=['additional_data'])
+        return True
+    return False
+
+
+def _backfill_online_checkouts_for_event(event):
+    created = 0
+    emailed = 0
+    skipped = 0
+    failed = 0
+
+    subscriptions = Subscription.objects.filter(event=event).select_related('event', 'profile', 'list')
+    for subscription in subscriptions:
+        total_cost = (Decimal(event.cost or 0)
+                      + Decimal(event.deposit or 0)
+                      + _services_total(subscription.selected_services or []))
+        if total_cost <= 0:
+            skipped += 1
+            continue
+
+        if subscription.sumup_checkout_id:
+            skipped += 1
+            continue
+
+        if _subscription_payment_already_registered(subscription):
+            skipped += 1
+            continue
+
+        try:
+            checkout_id, _ = create_sumup_checkout(subscription, total_cost, currency="EUR")
+            subscription.sumup_checkout_id = checkout_id
+
+            additional_data = subscription.additional_data or {}
+            if additional_data.get('payment_failed'):
+                additional_data.pop('payment_failed', None)
+                subscription.additional_data = additional_data
+                subscription.save(update_fields=['sumup_checkout_id', 'additional_data'])
+            else:
+                subscription.save(update_fields=['sumup_checkout_id'])
+
+            created += 1
+            if _send_online_payment_link_email(subscription):
+                emailed += 1
+        except Exception as e:
+            failed += 1
+            logger.error(
+                f"Backfill checkout failed for sub {subscription.pk} in event {event.pk}: {e}"
+            )
+
+    return {
+        'created': created,
+        'emailed': emailed,
+        'skipped': skipped,
+        'failed': failed,
+    }
+
+
 def _send_payment_confirmation_email(subscription):
     ad = subscription.additional_data or {}
     recipient = _subscription_recipient_email(subscription)
@@ -793,6 +910,8 @@ def event_detail(request, pk):
             if not get_action_permissions(request, 'event_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
 
+            previously_online_payment = bool(event.allow_online_payment)
+
             # Validation logic is handled in the serializer
             serializer = EventCreationSerializer(
                 instance=event,
@@ -802,7 +921,17 @@ def event_detail(request, pk):
             )
 
             if serializer.is_valid():
-                serializer.save()
+                updated_event = serializer.save()
+
+                now_online_payment = bool(updated_event.allow_online_payment)
+                if not previously_online_payment and now_online_payment:
+                    stats = _backfill_online_checkouts_for_event(updated_event)
+                    logger.info(
+                        f"Online payment backfill for event {updated_event.pk}: "
+                        f"created={stats['created']} emailed={stats['emailed']} "
+                        f"skipped={stats['skipped']} failed={stats['failed']}"
+                    )
+
                 return Response(serializer.data, status=200)
             else:
                 return Response(serializer.errors, status=400)
