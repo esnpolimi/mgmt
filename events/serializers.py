@@ -3,6 +3,7 @@ import os
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 
 from events.models import Event, EventList, Subscription, EventOrganizer
@@ -407,6 +408,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             # Any unexpected error in checks => deny gracefully instead of 500
             return False
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         # Authorization check
         if not self._user_can_edit(instance):
@@ -543,9 +545,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                     'subscription_end_date': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"
                 })
 
-        # Handle list capacity validation if there are subscriptions
-        if has_subscriptions and lists_data is not None:
-            from events.models import Subscription
+        # Handle list capacity validation against total subscriptions for the shared EventList
+        if lists_data is not None:
             for list_data in lists_data:
                 list_id = list_data.get('id')
 
@@ -559,12 +560,30 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
                 new_capacity = list_data.get('capacity', current_list.capacity)
 
-                # Get current subscription count for this list
-                subscription_count = Subscription.objects.filter(event=instance, list_id=list_id).count()
+                # Get total subscription count for this list across all events
+                subscription_count = Subscription.objects.filter(list_id=list_id).count()
                 if new_capacity > 0 and subscription_count > new_capacity:
                     raise serializers.ValidationError({
                         'lists': f"Non è possibile impostare una capacità lista minore del numero di iscrizioni presenti ({subscription_count})"
                     })
+
+        # Validate list deletion before saving
+        if lists_data is not None:
+            provided_list_ids = {
+                list_data['id']
+                for list_data in lists_data
+                if list_data.get('id') in existing_lists_by_id
+            }
+            removable = set(existing_lists_by_id.keys()) - provided_list_ids
+            blocked_lists = [
+                lst.name for rid, lst in existing_lists_by_id.items()
+                if rid in removable and lst.name != 'Form List' and lst.subscriptions.exists()
+            ]
+            if blocked_lists:
+                blocked_names = ', '.join(blocked_lists)
+                raise serializers.ValidationError({
+                    'lists': f"Non è possibile eliminare una lista che contiene delle iscrizioni: {blocked_names}"
+                })
 
         # Validate Form List deletion before saving (if enable_form is being disabled)
         if 'enable_form' in validated_data and not validated_data['enable_form']:
@@ -586,23 +605,6 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 form_list.delete()
 
         if lists_data is not None:
-            provided_list_ids = {
-                list_data['id']
-                for list_data in lists_data
-                if list_data.get('id') in existing_lists_by_id
-            }
-
-            removable = set(existing_lists_by_id.keys()) - provided_list_ids
-            blocked_lists = [
-                lst.name for rid, lst in existing_lists_by_id.items()
-                if rid in removable and lst.name != 'Form List' and lst.subscriptions.exists()
-            ]
-            if blocked_lists:
-                blocked_names = ', '.join(blocked_lists)
-                raise serializers.ValidationError({
-                    'lists': f"Non è possibile eliminare una lista che contiene delle iscrizioni: {blocked_names}"
-                })
-
             for list_data in lists_data:
                 list_id = list_data.get('id')
                 list_name = (list_data.get('name') or '').strip()

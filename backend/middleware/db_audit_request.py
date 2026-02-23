@@ -1,9 +1,9 @@
-from threading import local
+from asgiref.local import Local
 
 from rest_framework_simplejwt.tokens import AccessToken
 
 
-_state = local()
+_state = Local()
 
 
 def get_audit_actor_context() -> dict:
