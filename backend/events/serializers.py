@@ -417,6 +417,45 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         organizers_data = validated_data.pop('organizers', None)
         lead_organizer = validated_data.pop('lead_organizer', None)
 
+        def _normalize_list_id(raw_list_id):
+            if raw_list_id in (None, ''):
+                return None
+            try:
+                return int(raw_list_id)
+            except (TypeError, ValueError) as exc:
+                raise serializers.ValidationError({
+                    'lists': f"ID lista non valido: {raw_list_id}"
+                }) from exc
+
+        def _normalize_capacity(raw_capacity):
+            if raw_capacity in (None, ''):
+                return 0
+            try:
+                capacity = int(raw_capacity)
+            except (TypeError, ValueError) as exc:
+                raise serializers.ValidationError({
+                    'lists': f"Capacità lista non valida: {raw_capacity}"
+                }) from exc
+            if capacity < 0:
+                raise serializers.ValidationError({
+                    'lists': "La capacità lista non può essere negativa"
+                })
+            return capacity
+
+        if lists_data is not None:
+            normalized_lists_data = []
+            for raw_list_data in lists_data:
+                list_data = dict(raw_list_data)
+                list_data['id'] = _normalize_list_id(list_data.get('id'))
+                if 'capacity' in list_data:
+                    list_data['capacity'] = _normalize_capacity(list_data.get('capacity'))
+                normalized_lists_data.append(list_data)
+            lists_data = normalized_lists_data
+
+        existing_lists_by_id = None
+        if lists_data is not None:
+            existing_lists_by_id = {lst.id: lst for lst in instance.lists.all()}
+
         # Check if event has subscriptions for validation
         has_subscriptions = instance.pk and instance.subscription_set.exists()
 
@@ -509,15 +548,20 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             from events.models import Subscription
             for list_data in lists_data:
                 list_id = list_data.get('id')
-                new_capacity = list_data.get('capacity', 0)
 
                 # Skip validation for new lists (no ID)
                 if not list_id:
                     continue
 
+                current_list = existing_lists_by_id.get(list_id)
+                if current_list is None:
+                    continue
+
+                new_capacity = list_data.get('capacity', current_list.capacity)
+
                 # Get current subscription count for this list
                 subscription_count = Subscription.objects.filter(event=instance, list_id=list_id).count()
-                if subscription_count > new_capacity > 0:
+                if new_capacity > 0 and subscription_count > new_capacity:
                     raise serializers.ValidationError({
                         'lists': f"Non è possibile impostare una capacità lista minore del numero di iscrizioni presenti ({subscription_count})"
                     })
@@ -542,19 +586,33 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 form_list.delete()
 
         if lists_data is not None:
-            existing_lists = {lst.id: lst for lst in instance.lists.all()}
-            provided_list_ids = set()
+            provided_list_ids = {
+                list_data['id']
+                for list_data in lists_data
+                if list_data.get('id') in existing_lists_by_id
+            }
+
+            removable = set(existing_lists_by_id.keys()) - provided_list_ids
+            blocked_lists = [
+                lst.name for rid, lst in existing_lists_by_id.items()
+                if rid in removable and lst.name != 'Form List' and lst.subscriptions.exists()
+            ]
+            if blocked_lists:
+                blocked_names = ', '.join(blocked_lists)
+                raise serializers.ValidationError({
+                    'lists': f"Non è possibile eliminare una lista che contiene delle iscrizioni: {blocked_names}"
+                })
+
             for list_data in lists_data:
                 list_id = list_data.get('id')
                 list_name = (list_data.get('name') or '').strip()
                 if list_id:
-                    list_id = int(list_id)
-                    if list_id in existing_lists:
-                        el = existing_lists[list_id]
-                        provided_list_ids.add(list_id)
+                    if list_id in existing_lists_by_id:
+                        el = existing_lists_by_id[list_id]
                         if el.name == 'Form List':
                         # Protect form list name
-                            el.capacity = list_data.get('capacity', el.capacity)
+                            if 'capacity' in list_data:
+                                el.capacity = list_data.get('capacity')
                             # Allow capacity & flags update except name
                             el.display_order = list_data.get('display_order', el.display_order)
                             el.is_main_list = False
@@ -567,17 +625,22 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                                 is_already_form_list = (el.name == 'Form List')
                                 self._validate_not_reserved_form_list_name(list_name, is_already_form_list)
                             el.name = list_name
-                            el.capacity = list_data.get('capacity', el.capacity)
+                            if 'capacity' in list_data:
+                                el.capacity = list_data.get('capacity')
                             el.display_order = list_data.get('display_order', el.display_order)
                             el.is_main_list = list_data.get('is_main_list', el.is_main_list)
                             el.is_waiting_list = list_data.get('is_waiting_list', el.is_waiting_list)
                             el.save()
+                    else:
+                        raise serializers.ValidationError({
+                            'lists': f"Invalid list_id: {list_id} for event {instance.id}"
+                        })
                 else:
                     if list_name:
                         self._validate_not_reserved_form_list_name(list_name)
                         new_list = EventList.objects.create(
                             name=list_name,
-                            capacity=list_data.get('capacity', 0),
+                            capacity=_normalize_capacity(list_data.get('capacity', 0)),
                             display_order=list_data.get('display_order', 0),
                             is_main_list=list_data.get('is_main_list', False),
                             is_waiting_list=list_data.get('is_waiting_list', False)
@@ -585,9 +648,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                         new_list.events.add(instance)
 
             # Remove unprovided lists (except form list) if no subscriptions
-            removable = set(existing_lists.keys()) - provided_list_ids
             for rid in removable:
-                lst = existing_lists[rid]
+                lst = existing_lists_by_id[rid]
                 if lst.name == 'Form List':
                     continue
                 if not lst.subscriptions.exists():

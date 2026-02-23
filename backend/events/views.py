@@ -21,6 +21,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -950,6 +951,8 @@ def event_detail(request, pk):
         return Response({'error': "L'evento non esiste"}, status=404)
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
+    except DRFValidationError as e:
+        return Response(getattr(e, 'detail', {'error': str(e)}), status=400)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
     except Exception as e:

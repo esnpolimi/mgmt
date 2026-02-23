@@ -406,6 +406,52 @@ class EventDetailTests(EventsBaseTestCase):
 		self.assertIsNone(sub_fail.sumup_checkout_id)
 		self.assertEqual(sub_ok.sumup_checkout_id, "chk_ok")
 
+	def test_event_detail_patch_cannot_remove_list_with_subscriptions(self):
+		"""Removing a list with subscriptions from payload should fail with 400."""
+		profile = _create_profile("editor-list-remove@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Event Lists Protected")
+		main_list = _create_event_list(event, name="Main List", capacity=100, is_main_list=True)
+		extra_list = _create_event_list(event, name="Extra List", capacity=10, is_main_list=False)
+		profile_sub = _create_profile("list-sub@uni.it", is_esner=False)
+		Subscription.objects.create(profile=profile_sub, event=event, list=extra_list)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"lists": [
+				{"id": main_list.pk, "name": "Main List", "capacity": 100, "is_main_list": True},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("contiene delle iscrizioni", str(response.data["lists"]).lower())
+		event.refresh_from_db()
+		self.assertTrue(event.lists.filter(pk=extra_list.pk).exists())
+
+	def test_event_detail_patch_capacity_zero_string_is_unlimited(self):
+		"""Setting list capacity to string '0' should be accepted as unlimited."""
+		profile = _create_profile("editor-capacity-zero@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Event Capacity Zero")
+		main_list = _create_event_list(event, name="Main List", capacity=2, is_main_list=True)
+		profile_sub = _create_profile("cap-sub@uni.it", is_esner=False)
+		Subscription.objects.create(profile=profile_sub, event=event, list=main_list)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"lists": [
+				{"id": main_list.pk, "name": "Main List", "capacity": "0", "is_main_list": True},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		main_list.refresh_from_db()
+		self.assertEqual(main_list.capacity, 0)
+
 	def test_event_detail_delete_with_subscriptions_fails(self):
 		"""DELETE should fail if event has subscriptions."""
 		profile = _create_profile("deleter@esnpolimi.it")
