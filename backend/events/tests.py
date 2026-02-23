@@ -299,6 +299,113 @@ class EventDetailTests(EventsBaseTestCase):
 		event.refresh_from_db()
 		self.assertEqual(event.name, "Updated")
 
+	@patch("events.views._send_online_payment_link_email")
+	@patch("events.views.create_sumup_checkout")
+	def test_event_detail_patch_enable_online_payment_backfills_existing_unpaid_subscriptions(
+		self, mock_create_checkout, mock_send_link_email
+	):
+		"""Enabling online payment should create checkout ids for existing unpaid subscriptions missing one."""
+		mock_send_link_email.return_value = True
+
+		def _checkout_side_effect(subscription, total_amount, currency="EUR"):
+			return (f"chk_{subscription.pk}", None)
+
+		mock_create_checkout.side_effect = _checkout_side_effect
+
+		profile = _create_profile("editor2@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Online Toggle Event", allow_online_payment=False, cost=10, deposit=0)
+		list_main = _create_event_list(event)
+
+		sub_unpaid = Subscription.objects.create(
+			profile=_create_profile("sub-unpaid@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+		)
+		sub_already_checkout = Subscription.objects.create(
+			profile=_create_profile("sub-checkout@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+			sumup_checkout_id="existing_chk",
+		)
+
+		# Paid subscription should be skipped
+		paid_profile = _create_profile("sub-paid@uni.it", is_esner=False)
+		sub_paid = Subscription.objects.create(profile=paid_profile, event=event, list=list_main)
+		account = _create_account("Main", user=user)
+		Transaction.objects.create(
+			subscription=sub_paid,
+			account=account,
+			type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10,
+			description="Quota paid"
+		)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"allow_online_payment": True,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		event.refresh_from_db()
+		self.assertTrue(event.allow_online_payment)
+
+		sub_unpaid.refresh_from_db()
+		sub_already_checkout.refresh_from_db()
+		sub_paid.refresh_from_db()
+
+		self.assertEqual(sub_unpaid.sumup_checkout_id, f"chk_{sub_unpaid.pk}")
+		self.assertEqual(sub_already_checkout.sumup_checkout_id, "existing_chk")
+		self.assertIsNone(sub_paid.sumup_checkout_id)
+		self.assertEqual(mock_create_checkout.call_count, 1)
+
+	@patch("events.views._send_online_payment_link_email")
+	@patch("events.views.create_sumup_checkout")
+	def test_event_detail_patch_enable_online_payment_backfill_continues_on_single_failure(
+		self, mock_create_checkout, mock_send_link_email
+	):
+		"""Backfill should continue for other subscriptions if one checkout creation fails."""
+		mock_send_link_email.return_value = True
+
+		profile = _create_profile("editor3@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Online Toggle Event 2", allow_online_payment=False, cost=15, deposit=0)
+		list_main = _create_event_list(event)
+
+		sub_fail = Subscription.objects.create(
+			profile=_create_profile("sub-fail@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+		)
+		sub_ok = Subscription.objects.create(
+			profile=_create_profile("sub-ok@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+		)
+
+		def _checkout_side_effect(subscription, total_amount, currency="EUR"):
+			if subscription.pk == sub_fail.pk:
+				raise RuntimeError("SumUp temporary error")
+			return ("chk_ok", None)
+
+		mock_create_checkout.side_effect = _checkout_side_effect
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"allow_online_payment": True,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		sub_fail.refresh_from_db()
+		sub_ok.refresh_from_db()
+
+		self.assertIsNone(sub_fail.sumup_checkout_id)
+		self.assertEqual(sub_ok.sumup_checkout_id, "chk_ok")
+
 	def test_event_detail_delete_with_subscriptions_fails(self):
 		"""DELETE should fail if event has subscriptions."""
 		profile = _create_profile("deleter@esnpolimi.it")
