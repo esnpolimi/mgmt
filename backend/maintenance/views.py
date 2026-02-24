@@ -61,6 +61,8 @@ def _write_notification(message=DEFAULT_MESSAGE):
 def _sse_event_generator():
     """
     Generator that keeps a long-lived SSE connection open.
+    - Immediately sends the current notification to newly-connected clients so
+      they never miss a notification that was written before they connected.
     - Checks the JSON file every 3 seconds.
     - Sends a 'maintenance' event when the notification_id changes.
     - Sends a heartbeat comment every ~30 s to keep the connection alive.
@@ -68,7 +70,21 @@ def _sse_event_generator():
       is recycled; the browser EventSource reconnects automatically.
     """
     MAX_TICKS = 200  # 200 × 3 s ≈ 10 minutes per connection slot
-    last_id = _read_notification().get("notification_id")
+
+    # Read the notification that exists at connection time.
+    current = _read_notification()
+    current_id = current.get("notification_id")
+
+    # If a notification is already active, deliver it immediately so clients
+    # connecting after the write don't miss it.
+    if current_id:
+        payload = json.dumps({
+            "message": current.get("message", DEFAULT_MESSAGE),
+            "triggered_at": current.get("triggered_at", ""),
+        }, ensure_ascii=False)
+        yield f"event: maintenance\ndata: {payload}\n\n"
+
+    last_id = current_id
     tick = 0
 
     while tick < MAX_TICKS:
