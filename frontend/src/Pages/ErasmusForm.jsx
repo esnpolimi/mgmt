@@ -69,28 +69,6 @@ export default function ErasmusForm() {
         starting_semester: 'autumn' // 'autumn' or 'spring'
     });
 
-    /*const [formData, setFormData] = React.useState({
-        'name': 'Giampiero',
-        'surname': 'Bassini',
-        'email': 'informatica@esnpolimi.it',
-        'email_confirm': 'informatica@esnpolimi.it',
-        'birthdate': dayjs(),
-        'country': 'IT',
-        'phone_prefix': '+39',
-        'phone_number': '111111112',
-        'whatsapp_prefix': '+39',
-        'whatsapp_number': '',
-        'person_code': '65432101',
-        'domicile': 'via bassini 1, Milano',
-        'course': 'Design',
-        'document_type': 'ID Card',
-        'document_number': '324153gfd3',
-        'document_expiration': dayjs(),
-        'matricola_number': '653463',
-        'matricola_expiration': dayjs(),
-        'is_esner': false,
-        mobility_semesters: 1
-    });*/
 
 
     const initialFormErrors = {
@@ -259,6 +237,11 @@ export default function ErasmusForm() {
                 whatsapp_prefix: formData.phone_prefix,
                 whatsapp_number: formData.phone_number
             });
+            setFormErrors(prev => ({
+                ...prev,
+                whatsapp_prefix: [false, ''],
+                whatsapp_number: [false, '']
+        }));
         }
     };
 
