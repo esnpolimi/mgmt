@@ -1,27 +1,35 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * Opens a single SSE connection to the backend maintenance stream.
  * Returns the notification object { message, triggered_at } when a
  * 'maintenance' event is received, or null while idle.
  *
- * The connection is established as soon as the hook mounts and is
- * automatically closed on unmount. No periodic polling from the client.
+ * @param {string|null} accessToken - Current JWT access token from AuthContext.
+ *   The token is passed as a query parameter because native EventSource cannot
+ *   send Authorization headers.  Pass null / undefined when the user is not
+ *   logged in; no connection will be opened in that case.
+ *   The effect reruns whenever the token changes (e.g. after a token rotation)
+ *   so the EventSource is always opened with a fresh credential.
  */
-const useMaintenanceNotification = () => {
+const useMaintenanceNotification = (accessToken) => {
     const [notification, setNotification] = useState(null);
 
     useEffect(() => {
-        const apiHost = window.API_HOST || '';
-        const url = `${apiHost}/maintenance/stream/`;
+        if (!accessToken) {
+            // Not logged in – skip opening the connection entirely.
+            return;
+        }
 
-        // withCredentials: true is required so the browser includes the
-        // session cookie on cross-origin SSE requests (e.g. during local
-        // development where the Vite dev server and the Django API run on
-        // different ports).  The backend already sets
-        // CORS_ALLOW_CREDENTIALS = True and an explicit CORS_ALLOWED_ORIGINS,
-        // so the browser will honour the credential flag.
-        const es = new EventSource(url, { withCredentials: true });
+        const apiHost = window.API_HOST || '';
+        // Native EventSource cannot send an Authorization header, so the JWT
+        // access token is passed as a query parameter instead.  The backend
+        // validates it server-side with simplejwt before opening the stream.
+        // The effect declares `accessToken` as a dependency so the connection
+        // is automatically recreated after every token rotation.
+        const url = `${apiHost}/maintenance/stream/?token=${encodeURIComponent(accessToken)}`;
+
+        const es = new EventSource(url);
 
         es.addEventListener('maintenance', (event) => {
             try {
@@ -43,7 +51,7 @@ const useMaintenanceNotification = () => {
         return () => {
             es.close();
         };
-    }, []);  // runs once on mount
+    }, [accessToken]);  // rerun whenever the token rotates
 
     const dismiss = () => setNotification(null);
 

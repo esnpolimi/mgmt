@@ -615,12 +615,30 @@ def _backfill_online_checkouts_for_event(event):
     skipped = 0
 
     subscriptions = Subscription.objects.filter(event=event).select_related('event', 'profile', 'list')
+
+    # Precompute event-level cost components once (avoids re-reading the same
+    # Decimal values on every iteration).
+    event_cost = Decimal(event.cost or 0)
+    event_deposit = Decimal(event.deposit or 0)
+
+    # Single query to discover which transaction types are already registered
+    # for each subscription in this event.  This replaces up to 3 per-row
+    # Transaction.exists() calls that _subscription_payment_already_registered
+    # would otherwise issue inside the loop.
+    paid_types_by_sub: dict[int, set] = {}
+    for sub_id, txn_type in Transaction.objects.filter(
+        subscription__event=event,
+        type__in=[
+            Transaction.TransactionType.SUBSCRIPTION,
+            Transaction.TransactionType.CAUZIONE,
+            Transaction.TransactionType.SERVICE,
+        ],
+    ).values_list('subscription_id', 'type'):
+        paid_types_by_sub.setdefault(sub_id, set()).add(txn_type)
+
     for subscription in subscriptions:
-        total_cost = (
-            Decimal(event.cost or 0)
-            + Decimal(event.deposit or 0)
-            + _services_total(subscription.selected_services or [])
-        )
+        services_total = _services_total(subscription.selected_services or [])
+        total_cost = event_cost + event_deposit + services_total
         if total_cost <= 0:
             skipped += 1
             continue
@@ -629,7 +647,13 @@ def _backfill_online_checkouts_for_event(event):
             skipped += 1
             continue
 
-        if _subscription_payment_already_registered(subscription):
+        # Inline equivalent of _subscription_payment_already_registered using
+        # the precomputed paid_types_by_sub dict (no extra DB round-trips).
+        paid_types = paid_types_by_sub.get(subscription.pk, set())
+        quota_paid = event_cost <= 0 or Transaction.TransactionType.SUBSCRIPTION in paid_types
+        deposit_paid = event_deposit <= 0 or Transaction.TransactionType.CAUZIONE in paid_types
+        services_paid = services_total <= 0 or Transaction.TransactionType.SERVICE in paid_types
+        if quota_paid and deposit_paid and services_paid:
             skipped += 1
             continue
 

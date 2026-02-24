@@ -1,6 +1,6 @@
 import {BrowserRouter as Router, Routes, Route} from 'react-router-dom';
 import './App.css';
-import {AuthProvider} from "./Context/AuthContext.jsx";
+import {AuthProvider, useAuth} from "./Context/AuthContext.jsx";
 import {SidebarProvider} from './Context/SidebarContext.jsx';
 import useMaintenanceNotification from './utils/useMaintenanceNotification.js';
 import MaintenanceBanner from './Components/MaintenanceBanner.jsx';
@@ -27,44 +27,58 @@ import Profile from "./Pages/profiles/Profile.jsx";
 import UrlSanitizer from "./UrlSanitizer";
 import ContentManager from "./Pages/ContentManager.jsx";
 
-function App() {
-    const {notification, dismiss} = useMaintenanceNotification();
+/**
+ * Inner shell rendered inside AuthProvider so that useMaintenanceNotification
+ * can receive the current access token and recreate the SSE connection after
+ * each token rotation without needing to read directly from localStorage.
+ */
+function AppShell() {
+    const {accessToken} = useAuth();
+    const {notification, dismiss} = useMaintenanceNotification(accessToken);
 
+    return (
+        <>
+            <Router>
+                <UrlSanitizer />
+                <Routes>
+                    <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
+                    <Route path="/reset-password/:uid/:token" element={<ResetPassword/>}/>
+                    <Route path='/login' element={<Login/>}/>
+                    <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
+                    <Route path='/profiles/erasmus' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
+                    <Route path='/profiles/esners' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
+                    <Route path='/profile/:id' element={<ProtectedRoute><Profile/></ProtectedRoute>}/>
+                    <Route path='/erasmus_form' element={<ErasmusForm/>}/>
+                    <Route path='/esner_form' element={<ESNerForm/>}/>
+                    <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
+                    <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
+                    <Route path='/event/:id/formlogin' element={<EventFormLogin/>}/>
+                    <Route path='/event/:id/form' element={<EventForm/>}/>
+                    <Route path='/event/:id/formresult' element={<EventFormResult/>}/>
+                    <Route path='/event/:id/pay' element={<EventPayment/>}/>
+                    <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>
+                    <Route path='/treasury/accounts_list' element={<ProtectedRoute requiredPermission="change_account"><AccountsList/></ProtectedRoute>}/>
+                    <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
+                    <Route path='/treasury/transactions_list/:id' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
+                    <Route path='/treasury/reimbursement_requests_list' element={<ProtectedRoute><ReimbursementRequestsList/></ProtectedRoute>}/>
+                    <Route path='/content-manager' element={<ProtectedRoute requiredPermission="change_account"><ContentManager/></ProtectedRoute>}/>
+                </Routes>
+            </Router>
+            {notification && (
+                <MaintenanceBanner message={notification.message} onClose={dismiss}/>
+            )}
+        </>
+    );
+}
+
+function App() {
     return (
         <AuthProvider>
             <SidebarProvider>
-                <Router>
-                    <UrlSanitizer />
-                    <Routes>
-                        <Route path="/verify-email/:uid/:token" element={<EmailVerification/>}/>
-                        <Route path="/reset-password/:uid/:token" element={<ResetPassword/>}/>
-                        <Route path='/login' element={<Login/>}/>
-                        <Route path='/' element={<ProtectedRoute><Home/></ProtectedRoute>}/>
-                        <Route path='/profiles/erasmus' element={<ProtectedRoute><ErasmusProfiles/></ProtectedRoute>}/>
-                        <Route path='/profiles/esners' element={<ProtectedRoute><ESNersProfiles/></ProtectedRoute>}/>
-                        <Route path='/profile/:id' element={<ProtectedRoute><Profile/></ProtectedRoute>}/>
-                        <Route path='/erasmus_form' element={<ErasmusForm/>}/>
-                        <Route path='/esner_form' element={<ESNerForm/>}/>
-                        <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
-                        <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
-                        <Route path='/event/:id/formlogin' element={<EventFormLogin/>}/>
-                        <Route path='/event/:id/form' element={<EventForm/>}/>
-                        <Route path='/event/:id/formresult' element={<EventFormResult/>}/>
-                        <Route path='/event/:id/pay' element={<EventPayment/>}/>
-                        <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>
-                        <Route path='/treasury/accounts_list' element={<ProtectedRoute requiredPermission="change_account"><AccountsList/></ProtectedRoute>}/>
-                        <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
-                        <Route path='/treasury/transactions_list/:id' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
-                        <Route path='/treasury/reimbursement_requests_list' element={<ProtectedRoute><ReimbursementRequestsList/></ProtectedRoute>}/>
-                        <Route path='/content-manager' element={<ProtectedRoute requiredPermission="change_account"><ContentManager/></ProtectedRoute>}/>
-                    </Routes>
-                </Router>
-                {notification && (
-                    <MaintenanceBanner message={notification.message} onClose={dismiss}/>
-                )}
+                <AppShell />
             </SidebarProvider>
         </AuthProvider>
-    )
+    );
 }
 
 export default App;

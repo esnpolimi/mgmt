@@ -61,8 +61,6 @@ def _write_notification(message=DEFAULT_MESSAGE):
 def _sse_event_generator():
     """
     Generator that keeps a long-lived SSE connection open.
-    - Immediately sends the current notification to newly-connected clients so
-      they never miss a notification that was written before they connected.
     - Checks the JSON file every 3 seconds.
     - Sends a 'maintenance' event when the notification_id changes.
     - Sends a heartbeat comment every ~30 s to keep the connection alive.
@@ -70,21 +68,7 @@ def _sse_event_generator():
       is recycled; the browser EventSource reconnects automatically.
     """
     MAX_TICKS = 200  # 200 × 3 s ≈ 10 minutes per connection slot
-
-    # Read the notification that exists at connection time.
-    current = _read_notification()
-    current_id = current.get("notification_id")
-
-    # If a notification is already active, deliver it immediately so clients
-    # connecting after the write don't miss it.
-    if current_id:
-        payload = json.dumps({
-            "message": current.get("message", DEFAULT_MESSAGE),
-            "triggered_at": current.get("triggered_at", ""),
-        }, ensure_ascii=False)
-        yield f"event: maintenance\ndata: {payload}\n\n"
-
-    last_id = current_id
+    last_id = _read_notification().get("notification_id")
     tick = 0
 
     while tick < MAX_TICKS:
@@ -115,14 +99,28 @@ def maintenance_stream(request):
     """
     SSE endpoint. Clients hold this connection open to receive push alerts.
 
-    Requires an authenticated session. Anonymous requests are rejected with
-    HTTP 403 before the streaming generator is created, so unauthenticated
-    clients can never tie up a worker thread with a long-lived connection.
+    Requires a valid JWT access token passed as the ``token`` query parameter
+    because native ``EventSource`` cannot send ``Authorization`` headers and the
+    React app does not establish a Django session (only JWT cookies are used).
+    Anonymous or invalid-token requests are rejected with HTTP 403 before the
+    streaming generator is created, so unauthenticated clients can never tie up
+    a worker thread with a long-lived connection.
     """
-    if not request.user.is_authenticated:
-        from django.http import JsonResponse
+    from django.http import JsonResponse
+    from rest_framework_simplejwt.tokens import AccessToken
+    from rest_framework_simplejwt.exceptions import TokenError
+
+    token_param = request.GET.get('token', '')
+    if not token_param:
         return JsonResponse(
             {"detail": "Authentication required to connect to the maintenance stream."},
+            status=403,
+        )
+    try:
+        AccessToken(token_param)  # validates signature, expiry, and token type
+    except TokenError:
+        return JsonResponse(
+            {"detail": "Invalid or expired token."},
             status=403,
         )
 
