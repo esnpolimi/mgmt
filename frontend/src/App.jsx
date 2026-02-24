@@ -2,6 +2,8 @@ import {BrowserRouter as Router, Routes, Route} from 'react-router-dom';
 import './App.css';
 import {AuthProvider} from "./Context/AuthContext.jsx";
 import {SidebarProvider} from './Context/SidebarContext.jsx';
+import useMaintenanceNotification from './utils/useMaintenanceNotification.js';
+import MaintenanceBanner from './Components/MaintenanceBanner.jsx';
 import Login from './Pages/Login.jsx'
 import ErasmusForm from './Pages/ErasmusForm.jsx';
 import ESNerForm from './Pages/ESNerForm.jsx';
@@ -26,6 +28,8 @@ import UrlSanitizer from "./UrlSanitizer";
 import ContentManager from "./Pages/ContentManager.jsx";
 
 function App() {
+    const {notification, dismiss} = useMaintenanceNotification();
+
     return (
         <AuthProvider>
             <SidebarProvider>
@@ -55,6 +59,9 @@ function App() {
                         <Route path='/content-manager' element={<ProtectedRoute requiredPermission="change_account"><ContentManager/></ProtectedRoute>}/>
                     </Routes>
                 </Router>
+                {notification && (
+                    <MaintenanceBanner message={notification.message} onClose={dismiss}/>
+                )}
             </SidebarProvider>
         </AuthProvider>
     )

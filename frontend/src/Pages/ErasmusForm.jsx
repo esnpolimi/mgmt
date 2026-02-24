@@ -137,6 +137,20 @@ export default function ErasmusForm() {
             }
         });
 
+        // Validate WhatsApp fields only when a separate number is provided
+        if (!sameWAasPhone) {
+            ['whatsapp_prefix', 'whatsapp_number'].forEach(field => {
+                if (!formData[field] || (typeof formData[field] === 'string' && formData[field].trim() === '')) {
+                    newErrors[field] = [true, 'This field is required'];
+                    valid = false;
+                } else {
+                    newErrors[field] = [false, ''];
+                }
+            });
+        } else {
+            newErrors.whatsapp_prefix = [false, ''];
+            newErrors.whatsapp_number = [false, ''];
+        }
         // Validate matricola (exactly 6 digits)
         const matricolaRegex = /^\d{6}$/;
         if (!matricolaRegex.test(formData.matricola_number)) {

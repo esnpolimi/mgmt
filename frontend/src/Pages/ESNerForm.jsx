@@ -153,6 +153,20 @@ export default function ESNerForm() {
             }
         });
 
+        // Validate WhatsApp fields only when a separate number is provided
+        if (!sameWAasPhone) {
+            ['whatsapp_prefix', 'whatsapp_number'].forEach(field => {
+                if (!formData[field] || (typeof formData[field] === 'string' && formData[field].trim() === '')) {
+                    newErrors[field] = [true, 'Questo campo è obbligatorio'];
+                    valid = false;
+                } else {
+                    newErrors[field] = [false, ''];
+                }
+            });
+        } else {
+            newErrors.whatsapp_prefix = [false, ''];
+            newErrors.whatsapp_number = [false, ''];
+        }
         // Enforce domain for ESNer registration
         if (
             !formData.email.endsWith(enforcedDomain) ||
