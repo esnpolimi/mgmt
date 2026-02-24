@@ -202,6 +202,7 @@ export default function SubscriptionModal({
                 fetchCustom("GET", `/profile/${profileId}/`, {
                     onSuccess: (profileData) => {
                         if (!profileData.is_esner) {
+                            setProfileHasEsncard(Boolean(profileData.latest_esncard));
                             const matricolaMissing = !profileData.matricola_number || !profileData.person_code;
                             const matricolaExpired = profileData.matricola_expiration ? 
                                 new Date(profileData.matricola_expiration) < new Date() : false;
