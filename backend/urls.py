@@ -5,8 +5,7 @@ from maintenance.views import maintenance_admin_view
 
 urlpatterns = [
     # Must come BEFORE path("admin/", ...) otherwise the admin prefix swallows it
-    path("admin/maintenance-notify/", maintenance_admin_view, name='maintenance-admin-notify'),
-    path("admin/", admin.site.urls),
+    path("admin/maintenance-notify/", admin.site.admin_view(maintenance_admin_view), name='maintenance-admin-notify'),    path("admin/", admin.site.urls),
     path("backend/", include('users.urls')),
     path("backend/", include('profiles.urls')),
     path("backend/", include('treasury.urls')),
