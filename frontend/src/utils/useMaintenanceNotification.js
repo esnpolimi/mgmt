@@ -10,14 +10,12 @@ import { useState, useEffect, useRef } from 'react';
  */
 const useMaintenanceNotification = () => {
     const [notification, setNotification] = useState(null);
-    const eventSourceRef = useRef(null);
 
     useEffect(() => {
         const apiHost = window.API_HOST || '';
         const url = `${apiHost}/maintenance/stream/`;
 
         const es = new EventSource(url);
-        eventSourceRef.current = es;
 
         es.addEventListener('maintenance', (event) => {
             try {
@@ -38,7 +36,6 @@ const useMaintenanceNotification = () => {
         };
         return () => {
             es.close();
-            eventSourceRef.current = null;
         };
     }, []);  // runs once on mount
 
