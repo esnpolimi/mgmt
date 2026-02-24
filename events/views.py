@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from datetime import timedelta, datetime
 from decimal import Decimal
@@ -544,17 +545,61 @@ def _send_online_payment_link_email(subscription):
     return False
 
 
+def process_subscription_checkout(subscription_id, event_id):
+    """Background task: create a SumUp checkout and send the payment-link email for one subscription."""
+    try:
+        subscription = Subscription.objects.select_related('event', 'profile', 'list').get(pk=subscription_id)
+
+        # Idempotency guard: another worker may have already created the checkout.
+        if subscription.sumup_checkout_id is not None:
+            logger.info(
+                f"process_subscription_checkout: checkout already exists for sub {subscription_id} "
+                f"in event {event_id}, skipping"
+            )
+            return
+
+        event = subscription.event
+        total_cost = (
+            Decimal(event.cost or 0)
+            + Decimal(event.deposit or 0)
+            + _services_total(subscription.selected_services or [])
+        )
+        checkout_id, _ = create_sumup_checkout(subscription, total_cost, currency="EUR")
+        subscription.sumup_checkout_id = checkout_id
+
+        additional_data = subscription.additional_data or {}
+        if additional_data.get('payment_failed'):
+            additional_data.pop('payment_failed', None)
+            subscription.additional_data = additional_data
+            subscription.save(update_fields=['sumup_checkout_id', 'additional_data'])
+        else:
+            subscription.save(update_fields=['sumup_checkout_id'])
+
+        _send_online_payment_link_email(subscription)
+        logger.info(
+            f"process_subscription_checkout: checkout created for sub {subscription_id} "
+            f"in event {event_id}"
+        )
+    except Exception as e:
+        logger.error(
+            f"process_subscription_checkout: failed for sub {subscription_id} "
+            f"in event {event_id}: {e}"
+        )
+        sentry_sdk.capture_exception(e)
+
+
 def _backfill_online_checkouts_for_event(event):
-    created = 0
-    emailed = 0
+    """Enqueue a background thread for each eligible subscription; return immediately."""
+    queued = 0
     skipped = 0
-    failed = 0
 
     subscriptions = Subscription.objects.filter(event=event).select_related('event', 'profile', 'list')
     for subscription in subscriptions:
-        total_cost = (Decimal(event.cost or 0)
-                      + Decimal(event.deposit or 0)
-                      + _services_total(subscription.selected_services or []))
+        total_cost = (
+            Decimal(event.cost or 0)
+            + Decimal(event.deposit or 0)
+            + _services_total(subscription.selected_services or [])
+        )
         if total_cost <= 0:
             skipped += 1
             continue
@@ -567,32 +612,20 @@ def _backfill_online_checkouts_for_event(event):
             skipped += 1
             continue
 
-        try:
-            checkout_id, _ = create_sumup_checkout(subscription, total_cost, currency="EUR")
-            subscription.sumup_checkout_id = checkout_id
-
-            additional_data = subscription.additional_data or {}
-            if additional_data.get('payment_failed'):
-                additional_data.pop('payment_failed', None)
-                subscription.additional_data = additional_data
-                subscription.save(update_fields=['sumup_checkout_id', 'additional_data'])
-            else:
-                subscription.save(update_fields=['sumup_checkout_id'])
-
-            created += 1
-            if _send_online_payment_link_email(subscription):
-                emailed += 1
-        except Exception as e:
-            failed += 1
-            logger.error(
-                f"Backfill checkout failed for sub {subscription.pk} in event {event.pk}: {e}"
+        if getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True):
+            t = threading.Thread(
+                target=process_subscription_checkout,
+                args=(subscription.pk, event.pk),
+                daemon=True,
             )
+            t.start()
+        else:
+            process_subscription_checkout(subscription.pk, event.pk)
+        queued += 1
 
     return {
-        'created': created,
-        'emailed': emailed,
+        'queued': queued,
         'skipped': skipped,
-        'failed': failed,
     }
 
 
@@ -929,8 +962,7 @@ def event_detail(request, pk):
                     stats = _backfill_online_checkouts_for_event(updated_event)
                     logger.info(
                         f"Online payment backfill for event {updated_event.pk}: "
-                        f"created={stats['created']} emailed={stats['emailed']} "
-                        f"skipped={stats['skipped']} failed={stats['failed']}"
+                        f"queued={stats['queued']} skipped={stats['skipped']}"
                     )
 
                 return Response(serializer.data, status=200)

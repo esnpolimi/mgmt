@@ -299,6 +299,7 @@ class EventDetailTests(EventsBaseTestCase):
 		event.refresh_from_db()
 		self.assertEqual(event.name, "Updated")
 
+	@override_settings(CHECKOUT_BACKFILL_ASYNC=False)
 	@patch("events.views._send_online_payment_link_email")
 	@patch("events.views.create_sumup_checkout")
 	def test_event_detail_patch_enable_online_payment_backfills_existing_unpaid_subscriptions(
@@ -361,6 +362,7 @@ class EventDetailTests(EventsBaseTestCase):
 		self.assertIsNone(sub_paid.sumup_checkout_id)
 		self.assertEqual(mock_create_checkout.call_count, 1)
 
+	@override_settings(CHECKOUT_BACKFILL_ASYNC=False)
 	@patch("events.views._send_online_payment_link_email")
 	@patch("events.views.create_sumup_checkout")
 	def test_event_detail_patch_enable_online_payment_backfill_continues_on_single_failure(
