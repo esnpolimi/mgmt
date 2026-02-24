@@ -547,35 +547,52 @@ def _send_online_payment_link_email(subscription):
 
 def process_subscription_checkout(subscription_id, event_id):
     """Background task: create a SumUp checkout and send the payment-link email for one subscription."""
+    subscription_for_email = None
     try:
-        subscription = Subscription.objects.select_related('event', 'profile', 'list').get(pk=subscription_id)
-
-        # Idempotency guard: another worker may have already created the checkout.
-        if subscription.sumup_checkout_id is not None:
-            logger.info(
-                f"process_subscription_checkout: checkout already exists for sub {subscription_id} "
-                f"in event {event_id}, skipping"
+        with transaction.atomic():
+            # select_for_update() acquires a row-level lock so that concurrent
+            # workers cannot both pass the sumup_checkout_id is None guard and
+            # each create their own checkout for the same subscription.
+            subscription = (
+                Subscription.objects
+                .select_for_update()
+                .select_related('event', 'profile', 'list')
+                .get(pk=subscription_id)
             )
-            return
 
-        event = subscription.event
-        total_cost = (
-            Decimal(event.cost or 0)
-            + Decimal(event.deposit or 0)
-            + _services_total(subscription.selected_services or [])
-        )
-        checkout_id, _ = create_sumup_checkout(subscription, total_cost, currency="EUR")
-        subscription.sumup_checkout_id = checkout_id
+            # Idempotency guard: another worker may have already created the
+            # checkout while this one was waiting for the lock.
+            if subscription.sumup_checkout_id is not None:
+                logger.info(
+                    f"process_subscription_checkout: checkout already exists for sub {subscription_id} "
+                    f"in event {event_id}, skipping"
+                )
+                return
 
-        additional_data = subscription.additional_data or {}
-        if additional_data.get('payment_failed'):
-            additional_data.pop('payment_failed', None)
-            subscription.additional_data = additional_data
-            subscription.save(update_fields=['sumup_checkout_id', 'additional_data'])
-        else:
-            subscription.save(update_fields=['sumup_checkout_id'])
+            event = subscription.event
+            total_cost = (
+                Decimal(event.cost or 0)
+                + Decimal(event.deposit or 0)
+                + _services_total(subscription.selected_services or [])
+            )
+            checkout_id, _ = create_sumup_checkout(subscription, total_cost, currency="EUR")
+            subscription.sumup_checkout_id = checkout_id
 
-        _send_online_payment_link_email(subscription)
+            additional_data = subscription.additional_data or {}
+            if additional_data.get('payment_failed'):
+                additional_data.pop('payment_failed', None)
+                subscription.additional_data = additional_data
+                subscription.save(update_fields=['sumup_checkout_id', 'additional_data'])
+            else:
+                subscription.save(update_fields=['sumup_checkout_id'])
+
+            # Capture the object to use after the transaction commits; email is
+            # sent outside the atomic block to avoid holding the DB lock during
+            # network I/O.
+            subscription_for_email = subscription
+
+        # Transaction has committed – safe to do network I/O now.
+        _send_online_payment_link_email(subscription_for_email)
         logger.info(
             f"process_subscription_checkout: checkout created for sub {subscription_id} "
             f"in event {event_id}"

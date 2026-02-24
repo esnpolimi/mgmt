@@ -15,7 +15,13 @@ const useMaintenanceNotification = () => {
         const apiHost = window.API_HOST || '';
         const url = `${apiHost}/maintenance/stream/`;
 
-        const es = new EventSource(url);
+        // withCredentials: true is required so the browser includes the
+        // session cookie on cross-origin SSE requests (e.g. during local
+        // development where the Vite dev server and the Django API run on
+        // different ports).  The backend already sets
+        // CORS_ALLOW_CREDENTIALS = True and an explicit CORS_ALLOWED_ORIGINS,
+        // so the browser will honour the credential flag.
+        const es = new EventSource(url, { withCredentials: true });
 
         es.addEventListener('maintenance', (event) => {
             try {
