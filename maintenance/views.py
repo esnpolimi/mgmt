@@ -50,7 +50,12 @@ def _write_notification(message=DEFAULT_MESSAGE):
 
 # ---------------------------------------------------------------------------
 # SSE stream  –  GET /backend/maintenance/stream/
-# No authentication required: it only streams non-sensitive maintenance alerts.
+# Authentication required: anonymous requests are rejected with 403 to prevent
+# any client from opening unbounded long-lived worker-thread connections.
+# Each accepted connection auto-recycles after MAX_TICKS (~10 min); the
+# browser EventSource reconnects automatically.
+# NOTE: until the WSGI blocking issue is resolved this view must stay
+# protected – do not remove the authentication guard.
 # ---------------------------------------------------------------------------
 
 def _sse_event_generator():
@@ -91,7 +96,20 @@ def _sse_event_generator():
 
 
 def maintenance_stream(request):
-    """SSE endpoint. Clients hold this connection open to receive push alerts."""
+    """
+    SSE endpoint. Clients hold this connection open to receive push alerts.
+
+    Requires an authenticated session. Anonymous requests are rejected with
+    HTTP 403 before the streaming generator is created, so unauthenticated
+    clients can never tie up a worker thread with a long-lived connection.
+    """
+    if not request.user.is_authenticated:
+        from django.http import JsonResponse
+        return JsonResponse(
+            {"detail": "Authentication required to connect to the maintenance stream."},
+            status=403,
+        )
+
     response = StreamingHttpResponse(
         _sse_event_generator(),
         content_type='text/event-stream; charset=utf-8',

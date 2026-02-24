@@ -12,7 +12,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.core.mail import send_mail
 from django.core.validators import validate_email
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.utils import timezone
@@ -586,6 +586,10 @@ def process_subscription_checkout(subscription_id, event_id):
             f"in event {event_id}: {e}"
         )
         sentry_sdk.capture_exception(e)
+    finally:
+        # Manually spawned threads are not managed by Django's request/response
+        # cycle, so DB connections must be explicitly released to avoid leaks.
+        close_old_connections()
 
 
 def _backfill_online_checkouts_for_event(event):

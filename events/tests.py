@@ -361,6 +361,7 @@ class EventDetailTests(EventsBaseTestCase):
 		self.assertEqual(sub_already_checkout.sumup_checkout_id, "existing_chk")
 		self.assertIsNone(sub_paid.sumup_checkout_id)
 		self.assertEqual(mock_create_checkout.call_count, 1)
+		self.assertEqual(mock_send_link_email.call_count, 1)
 
 	@override_settings(CHECKOUT_BACKFILL_ASYNC=False)
 	@patch("events.views._send_online_payment_link_email")
@@ -407,6 +408,8 @@ class EventDetailTests(EventsBaseTestCase):
 
 		self.assertIsNone(sub_fail.sumup_checkout_id)
 		self.assertEqual(sub_ok.sumup_checkout_id, "chk_ok")
+		self.assertEqual(mock_create_checkout.call_count, 2)
+		self.assertEqual(mock_send_link_email.call_count, 1)
 
 	def test_event_detail_patch_cannot_remove_list_with_subscriptions(self):
 		"""Removing a list with subscriptions from payload should fail with 400."""
