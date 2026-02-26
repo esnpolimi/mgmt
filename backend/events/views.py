@@ -1402,8 +1402,33 @@ def generate_liberatorie_pdf(request):
         event = Event.objects.get(pk=event_id)
         subscriptions = Subscription.objects.filter(id__in=subscription_ids)
 
-        # Use a more detailed serializer to get all profile info
-        profiles_data = LiberatoriaProfileSerializer([sub.profile for sub in subscriptions], many=True).data
+        # Build profile data list, handling external subscriptions (profile=None).
+        profiles_data = []
+        for sub in subscriptions:
+            if sub.profile is not None:
+                profiles_data.append(LiberatoriaProfileSerializer(sub.profile).data)
+            else:
+                # External subscription: build partial data from available external fields.
+                first_name = sub.external_first_name or ''
+                last_name = sub.external_last_name or ''
+                if not first_name and not last_name and sub.external_name:
+                    parts = sub.external_name.split(None, 1)
+                    first_name = parts[0] if parts else ''
+                    last_name = parts[1] if len(parts) > 1 else ''
+                profiles_data.append({
+                    'name': first_name,
+                    'surname': last_name,
+                    'address': '',
+                    'esncard_number': '',
+                    'document_number': '',
+                    'document_expiry': '',
+                    'date_of_birth': '',
+                    'place_of_birth': '',
+                    'phone': sub.external_whatsapp_number or '',
+                    'email': '',
+                    'matricola': '',
+                    'codice_persona': '',
+                })
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4,

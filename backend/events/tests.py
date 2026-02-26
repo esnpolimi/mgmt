@@ -2150,3 +2150,134 @@ class ServiceEdgeCaseTests(ServiceBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 
+
+class GenerateLiberatoriePdfTests(EventsBaseTestCase):
+	"""Tests for the generate_liberatorie_pdf endpoint."""
+
+	def setUp(self):
+		self.board_profile = _create_profile("board_lib@test.com", name="Board", surname="Lib")
+		self.board_user = _create_user(self.board_profile)
+		self.board_user.groups.add(self.group_board)
+
+		self.event = _create_event(name="Test Trip", cost=50, is_allow_external=True)
+		self.event_list = _create_event_list(self.event)
+
+	def _post(self, event_id, subscription_ids):
+		return self.client.post("/backend/generate_liberatorie_pdf/", {
+			"event_id": event_id,
+			"subscription_ids": subscription_ids,
+		}, format="json")
+
+	def test_requires_board_group(self):
+		"""Non-Board users should receive a 403 error."""
+		profile = _create_profile("noboard@test.com")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_event)
+		self.authenticate(user)
+
+		response = self._post(self.event.pk, [])
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_missing_event_id_returns_400(self):
+		"""Missing event_id should return 400."""
+		self.authenticate(self.board_user)
+
+		response = self.client.post("/backend/generate_liberatorie_pdf/", {
+			"subscription_ids": [],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+
+	def test_missing_subscription_ids_returns_400(self):
+		"""Missing subscription_ids should return 400."""
+		self.authenticate(self.board_user)
+
+		response = self.client.post("/backend/generate_liberatorie_pdf/", {
+			"event_id": self.event.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_generates_pdf_for_regular_subscription(self, mock_doc):
+		"""PDF generation succeeds for a subscription linked to a Profile."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		sub_profile = _create_profile("subscriber_reg@test.com", name="Alice", surname="Smith")
+		sub = Subscription.objects.create(
+			profile=sub_profile,
+			event=self.event,
+			list=self.event_list,
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "application/pdf")
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_generates_pdf_for_external_subscription_no_crash(self, mock_doc):
+		"""PDF generation must not raise AttributeError when profile is None (external subscription)."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		# External subscription: profile is None, only external fields are set
+		sub = Subscription.objects.create(
+			profile=None,
+			event=self.event,
+			list=self.event_list,
+			external_first_name="Bob",
+			external_last_name="External",
+			external_whatsapp_number="+391234567890",
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		# Previously raised AttributeError ('NoneType' has no attribute 'name') and returned 500
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "application/pdf")
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_external_subscription_external_name_fallback(self, mock_doc):
+		"""When external_first/last_name are blank, external_name is split as first/last."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		sub = Subscription.objects.create(
+			profile=None,
+			event=self.event,
+			list=self.event_list,
+			external_name="Carlo Bianchi",
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		self.assertEqual(response.status_code, 200)
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_generates_pdf_for_mixed_subscriptions(self, mock_doc):
+		"""PDF generation works when subscription list mixes regular and external entries."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		regular_profile = _create_profile("mix_reg@test.com", name="Luca", surname="Verdi")
+		sub_regular = Subscription.objects.create(
+			profile=regular_profile,
+			event=self.event,
+			list=self.event_list,
+		)
+		sub_external = Subscription.objects.create(
+			profile=None,
+			event=self.event,
+			list=self.event_list,
+			external_first_name="Maria",
+			external_last_name="Rossi",
+		)
+
+		response = self._post(self.event.pk, [sub_regular.pk, sub_external.pk])
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "application/pdf")
+
