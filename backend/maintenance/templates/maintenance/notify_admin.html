@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; Notifica Manutenzione
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <p style="margin: 16px 0; font-size: 15px; color: #a6a5a5;">
+        Clicca il bottone qui sotto per inviare una <strong>notifica push immediata</strong>
+        a tutti gli utenti attualmente connessi al sistema.
+    </p>
+
+    {% if sent %}
+    <div role="alert" style="background: #d1e7dd; border: 1px solid #0f5132; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; color: #0f5132;">
+        ✅ Notifica inviata con successo! Tutti gli utenti connessi la riceveranno entro pochi secondi.
+    </div>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <input
+            type="submit"
+            value="Invia Notifica Ora"
+            class="button"
+            style="
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                padding: 12px 28px;
+                font-size: 15px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: bold;
+            "
+            {% if sent %}disabled{% endif %}
+        >
+        {% if sent %}
+        <a href="." style="margin-left: 16px; font-size: 14px;">Invia un'altra</a>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
