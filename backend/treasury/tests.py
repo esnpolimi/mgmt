@@ -1683,52 +1683,6 @@ class ReimbursementComplexEdgeCaseTests(TreasuryBaseTestCase):
 
 		self.assertIn(response.status_code, [400, 201])
 
-	@unittest.skip("Negative amount validation not implemented in current API")
-	def test_reimbursement_with_negative_amount_rejected(self):
-		"""Reimbursement request with negative amount should be rejected."""
-		profile = _create_profile("user@test.com")
-		user = _create_user(profile)
-		self.authenticate(user)
-
-		response = self.client.post("/backend/reimbursement_request/", {
-			"amount": "-50.00",
-			"description": "Negative amount",
-			"payment": "cash",
-		}, format="json")
-
-		self.assertEqual(response.status_code, 400)
-
-	@unittest.skip("User-level filtering not implemented in current API")
-	def test_reimbursement_list_visibility_for_users(self):
-		"""Users should only see their own reimbursement requests."""
-		user1_profile = _create_profile("user1@test.com")
-		user1 = _create_user(user1_profile)
-
-		user2_profile = _create_profile("user2@test.com")
-		user2 = _create_user(user2_profile)
-
-		ReimbursementRequest.objects.create(
-			user=user1,
-			amount=Decimal("50.00"),
-			description="User 1 request",
-			payment="cash"
-		)
-		ReimbursementRequest.objects.create(
-			user=user2,
-			amount=Decimal("75.00"),
-			description="User 2 request",
-			payment="cash"
-		)
-
-		self.authenticate(user1)
-		response = self.client.get("/backend/reimbursement_requests/")
-
-		if response.status_code == 200:
-			# user1 should only see their request
-			self.assertEqual(len(response.data), 1)
-			self.assertEqual(response.data[0]["description"], "User 1 request")
-
-
 class DepositReimbursementEdgeCaseTests(TreasuryBaseTestCase):
 	"""Tests for deposit reimbursement scenarios."""
 
