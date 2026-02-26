@@ -1,5 +1,6 @@
 import {useLocation, useParams, useNavigate} from 'react-router-dom';
 import {Container, Typography, Box, Button, Alert} from '@mui/material';
+import PaymentIcon from '@mui/icons-material/Payment';
 
 export default function EventFormResult() {
     const {id} = useParams();
@@ -37,6 +38,12 @@ export default function EventFormResult() {
     // paymentError handled by dedicated alert (no banner to avoid duplication)
 
     const retryNavigate = () => navigate(`/event/${id}/formlogin`);
+    const goToPayment = () => navigate(`/event/${id}/pay?subscriptionId=${subscriptionId}`, {
+        state: {subscriptionId, assignedList}
+    });
+
+    // Show the Pay Now button only when payment is pending (not yet paid, no error, checkout expected)
+    const showPayButton = paymentRequired && subscriptionId && !paid && !paymentError;
 
     return (
         <Container maxWidth="sm">
@@ -54,6 +61,19 @@ export default function EventFormResult() {
                     <Alert severity="warning" sx={{width:'100%'}}>
                         Subscription saved. Online payment currently unavailable. Please contact us at informatica@esnpolimi.it
                     </Alert>
+                )}
+                OR
+                {showPayButton && (
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        size="large"
+                        startIcon={<PaymentIcon />}
+                        onClick={goToPayment}
+                        sx={{mt:1}}
+                    >
+                        Pay now
+                    </Button>
                 )}
                 {bannerState === 'error' && (
                     <Button variant="contained" sx={{mt:1}} onClick={retryNavigate}>Start Over</Button>
