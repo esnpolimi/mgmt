@@ -69,28 +69,6 @@ export default function ErasmusForm() {
         starting_semester: 'autumn' // 'autumn' or 'spring'
     });
 
-    /*const [formData, setFormData] = React.useState({
-        'name': 'Giampiero',
-        'surname': 'Bassini',
-        'email': 'informatica@esnpolimi.it',
-        'email_confirm': 'informatica@esnpolimi.it',
-        'birthdate': dayjs(),
-        'country': 'IT',
-        'phone_prefix': '+39',
-        'phone_number': '111111112',
-        'whatsapp_prefix': '+39',
-        'whatsapp_number': '',
-        'person_code': '65432101',
-        'domicile': 'via bassini 1, Milano',
-        'course': 'Design',
-        'document_type': 'ID Card',
-        'document_number': '324153gfd3',
-        'document_expiration': dayjs(),
-        'matricola_number': '653463',
-        'matricola_expiration': dayjs(),
-        'is_esner': false,
-        mobility_semesters: 1
-    });*/
 
 
     const initialFormErrors = {
@@ -137,10 +115,24 @@ export default function ErasmusForm() {
             }
         });
 
-        // Validate matricola (6 digits OR 1 letter + 5 digits)
-        const matricolaRegex = /^(?:\d{6}|[A-Za-z]\d{5})$/;
+        // Validate WhatsApp fields only when a separate number is provided
+        if (!sameWAasPhone) {
+            ['whatsapp_prefix', 'whatsapp_number'].forEach(field => {
+                if (!formData[field] || (typeof formData[field] === 'string' && formData[field].trim() === '')) {
+                    newErrors[field] = [true, 'This field is required'];
+                    valid = false;
+                } else {
+                    newErrors[field] = [false, ''];
+                }
+            });
+        } else {
+            newErrors.whatsapp_prefix = [false, ''];
+            newErrors.whatsapp_number = [false, ''];
+        }
+        // Validate matricola (exactly 6 digits)
+        const matricolaRegex = /^\d{6}$/;
         if (!matricolaRegex.test(formData.matricola_number)) {
-            newErrors.matricola_number = [true, 'Matricola must be 6 digits or 1 letter followed by 5 digits'];
+            newErrors.matricola_number = [true, 'Matricola must be exactly 6 numeric digits'];
             valid = false;
         } else newErrors.matricola_number = [false, ''];
 
@@ -199,12 +191,8 @@ export default function ErasmusForm() {
             if (value.length > 8) value = value.slice(0, 8);
         }
         if (name === 'matricola_number') {
-            value = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            if (/^[A-Z]/.test(value)) {
-                value = value[0] + value.slice(1).replace(/\D/g, '');
-            } else {
-                value = value.replace(/\D/g, '');
-            }
+            // Only accept numeric digits, max 6
+            value = value.replace(/\D/g, '');
             if (value.length > 6) value = value.slice(0, 6);
         }
         setFormData({
@@ -249,6 +237,11 @@ export default function ErasmusForm() {
                 whatsapp_prefix: formData.phone_prefix,
                 whatsapp_number: formData.phone_number
             });
+            setFormErrors(prev => ({
+                ...prev,
+                whatsapp_prefix: [false, ''],
+                whatsapp_number: [false, '']
+        }));
         }
     };
 
@@ -784,7 +777,7 @@ export default function ErasmusForm() {
                 </Grid>
                 <Grid size={{xs: 12, sm: 6}}>
                     <TextField
-                        label="Matricola (6 digits or 1 letter + 5 digits)"
+                        label="Matricola (6 digits)"
                         variant="outlined"
                         name="matricola_number"
                         type="text"
@@ -802,6 +795,8 @@ export default function ErasmusForm() {
                         from the Online Services.
                         <br/> In case the university has not provided you a Person Code or Matricola yet, you can fill the field with 8 or 6
                         0s.
+                        <br/>
+                        <br/> <strong>Note:</strong> If your matricola has a different format (e.g., 1 letter + 5 digits), please contact the secretariat at <a href="mailto:info@esnpolimi.it">info@esnpolimi.it</a>
                     </Typography>
                 </Grid>
             </Grid>
