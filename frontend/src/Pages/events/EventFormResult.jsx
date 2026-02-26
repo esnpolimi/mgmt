@@ -62,18 +62,20 @@ export default function EventFormResult() {
                         Subscription saved. Online payment currently unavailable. Please contact us at informatica@esnpolimi.it
                     </Alert>
                 )}
-                OR
                 {showPayButton && (
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        size="large"
-                        startIcon={<PaymentIcon />}
-                        onClick={goToPayment}
-                        sx={{mt:1}}
-                    >
-                        Pay now
-                    </Button>
+                    <>
+                        <Typography variant="body2" color="text.secondary">OR</Typography>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            size="large"
+                            startIcon={<PaymentIcon />}
+                            onClick={goToPayment}
+                            sx={{mt:1}}
+                        >
+                            Pay now
+                        </Button>
+                    </>
                 )}
                 {bannerState === 'error' && (
                     <Button variant="contained" sx={{mt:1}} onClick={retryNavigate}>Start Over</Button>
