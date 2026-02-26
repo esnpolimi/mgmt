@@ -299,6 +299,164 @@ class EventDetailTests(EventsBaseTestCase):
 		event.refresh_from_db()
 		self.assertEqual(event.name, "Updated")
 
+	@override_settings(CHECKOUT_BACKFILL_ASYNC=False)
+	@patch("events.views._send_online_payment_link_email")
+	@patch("events.views.create_sumup_checkout")
+	def test_event_detail_patch_enable_online_payment_backfills_existing_unpaid_subscriptions(
+		self, mock_create_checkout, mock_send_link_email
+	):
+		"""Enabling online payment should create checkout ids for existing unpaid subscriptions missing one."""
+		mock_send_link_email.return_value = True
+
+		def _checkout_side_effect(subscription, total_amount, currency="EUR"):
+			return (f"chk_{subscription.pk}", None)
+
+		mock_create_checkout.side_effect = _checkout_side_effect
+
+		profile = _create_profile("editor2@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Online Toggle Event", allow_online_payment=False, cost=10, deposit=0)
+		list_main = _create_event_list(event)
+
+		sub_unpaid = Subscription.objects.create(
+			profile=_create_profile("sub-unpaid@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+		)
+		sub_already_checkout = Subscription.objects.create(
+			profile=_create_profile("sub-checkout@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+			sumup_checkout_id="existing_chk",
+		)
+
+		# Paid subscription should be skipped
+		paid_profile = _create_profile("sub-paid@uni.it", is_esner=False)
+		sub_paid = Subscription.objects.create(profile=paid_profile, event=event, list=list_main)
+		account = _create_account("Main", user=user)
+		Transaction.objects.create(
+			subscription=sub_paid,
+			account=account,
+			type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10,
+			description="Quota paid"
+		)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"allow_online_payment": True,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		event.refresh_from_db()
+		self.assertTrue(event.allow_online_payment)
+
+		sub_unpaid.refresh_from_db()
+		sub_already_checkout.refresh_from_db()
+		sub_paid.refresh_from_db()
+
+		self.assertEqual(sub_unpaid.sumup_checkout_id, f"chk_{sub_unpaid.pk}")
+		self.assertEqual(sub_already_checkout.sumup_checkout_id, "existing_chk")
+		self.assertIsNone(sub_paid.sumup_checkout_id)
+		self.assertEqual(mock_create_checkout.call_count, 1)
+		self.assertEqual(mock_send_link_email.call_count, 1)
+
+	@override_settings(CHECKOUT_BACKFILL_ASYNC=False)
+	@patch("events.views._send_online_payment_link_email")
+	@patch("events.views.create_sumup_checkout")
+	def test_event_detail_patch_enable_online_payment_backfill_continues_on_single_failure(
+		self, mock_create_checkout, mock_send_link_email
+	):
+		"""Backfill should continue for other subscriptions if one checkout creation fails."""
+		mock_send_link_email.return_value = True
+
+		profile = _create_profile("editor3@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Online Toggle Event 2", allow_online_payment=False, cost=15, deposit=0)
+		list_main = _create_event_list(event)
+
+		sub_fail = Subscription.objects.create(
+			profile=_create_profile("sub-fail@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+		)
+		sub_ok = Subscription.objects.create(
+			profile=_create_profile("sub-ok@uni.it", is_esner=False),
+			event=event,
+			list=list_main,
+		)
+
+		def _checkout_side_effect(subscription, total_amount, currency="EUR"):
+			if subscription.pk == sub_fail.pk:
+				raise RuntimeError("SumUp temporary error")
+			return ("chk_ok", None)
+
+		mock_create_checkout.side_effect = _checkout_side_effect
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"allow_online_payment": True,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		sub_fail.refresh_from_db()
+		sub_ok.refresh_from_db()
+
+		self.assertIsNone(sub_fail.sumup_checkout_id)
+		self.assertEqual(sub_ok.sumup_checkout_id, "chk_ok")
+		self.assertEqual(mock_create_checkout.call_count, 2)
+		self.assertEqual(mock_send_link_email.call_count, 1)
+
+	def test_event_detail_patch_cannot_remove_list_with_subscriptions(self):
+		"""Removing a list with subscriptions from payload should fail with 400."""
+		profile = _create_profile("editor-list-remove@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Event Lists Protected")
+		main_list = _create_event_list(event, name="Main List", capacity=100, is_main_list=True)
+		extra_list = _create_event_list(event, name="Extra List", capacity=10, is_main_list=False)
+		profile_sub = _create_profile("list-sub@uni.it", is_esner=False)
+		Subscription.objects.create(profile=profile_sub, event=event, list=extra_list)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"lists": [
+				{"id": main_list.pk, "name": "Main List", "capacity": 100, "is_main_list": True},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("contiene delle iscrizioni", str(response.data["lists"]).lower())
+		event.refresh_from_db()
+		self.assertTrue(event.lists.filter(pk=extra_list.pk).exists())
+
+	def test_event_detail_patch_capacity_zero_string_is_unlimited(self):
+		"""Setting list capacity to string '0' should be accepted as unlimited."""
+		profile = _create_profile("editor-capacity-zero@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(name="Event Capacity Zero")
+		main_list = _create_event_list(event, name="Main List", capacity=2, is_main_list=True)
+		profile_sub = _create_profile("cap-sub@uni.it", is_esner=False)
+		Subscription.objects.create(profile=profile_sub, event=event, list=main_list)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"lists": [
+				{"id": main_list.pk, "name": "Main List", "capacity": "0", "is_main_list": True},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		main_list.refresh_from_db()
+		self.assertEqual(main_list.capacity, 0)
+
 	def test_event_detail_delete_with_subscriptions_fails(self):
 		"""DELETE should fail if event has subscriptions."""
 		profile = _create_profile("deleter@esnpolimi.it")
@@ -1991,4 +2149,135 @@ class ServiceEdgeCaseTests(ServiceBaseTestCase):
 		}, format="json")
 
 		self.assertEqual(response.status_code, 200)
+
+
+class GenerateLiberatoriePdfTests(EventsBaseTestCase):
+	"""Tests for the generate_liberatorie_pdf endpoint."""
+
+	def setUp(self):
+		self.board_profile = _create_profile("board_lib@test.com", name="Board", surname="Lib")
+		self.board_user = _create_user(self.board_profile)
+		self.board_user.groups.add(self.group_board)
+
+		self.event = _create_event(name="Test Trip", cost=50, is_allow_external=True)
+		self.event_list = _create_event_list(self.event)
+
+	def _post(self, event_id, subscription_ids):
+		return self.client.post("/backend/generate_liberatorie_pdf/", {
+			"event_id": event_id,
+			"subscription_ids": subscription_ids,
+		}, format="json")
+
+	def test_requires_board_group(self):
+		"""Non-Board users should receive a 403 error."""
+		profile = _create_profile("noboard@test.com")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_event)
+		self.authenticate(user)
+
+		response = self._post(self.event.pk, [])
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_missing_event_id_returns_400(self):
+		"""Missing event_id should return 400."""
+		self.authenticate(self.board_user)
+
+		response = self.client.post("/backend/generate_liberatorie_pdf/", {
+			"subscription_ids": [],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+
+	def test_missing_subscription_ids_returns_400(self):
+		"""Missing subscription_ids should return 400."""
+		self.authenticate(self.board_user)
+
+		response = self.client.post("/backend/generate_liberatorie_pdf/", {
+			"event_id": self.event.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_generates_pdf_for_regular_subscription(self, mock_doc):
+		"""PDF generation succeeds for a subscription linked to a Profile."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		sub_profile = _create_profile("subscriber_reg@test.com", name="Alice", surname="Smith")
+		sub = Subscription.objects.create(
+			profile=sub_profile,
+			event=self.event,
+			list=self.event_list,
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "application/pdf")
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_generates_pdf_for_external_subscription_no_crash(self, mock_doc):
+		"""PDF generation must not raise AttributeError when profile is None (external subscription)."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		# External subscription: profile is None, only external fields are set
+		sub = Subscription.objects.create(
+			profile=None,
+			event=self.event,
+			list=self.event_list,
+			external_first_name="Bob",
+			external_last_name="External",
+			external_whatsapp_number="+391234567890",
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		# Previously raised AttributeError ('NoneType' has no attribute 'name') and returned 500
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "application/pdf")
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_external_subscription_external_name_fallback(self, mock_doc):
+		"""When external_first/last_name are blank, external_name is split as first/last."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		sub = Subscription.objects.create(
+			profile=None,
+			event=self.event,
+			list=self.event_list,
+			external_name="Carlo Bianchi",
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		self.assertEqual(response.status_code, 200)
+
+	@patch("events.views.SimpleDocTemplate")
+	def test_generates_pdf_for_mixed_subscriptions(self, mock_doc):
+		"""PDF generation works when subscription list mixes regular and external entries."""
+		mock_doc.return_value.build = lambda story: None
+		self.authenticate(self.board_user)
+
+		regular_profile = _create_profile("mix_reg@test.com", name="Luca", surname="Verdi")
+		sub_regular = Subscription.objects.create(
+			profile=regular_profile,
+			event=self.event,
+			list=self.event_list,
+		)
+		sub_external = Subscription.objects.create(
+			profile=None,
+			event=self.event,
+			list=self.event_list,
+			external_first_name="Maria",
+			external_last_name="Rossi",
+		)
+
+		response = self._post(self.event.pk, [sub_regular.pk, sub_external.pk])
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "application/pdf")
 

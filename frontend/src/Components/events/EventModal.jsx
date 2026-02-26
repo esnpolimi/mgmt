@@ -1566,7 +1566,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                             onChange={e => setAllowOnlinePayment(e.target.checked)}
                                             name="allow_online_payment"
                                             color="primary"
-                                            disabled={isEdit && hasSubscriptions}
                                         />
                                     }
                                 />
