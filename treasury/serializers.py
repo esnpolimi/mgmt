@@ -143,6 +143,65 @@ def upload_reimbursement_receipt_to_drive(receipt_file, user, instance_time, eve
     return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
 
 
+# --- Specific upload helper for transaction receipts with folder structure ---
+def upload_transaction_receipt_to_drive(receipt_file, user, instance_time, event=None):
+    """
+    Upload transaction receipt to Google Drive with organized folder structure:
+    {Year}/Transazioni/transazioni generiche  (if no event)
+    {Year}/Transazioni/{EventName_EventDate}   (if event specified)
+    """
+    if not receipt_file:
+        return None
+
+    GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
+    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    service = build('drive', 'v3', credentials=credentials)
+
+    # Create folder structure: {Year}/Transazioni/{transazioni generiche or EventName_EventDate}
+    current_year = instance_time.year
+
+    # Find or create year folder (e.g., "2026")
+    year_folder_id = find_or_create_drive_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)
+
+    # Find or create "Transazioni" folder
+    transazioni_folder_id = find_or_create_drive_folder(service, "Transazioni", year_folder_id)
+
+    # Determine final folder based on event
+    if event:
+        event_date_str = event.date.strftime('%Y-%m-%d') if event.date else 'NoDate'
+        event_folder_name = f"{event.name}_{event_date_str}"
+        final_folder_id = find_or_create_drive_folder(service, event_folder_name, transazioni_folder_id)
+    else:
+        final_folder_id = find_or_create_drive_folder(service, "transazioni generiche", transazioni_folder_id)
+
+    # Upload file to the final folder
+    receipt_file.seek(0)
+    mimetype = getattr(receipt_file, 'content_type', 'application/octet-stream')
+    media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
+    ext = os.path.splitext(receipt_file.name)[1].lower()
+    filename = f"transazione_{user.profile.name}_{user.profile.surname}_{instance_time.strftime('%Y%m%d_%H%M%S')}{ext}"
+
+    metadata = {'name': filename, 'parents': [final_folder_id]}
+    uploaded = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+
+    service.permissions().create(
+        fileId=uploaded['id'],
+        body={'role': 'reader', 'type': 'anyone'},
+        supportsAllDrives=True
+    ).execute()
+
+    return f"https://drive.google.com/file/d/{uploaded['id']}/view?usp=sharing"
+
+
 # Centralized allowed mimetypes / extensions for receipt uploads
 ALLOWED_RECEIPT_MIMETYPES = [
     'application/pdf',
@@ -221,11 +280,12 @@ class ESNcardSerializer(serializers.ModelSerializer):
 class TransactionCreateSerializer(serializers.ModelSerializer):
     receiptFile = serializers.FileField(write_only=True, required=False, allow_null=True, allow_empty_file=True)
     receipt_link = serializers.URLField(read_only=True)
+    created_at = serializers.DateTimeField(required=False, write_only=True)
 
     class Meta:
         model = Transaction
         fields = ['subscription', 'account', 'executor', 'amount', 'description', 'type',
-                  'event_reference_manual', 'receiptFile', 'receipt_link']
+                  'event_reference_manual', 'receiptFile', 'receipt_link', 'created_at']
 
     @staticmethod
     def validate_receiptFile(file):
@@ -233,10 +293,17 @@ class TransactionCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         receipt_file = validated_data.pop('receiptFile', None)
+        custom_created_at = validated_data.pop('created_at', None)
+        event = validated_data.get('event_reference_manual', None)
         with transaction.atomic():
             tx = Transaction.objects.create(**validated_data)
+            if custom_created_at:
+                tx.created_at = custom_created_at
+                tx.save(update_fields=['created_at'])
             if receipt_file:
-                link = upload_receipt_to_drive(receipt_file, self.context['request'].user, tx.created_at, "transazione")
+                link = upload_transaction_receipt_to_drive(
+                    receipt_file, self.context['request'].user, tx.created_at, event=event
+                )
                 tx.receipt_link = link
                 tx.save(update_fields=['receipt_link'])
         return tx
