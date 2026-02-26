@@ -7,11 +7,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import StreamingHttpResponse
 from django.shortcuts import render
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser
-from rest_framework.response import Response
 
 # Path to the JSON file that stores the current notification state.
 # It lives next to manage.py in the backend root.

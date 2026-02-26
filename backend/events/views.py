@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import threading
 import time
@@ -569,6 +570,16 @@ def process_subscription_checkout(subscription_id, event_id):
                 )
                 return
 
+            # Already-paid guard: do not create a new checkout if the
+            # subscription has already been paid (a successful SumUp
+            # transaction was recorded).
+            if subscription.sumup_transaction_id is not None:
+                logger.info(
+                    f"process_subscription_checkout: subscription {subscription_id} "
+                    f"in event {event_id} is already paid, skipping"
+                )
+                return
+
             event = subscription.event
             total_cost = (
                 Decimal(event.cost or 0)
@@ -609,8 +620,25 @@ def process_subscription_checkout(subscription_id, event_id):
         close_old_connections()
 
 
+# Maximum number of worker threads used by _backfill_online_checkouts_for_event
+# when CHECKOUT_BACKFILL_ASYNC is True.  Keep this small to avoid exhausting
+# the DB connection pool or the OS thread limit.
+MAX_CHECKOUT_BACKFILL_WORKERS = 4
+
+
 def _backfill_online_checkouts_for_event(event):
-    """Enqueue a background thread for each eligible subscription; return immediately."""
+    """Submit checkout creation for each eligible subscription.
+
+    When ``settings.CHECKOUT_BACKFILL_ASYNC`` is ``True`` (the default) tasks
+    are submitted to a bounded ``ThreadPoolExecutor`` and the function returns
+    immediately without waiting for them to finish.  The executor is shut down
+    with ``wait=False`` so that already-submitted tasks still run to completion but no
+    new work is accepted after this call.
+
+    When ``CHECKOUT_BACKFILL_ASYNC`` is ``False`` the function runs each task
+    in-process (useful for tests and one-off admin operations) and blocks until
+    all are finished.
+    """
     queued = 0
     skipped = 0
 
@@ -636,6 +664,10 @@ def _backfill_online_checkouts_for_event(event):
     ).values_list('subscription_id', 'type'):
         paid_types_by_sub.setdefault(sub_id, set()).add(txn_type)
 
+    # Collect eligible (subscription_pk, event_pk) pairs in a single pass so
+    # that submission to the executor (or direct execution) is decoupled from
+    # the filtering logic.
+    eligible: list[tuple[int, int]] = []
     for subscription in subscriptions:
         services_total = _services_total(subscription.selected_services or [])
         total_cost = event_cost + event_deposit + services_total
@@ -657,16 +689,31 @@ def _backfill_online_checkouts_for_event(event):
             skipped += 1
             continue
 
-        if getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True):
-            t = threading.Thread(
-                target=process_subscription_checkout,
-                args=(subscription.pk, event.pk),
-                daemon=True,
-            )
-            t.start()
-        else:
-            process_subscription_checkout(subscription.pk, event.pk)
+        eligible.append((subscription.pk, event.pk))
         queued += 1
+
+    if not eligible:
+        return {'queued': queued, 'skipped': skipped}
+
+    use_async = getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True)
+    if use_async:
+        # Create a *single* executor for this backfill run so the total number
+        # of worker threads is bounded by MAX_CHECKOUT_BACKFILL_WORKERS,
+        # regardless of how many eligible subscriptions were found.
+        executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=MAX_CHECKOUT_BACKFILL_WORKERS,
+            thread_name_prefix='checkout_backfill',
+        )
+        try:
+            for sub_pk, evt_pk in eligible:
+                executor.submit(process_subscription_checkout, sub_pk, evt_pk)
+        finally:
+            # shutdown(wait=False): stop accepting new tasks but let already-
+            # submitted futures run to completion without blocking the caller.
+            executor.shutdown(wait=False)
+    else:
+        for sub_pk, evt_pk in eligible:
+            process_subscription_checkout(sub_pk, evt_pk)
 
     return {
         'queued': queued,
