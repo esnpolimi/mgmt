@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from datetime import timedelta, datetime
 from decimal import Decimal
@@ -11,7 +12,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.core.mail import send_mail
 from django.core.validators import validate_email
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.utils import timezone
@@ -21,6 +22,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -478,6 +480,200 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
         subscription.save(update_fields=['additional_data'])
 
 
+def _subscription_payment_already_registered(subscription):
+    event = subscription.event
+    cost = Decimal(event.cost or 0)
+    deposit = Decimal(event.deposit or 0)
+    services_total = _services_total(subscription.selected_services or [])
+
+    quota_paid = cost <= 0 or Transaction.objects.filter(
+        subscription=subscription,
+        type=Transaction.TransactionType.SUBSCRIPTION
+    ).exists()
+    deposit_paid = deposit <= 0 or Transaction.objects.filter(
+        subscription=subscription,
+        type=Transaction.TransactionType.CAUZIONE
+    ).exists()
+    services_paid = services_total <= 0 or Transaction.objects.filter(
+        subscription=subscription,
+        type=Transaction.TransactionType.SERVICE
+    ).exists()
+
+    return quota_paid and deposit_paid and services_paid
+
+
+def _send_online_payment_link_email(subscription):
+    recipient = _subscription_recipient_email(subscription)
+    if not recipient or not subscription.sumup_checkout_id:
+        return False
+
+    event = subscription.event
+    total_cost = (Decimal(event.cost or 0)
+                  + Decimal(event.deposit or 0)
+                  + _services_total(subscription.selected_services or []))
+    if total_cost <= 0:
+        return False
+
+    ad = subscription.additional_data or {}
+    if ad.get('online_payment_link_email_sent'):
+        return False
+
+    pay_link = f"{settings.SCHEME_HOST}/event/{event.id}/pay?subscriptionId={subscription.id}"
+    subject = f"{event.name} - Online payment link"
+
+    list_sentence = ""
+    if getattr(event, 'notify_list', True):
+        list_name = subscription.list.name if subscription.list else "(no list)"
+        list_sentence = f"<p>Your current list is: <b>{list_name}</b>.</p>"
+
+    html_content = (
+        "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
+        "<p>Online payment has been enabled for your subscription.</p>"
+        f"<p>Amount due: <b>{total_cost} EUR</b></p>"
+        f"{list_sentence}"
+        "<p>Use this link to complete your payment:<br/>"
+        f"<a href='{pay_link}' style='font-weight:bold;color:#0a5db3;'>{pay_link}</a></p>"
+        "<p>Thank you,<br/>ESN Politecnico Milano</p>"
+        "</body></html>"
+    )
+
+    if _send_email(subject, html_content, recipient):
+        ad['online_payment_link_email_sent'] = True
+        subscription.additional_data = ad
+        subscription.save(update_fields=['additional_data'])
+        return True
+    return False
+
+
+def process_subscription_checkout(subscription_id, event_id):
+    """Background task: create a SumUp checkout and send the payment-link email for one subscription."""
+    subscription_for_email = None
+    try:
+        with transaction.atomic():
+            # select_for_update() acquires a row-level lock so that concurrent
+            # workers cannot both pass the sumup_checkout_id is None guard and
+            # each create their own checkout for the same subscription.
+            subscription = (
+                Subscription.objects
+                .select_for_update()
+                .select_related('event', 'profile', 'list')
+                .get(pk=subscription_id)
+            )
+
+            # Idempotency guard: another worker may have already created the
+            # checkout while this one was waiting for the lock.
+            if subscription.sumup_checkout_id is not None:
+                logger.info(
+                    f"process_subscription_checkout: checkout already exists for sub {subscription_id} "
+                    f"in event {event_id}, skipping"
+                )
+                return
+
+            event = subscription.event
+            total_cost = (
+                Decimal(event.cost or 0)
+                + Decimal(event.deposit or 0)
+                + _services_total(subscription.selected_services or [])
+            )
+            checkout_id, _ = create_sumup_checkout(subscription, total_cost, currency="EUR")
+            subscription.sumup_checkout_id = checkout_id
+
+            additional_data = subscription.additional_data or {}
+            if additional_data.get('payment_failed'):
+                additional_data.pop('payment_failed', None)
+                subscription.additional_data = additional_data
+                subscription.save(update_fields=['sumup_checkout_id', 'additional_data'])
+            else:
+                subscription.save(update_fields=['sumup_checkout_id'])
+
+            # Capture the object to use after the transaction commits; email is
+            # sent outside the atomic block to avoid holding the DB lock during
+            # network I/O.
+            subscription_for_email = subscription
+
+        # Transaction has committed – safe to do network I/O now.
+        _send_online_payment_link_email(subscription_for_email)
+        logger.info(
+            f"process_subscription_checkout: checkout created for sub {subscription_id} "
+            f"in event {event_id}"
+        )
+    except Exception as e:
+        logger.error(
+            f"process_subscription_checkout: failed for sub {subscription_id} "
+            f"in event {event_id}: {e}"
+        )
+        sentry_sdk.capture_exception(e)
+    finally:
+        # Manually spawned threads are not managed by Django's request/response
+        # cycle, so DB connections must be explicitly released to avoid leaks.
+        close_old_connections()
+
+
+def _backfill_online_checkouts_for_event(event):
+    """Enqueue a background thread for each eligible subscription; return immediately."""
+    queued = 0
+    skipped = 0
+
+    subscriptions = Subscription.objects.filter(event=event).select_related('event', 'profile', 'list')
+
+    # Precompute event-level cost components once (avoids re-reading the same
+    # Decimal values on every iteration).
+    event_cost = Decimal(event.cost or 0)
+    event_deposit = Decimal(event.deposit or 0)
+
+    # Single query to discover which transaction types are already registered
+    # for each subscription in this event.  This replaces up to 3 per-row
+    # Transaction.exists() calls that _subscription_payment_already_registered
+    # would otherwise issue inside the loop.
+    paid_types_by_sub: dict[int, set] = {}
+    for sub_id, txn_type in Transaction.objects.filter(
+        subscription__event=event,
+        type__in=[
+            Transaction.TransactionType.SUBSCRIPTION,
+            Transaction.TransactionType.CAUZIONE,
+            Transaction.TransactionType.SERVICE,
+        ],
+    ).values_list('subscription_id', 'type'):
+        paid_types_by_sub.setdefault(sub_id, set()).add(txn_type)
+
+    for subscription in subscriptions:
+        services_total = _services_total(subscription.selected_services or [])
+        total_cost = event_cost + event_deposit + services_total
+        if total_cost <= 0:
+            skipped += 1
+            continue
+
+        if subscription.sumup_checkout_id:
+            skipped += 1
+            continue
+
+        # Inline equivalent of _subscription_payment_already_registered using
+        # the precomputed paid_types_by_sub dict (no extra DB round-trips).
+        paid_types = paid_types_by_sub.get(subscription.pk, set())
+        quota_paid = event_cost <= 0 or Transaction.TransactionType.SUBSCRIPTION in paid_types
+        deposit_paid = event_deposit <= 0 or Transaction.TransactionType.CAUZIONE in paid_types
+        services_paid = services_total <= 0 or Transaction.TransactionType.SERVICE in paid_types
+        if quota_paid and deposit_paid and services_paid:
+            skipped += 1
+            continue
+
+        if getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True):
+            t = threading.Thread(
+                target=process_subscription_checkout,
+                args=(subscription.pk, event.pk),
+                daemon=True,
+            )
+            t.start()
+        else:
+            process_subscription_checkout(subscription.pk, event.pk)
+        queued += 1
+
+    return {
+        'queued': queued,
+        'skipped': skipped,
+    }
+
+
 def _send_payment_confirmation_email(subscription):
     ad = subscription.additional_data or {}
     recipient = _subscription_recipient_email(subscription)
@@ -793,6 +989,8 @@ def event_detail(request, pk):
             if not get_action_permissions(request, 'event_detail_PATCH'):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
 
+            previously_online_payment = bool(event.allow_online_payment)
+
             # Validation logic is handled in the serializer
             serializer = EventCreationSerializer(
                 instance=event,
@@ -802,7 +1000,16 @@ def event_detail(request, pk):
             )
 
             if serializer.is_valid():
-                serializer.save()
+                updated_event = serializer.save()
+
+                now_online_payment = bool(updated_event.allow_online_payment)
+                if not previously_online_payment and now_online_payment:
+                    stats = _backfill_online_checkouts_for_event(updated_event)
+                    logger.info(
+                        f"Online payment backfill for event {updated_event.pk}: "
+                        f"queued={stats['queued']} skipped={stats['skipped']}"
+                    )
+
                 return Response(serializer.data, status=200)
             else:
                 return Response(serializer.errors, status=400)
@@ -821,6 +1028,8 @@ def event_detail(request, pk):
         return Response({'error': "L'evento non esiste"}, status=404)
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
+    except DRFValidationError as e:
+        return Response(getattr(e, 'detail', {'error': str(e)}), status=400)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
     except Exception as e:
@@ -1193,8 +1402,33 @@ def generate_liberatorie_pdf(request):
         event = Event.objects.get(pk=event_id)
         subscriptions = Subscription.objects.filter(id__in=subscription_ids)
 
-        # Use a more detailed serializer to get all profile info
-        profiles_data = LiberatoriaProfileSerializer([sub.profile for sub in subscriptions], many=True).data
+        # Build profile data list, handling external subscriptions (profile=None).
+        profiles_data = []
+        for sub in subscriptions:
+            if sub.profile is not None:
+                profiles_data.append(LiberatoriaProfileSerializer(sub.profile).data)
+            else:
+                # External subscription: build partial data from available external fields.
+                first_name = sub.external_first_name or ''
+                last_name = sub.external_last_name or ''
+                if not first_name and not last_name and sub.external_name:
+                    parts = sub.external_name.split(None, 1)
+                    first_name = parts[0] if parts else ''
+                    last_name = parts[1] if len(parts) > 1 else ''
+                profiles_data.append({
+                    'name': first_name,
+                    'surname': last_name,
+                    'address': '',
+                    'esncard_number': '',
+                    'document_number': '',
+                    'document_expiry': '',
+                    'date_of_birth': '',
+                    'place_of_birth': '',
+                    'phone': sub.external_whatsapp_number or '',
+                    'email': '',
+                    'matricola': '',
+                    'codice_persona': '',
+                })
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4,

@@ -66,6 +66,7 @@ export default function SubscriptionModal({
     });
 
     const [profileHasEsncard, setProfileHasEsncard] = useState(null);
+    const [matricolaStatus, setMatricolaStatus] = useState({ isMissing: false, isExpired: false });
 
     // Reusable empty errors shape
     const emptyErrors = {
@@ -197,6 +198,24 @@ export default function SubscriptionModal({
                     profile_id: profileId,
                     profile_name: profileName || ''
                 }));
+                // Fetch profile data to check matricola status
+                fetchCustom("GET", `/profile/${profileId}/`, {
+                    onSuccess: (profileData) => {
+                        if (!profileData.is_esner) {
+                            setProfileHasEsncard(Boolean(profileData.latest_esncard));
+                            const matricolaMissing = !profileData.matricola_number || !profileData.person_code;
+                            const matricolaExpired = profileData.matricola_expiration ? 
+                                new Date(profileData.matricola_expiration) < new Date() : false;
+                            setMatricolaStatus({
+                                isMissing: matricolaMissing,
+                                isExpired: matricolaExpired
+                            });
+                        } else {
+                            setMatricolaStatus({ isMissing: false, isExpired: false });
+                        }
+                    },
+                    onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup)
+                });
             }
             if (event.selectedList) {
                 setData(d => ({
@@ -429,6 +448,9 @@ export default function SubscriptionModal({
     // Helper to check if either quota or cauzione is reimbursed
     const isReimbursed = data.status_quota === 'reimbursed' || data.status_cauzione === 'reimbursed' || data.status_services === 'reimbursed';
 
+    // Block form when profile has no active ESNcard and externals are not allowed
+    const isBlockedByNoEsncard = !event.is_allow_external && !!data.profile_id && profileHasEsncard === false;
+
     return (
         <Modal open={open}
                onClose={() => onClose(false)}
@@ -549,6 +571,19 @@ export default function SubscriptionModal({
                                             });
                                             // derive ESNcard presence from the selected option (no extra API call)
                                             setProfileHasEsncard(newValue ? Boolean(newValue.latest_esncard) : null);
+                                            
+                                            // Check matricola status
+                                            if (newValue && !newValue.is_esner) {
+                                                const matricolaMissing = !newValue.matricola_number || !newValue.person_code;
+                                                const matricolaExpired = newValue.matricola_expiration ? 
+                                                    new Date(newValue.matricola_expiration) < new Date() : false;
+                                                setMatricolaStatus({
+                                                    isMissing: matricolaMissing,
+                                                    isExpired: matricolaExpired
+                                                });
+                                            } else {
+                                                setMatricolaStatus({ isMissing: false, isExpired: false });
+                                            }
                                         }}
                                         error={errors.profile_id && errors.profile_id[0]}
                                         helperText={errors.profile_id && errors.profile_id[1] || 'Cerca per nome o numero ESNcard'}
@@ -575,7 +610,7 @@ export default function SubscriptionModal({
                                                                 <Checkbox
                                                                     checked={!!selected}
                                                                     onChange={() => toggleService(svc)}
-                                                                    disabled={isReimbursed}
+                                                                    disabled={isReimbursed || isBlockedByNoEsncard}
                                                                     size="small"
                                                                 />
                                                             }
@@ -588,7 +623,7 @@ export default function SubscriptionModal({
                                                             sx={{width: 90}}
                                                             value={selected?.quantity || 1}
                                                             onChange={(e) => updateServiceQty(svc, e.target.value)}
-                                                            disabled={!selected || isReimbursed}
+                                                            disabled={!selected || isReimbursed || isBlockedByNoEsncard}
                                                             slotProps={{htmlInput: {min: 1, step: 1}}}
                                                         />
                                                     </Box>
@@ -634,7 +669,7 @@ export default function SubscriptionModal({
                                                         status_quota: d.status_quota === 'paid' ? 'pending' : 'paid'
                                                     }))}
                                                     color="primary"
-                                                    disabled={isReimbursed}
+                                                    disabled={isReimbursed || isBlockedByNoEsncard}
                                                     size="small"
                                                 />
                                             }
@@ -671,7 +706,7 @@ export default function SubscriptionModal({
                                                         status_cauzione: d.status_cauzione === 'paid' ? 'pending' : 'paid'
                                                     }))}
                                                     color="primary"
-                                                    disabled={isReimbursed}
+                                                    disabled={isReimbursed || isBlockedByNoEsncard}
                                                     size="small"
                                                 />
                                             }
@@ -708,7 +743,7 @@ export default function SubscriptionModal({
                                                         status_services: d.status_services === 'paid' ? 'pending' : 'paid'
                                                     }))}
                                                     color="primary"
-                                                    disabled={isReimbursed}
+                                                    disabled={isReimbursed || isBlockedByNoEsncard}
                                                     size="small"
                                                 />
                                             }
@@ -739,7 +774,7 @@ export default function SubscriptionModal({
                                                 value={data.account_id || ''}
                                                 error={errors.account_id && errors.account_id[0]}
                                                 onChange={handleChange}
-                                                disabled={isReimbursed}
+                                                disabled={isReimbursed || isBlockedByNoEsncard}
                                             >
                                                 {accounts.map((account) => (
                                                     <MenuItem key={account.id}
@@ -766,7 +801,7 @@ export default function SubscriptionModal({
                                                                 onChange={() => setData(d => ({...d, send_payment_email: !d.send_payment_email}))}
                                                                 color="primary"
                                                                 size="small"
-                                                                disabled={isReimbursed}
+                                                                disabled={isReimbursed || isBlockedByNoEsncard}
                                                             />
                                                         }
                                                         label="Invia email di conferma pagamento"
@@ -782,7 +817,7 @@ export default function SubscriptionModal({
                                                                 onChange={() => setData(d => ({...d, auto_move_after_payment: !d.auto_move_after_payment}))}
                                                                 color="primary"
                                                                 size="small"
-                                                                disabled={isReimbursed}
+                                                                disabled={isReimbursed || isBlockedByNoEsncard}
                                                             />
                                                         }
                                                         label="Sposta nella prima lista libera"
@@ -801,16 +836,27 @@ export default function SubscriptionModal({
                                     value={data.notes}
                                     onChange={handleChange}
                                     fullWidth
-                                    disabled={isReimbursed}
+                                    disabled={isReimbursed || isBlockedByNoEsncard}
                                 />
                             </Grid>
                         </Grid>
 
-                        {/* Alert: profile without ESNcard when externals are not allowed */}
-                        {!event.is_allow_external && data.profile_id && profileHasEsncard === false && (
+                        {/* Alert: profile without ESNcard when externals are not allowed — form is blocked */}
+                        {isBlockedByNoEsncard && (
                             <Alert severity="error" sx={{mt: 2}}>
-                                Attenzione! Il profilo selezionato non ha una ESNcard attiva. Contatta gli organizzatori per
-                                verificare la situazione.
+                                Iscrizione bloccata: il profilo selezionato non ha una ESNcard attiva e l&apos;evento non consente iscrizioni esterne.
+                                Lo studente deve acquistare una ESNcard prima di poter essere iscritto.
+                            </Alert>
+                        )}
+
+                        {/* Alert: matricola expired or missing */}
+                        {data.profile_id && (matricolaStatus.isMissing || matricolaStatus.isExpired) && (
+                            <Alert severity="warning" sx={{mt: 2}}>
+                                {matricolaStatus.isMissing && matricolaStatus.isExpired 
+                                    ? 'Attenzione: la matricola è mancante e scaduta'
+                                    : matricolaStatus.isMissing 
+                                        ? 'Attenzione: la matricola o il codice persona è mancante'
+                                        : 'Attenzione: la matricola è scaduta'}
                             </Alert>
                         )}
 
@@ -822,7 +868,7 @@ export default function SubscriptionModal({
                                     '&:hover': {bgcolor: (data.profile_id || (event.is_allow_external && data.external_name)) ? '#1565c0' : '#757575'}
                                 }}
                                 onClick={handleSubmit}
-                                disabled={submitLoading || isReimbursed || (!data.profile_id && !(data.external_name && data.external_email))}
+                                disabled={submitLoading || isReimbursed || isBlockedByNoEsncard || (!data.profile_id && !(data.external_name && data.external_email))}
                                 startIcon={submitLoading ? <CircularProgress size={18}/> : null}>
                             {isEdit ? 'Salva Modifiche' : 'Conferma'}
                         </Button>
