@@ -28,7 +28,7 @@ const useMaintenanceNotification = (accessToken) => {
         // validates it server-side with simplejwt before opening the stream.
         // The effect declares `accessToken` as a dependency so the connection
         // is automatically recreated after every token rotation.
-        const url = `${apiHost}/maintenance/stream/?token=${encodeURIComponent(accessToken)}`;
+        const url = `${apiHost}/backend/maintenance/stream/?token=${encodeURIComponent(accessToken)}`;
 
         const es = new EventSource(url);
 
