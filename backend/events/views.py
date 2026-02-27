@@ -33,7 +33,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import json
 
-from events.models import Event, Subscription
+from events.models import Event, Subscription, EventOrganizer
 from events.models import EventList, validate_field_data
 from events.serializers import (
     EventsListSerializer, EventCreationSerializer,
@@ -1437,15 +1437,20 @@ def generate_liberatorie_pdf(request):
     def display_na(value):
         return value if value not in [None, '', [], {}] else 'N/A'
 
-    if not get_action_permissions(request, 'generate_liberatorie_pdf_POST'):
+    event_id = request.data.get('event_id')
+    subscription_ids = request.data.get('subscription_ids', [])
+
+    if not event_id or not subscription_ids:
+        return Response({'error': 'Event ID and Subscription IDs are required.'}, status=400)
+
+    is_board = request.user.groups.filter(name='Board').exists()
+    is_lead_organizer = (
+        hasattr(request.user, 'profile') and
+        EventOrganizer.objects.filter(event_id=event_id, profile=request.user.profile, is_lead=True).exists()
+    )
+    if not (is_board or is_lead_organizer):
         return Response({'error': 'Non hai i permessi per generare liberatorie.'}, status=403)
     try:
-        event_id = request.data.get('event_id')
-        subscription_ids = request.data.get('subscription_ids', [])
-
-        if not event_id or not subscription_ids:
-            return Response({'error': 'Event ID and Subscription IDs are required.'}, status=400)
-
         event = Event.objects.get(pk=event_id)
         subscriptions = Subscription.objects.filter(id__in=subscription_ids)
 
@@ -1591,7 +1596,12 @@ def printable_liberatorie(request, event_id):
     Returns all subscriptions for the event with a paid quota (status_quota == 'paid').
     Optional query param: list=<list_id> to filter by list.
     """
-    if not get_action_permissions(request, 'printable_liberatorie_GET'):
+    is_board = request.user.groups.filter(name='Board').exists()
+    is_lead_organizer = (
+        hasattr(request.user, 'profile') and
+        EventOrganizer.objects.filter(event_id=event_id, profile=request.user.profile, is_lead=True).exists()
+    )
+    if not (is_board or is_lead_organizer):
         return Response({'error': 'Non hai i permessi per visualizzare le liberatorie.'}, status=403)
     try:
         event = Event.objects.get(pk=event_id)

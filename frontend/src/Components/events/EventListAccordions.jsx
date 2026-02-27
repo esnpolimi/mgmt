@@ -40,6 +40,7 @@ export default memo(function EventListAccordions({
                                                      canChangeTransactions,
                                                      isBoardMember,
                                                      isOrganizer,
+                                                     isLeadOrganizer,
                                                  }) {
     const [expandedAccordion, setExpandedAccordion] = useState([]);
     const hasDeposit = data?.deposit > 0;
@@ -907,7 +908,7 @@ export default memo(function EventListAccordions({
                                         Rimborsa Cauzioni
                                     </Button>
                                 )}
-                                {hasQuota && selectedCount === 0 && (
+                                {hasQuota && selectedCount === 0 && (isBoardMember || isLeadOrganizer) && (
                                     <Button variant="contained"
                                             color="info"
                                             onClick={e => {
@@ -925,7 +926,7 @@ export default memo(function EventListAccordions({
                 },
             }
         }));
-    }, [listConfigs, data, canChangeSubscription, canChangeTransactions, isBoardMember, onOpenSubscriptionModal, onEditSubscription, onMoveToList, onOpenReimburseDeposits, onOpenPrintableLibetatorie]);
+    }, [listConfigs, data, canChangeSubscription, canChangeTransactions, isBoardMember, isLeadOrganizer, onOpenSubscriptionModal, onEditSubscription, onMoveToList, onOpenReimburseDeposits, onOpenPrintableLibetatorie]);
 
     if (!lists || lists.length === 0) {
         return <Typography>Nessuna lista disponibile (aggiungine una per poter iscrivere)</Typography>;
