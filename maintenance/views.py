@@ -145,6 +145,7 @@ def maintenance_admin_view(request):
 
     context = {
         'title': 'Notifica Manutenzione',
+        'subtitle': 'Invia una notifica push immediata a tutti gli utenti connessi.',
         'sent': sent,
         'has_permission': True,
     }
