@@ -72,3 +72,37 @@ class ContentLink(models.Model):
 
     def __str__(self):
         return f"{self.section.get_title_display()} - {self.name}"
+
+
+class WhatsAppConfig(models.Model):
+    """
+    Singleton model that stores the WhatsApp group link.
+    Editable from the ContentManager page.
+    """
+    whatsapp_link = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name="WhatsApp Group Link"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='whatsapp_config_updated'
+    )
+
+    class Meta:
+        verbose_name = "WhatsApp Config"
+        verbose_name_plural = "WhatsApp Config"
+
+    def __str__(self):
+        return f"WhatsApp Config (link: {self.whatsapp_link[:60]})"
+
+    @classmethod
+    def get_instance(cls):
+        """Returns the singleton instance, creating it if it doesn't exist."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
