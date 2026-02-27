@@ -13,6 +13,7 @@ __pycache__/
 .vscode
 backend/events/migrations/*
 backend/treasury/migrations/*
+backend/content/migrations/*
 scripts
 logs
 backend/maintenance_notification.json
