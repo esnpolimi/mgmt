@@ -2175,7 +2175,7 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 		user.user_permissions.add(self.perm_view_event)
 		self.authenticate(user)
 
-		response = self._post(self.event.pk, [])
+		response = self._post(self.event.pk, [999999])
 
 		self.assertEqual(response.status_code, 403)
 
