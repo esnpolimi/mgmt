@@ -35,6 +35,11 @@ export default function ContentManager() {
     const [popup, setPopup] = useState(null);
     const [, setLoading] = useState(false);
 
+    // WhatsApp link state
+    const [waLink, setWaLink] = useState('');
+    const [waLinkInput, setWaLinkInput] = useState('');
+    const [waSaving, setWaSaving] = useState(false);
+
     // Link Dialog
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [editingLink, setEditingLink] = useState(null);
@@ -48,7 +53,32 @@ export default function ContentManager() {
 
     useEffect(() => {
         fetchSections();
+        fetchWaConfig();
     }, []);
+
+    const fetchWaConfig = () => {
+        fetchCustom('GET', '/content/whatsapp-config/', {
+            onSuccess: (data) => {
+                setWaLink(data.whatsapp_link || '');
+                setWaLinkInput(data.whatsapp_link || '');
+            },
+            onError: (error) => defaultErrorHandler(error, setPopup),
+        });
+    };
+
+    const handleSaveWaLink = () => {
+        setWaSaving(true);
+        fetchCustom('PATCH', '/content/whatsapp-config/', {
+            body: { whatsapp_link: waLinkInput },
+            onSuccess: (data) => {
+                setWaLink(data.whatsapp_link || '');
+                setWaLinkInput(data.whatsapp_link || '');
+                setPopup({ message: 'Link WhatsApp aggiornato con successo!', state: 'success', id: Date.now() });
+            },
+            onError: (error) => defaultErrorHandler(error, setPopup),
+            onFinally: () => setWaSaving(false),
+        });
+    };
 
     const fetchSections = () => {
         setLoading(true);
@@ -289,6 +319,38 @@ export default function ContentManager() {
                             </AccordionDetails>
                         </Accordion>
                     ))}
+                </Paper>
+
+                {/* ── WhatsApp Group Link ── */}
+                <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+                        Link Gruppo WhatsApp
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Questo link viene inviato via email agli studenti che compilano il form pubblico{' '}
+                        <a href="/whatsapp" target="_blank" rel="noopener noreferrer">/whatsapp</a>.
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                        <TextField
+                            label="Link del gruppo WhatsApp"
+                            variant="outlined"
+                            fullWidth
+                            value={waLinkInput}
+                            onChange={(e) => setWaLinkInput(e.target.value)}
+                            placeholder="https://chat.whatsapp.com/..."
+                            helperText={waLink ? `Link attuale: ${waLink}` : 'Nessun link configurato'}
+                            sx={{ flex: 1, minWidth: 280 }}
+                        />
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleSaveWaLink}
+                            disabled={waSaving || waLinkInput === waLink}
+                            sx={{ mt: 1 }}
+                        >
+                            {waSaving ? 'Salvataggio...' : 'Salva'}
+                        </Button>
+                    </Box>
                 </Paper>
             </Box>
 
