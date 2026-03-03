@@ -63,7 +63,7 @@ function AppShell() {
                     <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                     <Route path='/treasury/transactions_list/:id' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                     <Route path='/treasury/reimbursement_requests_list' element={<ProtectedRoute><ReimbursementRequestsList/></ProtectedRoute>}/>
-                    <Route path='/content-manager' element={<ProtectedRoute requiredPermission="change_account"><ContentManager/></ProtectedRoute>}/>
+                    <Route path='/content-manager' element={<ProtectedRoute requiredPermission="manage_content"><ContentManager/></ProtectedRoute>}/>
                 </Routes>
             </Router>
             {notification && (
