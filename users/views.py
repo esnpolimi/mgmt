@@ -351,12 +351,17 @@ def user_finance_permissions(request):
         def effective_view(u):
             return u.can_view_casse_import or _in_group(u, 'Attivi') or _in_group(u, 'Board')
 
+        def effective_content(u):
+            return u.can_manage_content or _in_group(u, 'Attivi') or _in_group(u, 'Board')
+
         if request.method == 'GET':
             return Response({
                 'can_manage_casse': target.can_manage_casse,
                 'can_view_casse_import': target.can_view_casse_import,
+                'can_manage_content': target.can_manage_content,
                 'effective_can_manage_casse': effective_manage(target),
                 'effective_can_view_casse_import': effective_view(target),
+                'effective_can_manage_content': effective_content(target),
             }, status=200)
 
         if request.method == 'PATCH':
@@ -364,8 +369,16 @@ def user_finance_permissions(request):
                 return Response({'error': 'Solo Board può modificare questi permessi.'}, status=403)
             if not target.profile.is_esner:
                 return Response({'error': 'Il profilo non è un ESNer.'}, status=400)
-            if not _in_group(target, 'Aspiranti'):
-                return Response({'error': 'Permessi speciali applicabili solo agli Aspiranti.'}, status=400)
+
+            # Validate field-specific group restrictions
+            finance_fields = {k for k in request.data if k in ['can_manage_casse', 'can_view_casse_import']}
+            content_fields = {k for k in request.data if k == 'can_manage_content'}
+
+            if finance_fields and not _in_group(target, 'Aspiranti'):
+                return Response({'error': 'Permessi casse applicabili solo agli Aspiranti.'}, status=400)
+            if content_fields and not (_in_group(target, 'Aspiranti') or _in_group(target, 'Attivi')):
+                return Response({'error': 'Ruolo Content Manager applicabile solo ad Aspiranti e Attivi.'}, status=400)
+
             serializer = FinancePermissionSerializer(target, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
@@ -373,6 +386,7 @@ def user_finance_permissions(request):
                     **serializer.data,
                     'effective_can_manage_casse': effective_manage(target),
                     'effective_can_view_casse_import': effective_view(target),
+                    'effective_can_manage_content': effective_content(target),
                 }, status=200)
             return Response(serializer.errors, status=400)
         return Response({'error': 'Metodo non consentito.'}, status=405)

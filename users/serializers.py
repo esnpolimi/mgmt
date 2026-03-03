@@ -57,6 +57,7 @@ class UserReactSerializer(serializers.ModelSerializer):
     profile = ProfileListViewSerializer(read_only=True)
     effective_can_manage_casse = serializers.SerializerMethodField()
     effective_can_view_casse_import = serializers.SerializerMethodField()
+    effective_can_manage_content = serializers.SerializerMethodField()
     restricted_accounts = serializers.SerializerMethodField()
 
     class Meta:
@@ -68,7 +69,14 @@ class UserReactSerializer(serializers.ModelSerializer):
         """ Get all permissions assigned to the user. """
         user_permissions = obj.user_permissions.values_list('codename', flat=True)
         group_permissions = obj.groups.values_list('permissions__codename', flat=True)
-        return list(set(user_permissions).union(set(group_permissions)))
+        permissions = set(user_permissions).union(set(group_permissions))
+        # Virtual permission: manage_content — granted to Board, Attivi, or flagged users
+        if (
+            obj.groups.filter(name__in=['Board', 'Attivi']).exists()
+            or getattr(obj, 'can_manage_content', False)
+        ):
+            permissions.add('manage_content')
+        return list(permissions)
 
     @staticmethod
     def _is_in(obj, group_name: str):
@@ -84,6 +92,13 @@ class UserReactSerializer(serializers.ModelSerializer):
     def get_effective_can_view_casse_import(self, obj):
         return (
             obj.can_view_casse_import
+            or self._is_in(obj, 'Attivi')
+            or self._is_in(obj, 'Board')
+        )
+
+    def get_effective_can_manage_content(self, obj):
+        return (
+            obj.can_manage_content
             or self._is_in(obj, 'Attivi')
             or self._is_in(obj, 'Board')
         )
@@ -132,4 +147,4 @@ class UserGroupEditSerializer(serializers.ModelSerializer):
 class FinancePermissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['can_manage_casse', 'can_view_casse_import']
+        fields = ['can_manage_casse', 'can_view_casse_import', 'can_manage_content']
