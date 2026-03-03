@@ -36,7 +36,7 @@ export default function Sidebar() {
         {text: "Home", icon: <HomeIcon/>, path: "/"},
         {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury", requiredPermission: "change_account"},
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
-        {text: "Gestione Contenuti", icon: <EditIcon/>, path: "/content-manager", requiredPermission: "change_account"},
+        {text: "Gestione Contenuti", icon: <EditIcon/>, path: "/content-manager", requiredPermission: "manage_content"},
         {
             text: "Profili",
             icon: <PersonIcon/>,

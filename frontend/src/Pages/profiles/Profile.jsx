@@ -557,6 +557,24 @@ export default function Profile() {
         });
     };
 
+    const toggleContentManagerRole = () => {
+        if (!profile) return;
+        const targetEmail = profile.email;
+        const enable = !(financePerms?.can_manage_content || false);
+        fetchCustom("PATCH", `/users/finance-permissions/?email=${encodeURIComponent(targetEmail)}`, {
+            body: { can_manage_content: enable },
+            onSuccess: (res) => {
+                setFinancePerms(res);
+                setPopup({
+                    message: enable ? 'Ruolo Content Manager assegnato.' : 'Ruolo Content Manager revocato.',
+                    state: 'success',
+                    id: Date.now()
+                });
+            },
+            onError: (err) => defaultErrorHandler(err, setPopup)
+        });
+    };
+
     // Determine which columns to show based on subscriptions data
     const showQuotaColumn = subscriptions.some(sub => sub.status_quota !== undefined && sub.status_quota !== null);
     const showCauzioneColumn = subscriptions.some(sub => sub.status_cauzione !== undefined && sub.status_cauzione !== null);
@@ -1353,6 +1371,21 @@ export default function Profile() {
                                                 onClick={toggleFinancePerms}
                                             >
                                                 {financePerms?.can_manage_casse ? 'Revoca Permessi Casse' : 'Concedi Permessi Casse'}
+                                            </Button>
+                                        </Tooltip>
+                                    )}
+                                    {/* Content Manager role toggle (Board → ESNer Aspiranti/Attivi) */}
+                                    {user?.groups?.includes('Board') && profileType === 'ESNer' && ['Aspiranti', 'Attivi'].includes(profile?.group) && (
+                                        <Tooltip
+                                            title="Permette di vedere e modificare la pagina Gestione Contenuti"
+                                            arrow>
+                                            <Button
+                                                variant={financePerms?.can_manage_content ? 'outlined' : 'contained'}
+                                                color="info"
+                                                startIcon={<EditIcon/>}
+                                                onClick={toggleContentManagerRole}
+                                            >
+                                                {financePerms?.can_manage_content ? 'Revoca Content Manager' : 'Concedi Content Manager'}
                                             </Button>
                                         </Tooltip>
                                     )}
