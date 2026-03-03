@@ -186,9 +186,8 @@ export default function Profile() {
     const isBoardMember = user?.groups?.includes('Board');
     const isProfileOwner = user?.profile?.id === profile?.id;
     const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
-    const canManualVerifyErasmus =
+    const canManualVerify =
         isBoardMember &&
-        profileType === 'Erasmus' &&
         !!profile &&
         (!profile.enabled || !profile.email_is_verified);
 
@@ -519,13 +518,13 @@ export default function Profile() {
         if (success && msg) setPopup({message: msg, state: "success", id: Date.now()});
     };
 
-    const handleManualVerifyErasmus = () => {
+    const handleManualVerify = () => {
         if (!profile?.id) return;
         setSaving(true);
         fetchCustom("POST", `/profile/${profile.id}/manual-verify-email/`, {
             onSuccess: (res) => {
                 setPopup({
-                    message: res?.message || "Profilo Erasmus attivato manualmente.",
+                    message: res?.message || "Profilo attivato manualmente.",
                     state: "success",
                     id: Date.now()
                 });
@@ -1345,14 +1344,14 @@ export default function Profile() {
                                     <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
                                         Iscrivi ad Evento
                                     </Button>
-                                    {canManualVerifyErasmus && (
+                                    {canManualVerify && (
                                         <Tooltip
                                             title="Attiva manualmente il profilo e marca l'email come verificata"
                                             arrow>
                                             <Button
                                                 variant="contained"
                                                 color="warning"
-                                                onClick={handleManualVerifyErasmus}
+                                                onClick={handleManualVerify}
                                                 disabled={saving}
                                             >
                                                 Attiva / Verifica Email
