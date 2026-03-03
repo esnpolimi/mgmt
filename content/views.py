@@ -117,8 +117,8 @@ class IsFinanceManagerOrReadOnly(permissions.BasePermission):
     """
     Custom permission for content management.
     - GET: All authenticated users
-    - POST/PUT/PATCH/DELETE: Users with treasury management permissions (same as Tesoreria)
-      Board members, Attivi, or Aspiranti with can_manage_casse flag
+    - POST/PUT/PATCH/DELETE: Board, Attivi, Aspiranti with can_manage_casse,
+      or users with can_manage_content flag
     """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
@@ -133,8 +133,12 @@ class IsFinanceManagerOrReadOnly(permissions.BasePermission):
         if user.groups.filter(name__in=['Board', 'Attivi']).exists():
             return True
         
-        # Aspiranti with the special flag
+        # Aspiranti with the special finance flag
         if getattr(user, 'can_manage_casse', False):
+            return True
+        
+        # Users with the Content Manager flag
+        if getattr(user, 'can_manage_content', False):
             return True
         
         return False
@@ -195,11 +199,12 @@ def whatsapp_config(request):
         serializer = WhatsAppConfigSerializer(instance)
         return Response(serializer.data)
 
-    # PATCH – only board/attivi can edit
+    # PATCH – board/attivi or content managers can edit
     user = request.user
     can_edit = (
         user.groups.filter(name__in=['Board', 'Attivi']).exists()
         or getattr(user, 'can_manage_casse', False)
+        or getattr(user, 'can_manage_content', False)
     )
     if not can_edit:
         return Response({'detail': 'Permission denied.'}, status=drf_status.HTTP_403_FORBIDDEN)
