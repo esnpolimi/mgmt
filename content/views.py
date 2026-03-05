@@ -7,6 +7,7 @@ from datetime import datetime
 import sentry_sdk
 from django.conf import settings
 from django.core.mail import send_mail
+from django.shortcuts import render
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -213,6 +214,110 @@ def whatsapp_config(request):
     return Response(serializer.errors, status=drf_status.HTTP_400_BAD_REQUEST)
 
 
+def _send_whatsapp_email(first_name, email, whatsapp_link):
+    """Send the WhatsApp group link to the applicant. Raises on failure."""
+    subject = 'ESN Politecnico Milano \u2013 WhatsApp Group Link'
+    html_content = f"""
+    <html><body>
+    <p>Hi {first_name},</p>
+    <p>here is the link to gain access to the WhatsApp group:
+    <a href="{whatsapp_link}">ESN Politecnico Milano - WhatsApp</a>.</p>
+    <p>We kindly ask you not to share the link, as the access to the group should be limited
+    to students attending Politecnico di Milano, or exchange students studying at our university.</p>
+    <p>Please contact us at <strong>@esnpolimi</strong> on Instagram for every information.</p>
+    <br/>
+    <p>Have a nice day!</p>
+    <p><strong>ESN Politecnico Milano</strong></p>
+    </body></html>
+    """
+    plain_content = (
+        f"Hi {first_name},\n\n"
+        f"here is the link to gain access to the WhatsApp group: ESN Politecnico Milano - WhatsApp "
+        f"({whatsapp_link}).\n"
+        "We kindly ask you not to share the link, as the access to the group should be limited "
+        "to students attending Politecnico di Milano, or exchange students studying at our university.\n"
+        "Please contact us at @esnpolimi on Instagram for every information.\n\n"
+        "Have a nice day!\n\nESN Politecnico Milano"
+    )
+    send_mail(
+        subject=subject,
+        message=plain_content,
+        from_email=None,
+        recipient_list=[email],
+        html_message=html_content,
+        fail_silently=False,
+    )
+
+
+def whatsapp_page(request):
+    """
+    GET  /whatsapp  \u2192 render the WhatsApp registration form (standalone HTML page).
+    POST /whatsapp  \u2192 process the form and show result.
+    """
+    if request.method == 'GET':
+        return render(request, 'content/whatsapp.html', {'form_data': {}, 'errors': {}})
+
+    raw = {
+        'email': request.POST.get('email', '').strip().lower(),
+        'first_name': request.POST.get('first_name', '').strip(),
+        'last_name': request.POST.get('last_name', '').strip(),
+        'is_international': request.POST.get('is_international'),
+        'home_university': request.POST.get('home_university', '').strip(),
+        'course_of_study': request.POST.get('course_of_study', '').strip(),
+    }
+
+    serializer_data = dict(raw)
+    is_int_raw = raw.get('is_international')
+    if is_int_raw == 'true':
+        serializer_data['is_international'] = True
+    elif is_int_raw == 'false':
+        serializer_data['is_international'] = False
+    else:
+        serializer_data['is_international'] = None
+
+    serializer = WhatsAppRegistrationSerializer(data=serializer_data)
+    if not serializer.is_valid():
+        field_errors = {
+            field: msgs[0] if isinstance(msgs, list) else str(msgs)
+            for field, msgs in serializer.errors.items()
+        }
+        return render(request, 'content/whatsapp.html', {'form_data': raw, 'errors': field_errors})
+
+    data = serializer.validated_data
+    config = WhatsAppConfig.get_instance()
+
+    if not data['is_international']:
+        _append_to_whatsapp_log(data, 'Non ammesso (non internazionale/Erasmus)')
+        return render(request, 'content/whatsapp.html', {'not_admitted': True})
+
+    if not config.whatsapp_link:
+        _append_to_whatsapp_log(data, 'Errore: link WhatsApp non configurato')
+        return render(request, 'content/whatsapp.html', {
+            'form_data': raw,
+            'errors': {},
+            'error': 'The WhatsApp link has not been configured yet. Please contact us on Instagram @esnpolimi.',
+        })
+
+    try:
+        _send_whatsapp_email(data['first_name'], data['email'], config.whatsapp_link)
+        logger.info(f"WhatsApp link sent to {data['email']}")
+    except Exception as e:
+        logger.exception(f"Error sending WhatsApp link email to {data['email']}")
+        sentry_sdk.capture_exception(e)
+        _append_to_whatsapp_log(data, 'Errore invio email')
+        return render(request, 'content/whatsapp.html', {
+            'form_data': raw,
+            'errors': {},
+            'error': 'Unable to process your request right now. Please try again later.',
+        })
+
+    _append_to_whatsapp_log(data, 'Email inviata')
+    return render(request, 'content/whatsapp.html', {
+        'success': True,
+        'submitted_email': data['email'],
+    })
+
+
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def whatsapp_register(request):
@@ -246,39 +351,8 @@ def whatsapp_register(request):
     email = data['email']
     whatsapp_link = config.whatsapp_link
 
-    subject = 'ESN Politecnico Milano – WhatsApp Group Link'
-    html_content = f"""
-    <html><body>
-    <p>Hi {first_name},</p>
-    <p>here is the link to gain access to the WhatsApp group:
-    <a href="{whatsapp_link}">ESN Politecnico Milano - WhatsApp</a>.</p>
-    <p>We kindly ask you not to share the link, as the access to the group should be limited
-    to students attending Politecnico di Milano, or exchange students studying at our university.</p>
-    <p>Please contact us at <strong>@esnpolimi</strong> on Instagram for every information.</p>
-    <br/>
-    <p>Have a nice day!</p>
-    <p><strong>ESN Politecnico Milano</strong></p>
-    </body></html>
-    """
-    plain_content = (
-        f"Hi {first_name},\n\n"
-        f"here is the link to gain access to the WhatsApp group: ESN Politecnico Milano - WhatsApp "
-        f"({whatsapp_link}).\n"
-        "We kindly ask you not to share the link, as the access to the group should be limited "
-        "to students attending Politecnico di Milano, or exchange students studying at our university.\n"
-        "Please contact us at @esnpolimi on Instagram for every information.\n\n"
-        "Have a nice day!\n\nESN Politecnico Milano"
-    )
-
     try:
-        send_mail(
-            subject=subject,
-            message=plain_content,
-            from_email=None,  # uses DEFAULT_FROM_EMAIL
-            recipient_list=[email],
-            html_message=html_content,
-            fail_silently=False,
-        )
+        _send_whatsapp_email(first_name, email, whatsapp_link)
         logger.info(f"WhatsApp link sent to {email}")
     except Exception as e:
         logger.exception(f"Error sending WhatsApp link email to {email}")
