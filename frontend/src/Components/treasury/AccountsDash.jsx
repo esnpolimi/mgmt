@@ -34,7 +34,7 @@ export default function AccountsDash() {
             Cell: ({cell}) => (
                 <Box>
                     {cell.getValue() !== null ? (
-                        <Chip label={`€${cell.getValue()}`} color="primary"/>) : (
+                        <Chip label={`€${cell.getValue()}`} color={parseFloat(cell.getValue()) < 0 ? "error" : "primary"}/>) : (
                         <Chip label="N/A" color="warning"/>)}
                 </Box>
             ),

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ContentSection, ContentLink
+from .models import ContentSection, ContentLink, WhatsAppConfig
 
 
 class ContentLinkInline(admin.TabularInline):
@@ -32,4 +32,18 @@ class ContentLinkAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if not change:  # If creating new object
             obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(WhatsAppConfig)
+class WhatsAppConfigAdmin(admin.ModelAdmin):
+    list_display = ('whatsapp_link', 'updated_at', 'updated_by')
+    readonly_fields = ('updated_at', 'updated_by')
+
+    def has_add_permission(self, request):
+        # Only one instance allowed
+        return not WhatsAppConfig.objects.exists()
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
         super().save_model(request, obj, form, change)

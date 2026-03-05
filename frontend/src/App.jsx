@@ -26,6 +26,7 @@ import ReimbursementRequestsList from "./Pages/treasury/ReimbursementRequestsLis
 import Profile from "./Pages/profiles/Profile.jsx";
 import UrlSanitizer from "./UrlSanitizer";
 import ContentManager from "./Pages/ContentManager.jsx";
+import WhatsAppForm from "./Pages/WhatsAppForm.jsx";
 
 /**
  * Inner shell rendered inside AuthProvider so that useMaintenanceNotification
@@ -50,6 +51,7 @@ function AppShell() {
                     <Route path='/profile/:id' element={<ProtectedRoute><Profile/></ProtectedRoute>}/>
                     <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                     <Route path='/esner_form' element={<ESNerForm/>}/>
+                    <Route path='/whatsapp' element={<WhatsAppForm/>}/>
                     <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
                     <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
                     <Route path='/event/:id/formlogin' element={<EventFormLogin/>}/>
@@ -61,7 +63,7 @@ function AppShell() {
                     <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                     <Route path='/treasury/transactions_list/:id' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
                     <Route path='/treasury/reimbursement_requests_list' element={<ProtectedRoute><ReimbursementRequestsList/></ProtectedRoute>}/>
-                    <Route path='/content-manager' element={<ProtectedRoute requiredPermission="change_account"><ContentManager/></ProtectedRoute>}/>
+                    <Route path='/content-manager' element={<ProtectedRoute requiredPermission="manage_content"><ContentManager/></ProtectedRoute>}/>
                 </Routes>
             </Router>
             {notification && (

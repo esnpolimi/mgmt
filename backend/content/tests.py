@@ -1,10 +1,12 @@
 """Tests for content module endpoints and behaviors."""
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from rest_framework.test import APITestCase
 
-from content.models import ContentSection, ContentLink
+from content.models import ContentSection, ContentLink, WhatsAppConfig
 from profiles.models import Profile
 
 
@@ -546,4 +548,148 @@ class ContentOrderingTests(ContentBaseTestCase):
 		results = response.data.get('results', response.data)
 		names = [l["name"] for l in results]
 		self.assertEqual(names, ["A", "B", "C"])
+
+
+class WhatsAppEndpointsTests(ContentBaseTestCase):
+	"""Tests for WhatsApp config and registration endpoints."""
+
+	def setUp(self):
+		super().setUp()
+		self.registration_payload = {
+			"email": "mario.rossi@mail.polimi.it",
+			"first_name": "Mario",
+			"last_name": "Rossi",
+			"is_international": True,
+			"home_university": "Politecnico di Milano",
+			"course_of_study": "Computer Science",
+		}
+
+	def test_whatsapp_config_patch_requires_authentication(self):
+		"""PATCH whatsapp-config should require authentication."""
+		response = self.client.patch(
+			"/backend/content/whatsapp-config/",
+			{"whatsapp_link": "https://chat.whatsapp.com/new-link"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 401)
+
+	def test_whatsapp_config_patch_forbidden_for_non_board_attivi(self):
+		"""PATCH whatsapp-config should be forbidden for users without permission."""
+		profile = _create_profile("viewer@esnpolimi.it")
+		user = _create_user(profile)
+		self.authenticate(user)
+
+		response = self.client.patch(
+			"/backend/content/whatsapp-config/",
+			{"whatsapp_link": "https://chat.whatsapp.com/new-link"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_whatsapp_config_patch_allowed_for_board(self):
+		"""PATCH whatsapp-config should succeed for Board users."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		response = self.client.patch(
+			"/backend/content/whatsapp-config/",
+			{"whatsapp_link": "https://chat.whatsapp.com/board-link"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		config = WhatsAppConfig.get_instance()
+		self.assertEqual(config.whatsapp_link, "https://chat.whatsapp.com/board-link")
+
+	def test_whatsapp_config_patch_allowed_for_attivi(self):
+		"""PATCH whatsapp-config should succeed for Attivi users."""
+		profile = _create_profile("attivo@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_attivi)
+		self.authenticate(user)
+
+		response = self.client.patch(
+			"/backend/content/whatsapp-config/",
+			{"whatsapp_link": "https://chat.whatsapp.com/attivi-link"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		config = WhatsAppConfig.get_instance()
+		self.assertEqual(config.whatsapp_link, "https://chat.whatsapp.com/attivi-link")
+
+	@patch("content.views.send_mail")
+	@patch("content.views._append_to_whatsapp_log")
+	def test_whatsapp_register_admitted_user_sends_email(
+		self,
+		mock_append_log,
+		mock_send_mail,
+	):
+		"""Admitted users should receive email and return 200."""
+		mock_append_log.return_value = None
+		config = WhatsAppConfig.get_instance()
+		config.whatsapp_link = "https://chat.whatsapp.com/valid-link"
+		config.save(update_fields=["whatsapp_link"])
+
+		response = self.client.post(
+			"/backend/content/whatsapp-register/",
+			self.registration_payload,
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["message"], "Email sent successfully.")
+		mock_send_mail.assert_called_once()
+		mock_append_log.assert_called_once_with(self.registration_payload, "Email inviata")
+
+	@patch("content.views.send_mail")
+	@patch("content.views._append_to_whatsapp_log")
+	def test_whatsapp_register_non_admitted_user_returns_403(
+		self,
+		mock_append_log,
+		mock_send_mail,
+	):
+		"""Non-international users should be rejected and not trigger email send."""
+		not_admitted_payload = {
+			**self.registration_payload,
+			"is_international": False,
+		}
+
+		response = self.client.post(
+			"/backend/content/whatsapp-register/",
+			not_admitted_payload,
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 403)
+		self.assertIn("Not admitted", response.data["detail"])
+		mock_send_mail.assert_not_called()
+		mock_append_log.assert_called_once_with(not_admitted_payload, "Non ammesso (non internazionale/Erasmus)")
+
+	@patch("content.views.send_mail")
+	@patch("content.views._append_to_whatsapp_log")
+	def test_whatsapp_register_link_unset_returns_503(
+		self,
+		mock_append_log,
+		mock_send_mail,
+	):
+		"""When link is unset, endpoint should return 503 and avoid sending email."""
+		config = WhatsAppConfig.get_instance()
+		config.whatsapp_link = ""
+		config.save(update_fields=["whatsapp_link"])
+
+		response = self.client.post(
+			"/backend/content/whatsapp-register/",
+			self.registration_payload,
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 503)
+		self.assertIn("has not been configured", response.data["detail"])
+		mock_send_mail.assert_not_called()
+		mock_append_log.assert_called_once_with(self.registration_payload, "Errore: link WhatsApp non configurato")
 
