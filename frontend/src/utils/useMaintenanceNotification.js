@@ -18,6 +18,7 @@ const useMaintenanceNotification = (accessToken) => {
     useEffect(() => {
         if (!accessToken) {
             // Not logged in – skip opening the connection entirely.
+            setNotification(null);
             return;
         }
 

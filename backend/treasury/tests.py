@@ -431,7 +431,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
-		# Add balance first to allow negative transaction
+		# Add balance first so the negative-amount REIMBURSEMENT doesn't fail the balance check
 		Transaction.objects.create(
 			account=account,
 			executor=user,
@@ -461,7 +461,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
-		# Add balance first to allow negative transaction
+		# Add balance first so the negative-amount RIMBORSO_QUOTA doesn't fail the balance check
 		Transaction.objects.create(
 			account=account,
 			executor=user,
@@ -1378,8 +1378,8 @@ class AccountBalanceEdgeCaseTests(TreasuryBaseTestCase):
 		account.refresh_from_db()
 		self.assertEqual(account.balance, Decimal("7.49"))
 
-	def test_account_cannot_go_negative(self):
-		"""Transactions that would make balance negative should be prevented."""
+	def test_account_can_go_negative(self):
+		"""Transactions that would make balance negative are now allowed."""
 		profile = _create_profile("board@esnpolimi.it")
 		user = _create_user(profile)
 		user.groups.add(self.group_board)
@@ -1390,13 +1390,15 @@ class AccountBalanceEdgeCaseTests(TreasuryBaseTestCase):
 
 		response = self.client.post("/backend/transaction/", {
 			"account": account.pk,
-			"type": "WITHDRAWAL",
+			"type": "withdrawal",
 			"amount": "-100.00",
 			"description": "Over-withdrawal"
 		}, format="json")
 
-		# Should fail - exact status depends on implementation
-		self.assertIn(response.status_code, [400, 403])
+		# Negative balance is now allowed
+		self.assertEqual(response.status_code, 200)
+		account.refresh_from_db()
+		self.assertEqual(account.balance, Decimal("-50.00"))
 
 	def test_account_balance_after_transaction_deletion(self):
 		"""Deleting a transaction should update account balance."""

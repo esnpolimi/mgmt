@@ -423,11 +423,12 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             if raw_list_id in (None, ''):
                 return None
             try:
-                return int(raw_list_id)
+                parsed = int(raw_list_id)
             except (TypeError, ValueError) as exc:
                 raise serializers.ValidationError({
                     'lists': f"ID lista non valido: {raw_list_id}"
                 }) from exc
+            return parsed if parsed > 0 else None
 
         def _normalize_capacity(raw_capacity):
             if raw_capacity in (None, ''):
