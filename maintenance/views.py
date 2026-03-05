@@ -49,6 +49,18 @@ def _write_notification(message=DEFAULT_MESSAGE):
     return data
 
 
+def _clear_notification():
+    """Clear the active notification so clients stop receiving maintenance alerts."""
+    data = {
+        "notification_id": None,
+        "message": DEFAULT_MESSAGE,
+        "triggered_at": None,
+    }
+    with open(NOTIFICATION_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
 # ---------------------------------------------------------------------------
 # SSE stream  –  GET /backend/maintenance/stream/
 # Authentication required: anonymous requests are rejected with 403 to prevent
@@ -161,17 +173,30 @@ def maintenance_status(request):
 @staff_member_required
 @require_http_methods(["GET", "POST"])
 def maintenance_admin_view(request):
-    """Simple staff-only page with a button to fire the maintenance alert."""
+    """Simple staff-only page with actions to fire or clear maintenance alerts."""
     sent = False
+    cleared = False
+
     if request.method == 'POST':
-        logger.info(f"[Maintenance] Notification triggered by admin: {request.user}")
-        _write_notification(DEFAULT_MESSAGE)
-        sent = True
+        action = request.POST.get('action')
+        if action == 'send':
+            logger.info(f"[Maintenance] Notification triggered by admin: {request.user}")
+            _write_notification(DEFAULT_MESSAGE)
+            sent = True
+        elif action == 'clear':
+            logger.info(f"[Maintenance] Notification cleared by admin: {request.user}")
+            _clear_notification()
+            cleared = True
+
+    current = _read_notification()
+    has_active_notification = bool(current.get('notification_id'))
 
     context = {
         'title': 'Notifica Manutenzione',
-        'subtitle': 'Invia una notifica push immediata a tutti gli utenti connessi.',
+        'subtitle': 'Invia o cancella la notifica di manutenzione per gli utenti connessi.',
         'sent': sent,
+        'cleared': cleared,
+        'has_active_notification': has_active_notification,
         'has_permission': True,
     }
     return render(request, 'maintenance/notify_admin.html', context)
