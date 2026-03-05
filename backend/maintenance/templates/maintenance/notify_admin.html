@@ -11,8 +11,8 @@
 {% block content %}
 <div id="content-main">
     <p style="margin: 16px 0; font-size: 15px; color: #a6a5a5;">
-        Clicca il bottone qui sotto per inviare una <strong>notifica push immediata</strong>
-        a tutti gli utenti attualmente connessi al sistema.
+        Usa i pulsanti qui sotto per gestire la comunicazione di manutenzione:
+        puoi inviare una <strong>notifica push immediata</strong> o cancellarla per fermare gli avvisi.
     </p>
 
     {% if sent %}
@@ -20,11 +20,28 @@
         ✅ Notifica inviata con successo! Tutti gli utenti connessi la riceveranno entro pochi secondi.
     </div>
     {% endif %}
+
+    {% if cleared %}
+    <div role="alert" style="background: #fff3cd; border: 1px solid #664d03; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; color: #664d03;">
+        Notifica cancellata con successo. I client non mostreranno piu la comunicazione di manutenzione.
+    </div>
+    {% endif %}
+
+    <div style="margin: 14px 0 20px; font-size: 14px; color: #444;">
+        Stato corrente:
+        {% if has_active_notification %}
+        <strong style="color: #0f5132;">Notifica attiva</strong>
+        {% else %}
+        <strong style="color: #666;">Nessuna notifica attiva</strong>
+        {% endif %}
+    </div>
+
     <form method="post">
         {% csrf_token %}
-        <input
+        <button
             type="submit"
-            value="Invia Notifica Ora"
+            name="action"
+            value="send"
             class="button"
             style="
                 background-color: #e74c3c;
@@ -35,12 +52,29 @@
                 border-radius: 6px;
                 cursor: pointer;
                 font-weight: bold;
+                margin-right: 12px;
             "
-            {% if sent %}disabled{% endif %}
         >
-        {% if sent %}
-        <a href="." style="margin-left: 16px; font-size: 14px;">Invia un'altra</a>
-        {% endif %}
+            Invia Notifica Ora
+        </button>
+        <button
+            type="submit"
+            name="action"
+            value="clear"
+            class="button"
+            style="
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 12px 28px;
+                font-size: 15px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: bold;
+            "
+        >
+            Cancella Comunicazione
+        </button>
     </form>
 </div>
 {% endblock %}
