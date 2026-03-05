@@ -379,15 +379,6 @@ def manual_verify_erasmus_profile(request, pk):
             profile.save(update_fields=['enabled', 'email_is_verified'])
             Document.objects.filter(profile=profile).update(enabled=True)
 
-            # For ESNer profiles, also activate the associated Django user
-            if profile.is_esner:
-                try:
-                    esner_user = User.objects.get(profile=profile)
-                    esner_user.is_active = True
-                    esner_user.save()
-                except User.DoesNotExist:
-                    pass  # No associated user; proceed without blocking
-
         profile_type_label = 'ESNer' if profile.is_esner else 'Erasmus'
         return Response({'message': f'Profilo {profile_type_label} attivato e email verificata manualmente.'}, status=200)
     except Exception as e:
