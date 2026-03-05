@@ -356,7 +356,7 @@ def verify_email_and_enable_profile(request, uid, token):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def manual_verify_erasmus_profile(request, pk):
+def manual_verify_profile_email(request, pk):
     """
     Board-only endpoint to manually mark profiles (Erasmus or ESNer) as email-verified and enabled.
     Useful when users do not complete email verification flow.
@@ -378,6 +378,19 @@ def manual_verify_erasmus_profile(request, pk):
             profile.email_is_verified = True
             profile.save(update_fields=['enabled', 'email_is_verified'])
             Document.objects.filter(profile=profile).update(enabled=True)
+            
+            if profile.is_esner:
+                try:
+                    user = User.objects.get(profile=profile)
+                    user.is_active = True
+                    user.save()
+                except User.DoesNotExist:
+                    logger.error(f"manual_verify_profile_email: No User found for is_esner profile {profile.pk}")
+                    profile.enabled = False
+                    profile.email_is_verified = False
+                    profile.save(update_fields=['enabled', 'email_is_verified'])
+                    Document.objects.filter(profile=profile).update(enabled=False)
+                    return Response({'error': 'L\'utente associato a questo profilo non esiste. Impossibile attivare il profilo.'}, status=409)
 
         profile_type_label = 'ESNer' if profile.is_esner else 'Erasmus'
         return Response({'message': f'Profilo {profile_type_label} attivato e email verificata manualmente.'}, status=200)
@@ -403,12 +416,19 @@ def profile_detail(request, pk):
         elif request.method == 'PATCH':
             if not get_action_permissions('profile_detail_patch', request.user):
                 return Response({'error': 'Non hai i permessi per modificare questo profilo.'}, status=403)
-            serializer = ProfileFullEditSerializer(profile, data=request.data, partial=True)
+            payload = request.data.copy()
+            payload.pop('email', None)
+            serializer = ProfileFullEditSerializer(profile, data=payload, partial=True)
             if serializer.is_valid():
                 serializer.save()
-                group_name = request.data.get('group')
-                try:
-                    user = User.objects.get(profile=profile)
+                group_name = payload.get('group')
+                if group_name is not None:
+                    try:
+                        user = User.objects.get(profile=profile)
+                    except User.DoesNotExist:
+                        logger.error(f"Errore: Utente non trovato per il profilo esner {profile.id}")
+                        return Response({'error': "L'utente associato a questo profilo non esiste."}, status=400)
+
                     current_group_obj = user.groups.first()
                     current_group = current_group_obj.name if current_group_obj else None
 
@@ -417,13 +437,8 @@ def profile_detail(request, pk):
                         # Permission logic
                         allowed = False
                         error_msg = None
-                        # Get requester's group
-                        try:
-                            requester_user = User.objects.get(profile=request.user.profile)
-                            requester_group_obj = requester_user.groups.first()
-                            requester_group = requester_group_obj.name if requester_group_obj else None
-                        except ExceptionGroup:
-                            requester_group = None
+                        requester_group_obj = request.user.groups.first()
+                        requester_group = requester_group_obj.name if requester_group_obj else None
 
                         if current_group == "Aspiranti" and (group_name in ["Attivi", "Board"]):
                             if requester_group in ["Board"]:
@@ -446,9 +461,6 @@ def profile_detail(request, pk):
                                 return Response(group_serializer.errors, status=400)
                         else:
                             return Response({'error': error_msg}, status=403)
-                    # else: no change needed
-                except User.DoesNotExist:
-                    pass
                 response_serializer = ProfileDetailViewSerializer(profile)
                 return Response(response_serializer.data)
             return Response(serializer.errors, status=400)
