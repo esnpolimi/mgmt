@@ -82,6 +82,15 @@ export default function EventFormLogin() {
                 } else if (data && Object.keys(data).length > 0 && !data.error) {
                     // Valid profile found - extract possible ESNcard number fields
                     const esncardNumber = data?.esncard_number || '';
+                    // If the event is not open to externals and the user has no ESN card, block access
+                    if (!eventData?.is_allow_external && !esncardNumber) {
+                        setStatusMessage({
+                            message: "You do not have an ESN card. An ESN card is required to participate in this event. Please obtain your ESN card and try again.",
+                            state: "error"
+                        });
+                        setIsLoading(false);
+                        return;
+                    }
                     navigate(`/event/${id}/form`, {state: {email, eventData, esncardNumber, isExternal: false}});
                 } else if (eventData?.is_allow_external) {
                     // Fallback for external users
