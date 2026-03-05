@@ -111,7 +111,12 @@ def _serialize_instance(instance) -> dict:
 def _write_event(payload: dict) -> None:
     try:
         timezone_name = getattr(settings, "DB_AUDIT_TIMEZONE", "Europe/Rome")
-        event_time = timezone.now().astimezone(ZoneInfo(timezone_name)).isoformat()
+        try:
+            tz = ZoneInfo(timezone_name)
+        except Exception as e:
+            logging.warning("Invalid DB_AUDIT_TIMEZONE '%s': %s. Falling back to UTC.", timezone_name, e)
+            tz = timezone.utc
+        event_time = timezone.now().astimezone(tz).isoformat()
 
         entry = {
             "timestamp": event_time,
