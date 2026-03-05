@@ -91,6 +91,7 @@ class WhatsAppConfig(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        db_constraint=False,
         related_name='whatsapp_config_updated'
     )
 
