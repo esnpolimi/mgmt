@@ -1375,18 +1375,33 @@ export default function Profile() {
                                     )}
                                     {/* Content Manager role toggle (Board → ESNer Aspiranti/Attivi) */}
                                     {user?.groups?.includes('Board') && profileType === 'ESNer' && ['Aspiranti', 'Attivi'].includes(profile?.group) && (
-                                        <Tooltip
-                                            title="Permette di vedere e modificare la pagina Gestione Contenuti"
-                                            arrow>
-                                            <Button
-                                                variant={financePerms?.can_manage_content ? 'outlined' : 'contained'}
-                                                color="info"
-                                                startIcon={<EditIcon/>}
-                                                onClick={toggleContentManagerRole}
-                                            >
-                                                {financePerms?.can_manage_content ? 'Revoca Content Manager' : 'Concedi Content Manager'}
-                                            </Button>
-                                        </Tooltip>
+                                        financePerms && financePerms.can_manage_content !== financePerms.effective_can_manage_content ? (
+                                            <Tooltip title="Il permesso è ereditato dal gruppo e non può essere revocato da qui" arrow>
+                                                <span>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="info"
+                                                        startIcon={<EditIcon/>}
+                                                        disabled
+                                                    >
+                                                        Revoca Content Manager
+                                                    </Button>
+                                                </span>
+                                            </Tooltip>
+                                        ) : (
+                                            <Tooltip
+                                                title="Permette di vedere e modificare la pagina Gestione Contenuti"
+                                                arrow>
+                                                <Button
+                                                    variant={financePerms?.can_manage_content ? 'outlined' : 'contained'}
+                                                    color="info"
+                                                    startIcon={<EditIcon/>}
+                                                    onClick={toggleContentManagerRole}
+                                                >
+                                                    {financePerms?.can_manage_content ? 'Revoca Content Manager' : 'Concedi Content Manager'}
+                                                </Button>
+                                            </Tooltip>
+                                        )
                                     )}
                                 </Box>
                             </Toolbar>

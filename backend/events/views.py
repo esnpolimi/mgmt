@@ -1452,7 +1452,10 @@ def generate_liberatorie_pdf(request):
         return Response({'error': 'Non hai i permessi per generare liberatorie.'}, status=403)
     try:
         event = Event.objects.get(pk=event_id)
-        subscriptions = Subscription.objects.filter(id__in=subscription_ids)
+        subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
+
+        if subscriptions.count() != len(subscription_ids):
+            return Response({'error': 'Alcune iscrizioni non appartengono a questo evento o non esistono.'}, status=400)
 
         # Build profile data list, handling external subscriptions (profile=None).
         profiles_data = []
