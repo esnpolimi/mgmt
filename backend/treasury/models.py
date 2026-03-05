@@ -130,14 +130,14 @@ class Transaction(BaseEntity):
             # Must remain a pure manual transaction (no subscription / esncard)
             if self.subscription or self.esncard:
                 raise ValueError("Le transazioni manuali legate a un evento non devono avere iscrizioni o ESNcards associate.")
-        # Ensure both are Decimal for arithmetic
-        amount = Decimal(str(self.amount))
-        balance = Decimal(str(self.account.balance))
-        # Prevent negative balance
-        if amount < 0 and abs(amount) > balance:
-            raise ValueError("Il saldo non può andare in negativo.")
-        if amount + balance < 0:
-            raise ValueError("Il saldo non può andare in negativo.")
+        # Prevent negative balance for all transaction types except manual withdrawals
+        if self.type != self.TransactionType.WITHDRAWAL:
+            amount = Decimal(str(self.amount))
+            balance = Decimal(str(self.account.balance))
+            if amount < 0 and abs(amount) > balance:
+                raise ValueError("Il saldo non può andare in negativo.")
+            if amount + balance < 0:
+                raise ValueError("Il saldo non può andare in negativo.")
         super(Transaction, self).clean()
 
     def save(self, *args, **kwargs):

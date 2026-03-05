@@ -245,6 +245,7 @@ export default function Event() {
     // Derive edit permission: organizers OR Board (explicit change_event permission always needed)
     const currentProfileId = user?.profile?.id ?? user?.profile_id ?? user?.id;
     const isOrganizer = Array.isArray(data?.organizers) && data.organizers.some(o => o.profile === currentProfileId);
+    const isLeadOrganizer = Array.isArray(data?.organizers) && data.organizers.some(o => o.profile === currentProfileId && o.is_lead);
     // Widen permissions: Board or Organizer can edit even without explicit change_event
     const canEditEvent = Boolean(canChangeEvent && (isBoardMember || isOrganizer));
     // Widen subscription permissions: Board or Organizer can manage subs even without explicit permission
@@ -522,6 +523,7 @@ export default function Event() {
                                                 canChangeTransactions={canChangeTransactions}
                                                 isBoardMember={isBoardMember}
                                                 isOrganizer={isOrganizer}
+                                                isLeadOrganizer={isLeadOrganizer}
                                             />
                                         </Box>
                                     </Grid>
