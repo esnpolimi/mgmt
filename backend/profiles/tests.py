@@ -1241,17 +1241,21 @@ class ManualErasmusVerificationTests(ProfilesBaseTestCase):
 		self.assertTrue(target_profile.email_is_verified)
 		self.assertTrue(doc.enabled)
 
-	def test_manual_verify_erasmus_rejects_esner_target(self):
-		"""Manual verify endpoint is only for Erasmus profiles."""
+	def test_manual_verify_esner_target_success(self):
+		"""Manual verify endpoint can also verify ESNer profiles."""
 		board_profile = _create_profile("board-manual-2@esnpolimi.it", is_esner=True)
 		board_user = _create_user(board_profile)
 		board_user.groups.add(self.group_board)
 		self.authenticate(board_user)
 
 		esner_target = _create_profile("esner-target@esnpolimi.it", is_esner=True, verified=False, enabled=False)
+		esner_user = _create_user(esner_target)
 		response = self.client.post(f"/backend/profile/{esner_target.pk}/manual-verify-email/")
 
-		self.assertEqual(response.status_code, 400)
+		self.assertEqual(response.status_code, 200)
+		esner_target.refresh_from_db()
+		self.assertTrue(esner_target.enabled)
+		self.assertTrue(esner_target.email_is_verified)
 
 	def test_manual_verify_erasmus_already_active_returns_200(self):
 		"""Already active Erasmus profile should return 200."""
