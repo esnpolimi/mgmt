@@ -1254,8 +1254,10 @@ class ManualErasmusVerificationTests(ProfilesBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		esner_target.refresh_from_db()
+		esner_user.refresh_from_db()
 		self.assertTrue(esner_target.enabled)
 		self.assertTrue(esner_target.email_is_verified)
+		self.assertTrue(esner_user.is_active)
 
 	def test_manual_verify_erasmus_already_active_returns_200(self):
 		"""Already active Erasmus profile should return 200."""

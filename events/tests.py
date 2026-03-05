@@ -2291,7 +2291,6 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 			external_last_name="Rossi",
 		)
 
-		file_id = self.event.pk
 		response = self._post(self.event.pk, [sub_regular.pk, sub_external.pk])
 
 		self.assertEqual(response.status_code, 200)
