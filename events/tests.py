@@ -2183,16 +2183,24 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 		response = self._post(self.event.pk, [999999])
 		self.assertEqual(response.status_code, 403)
 
-	def test_allows_lead_organizer(self):
-		"""Lead organizer can access the endpoint."""
+	@patch("events.views.SimpleDocTemplate")
+	def test_allows_lead_organizer(self, mock_doc):
+		"""Lead organizer can access the endpoint and generate a PDF (not blocked by 403)."""
+		mock_doc.return_value.build = lambda story: None
+
 		profile = _create_profile("lead_org@test.com")
 		user = _create_user(profile)
 		self.authenticate(user)
 		EventOrganizer.objects.create(profile=profile, event=self.event, is_lead=True)
 
-		# Make it fail on 400 missing subscription, meaning it passed the 403 check
-		response = self._post(self.event.pk, [])
-		self.assertEqual(response.status_code, 400)
+		sub = Subscription.objects.create(
+			profile=profile,
+			event=self.event,
+			list=self.event_list,
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+		self.assertEqual(response.status_code, 200)
 
 	def test_missing_event_id_returns_400(self):
 		"""Missing event_id should return 400."""
