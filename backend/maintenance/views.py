@@ -2,12 +2,17 @@ import json
 import os
 import time
 import uuid
+import logging
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import StreamingHttpResponse
+from django.http import StreamingHttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+
+logger = logging.getLogger(__name__)
 
 # Path to the JSON file that stores the current notification state.
 # It lives next to manage.py in the backend root.
@@ -128,6 +133,25 @@ def maintenance_stream(request):
     response['X-Accel-Buffering'] = 'no'   # disable nginx buffering
     return response
 
+# ---------------------------------------------------------------------------
+# Polling endpoint  –  GET /backend/maintenance/status/
+# Used to check current maintenance notification without blocking a worker.
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def maintenance_status(request):
+    """
+    Returns the current maintenance state.
+    Used by clients that prefer polling over SSE to avoid exhausting worker threads.
+    """
+    current = _read_notification()
+    logger.debug(f"[Maintenance] API status checked by {request.user}. Current ID: {current.get('notification_id')}")
+    return JsonResponse({
+        "notification_id": current.get("notification_id"),
+        "message": current.get("message", DEFAULT_MESSAGE),
+        "triggered_at": current.get("triggered_at", ""),
+    })
 
 # ---------------------------------------------------------------------------
 # Django admin page  –  GET/POST /admin/maintenance-notify/
@@ -140,6 +164,7 @@ def maintenance_admin_view(request):
     """Simple staff-only page with a button to fire the maintenance alert."""
     sent = False
     if request.method == 'POST':
+        logger.info(f"[Maintenance] Notification triggered by admin: {request.user}")
         _write_notification(DEFAULT_MESSAGE)
         sent = True
 
