@@ -1,8 +1,10 @@
 import csv
 import io
 import logging
+import threading
 from datetime import datetime
 
+import sentry_sdk
 from django.conf import settings
 from django.core.mail import send_mail
 from google.oauth2 import service_account
@@ -27,6 +29,8 @@ _CSV_HEADERS = [
     'Corso di Studi (Polimi)', 'Esito',
 ]
 
+_drive_log_lock = threading.Lock()
+
 
 def _get_drive_service():
     credentials = service_account.Credentials.from_service_account_file(
@@ -46,85 +50,83 @@ def _append_to_whatsapp_log(data, outcome):
         folder_id = settings.GOOGLE_DRIVE_FOLDER_ID
         drive = _get_drive_service()
 
-        # Search for existing CSV file in the Drive folder
-        escaped_name = _CSV_FILENAME.replace("'", "\\'")
-        query = (
-            f"name='{escaped_name}' and '{folder_id}' in parents and trashed=false"
-        )
-        results = drive.files().list(
-            q=query, spaces='drive', fields='files(id)',
-            supportsAllDrives=True, includeItemsFromAllDrives=True,
-        ).execute()
-        files = results.get('files', [])
-
-        new_row = [
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            data['email'],
-            data['first_name'],
-            data['last_name'],
-            'Sì' if data['is_international'] else 'No',
-            data['home_university'],
-            data['course_of_study'],
-            outcome,
-        ]
-
-        if files:
-            # Download existing CSV, append the new row, re-upload
-            file_id = files[0]['id']
-            existing_bytes = drive.files().get_media(fileId=file_id).execute()
-            existing_text = existing_bytes.decode('utf-8-sig')
-
-            output = io.StringIO()
-            output.write(existing_text)
-            if existing_text and not existing_text.endswith('\n'):
-                output.write('\n')
-            csv.writer(output).writerow(new_row)
-
-            content_bytes = output.getvalue().encode('utf-8-sig')
-            drive.files().update(
-                fileId=file_id,
-                media_body=MediaIoBaseUpload(
-                    io.BytesIO(content_bytes), mimetype='text/csv',
-                ),
-                supportsAllDrives=True,
+        with _drive_log_lock:
+            # Search for existing CSV file in the Drive folder
+            escaped_name = _CSV_FILENAME.replace("'", "\\'")
+            query = (
+                f"name='{escaped_name}' and '{folder_id}' in parents and trashed=false"
+            )
+            results = drive.files().list(
+                q=query, spaces='drive', fields='files(id)',
+                supportsAllDrives=True, includeItemsFromAllDrives=True,
             ).execute()
-        else:
-            # Create a new CSV file with header + first row
-            output = io.StringIO()
-            writer = csv.writer(output)
-            writer.writerow(_CSV_HEADERS)
-            writer.writerow(new_row)
+            files = results.get('files', [])
 
-            content_bytes = output.getvalue().encode('utf-8-sig')
-            drive.files().create(
-                body={'name': _CSV_FILENAME, 'parents': [folder_id]},
-                media_body=MediaIoBaseUpload(
-                    io.BytesIO(content_bytes), mimetype='text/csv',
-                ),
-                fields='id',
-                supportsAllDrives=True,
-            ).execute()
+            new_row = [
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                data['email'],
+                data['first_name'],
+                data['last_name'],
+                'Sì' if data['is_international'] else 'No',
+                data['home_university'],
+                data['course_of_study'],
+                outcome,
+            ]
+
+            if files:
+                # Download existing CSV, append the new row, re-upload
+                file_id = files[0]['id']
+                existing_bytes = drive.files().get_media(fileId=file_id).execute()
+                existing_text = existing_bytes.decode('utf-8-sig')
+
+                output = io.StringIO()
+                output.write(existing_text)
+                if existing_text and not existing_text.endswith('\n'):
+                    output.write('\n')
+                csv.writer(output).writerow(new_row)
+
+                content_bytes = output.getvalue().encode('utf-8-sig')
+                drive.files().update(
+                    fileId=file_id,
+                    media_body=MediaIoBaseUpload(
+                        io.BytesIO(content_bytes), mimetype='text/csv',
+                    ),
+                    supportsAllDrives=True,
+                ).execute()
+            else:
+                # Create a new CSV file with header + first row
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(_CSV_HEADERS)
+                writer.writerow(new_row)
+
+                content_bytes = output.getvalue().encode('utf-8-sig')
+                drive.files().create(
+                    body={'name': _CSV_FILENAME, 'parents': [folder_id]},
+                    media_body=MediaIoBaseUpload(
+                        io.BytesIO(content_bytes), mimetype='text/csv',
+                    ),
+                    fields='id',
+                    supportsAllDrives=True,
+                ).execute()
 
         logger.info(f"WhatsApp CSV log appended for {data['email']} — {outcome}")
         return None
     except Exception as e:
-        error_msg = f"Drive CSV logging failed: {e}"
-        logger.error(error_msg)
-        return error_msg
+        logger.exception("Drive CSV logging failed")
+        return "Drive logging failed"
 
 
-class IsFinanceManagerOrReadOnly(permissions.BasePermission):
+class IsContentManagerOrReadOnly(permissions.BasePermission):
     """
     Custom permission for content management.
     - GET: All authenticated users
-    - POST/PUT/PATCH/DELETE: Board, Attivi, Aspiranti with can_manage_casse,
-      or users with can_manage_content flag
+    - POST/PUT/PATCH/DELETE: Board, Attivi, or users with can_manage_content flag
     """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return request.user and request.user.is_authenticated
         
-        # Check if user can manage treasury (same permissions as Tesoreria)
         user = request.user
         if not user or not user.is_authenticated:
             return False
@@ -133,12 +135,8 @@ class IsFinanceManagerOrReadOnly(permissions.BasePermission):
         if user.groups.filter(name__in=['Board', 'Attivi']).exists():
             return True
         
-        # Aspiranti with the special finance flag
-        if getattr(user, 'can_manage_casse', False):
-            return True
-        
-        # Users with the Content Manager flag
-        if getattr(user, 'can_manage_content', False):
+        # Users with content/finance management flags
+        if getattr(user, 'can_manage_content', False) or getattr(user, 'can_manage_casse', False):
             return True
         
         return False
@@ -148,11 +146,11 @@ class ContentSectionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for ContentSection.
     GET: Available to all authenticated users
-    POST/PUT/PATCH/DELETE: Users with treasury management permissions
+    POST/PUT/PATCH/DELETE: Users with content management permissions
     """
     queryset = ContentSection.objects.filter(is_active=True).prefetch_related('links')
     serializer_class = ContentSectionSerializer
-    permission_classes = [IsFinanceManagerOrReadOnly]
+    permission_classes = [IsContentManagerOrReadOnly]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -169,11 +167,11 @@ class ContentLinkViewSet(viewsets.ModelViewSet):
     """
     ViewSet for ContentLink.
     GET: Available to all authenticated users
-    POST/PUT/PATCH/DELETE: Users with treasury management permissions
+    POST/PUT/PATCH/DELETE: Users with content management permissions
     """
     queryset = ContentLink.objects.all()
     serializer_class = ContentLinkSerializer
-    permission_classes = [IsFinanceManagerOrReadOnly]
+    permission_classes = [IsContentManagerOrReadOnly]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -203,7 +201,6 @@ def whatsapp_config(request):
     user = request.user
     can_edit = (
         user.groups.filter(name__in=['Board', 'Attivi']).exists()
-        or getattr(user, 'can_manage_casse', False)
         or getattr(user, 'can_manage_content', False)
     )
     if not can_edit:
@@ -284,15 +281,15 @@ def whatsapp_register(request):
         )
         logger.info(f"WhatsApp link sent to {email}")
     except Exception as e:
-        logger.error(f"Error sending WhatsApp link email to {email}: {e}")
-        _append_to_whatsapp_log(data, f'Errore invio email: {e}')
+        logger.exception(f"Error sending WhatsApp link email to {email}")
+        sentry_sdk.capture_exception(e)
+        _append_to_whatsapp_log(data, 'Errore invio email')
         return Response(
-            {'detail': f'Error sending email: {e}'},
+            {'detail': 'Unable to process your request right now. Please try again later.'},
             status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
     log_error = _append_to_whatsapp_log(data, 'Email inviata')
-    response_body = {'message': 'Email sent successfully.'}
     if log_error:
-        response_body['warning'] = log_error
-    return Response(response_body, status=drf_status.HTTP_200_OK)
+        logger.warning(f"WhatsApp registration log append failed for {email}")
+    return Response({'message': 'Email sent successfully.'}, status=drf_status.HTTP_200_OK)

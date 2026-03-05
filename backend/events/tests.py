@@ -10,7 +10,7 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from events.models import Event, EventList, Subscription
+from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 from treasury.models import Account, Transaction
 
@@ -2168,16 +2168,31 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 			"subscription_ids": subscription_ids,
 		}, format="json")
 
-	def test_requires_board_group(self):
-		"""Non-Board users should receive a 403 error."""
+	def test_requires_board_group_or_lead_organizer(self):
+		"""Non-Board and non-lead organizer users should receive a 403 error."""
 		profile = _create_profile("noboard@test.com")
 		user = _create_user(profile)
 		user.user_permissions.add(self.perm_view_event)
 		self.authenticate(user)
 
 		response = self._post(self.event.pk, [999999])
-
 		self.assertEqual(response.status_code, 403)
+		
+		# Regular organizer (not lead) should also receive 403
+		EventOrganizer.objects.create(profile=profile, event=self.event, is_lead=False)
+		response = self._post(self.event.pk, [999999])
+		self.assertEqual(response.status_code, 403)
+
+	def test_allows_lead_organizer(self):
+		"""Lead organizer can access the endpoint."""
+		profile = _create_profile("lead_org@test.com")
+		user = _create_user(profile)
+		self.authenticate(user)
+		EventOrganizer.objects.create(profile=profile, event=self.event, is_lead=True)
+
+		# Make it fail on 400 missing subscription, meaning it passed the 403 check
+		response = self._post(self.event.pk, [])
+		self.assertEqual(response.status_code, 400)
 
 	def test_missing_event_id_returns_400(self):
 		"""Missing event_id should return 400."""
@@ -2276,8 +2291,53 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 			external_last_name="Rossi",
 		)
 
+		file_id = self.event.pk
 		response = self._post(self.event.pk, [sub_regular.pk, sub_external.pk])
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
+
+
+class PrintableLiberatorieTests(EventsBaseTestCase):
+	"""Tests for the printable_liberatorie endpoint."""
+
+	def setUp(self):
+		self.board_profile = _create_profile("board_lib_printable@test.com", name="Board", surname="Lib2")
+		self.board_user = _create_user(self.board_profile)
+		self.board_user.groups.add(self.group_board)
+
+		self.event = _create_event(name="Test Trip 2", cost=50, is_allow_external=True)
+		self.event_list = _create_event_list(self.event)
+		self.url = f"/backend/event/{self.event.pk}/printable_liberatorie/"
+
+	def test_requires_board_group_or_lead_organizer(self):
+		"""Non-Board and non-lead organizer users should receive a 403 error."""
+		profile = _create_profile("noboard2@test.com")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_event)
+		self.authenticate(user)
+
+		response = self.client.get(self.url)
+		self.assertEqual(response.status_code, 403)
+		
+		# Regular organizer (not lead) should also receive 403
+		EventOrganizer.objects.create(profile=profile, event=self.event, is_lead=False)
+		response = self.client.get(self.url)
+		self.assertEqual(response.status_code, 403)
+
+	def test_allows_board(self):
+		"""Board can access the endpoint."""
+		self.authenticate(self.board_user)
+		response = self.client.get(self.url)
+		self.assertEqual(response.status_code, 200)
+
+	def test_allows_lead_organizer(self):
+		"""Lead organizer can access the endpoint."""
+		profile = _create_profile("lead_org2@test.com")
+		user = _create_user(profile)
+		self.authenticate(user)
+		EventOrganizer.objects.create(profile=profile, event=self.event, is_lead=True)
+
+		response = self.client.get(self.url)
+		self.assertEqual(response.status_code, 200)
 

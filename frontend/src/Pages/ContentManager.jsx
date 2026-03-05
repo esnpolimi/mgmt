@@ -68,8 +68,9 @@ export default function ContentManager() {
 
     const handleSaveWaLink = () => {
         setWaSaving(true);
+        const normalizedInput = waLinkInput.trim();
         fetchCustom('PATCH', '/content/whatsapp-config/', {
-            body: { whatsapp_link: waLinkInput },
+            body: { whatsapp_link: normalizedInput },
             onSuccess: (data) => {
                 setWaLink(data.whatsapp_link || '');
                 setWaLinkInput(data.whatsapp_link || '');
@@ -345,7 +346,7 @@ export default function ContentManager() {
                             variant="contained"
                             color="primary"
                             onClick={handleSaveWaLink}
-                            disabled={waSaving || waLinkInput === waLink}
+                            disabled={waSaving || waLinkInput.trim() === waLink}
                             sx={{ mt: 1 }}
                         >
                             {waSaving ? 'Salvataggio...' : 'Salva'}
