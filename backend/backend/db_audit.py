@@ -109,15 +109,26 @@ def _serialize_instance(instance) -> dict:
 
 
 def _write_event(payload: dict) -> None:
-    timezone_name = getattr(settings, "DB_AUDIT_TIMEZONE", "Europe/Rome")
-    event_time = timezone.now().astimezone(ZoneInfo(timezone_name)).isoformat()
+    try:
+        timezone_name = getattr(settings, "DB_AUDIT_TIMEZONE", "Europe/Rome")
+        try:
+            tz = ZoneInfo(timezone_name)
+        except Exception as e:
+            logging.warning("Invalid DB_AUDIT_TIMEZONE '%s': %s. Falling back to UTC.", timezone_name, e)
+            tz = timezone.utc
+        event_time = timezone.now().astimezone(tz).isoformat()
 
-    entry = {
-        "timestamp": event_time,
-        "actor": get_audit_actor_context(),
-        **payload,
-    }
-    _get_audit_logger().info(json.dumps(entry, cls=DjangoJSONEncoder, ensure_ascii=False))
+        entry = {
+            "timestamp": event_time,
+            "actor": get_audit_actor_context(),
+            **payload,
+        }
+        _get_audit_logger().info(json.dumps(entry, cls=DjangoJSONEncoder, ensure_ascii=False))
+    except Exception:  # noqa: BLE001
+        try:
+            _get_audit_logger().exception("db_audit: _write_event failed; audit entry dropped")
+        except Exception:  # noqa: BLE001
+            logging.exception("db_audit: _write_event failed; audit entry dropped")
 
 
 def _on_pre_save(sender, instance, **kwargs):
