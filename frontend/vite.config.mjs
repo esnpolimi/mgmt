@@ -1,5 +1,4 @@
 import {defineConfig} from 'vite';
-import {resolve} from 'path';
 import react from '@vitejs/plugin-react';
 
 console.log(">>> VITE CONFIG LOADED <<<");
@@ -17,11 +16,5 @@ export default defineConfig({
     build: {
         outDir: "build",
         chunkSizeWarningLimit: 2000,
-        rollupOptions: {
-            input: {
-                main: resolve(__dirname, 'index.html'),
-                whatsapp: resolve(__dirname, 'whatsapp/index.html'),
-            },
-        },
     },
 });
