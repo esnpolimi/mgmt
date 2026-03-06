@@ -33,8 +33,8 @@ jobs:
         IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
         
         # Incrementa PATCH - MINOR - MAJOR
-        PATCH=$((PATCH + 0))
-        MINOR=$((MINOR + 1))
+        PATCH=$((PATCH + 1))
+        MINOR=$((MINOR + 0))
         MAJOR=$((MAJOR + 0))
         
         # Nuova versione
