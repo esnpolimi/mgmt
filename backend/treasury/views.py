@@ -726,10 +726,17 @@ def reimbursable_deposits(request):
             reimbursed = Transaction.objects.filter(subscription=sub,
                                                     type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
             if deposit_tx and not reimbursed:
+                profile_id = sub.profile.id if sub.profile else None
+                if sub.profile:
+                    profile_name = f"{sub.profile.name} {sub.profile.surname}"
+                elif sub.external_name:
+                    profile_name = sub.external_name
+                else:
+                    profile_name = "Esterno"
                 result.append({
                     "id": sub.pk,
-                    "profile_id": sub.profile.id,
-                    "profile_name": f"{sub.profile.name} {sub.profile.surname}",
+                    "profile_id": profile_id,
+                    "profile_name": profile_name,
                     "account_name": deposit_tx.account.name if deposit_tx.account else None
                 })
         return Response(result, status=200)
