@@ -121,7 +121,7 @@ class IsContentManagerOrReadOnly(permissions.BasePermission):
     """
     Custom permission for content management.
     - GET: All authenticated users
-    - POST/PUT/PATCH/DELETE: Board, Attivi, or users with can_manage_content flag
+    - POST/PUT/PATCH/DELETE: Board users or users with can_manage_content flag
     """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
@@ -131,15 +131,8 @@ class IsContentManagerOrReadOnly(permissions.BasePermission):
         if not user or not user.is_authenticated:
             return False
         
-        # Board and Attivi always have permission
-        if user.groups.filter(name__in=['Board', 'Attivi']).exists():
-            return True
-        
-        # Users with content/finance management flags
-        if getattr(user, 'can_manage_content', False) or getattr(user, 'can_manage_casse', False):
-            return True
-        
-        return False
+        # Content management is implicit for Board and explicit via a dedicated flag for others.
+        return user.groups.filter(name='Board').exists() or getattr(user, 'can_manage_content', False)
 
 
 class ContentSectionViewSet(viewsets.ModelViewSet):
@@ -189,7 +182,7 @@ class ContentLinkViewSet(viewsets.ModelViewSet):
 def whatsapp_config(request):
     """
     GET  /backend/content/whatsapp-config/  → returns the current WhatsApp link.
-    PATCH /backend/content/whatsapp-config/ → updates the link (board/attivi only).
+    PATCH /backend/content/whatsapp-config/ → updates the link (Board or content managers).
     """
     instance = WhatsAppConfig.get_instance()
 
@@ -197,12 +190,9 @@ def whatsapp_config(request):
         serializer = WhatsAppConfigSerializer(instance)
         return Response(serializer.data)
 
-    # PATCH – board/attivi or content managers can edit
+    # PATCH – Board or content managers can edit
     user = request.user
-    can_edit = (
-        user.groups.filter(name__in=['Board', 'Attivi']).exists()
-        or getattr(user, 'can_manage_content', False)
-    )
+    can_edit = user.groups.filter(name='Board').exists() or getattr(user, 'can_manage_content', False)
     if not can_edit:
         return Response({'detail': 'Permission denied.'}, status=drf_status.HTTP_403_FORBIDDEN)
 
