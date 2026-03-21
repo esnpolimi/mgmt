@@ -1373,10 +1373,10 @@ export default function Profile() {
                                             </Button>
                                         </Tooltip>
                                     )}
-                                    {/* Content Manager role toggle (Board → ESNer Aspiranti/Attivi) */}
-                                    {user?.groups?.includes('Board') && profileType === 'ESNer' && ['Aspiranti', 'Attivi'].includes(profile?.group) && (
+                                    {/* Content Manager role toggle (Board → ESNer; Board target users inherit the role) */}
+                                    {user?.groups?.includes('Board') && profileType === 'ESNer' && (
                                         financePerms && financePerms.can_manage_content !== financePerms.effective_can_manage_content ? (
-                                            <Tooltip title="Il permesso è ereditato dal gruppo e non può essere revocato da qui" arrow>
+                                            <Tooltip title="Il permesso è implicito per il gruppo Board e non può essere revocato da qui" arrow>
                                                 <span>
                                                     <Button
                                                         variant="outlined"
