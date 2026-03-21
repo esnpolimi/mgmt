@@ -335,7 +335,7 @@ def _in_group(user, name: str):
 def user_finance_permissions(request):
     """
     GET: Return raw and effective finance permission flags.
-    PATCH: Board only. Allowed only if target is ESNer in group 'Aspiranti'.
+    PATCH: Board only. Allowed only if target is ESNer.
     """
     email = request.query_params.get("email")
     if not email:
@@ -352,7 +352,7 @@ def user_finance_permissions(request):
             return u.can_view_casse_import or _in_group(u, 'Attivi') or _in_group(u, 'Board')
 
         def effective_content(u):
-            return u.can_manage_content or _in_group(u, 'Attivi') or _in_group(u, 'Board')
+            return u.can_manage_content or _in_group(u, 'Board')
 
         if request.method == 'GET':
             return Response({
@@ -376,8 +376,8 @@ def user_finance_permissions(request):
 
             if finance_fields and not _in_group(target, 'Aspiranti'):
                 return Response({'error': 'Permessi casse applicabili solo agli Aspiranti.'}, status=400)
-            if content_fields and not (_in_group(target, 'Aspiranti') or _in_group(target, 'Attivi')):
-                return Response({'error': 'Ruolo Content Manager applicabile solo ad Aspiranti e Attivi.'}, status=400)
+            if content_fields and not target.profile.is_esner:
+                return Response({'error': 'Ruolo Content Manager applicabile solo agli ESNer.'}, status=400)
 
             serializer = FinancePermissionSerializer(target, data=request.data, partial=True)
             if serializer.is_valid():
