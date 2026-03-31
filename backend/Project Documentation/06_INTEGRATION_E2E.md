@@ -81,15 +81,18 @@ Precondizioni:
 
 Sequenza:
 
-1. chiamata reimburse_deposits o reimburse_quota
-2. generazione transazioni rimborso
-3. aggiornamento saldo account
-4. blocco tentativo doppio rimborso
+1. apertura azione unica "Rimborsa" su subscription
+2. selezione voci (quota/servizi/cauzione) con disable automatico voci non valide
+3. orchestrazione chiamate reimburse_quota e/o reimburse_deposits
+4. generazione transazioni rimborso per voci riuscite
+5. aggiornamento saldo account
+6. blocco tentativo doppio rimborso
 
 Oracoli di test:
 
 - vincoli anti-duplicato rispettati
 - gestione esterni senza profile preservata
+- gestione esito parziale: errore puntuale per voce fallita + retry selettivo
 
 ### 2.5 Scenario E - ESNcard emission + accounting
 

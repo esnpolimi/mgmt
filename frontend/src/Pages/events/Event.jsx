@@ -17,7 +17,7 @@ import Popup from "../../Components/Popup";
 import SubscriptionModal from "../../Components/events/SubscriptionModal";
 import MoveToListModal from "../../Components/events/MoveToListModal";
 import ReimburseDepositsModal from "../../Components/events/ReimburseDepositsModal";
-import ReimburseQuotaModal from "../../Components/events/ReimburseQuotaModal";
+import ReimburseSelectionModal from "../../Components/events/ReimburseSelectionModal";
 import PrintableLiberatorieModal from "../../Components/events/PrintableLiberatorieModal";
 import dayjs from "dayjs";
 import FestivalIcon from "@mui/icons-material/Festival";
@@ -45,7 +45,7 @@ export default function Event() {
     const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
     const [moveToListModalOpen, setMoveToListModalOpen] = useState(false);
     const [reimburseDepositsModalOpen, setReimburseDepositsModalOpen] = useState(false);
-    const [reimburseQuotaModalOpen, setReimburseQuotaModalOpen] = useState(false);
+    const [reimburseSelectionModalOpen, setReimburseSelectionModalOpen] = useState(false);
     const [printableLiberatorieModalOpen, setPrintableLiberatorieModalOpen] = useState(false);
     const [printableLiberatorieListId, setPrintableLiberatorieListId] = useState(null);
     const [selectedRows, setSelectedRows] = useState([]);
@@ -60,7 +60,6 @@ export default function Event() {
     const [subscriptionIsEdit, setSubscriptionIsEdit] = useState(null);
     const [reimburseDepositsListId, setReimburseDepositsListId] = useState(null);
     const [singleSubToReimburse, setSingleSubToReimburse] = useState(null);
-    const [singleSubToReimburseQuota, setSingleSubToReimburseQuota] = useState(null);
     const [editAnswersModalOpen, setEditAnswersModalOpen] = useState(false);
     const [editAnswersSubscription, setEditAnswersSubscription] = useState(null);
     const hasDeposit = data?.deposit > 0;
@@ -173,14 +172,14 @@ export default function Event() {
     };
 
     const handleOpenReimburseDeposits = (subscription, listId) => {
-        setSingleSubToReimburse(subscription);
+        setSingleSubToReimburse(subscription || null);
         setReimburseDepositsListId(listId);
         setReimburseDepositsModalOpen(true);
     };
 
-    const handleOpenReimburseQuota = (subscription) => {
-        setSingleSubToReimburseQuota(subscription);
-        setReimburseQuotaModalOpen(true);
+    const handleOpenReimburseMenu = (subscription) => {
+        setSingleSubToReimburse(subscription);
+        setReimburseSelectionModalOpen(true);
     };
 
 
@@ -215,13 +214,13 @@ export default function Event() {
         setSingleSubToReimburse(null);
     };
 
-    const handleCloseReimburseQuotaModal = (success, message) => {
-        setReimburseQuotaModalOpen(false);
+    const handleCloseReimburseSelectionModal = (success, message) => {
+        setReimburseSelectionModalOpen(false);
         if (success) {
             setPopup({message: message, state: "success", id: Date.now()});
             refreshEventData();
         }
-        setSingleSubToReimburseQuota(null);
+        setSingleSubToReimburse(null);
     };
 
 
@@ -290,12 +289,13 @@ export default function Event() {
                     refreshEventData={refreshEventData}
                 />
             )}
-            {reimburseQuotaModalOpen && (
-                <ReimburseQuotaModal
-                    open={reimburseQuotaModalOpen}
-                    onClose={handleCloseReimburseQuotaModal}
+            {reimburseSelectionModalOpen && (
+                <ReimburseSelectionModal
+                    open={reimburseSelectionModalOpen}
+                    onClose={handleCloseReimburseSelectionModal}
+                    onRefresh={refreshEventData}
                     event={data}
-                    subscription={singleSubToReimburseQuota}
+                    subscription={singleSubToReimburse}
                 />
             )}
             {printableLiberatorieModalOpen && (
@@ -516,7 +516,7 @@ export default function Event() {
                                                 onEditSubscription={handleEditSubscription}
                                                 onMoveToList={handleMoveToList}
                                                 onOpenReimburseDeposits={handleOpenReimburseDeposits}
-                                                onOpenReimburseQuota={handleOpenReimburseQuota}
+                                                onOpenReimburseMenu={handleOpenReimburseMenu}
                                                 onOpenPrintableLibetatorie={handleOpenPrintableLibetatorie}
                                                 onOpenEditAnswers={handleOpenEditAnswers}
                                                 canChangeSubscription={canManageSubscriptions}
