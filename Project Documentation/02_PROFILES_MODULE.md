@@ -2,27 +2,28 @@
 
 ## 1. Module Purpose
 
-Il modulo profiles gestisce il lifecycle anagrafico e documentale di Erasmus/ESNer.
+The profiles module manages demographic and document lifecycle for Erasmus and ESNer users.
 
-Responsabilita:
+Responsibilities:
 
-- registrazione iniziale profilo
-- verifica email automatica e manuale
-- gestione documenti identificativi
-- ricerca e listing amministrativo
-- esposizione dati profilo per moduli events/treasury
+- initial profile registration
+- automatic and manual email verification
+- identity document management
+- administrative search and listing
+- profile data exposure for events/treasury modules
+- ESNcard actions from profile view integrated with treasury (issuance and revocation)
 
 ## 2. Domain Model
 
 ### 2.1 Profile
 
-Campi funzionali principali:
+Main functional fields:
 
-- identificazione: email (unique), is_esner
-- stato: email_is_verified, enabled
-- anagrafica: name, surname, birthdate, country, course, domicile
-- contatti: phone_*, whatsapp_*
-- identificativi: person_code, matricola_number, matricola_expiration
+- identification: `email` (unique), `is_esner`
+- state: `email_is_verified`, `enabled`
+- personal info: `name`, `surname`, `birthdate`, `country`, `course`, `domicile`
+- contacts: `phone_*`, `whatsapp_*`
+- identifiers: `person_code`, `matricola_number`, `matricola_expiration`
 
 Computed properties:
 
@@ -32,8 +33,8 @@ Computed properties:
 ### 2.2 Document
 
 - relazione: FK su Profile
-- tipo documento: enum (Passport, ID Card, Driving License, Residency Permit, Other)
-- number unique globale
+- document type: enum (Passport, ID Card, Driving License, Residency Permit, Other)
+- globally unique number
 - expiration
 - enabled
 
@@ -43,70 +44,70 @@ Base path: /backend/
 
 ### 3.1 Listing and Search
 
-| Endpoint | Metodo | Note |
+| Endpoint | Method | Notes |
 |---|---|---|
-| /erasmus_profiles/ | GET | listing paginato profili non ESNer |
-| /esner_profiles/ | GET | listing paginato profili ESNer |
-| /profiles/search/ | GET | ricerca multi-token cross-field |
+| /erasmus_profiles/ | GET | paginated listing of non-ESNer profiles |
+| /esner_profiles/ | GET | paginated listing of ESNer profiles |
+| /profiles/search/ | GET | cross-field multi-token search |
 
-Filtri principali:
+Main filters:
 
 - page, page_size, ordering, search
-- group (solo esner_profiles)
+- group (only on `esner_profiles`)
 - esncardValidity = valid|expired|absent
 
 ### 3.2 Creation and Verification
 
-| Endpoint | Metodo | Auth |
+| Endpoint | Method | Auth |
 |---|---|---|
-| /profile/initiate-creation/ | POST | pubblico |
-| /api/profile/verify-email/<uid>/<token>/ | GET | pubblico |
+| /profile/initiate-creation/ | POST | public |
+| /api/profile/verify-email/<uid>/<token>/ | GET | public |
 | /profile/<pk>/manual-verify-email/ | POST | Board |
 
 ### 3.3 Detail and Related Data
 
-| Endpoint | Metodo | Auth |
+| Endpoint | Method | Auth |
 |---|---|---|
-| /profile/<pk>/ | GET/PATCH/DELETE | autenticato + permessi |
-| /document/ | POST | autenticato |
-| /document/<pk>/ | PATCH/DELETE | autenticato + permessi |
+| /profile/<pk>/ | GET/PATCH/DELETE | authenticated + permissions |
+| /document/ | POST | authenticated |
+| /document/<pk>/ | PATCH/DELETE | authenticated + permissions |
 | /profile_subscriptions/<pk>/ | GET | object-level protected |
-| /profile_events/<pk>/ | GET | autenticato |
-| /check_erasmus_email/ | POST | pubblico |
+| /profile_events/<pk>/ | GET | authenticated |
+| /check_erasmus_email/ | POST | public |
 
 ## 4. Lifecycle Flows
 
 ### 4.1 Erasmus Registration Flow
 
-1. initiate-creation crea profile/document disabled
-2. invio email verifica
-3. verify-email abilita profile/document
+1. `initiate-creation` creates disabled `Profile`/`Document` records.
+2. Verification email is sent.
+3. `verify-email` enables profile/document.
 
 ### 4.2 ESNer Registration Flow
 
-1. dominio email obbligatorio @esnpolimi.it
-2. creazione User correlato in gruppo Aspiranti
-3. verify-email abilita profile/document/user
-4. invio notifica segreteria post-verifica
+1. `@esnpolimi.it` email domain is mandatory.
+2. A related `User` is created in group `Aspiranti`.
+3. `verify-email` enables profile/document/user.
+4. Post-verification notification is sent to secretariat.
 
 ### 4.3 Manual Verification
 
-Board puo forzare verifica/attivazione profilo per casi eccezionali.
+Board can force profile verification/activation for exceptional cases.
 
 ## 5. Authorization Rules
 
 ### 5.1 Profile Permissions
 
-- listing: autenticazione richiesta
+- listing: authentication required
 - patch profile: profiles.change_profile
-- delete profile: solo Board
-- delete bloccato se esistono Subscription collegate
+- delete profile: Board only
+- delete is blocked if linked `Subscription` records exist
 
 ### 5.2 Group Transition Constraints
 
-1. Aspiranti -> Attivi/Board: solo Board
-2. Attivi -> Board: solo Board
-3. altre transizioni secondo validazione richiesta
+1. `Aspiranti` -> `Attivi`/`Board`: Board only.
+2. `Attivi` -> `Board`: Board only.
+3. Other transitions follow request validation rules.
 
 ### 5.3 Document Permissions
 
@@ -115,48 +116,55 @@ Board puo forzare verifica/attivazione profilo per casi eccezionali.
 
 ### 5.4 Object-Level Access
 
-profile_subscriptions accessibile solo a:
+`profile_subscriptions` is accessible only to:
 
 - owner
 - staff
 - Board
 
+### 5.5 ESNcard Actions From Profile View
+
+- ESNcard issue/update follows dedicated treasury permissions
+- ESNcard revocation is visible only to Board members
+- Revocation uses treasury flow and generates a `rimborso_esncard` transaction
+
 ## 6. Search Semantics
 
-Ricerca profili combinata su:
+Combined profile search across:
 
 - name, surname, email
 - document number
 - esncard number
 - phone/whatsapp
 
-Filtro esncardValidity basato su valutazione latest_esncard.
+`esncardValidity` filter is based on `latest_esncard` evaluation.
 
 ## 7. Integration Notes
 
-- users: creazione/attivazione account ESNer
-- events: risoluzione profilo per iscrizioni e visibilita dati
-- treasury: lookup latest_esncard per validita servizi/card
+- users: ESNer account creation/activation
+- events: profile resolution for subscriptions and data visibility
+- treasury: `latest_esncard` lookup for card/service validity
+- treasury: ESNcard revocation from profile with preserved emission history and new `rimborso_esncard`
 
 ## 8. Operational Risks
 
-1. stati non allineati profile/document/user in flussi di attivazione
-2. regressioni su regole promozione gruppi
-3. cancellazione profilo con dipendenze evento non intercettata
+1. Misaligned profile/document/user states during activation flows.
+2. Regressions in group-promotion rules.
+3. Profile deletion with uncaught event dependencies.
 
 ## 9. Testing Requirements
 
-1. registration matrix Erasmus vs ESNer
+1. Registration matrix Erasmus vs ESNer
 2. token verification valid/invalid/expired
 3. permission matrix profile/document CRUD
 4. group transition constraints
 5. object-level access profile_subscriptions
 
-Riferimento test: backend/profiles/tests.py.
+Test reference: `backend/profiles/tests.py`.
 
 ## 10. Canonical Source Files
 
-Per analisi/verifica agenti AI usare come riferimento primario:
+For AI-agent analysis/verification, use these files as primary references:
 
 - backend/profiles/models.py
 - backend/profiles/urls.py

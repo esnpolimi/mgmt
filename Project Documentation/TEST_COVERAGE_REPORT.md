@@ -1,101 +1,102 @@
 # Test Coverage Report - ESN Polimi Management
 
-Data ultimo aggiornamento: 2026-03-25  
-Ambito: backend Django (users, profiles, events, treasury, content)
+Last update date: 2026-03-31  
+Scope: Django backend (users, profiles, events, treasury, content)
 
 ## 1. Quality Scope
 
-Questo report descrive la copertura test a livello funzionale e i rischi residui.
+This report describes functional test coverage and residual risks.
 
-Nota metodologica:
+Methodology note:
 
-- i conteggi rappresentano numero di funzioni test_, non line coverage percentuale
-- il dato misura ampiezza della suite, non profondita per ramo logico
+- counts represent the number of `test_` functions, not line coverage percentage
+- this metric reflects suite breadth, not branch-level depth
 
 ## 2. Test Inventory
 
-| File test | Numero funzioni test_ |
+| Test File | Number of `test_` Functions |
 |---|---:|
 | backend/users/tests.py | 40 |
 | backend/users/test_integration.py | 14 |
 | backend/profiles/tests.py | 70 |
 | backend/events/tests.py | 111 |
-| backend/treasury/tests.py | 76 |
+| backend/treasury/tests.py | 83 |
 | backend/content/tests.py | 43 |
 | backend/test_integration_e2e.py | 6 |
-| Totale | 360 |
+| Total | 367 |
 
 ## 3. Functional Coverage Matrix
 
 ### 3.1 Users
 
-- autenticazione JWT (login/refresh/logout)
-- reset e forgot password
-- CRUD utenti e gruppi
-- gestione permessi applicativi speciali
+- JWT authentication (login/refresh/logout)
+- reset and forgot password
+- user and group CRUD
+- special application-permission management
 
 ### 3.2 Profiles
 
-- onboarding Erasmus/ESNer
-- verifica email automatica e verifica manuale Board
-- CRUD profili e documenti
-- ricerca e filtri
-- endpoint di supporto per eventi/iscrizioni
+- Erasmus/ESNer onboarding
+- automatic email verification and Board manual verification
+- profile and document CRUD
+- search and filters
+- support endpoints for events/subscriptions
 
 ### 3.3 Events
 
-- CRUD eventi/liste
-- iscrizioni office e public form
-- schema campi dinamici e additional fields
-- servizi opzionali con pricing
-- flussi SumUp (checkout/process/webhook)
-- shared lists e move subscriptions
-- liberatorie e utilities organizzative
+- event/list CRUD
+- office and public-form subscriptions
+- dynamic field schema and additional fields
+- optional services with pricing
+- SumUp flows (checkout/process/webhook)
+- shared lists and move subscriptions
+- waivers and organizer utilities
 
 ### 3.4 Treasury
 
-- CRUD account e visibilita per gruppi
-- CRUD transazioni con impatto su balance
-- emissione ESNcard e fee policy
+- account CRUD and group-based visibility
+- transaction CRUD with balance impact
+- ESNcard issuance and fee policy
+- ESNcard revocation with tracked refund (`rimborso_esncard`)
 - reimbursement request lifecycle
-- rimborsi deposito/quota/servizi
+- deposit/fee/services reimbursements
 - export XLSX
 
 ### 3.5 Content
 
-- CRUD sezioni e link
+- section and link CRUD
 - policy content manager (Board o can_manage_content)
-- configurazione WhatsApp singleton
-- workflow pubblico whatsapp-register con email e audit CSV Drive
+- WhatsApp singleton configuration
+- public `whatsapp-register` workflow with email and Drive CSV audit
 
 ### 3.6 E2E Integration
 
-- test multi-modulo in backend/test_integration_e2e.py
-- copertura flussi critici onboarding/eventi/pagamenti/rimborsi
+- multi-module tests in `backend/test_integration_e2e.py`
+- coverage of critical onboarding/events/payments/reimbursements flows
 
 ## 4. Residual Risk Register
 
-1. Concorrenza treasury: race su update simultanei di balance.
-2. Scalabilita: dataset grandi su events/transactions/reimbursements.
-3. Sicurezza webhook/token: replay, ordering, scadenza, abuse rate.
-4. Contratti frontend-backend: drift payload su form pubblici/pagamenti.
+1. Treasury concurrency: race conditions on simultaneous balance updates.
+2. Scalability: large datasets on events/transactions/reimbursements.
+3. Webhook/token security: replay, ordering, expiration, abuse rate.
+4. Frontend-backend contracts: payload drift on public forms/payments.
 
 ## 5. Recommended Test Enhancements
 
-1. Aggiungere test di concorrenza per transazioni contabili.
-2. Introdurre contract test espliciti per endpoint pubblici.
-3. Rafforzare test idempotenza webhook con eventi duplicati/disordinati.
-4. Aggiungere smoke E2E automatizzati su gate release.
+1. Add concurrency tests for accounting transactions.
+2. Introduce explicit contract tests for public endpoints.
+3. Strengthen webhook idempotency tests with duplicate/out-of-order events.
+4. Add automated E2E smoke tests in release gate.
 
 ## 6. Execution Commands
 
-Esecuzione completa:
+Full execution:
 
 ```bash
 python manage.py test
 ```
 
-Per modulo:
+Per module:
 
 ```bash
 python manage.py test users
@@ -106,7 +107,7 @@ python manage.py test content
 python manage.py test test_integration_e2e
 ```
 
-Esecuzione con test settings:
+Execution with test settings:
 
 ```bash
 DJANGO_SETTINGS_MODULE=backend.settings.test python manage.py test
@@ -114,16 +115,16 @@ DJANGO_SETTINGS_MODULE=backend.settings.test python manage.py test
 
 ## 7. Maintenance Policy
 
-1. Ogni bug fix deve includere almeno un test di regressione.
-2. Ogni nuova API deve includere permessi, validazione, happy path, error path.
-3. Flussi finanziari devono includere controlli su balance e idempotenza.
-4. Questo report va aggiornato a ogni modifica significativa della suite test.
+1. Every bug fix must include at least one regression test.
+2. Every new API must include permissions, validation, happy path, and error path tests.
+3. Financial flows must include balance and idempotency checks.
+4. This report must be updated for every significant test-suite change.
 
 ## 8. AI Agent Interpretation Notes
 
-Regole per uso corretto del report da parte di agenti AI:
+Rules for correct report usage by AI agents:
 
-1. Non usare il numero totale test come metrica unica di qualita.
-2. Per cambi ad alto rischio consultare prima 06_INTEGRATION_E2E.md.
-3. Validare sempre i gap residui rispetto al cambiamento richiesto.
-4. In caso di mismatch tra report e suite reale, prevale l esecuzione test corrente.
+1. Do not use total test count as the only quality metric.
+2. For high-risk changes, consult `06_INTEGRATION_E2E.md` first.
+3. Always validate residual gaps against the requested change.
+4. If report and real suite differ, current test execution is authoritative.
