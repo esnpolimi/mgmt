@@ -1,82 +1,82 @@
 # ESN Polimi Management - Technical System Overview
 
-Questo documento e la vista architetturale di riferimento del progetto.
-Scopo: fornire una baseline tecnica chiara per sviluppo, manutenzione, onboarding e automazione AI.
+This document is the reference architectural view of the project.
+Purpose: provide a clear technical baseline for development, maintenance, onboarding, and AI automation.
 
 ## 1. Product Scope
 
-Il sistema copre i processi core ESN Polimi:
+The system covers ESN Polimi core processes:
 
-- gestione anagrafiche Erasmus ed ESNer
-- onboarding con verifica email
-- gestione eventi, liste, iscrizioni e form pubblici
-- pagamenti e rimborsi (quota, cauzione, servizi)
-- tesoreria (casse, transazioni, export)
-- contenuti dinamici homepage
-- registrazione WhatsApp pubblica con audit
-- gestione stato manutenzione applicativa
+- Erasmus and ESNer profile management
+- onboarding with email verification
+- event, list, subscription, and public-form management
+- payments and reimbursements (fee, deposit, services)
+- treasury operations (accounts, transactions, export)
+- dynamic homepage content
+- public WhatsApp registration with audit trail
+- maintenance state management
 
 ## 2. Architecture Snapshot
 
 ### 2.1 Backend
 
 - framework: Django + Django REST Framework
-- autenticazione: JWT (SimpleJWT access/refresh)
+- authentication: JWT (SimpleJWT access/refresh)
 - database: MySQL (dev/prod), SQLite (test)
-- pattern: modular monolith per dominio applicativo
+- pattern: modular monolith by application domain
 
 ### 2.2 Frontend
 
 - stack: React 19 + Vite + MUI
-- routing: SPA con route protette
+- routing: SPA with protected routes
 - API base URL:
   - local: http://localhost:8000/backend
   - prod: https://mgmt.esnpolimi.it/backend
 
 ### 2.3 External Integrations
 
-- Google Drive API: upload file form + append CSV audit
+- Google Drive API: form file upload + CSV audit append
 - SumUp API: checkout, payment confirmation, webhook reconciliation
-- SMTP: invio email operative/transazionali
-- Sentry: error tracking in produzione
-- OIDC provider: integrazione Dokuwiki
+- SMTP: operational/transactional email delivery
+- Sentry: error tracking in production
+- OIDC provider: Dokuwiki integration
 
 ## 3. Domain Boundaries
 
-| Modulo | Responsabilita | Dipendenze logiche |
+| Module | Responsibilities | Logical Dependencies |
 |---|---|---|
-| users | auth, gestione utenti e gruppi, permessi speciali | profiles |
-| profiles | profili, documenti, verifica email, ricerca | users, events |
-| events | eventi, liste, iscrizioni, form, pagamenti | profiles, treasury |
-| treasury | casse, transazioni, ESNcard, rimborsi | profiles, events, users |
-| content | contenuti homepage, WhatsApp config/register | users |
-| maintenance | stato manutenzione e notifiche | - |
+| users | auth, user/group management, special permissions | profiles |
+| profiles | profiles, documents, email verification, search | users, events |
+| events | events, lists, subscriptions, forms, payments | profiles, treasury |
+| treasury | accounts, transactions, ESNcard, reimbursements | profiles, events, users |
+| content | homepage content, WhatsApp config/register | users |
+| maintenance | maintenance state and notifications | - |
 
 ## 4. Authorization Model
 
-### 4.1 Gruppi
+### 4.1 Groups
 
 - Board
 - Attivi
 - Aspiranti
 
-### 4.2 Flag custom utente
+### 4.2 Custom User Flags
 
 - can_manage_casse
 - can_view_casse_import
 - can_manage_content
 
-### 4.3 Regole globali
+### 4.3 Global Rules
 
-1. Board mantiene privilegi impliciti estesi su quasi tutti i moduli.
-2. Attivi puo operare su aree treasury in base ai permessi endpoint.
-3. Aspiranti richiede flag espliciti per funzioni extra.
-4. Content manager e Board oppure can_manage_content=true.
-5. Alcuni endpoint applicano object-level permissions (owner/staff/Board).
+1. Board has broad implicit privileges across most modules.
+2. Attivi can operate in treasury areas based on endpoint permissions.
+3. Aspiranti require explicit flags for extra capabilities.
+4. A content manager is either Board or has `can_manage_content=true`.
+5. Some endpoints enforce object-level permissions (owner/staff/Board).
 
 ## 5. API Surface Map
 
-Prefisso comune backend: /backend/
+Common backend prefix: /backend/
 
 - users: /login/, /logout/, /api/token/*, /users/*, /groups/
 - profiles: /erasmus_profiles/, /esner_profiles/, /profile/*, /document/*
@@ -92,22 +92,22 @@ Prefisso comune backend: /backend/
 3. office subscription flow: events + treasury
 4. public form subscription flow: events + profiles + treasury
 5. SumUp online payment reconciliation: events + treasury
-6. reimbursement flow (quota/cauzione/servizi): treasury + events
-7. ESNcard issuance flow: treasury + profiles
+6. reimbursement flow (fee/deposit/services): treasury + events
+7. ESNcard issuance/revocation flow: treasury + profiles
 8. WhatsApp public registration flow: content + email + drive
 
-Dettagli operativi nei documenti modulo 01-06.
+Operational details are available in module documents 01-06.
 
 ## 7. Configuration and Environments
 
-Settings principali:
+Primary settings files:
 
 - backend/settings/base.py
 - backend/settings/dev.py
 - backend/settings/prod.py
 - backend/settings/test.py
 
-Variabili sensibili principali:
+Primary sensitive variables:
 
 - SECRET_KEY
 - SIMPLE_JWT_SIGNING_KEY
@@ -123,25 +123,26 @@ Variabili sensibili principali:
 
 ## 8. Observability and Audit
 
-- logging backend su file in produzione
-- audit middleware per context DB/action
-- Sentry con tracing configurabile
-- maintenance notification persistita in maintenance_notification.json
+- backend file logging in production
+- audit middleware for DB/action context
+- Sentry with configurable tracing
+- maintenance notification persisted in `maintenance_notification.json`
 
 ## 9. Technical Constraints and Invariants
 
-1. Coerenza saldo account deve essere preservata su create/update/delete transazioni.
-2. Pagamenti online e webhook devono essere trattati in modo idempotente.
-3. Vincoli permessi non devono essere bypassati lato API.
-4. I campi dinamici evento devono rispettare schema JSON previsto.
-5. I flussi esterni senza profile (iscritti esterni) devono essere sempre gestiti nei rimborsi.
+1. Account balance consistency must be preserved on transaction create/update/delete.
+2. Online payments and webhooks must be handled idempotently.
+3. Permission constraints must not be bypassed at API level.
+4. Dynamic event fields must respect the expected JSON schema.
+5. External flows without profile (external subscribers) must always be handled in reimbursements.
+6. ESNcard revocation must preserve the original emission transaction and register a dedicated refund transaction.
 
 ## 10. AI/Automation Notes
 
-1. Verificare sempre urls.py per endpoint effettivi e non assumere naming legacy.
-2. Per pagamenti usare insieme logica events e treasury.
-3. Non assumere che Subscription.profile sia sempre valorizzato.
-4. In content, Board e can_manage_content sono le sole condizioni di gestione.
+1. Always check `urls.py` for actual endpoints and avoid assuming legacy naming.
+2. For payments, evaluate `events` and `treasury` logic together.
+3. Do not assume `Subscription.profile` is always set.
+4. In content, only Board and `can_manage_content` enable management actions.
 
 ## 11. Documentation Index
 
@@ -156,7 +157,7 @@ Variabili sensibili principali:
 
 ## 12. Canonical Code Pointers
 
-Questa sezione indica i file da trattare come source of truth quando un agente deve verificare comportamento reale.
+This section lists the files to treat as source of truth when an agent must validate real behavior.
 
 - backend routing root: backend/backend/urls.py
 - users: backend/users/urls.py, backend/users/views.py, backend/users/serializers.py
@@ -168,19 +169,19 @@ Questa sezione indica i file da trattare come source of truth quando un agente d
 
 ## 13. AI Reference Usage Rules
 
-Regole operative per agenti AI:
+Operational rules for AI agents:
 
-1. Usare questi documenti come baseline funzionale, non come sostituto del codice.
-2. In caso di mismatch documentazione-codice, prevale il comportamento osservabile nei file canonici.
-3. Prima di modifiche su pagamenti/rimborsi, verificare sempre sia events che treasury.
-4. Prima di modifiche su autorizzazioni, verificare sia permessi Django sia flag custom utente.
-5. Non assumere invarianti non esplicitate nei documenti o non verificabili nel codice.
+1. Use these documents as functional baseline, not as a replacement for code inspection.
+2. If documentation and code differ, observed behavior in canonical files is authoritative.
+3. Before payment/reimbursement changes, always verify both `events` and `treasury`.
+4. Before authorization changes, verify both Django permissions and custom user flags.
+5. Do not assume invariants that are not explicitly documented or verifiable in code.
 
 ## 14. Documentation Completeness Notes
 
-Copertura attuale:
+Current coverage:
 
-- moduli core users, profiles, events, treasury, content: dettagliati
-- modulo maintenance: dettagliato
-- integrazione E2E: baseline presente
-- coverage qualitativa: presente
+- core modules users, profiles, events, treasury, content: detailed
+- maintenance module: detailed
+- E2E integration baseline: present
+- qualitative coverage: present

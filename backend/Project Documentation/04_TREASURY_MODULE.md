@@ -2,36 +2,37 @@
 
 ## 1. Module Purpose
 
-Il modulo treasury gestisce la contabilita applicativa e le regole finanziarie:
+The treasury module manages application accounting and financial rules:
 
-- casse (Account) e visibilita per gruppi
-- ledger transazioni con aggiornamento saldo
-- emissione/modifica ESNcard con fee parametrica
-- workflow richieste rimborso
-- rimborsi automatici su flussi evento (quota/cauzione/servizi)
-- export transazioni per reporting operativo
+- accounts and group-based visibility
+- transaction ledger with balance updates
+- ESNcard issue/update with parameterized fee policy
+- ESNcard revocation with refund tracked in ledger
+- reimbursement request workflow
+- automatic event-flow reimbursements (fee/deposit/services)
+- transaction export for operational reporting
 
 ## 2. Domain Model
 
 ### 2.1 Settings
 
-Parametri economici configurabili:
+Configurable economic parameters:
 
 - esncard_release_fee
 - esncard_lost_fee
 
 ### 2.2 ESNcard
 
-Attributi principali:
+Main attributes:
 
 - profile
 - number (unique)
-- expiration (calcolata)
-- membership_year (derivata)
+- expiration (computed)
+- membership_year (derived)
 
 ### 2.3 Account
 
-Attributi principali:
+Main attributes:
 
 - name (unique)
 - status: open|closed
@@ -41,32 +42,33 @@ Attributi principali:
 
 ### 2.4 Transaction
 
-Tipi operativi:
+Operational types:
 
 - subscription
 - esncard
+- rimborso_esncard
 - deposit
 - withdrawal
 - reimbursement
-- cauzione
+- `cauzione` (event deposit transaction type)
 - rimborso_cauzione
 - rimborso_quota
 - service
 - rimborso_service
 
-Invarianti contabili:
+Accounting invariants:
 
-1. create/update/delete transazione riallinea sempre balance account.
-2. account closed non accetta nuove operazioni mutative.
-3. per tipi vincolati, saldo negativo bloccato.
+1. Transaction create/update/delete always realigns account balance.
+2. Closed accounts do not accept new mutating operations.
+3. For constrained types, negative balance is blocked.
 
 ### 2.5 ReimbursementRequest
 
-Attributi:
+Attributes:
 
 - user
 - amount
-- payment (cash/paypal/bonifico)
+- payment (cash/PayPal/bank transfer)
 - description
 - receipt_link
 - account
@@ -79,7 +81,7 @@ Base path: /backend/
 ### 3.1 ESNcard APIs
 
 - POST /esncard_emission/
-- PATCH /esncard/<pk>/
+- PATCH|DELETE /esncard/<pk>/
 - GET /esncard_fees/
 
 ### 3.2 Transaction APIs
@@ -106,108 +108,125 @@ Base path: /backend/
 
 ## 4. Permission Model
 
-Regole principali:
+Main rules:
 
-1. creazione account: Board.
-2. patch completo account: change_account.
-3. update status account: anche casse manager (gruppo/flag).
-4. create transaction: add_transaction.
-5. patch/delete transaction: permessi specifici o can_manage_casse.
-6. patch reimbursement request: Board.
-7. delete reimbursement request: Board o permesso dedicato.
+1. Account creation: Board.
+2. Full account patch: `change_account`.
+3. Account status update: also allowed for treasury managers (group/flag).
+4. Transaction creation: `add_transaction`.
+5. Transaction patch/delete: specific permissions or `can_manage_casse`.
+6. ESNcard revocation (`DELETE esncard/<pk>`): Board only.
+7. Reimbursement request patch: Board.
+8. Reimbursement request delete: Board or dedicated permission.
 
-Visibilita account:
+Account visibility:
 
-- account visibile se utente appartiene a visible_to_groups
-- oppure se account non ha gruppi associati
+- account is visible if user belongs to `visible_to_groups`
+- or if account has no associated groups
 
 ## 5. Core Business Flows
 
 ### 5.1 ESNcard Emission
 
-1. validazione profilo e prerequisiti emissione
-2. calcolo fee corretta (rilascio/smarrimento/rinnovo)
-3. creazione ESNcard
-4. registrazione transaction esncard su account
+1. profile and issue-prerequisite validation
+2. correct fee calculation (issue/lost/renewal)
+3. ESNcard creation
+4. `esncard` transaction registration on account
+
+### 5.1bis ESNcard Revocation (Board only)
+
+1. Board-permission validation
+2. atomic lock on ESNcard, linked transactions, and account
+3. reference-integrity validation (no non-ESNcard types, max 1 linked emission)
+4. if a valid ESNcard emission exists:
+	- verify account is open and has sufficient balance
+	- create `rimborso_esncard` transaction with negative amount
+5. delete ESNcard record
+6. keep original emission transaction for audit history
 
 ### 5.2 Manual Transactions
 
-1. creazione deposit/withdrawal
-2. validazione account e saldo
-3. eventuale upload ricevuta
-4. notifica operativa in ambienti non localhost
+1. deposit/withdrawal creation
+2. account and balance validation
+3. optional receipt upload
+4. operational notification in non-localhost environments
 
 ### 5.3 Reimbursement Request Lifecycle
 
-1. utente apre richiesta rimborso
-2. Board valuta e aggiorna stato/dati
-3. creazione transazione rimborso collegata
-4. riallineamento saldo account
+1. user opens reimbursement request
+2. Board reviews and updates state/data
+3. linked reimbursement transaction creation
+4. account balance realignment
 
 ### 5.4 Event Reimbursements
 
 Depositi:
 
-1. input bulk subscription_ids
-2. verifica transazione cauzione originaria
-3. blocco duplicati rimborso_cauzione
-4. supporto iscritti esterni senza profile
+1. bulk `subscription_ids` input
+2. original deposit transaction verification
+3. duplicate `rimborso_cauzione` block
+4. support for external subscribers without profile
 
-Quota/servizi:
+Fee/services:
 
-1. verifica pagamenti originari
-2. blocco doppio rimborso
-3. rimborso opzionale servizi associati
-4. controllo saldo account disponibile
+1. original-payment verification
+2. duplicate-refund block
+3. optional reimbursement for related services
+4. available account-balance check
 
 Orchestrazione UI unificata (single icon):
 
-1. il frontend puo selezionare piu voci (quota/servizi/cauzione) in una singola azione utente
-2. lato backend restano endpoint separati (reimburse_quota, reimburse_deposits)
-3. il flusso non e atomico cross-endpoint: possibili successi parziali
-4. in caso di successo parziale, ogni voce mantiene il proprio stato e puo essere ritentata
-5. motivazione errore per singola voce propagata al client per retry guidato
+1. frontend can select multiple items (fee/services/deposit) in one user action
+2. backend still uses separate endpoints (`reimburse_quota`, `reimburse_deposits`)
+3. flow is not cross-endpoint atomic: partial success is possible
+4. on partial success, each item keeps its own state and can be retried
+5. per-item error reason is propagated to client for guided retry
 
 ## 6. Query, Filters and Export
 
-transactions list supporta:
+`transactions` list supports:
 
 - search
 - event
-- account multipli
-- type multipli
+- multiple accounts
+- multiple types
 - dateFrom/dateTo
 - limit per dashboard
 
-transactions_export produce XLSX con metadati contabili e descrizioni operative.
+`transactions_export` produces XLSX with accounting metadata and operational descriptions.
+
+Note: `rimborso_esncard` is exported with a dedicated description.
 
 ## 7. Cross-Module Dependencies
 
-- events: source of truth per Subscription/Event usati nei rimborsi
+- events: source of truth for `Subscription`/`Event` data used in reimbursements
 - profiles/users: identita attore e ownership richieste
 - notification/email: avvisi operativi su operazioni sensibili
 
 ## 8. Operational Risks
 
-1. race su aggiornamento balance in operazioni concorrenti
-2. disallineamento transazioni evento/treasury in caso errori parziali
-3. regressioni su edge case iscritti esterni senza profile
-4. policy account visibility non allineata con gruppi runtime
+1. race conditions in balance updates during concurrent operations
+2. event/treasury transaction misalignment on partial failures
+3. regressions on edge cases with external subscribers without profile
+4. account-visibility policy misalignment with runtime groups
+5. ESNcard revocation blocked on insufficient balance or closed account
 
 ## 9. Testing Requirements
 
-1. coerenza balance su create/update/delete transaction
-2. blocco operazioni su account chiuso
-3. permission matrix Board/Attivi/Aspiranti con flag speciali
-4. rimborsi quota/cauzione/servizi incluse condizioni duplicate
-5. gestione esterni senza profile nei rimborsi deposito
-6. export con filtri combinati e dataset non banali
+1. balance consistency on transaction create/update/delete
+2. operation block on closed account
+3. permission matrix Board/Attivi/Aspiranti with special flags
+4. fee/deposit/services reimbursements including duplicate conditions
+5. handling external users without profile in deposit reimbursements
+6. export with combined filters and non-trivial datasets
+7. ESNcard revocation with `rimborso_esncard` creation and balance consistency
+8. ESNcard revocation blocks on edge cases (multiple emissions, anomalous references, insufficient balance, closed account)
 
-Riferimento test: backend/treasury/tests.py.
+Test reference: `backend/treasury/tests.py`.
 
 ## 10. Canonical Source Files
 
-Per analisi/verifica agenti AI usare come riferimento primario:
+For AI-agent analysis/verification, use these files as primary references:
 
 - backend/treasury/models.py
 - backend/treasury/urls.py

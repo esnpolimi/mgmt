@@ -2,20 +2,20 @@
 
 ## 1. Module Purpose
 
-Il modulo content governa i contenuti dinamici della home e il workflow pubblico WhatsApp.
+The content module governs dynamic homepage content and the public WhatsApp workflow.
 
-Responsabilita:
+Responsibilities:
 
-- gestione sezioni editoriali e link ordinati
-- enforcement autorizzativo content manager
-- configurazione centralizzata link WhatsApp
-- registrazione pubblica con validazione, email e audit CSV su Drive
+- management of editorial sections and ordered links
+- authorization enforcement for content managers
+- centralized WhatsApp link configuration
+- public registration with validation, email delivery, and CSV audit on Drive
 
 ## 2. Domain Model
 
 ### 2.1 ContentSection
 
-Attributi principali:
+Main attributes:
 
 - title (enum, unique): LINK_UTILI | WIKI_TUTORIAL
 - order
@@ -24,7 +24,7 @@ Attributi principali:
 
 ### 2.2 ContentLink
 
-Attributi principali:
+Main attributes:
 
 - section (FK)
 - name
@@ -36,7 +36,7 @@ Attributi principali:
 
 ### 2.3 WhatsAppConfig
 
-Configurazione singleton (pk=1):
+Singleton configuration (`pk=1`):
 
 - whatsapp_link
 - updated_at
@@ -68,33 +68,33 @@ Base path: /backend/content/
 
 ## 4. Permission Model
 
-Guard centrale: _can_manage_content(user)
+Central guard: `_can_manage_content(user)`
 
-Condizioni true:
+True conditions:
 
 - user in Board
 - user.can_manage_content
 
-Policy endpoint:
+Endpoint policy:
 
-1. sections/links GET: autenticati.
+1. `sections/links` GET: authenticated.
 2. sections/links POST/PATCH/DELETE: content manager.
-3. whatsapp-config GET: autenticati.
+3. `whatsapp-config` GET: authenticated.
 4. whatsapp-config PATCH: content manager.
-5. whatsapp-register POST: pubblico (AllowAny).
+5. `whatsapp-register` POST: public (`AllowAny`).
 
 ## 5. Core Business Flows
 
 ### 5.1 Editorial CRUD Flow
 
-1. manager crea/aggiorna sezione o link
-2. ordinamento applicato via campo order
-3. is_active governa esposizione lato home
-4. audit metadata mantiene tracciabilita modifica
+1. manager creates/updates section or link
+2. ordering is applied through `order`
+3. `is_active` controls homepage exposure
+4. audit metadata preserves change traceability
 
 ### 5.2 Public WhatsApp Registration
 
-Input richiesto:
+Required input:
 
 - first_name
 - last_name
@@ -103,48 +103,48 @@ Input richiesto:
 - home_university
 - course_of_study
 
-Sequenza:
+Sequence:
 
-1. validazione serializer
-2. applicazione regole ammissibilita (international/erasmus)
-3. verifica presenza whatsapp_link configurato
-4. invio email con link gruppo
-5. append audit CSV su Google Drive con timestamp/esito
+1. serializer validation
+2. application of eligibility rules (international/erasmus)
+3. verify configured `whatsapp_link` presence
+4. send email with group link
+5. append audit CSV to Google Drive with timestamp/outcome
 
-CSV target: cronologia richieste gruppo whatsapp.csv.
+Target CSV: `cronologia richieste gruppo whatsapp.csv`.
 
 ## 6. Integration Notes
 
-- home frontend: rendering sezioni attive e links ordinati
-- content manager frontend: amministrazione completa contenuti/config
-- servizi esterni: SMTP per invio email, Drive API per audit trail
+- home frontend: rendering active sections and ordered links
+- content manager frontend: complete content/configuration administration
+- external services: SMTP for emails, Drive API for audit trail
 
 ## 7. Operational Constraints
 
-1. active_sections filtrate server-side.
-2. append CSV protetto da lock in-process per ridurre collisioni.
-3. errori email/Drive devono essere tracciati e osservabili.
+1. `active_sections` is filtered server-side.
+2. CSV append is protected by in-process lock to reduce collisions.
+3. Email/Drive errors must be traced and observable.
 
 ## 8. Operational Risks
 
-1. inconsistenza configurazione singleton WhatsApp in ambienti multipli
-2. lock locale non sufficiente in deployment multi-process
-3. regressioni su policy di accesso content manager
-4. error handling esterno (SMTP/Drive) non uniforme
+1. inconsistent WhatsApp singleton configuration across environments
+2. local lock may be insufficient in multi-process deployments
+3. regressions in content-manager access policy
+4. non-uniform external error handling (SMTP/Drive)
 
 ## 9. Testing Requirements
 
-1. permission matrix Board, can_manage_content, utente standard
+1. permission matrix for Board, `can_manage_content`, standard user
 2. validazioni ContentLink (url/color/name/order)
-3. percorso whatsapp-register ammesso e non ammesso
+3. `whatsapp-register` allowed and blocked paths
 4. failure path email e append CSV
-5. verifica active_sections solo su contenuti attivi
+5. verify `active_sections` returns only active content
 
-Riferimento test: backend/content/tests.py.
+Test reference: `backend/content/tests.py`.
 
 ## 10. Canonical Source Files
 
-Per analisi/verifica agenti AI usare come riferimento primario:
+For AI-agent analysis/verification, use these files as primary references:
 
 - backend/content/models.py
 - backend/content/urls.py

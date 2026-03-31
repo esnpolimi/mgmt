@@ -59,6 +59,8 @@ def get_action_permissions(action, user):
         return user.has_perm('treasury.delete_transaction') or getattr(user, 'can_manage_casse', False)
     if action == 'esncard_detail_patch':
         return user.has_perm('treasury.change_esncard')
+    if action == 'esncard_detail_delete':
+        return user_is_board(user)
     if action == 'reimbursement_request_detail_patch':
         return user_is_board(user)
     if action == 'reimbursement_request_detail_delete':
@@ -161,12 +163,12 @@ def esncard_emission(request):
         return Response({'error': 'Errore interno del server.'}, status=500)
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def esncard_detail(request, pk):
     try:
-        esncard = ESNcard.objects.get(pk=pk)
         if request.method == 'PATCH':
+            esncard = ESNcard.objects.get(pk=pk)
             if not get_action_permissions('esncard_detail_patch', request.user):
                 return Response({'error': 'Non autorizzato.'}, status=401)
             update_data = {}
@@ -178,10 +180,95 @@ def esncard_detail(request, pk):
                 return Response(esncard_serializer.data, status=200)  # Return updated data
             else:
                 return Response(esncard_serializer.errors, status=400)
+
+        elif request.method == 'DELETE':
+            if not get_action_permissions('esncard_detail_delete', request.user):
+                return Response({'error': 'Non autorizzato.'}, status=401)
+
+            with transaction.atomic():
+                esncard = ESNcard.objects.select_for_update().select_related('profile').get(pk=pk)
+
+                # Defensive guard: this flow only reverts ESNcard emission transactions.
+                # If the card is linked to unexpected transaction types, stop and require manual fix.
+                non_esncard_refs = Transaction.objects.select_for_update().filter(esncard=esncard).exclude(
+                    type=Transaction.TransactionType.ESNCARD
+                )
+                if non_esncard_refs.exists():
+                    return Response(
+                        {'error': 'La ESNcard è collegata a transazioni non revocabili automaticamente.'},
+                        status=409
+                    )
+
+                linked_emissions = list(
+                    Transaction.objects.select_for_update().filter(
+                        esncard=esncard,
+                        type=Transaction.TransactionType.ESNCARD
+                    ).order_by('-created_at', '-id')[:2]
+                )
+                if len(linked_emissions) > 1:
+                    return Response(
+                        {'error': 'Sono state trovate più transazioni ESNcard collegate. Revoca annullata.'},
+                        status=409
+                    )
+
+                original_transaction_id = None
+                refund_transaction_id = None
+                if linked_emissions:
+                    emission_tx = linked_emissions[0]
+                    original_transaction_id = emission_tx.id
+
+                    emission_amount = Decimal(str(emission_tx.amount or 0))
+                    if emission_amount <= 0:
+                        return Response(
+                            {'error': 'Importo della transazione ESNcard non valido per il rimborso automatico.'},
+                            status=409
+                        )
+
+                    refund_account = Account.objects.select_for_update().get(pk=emission_tx.account_id)
+                    if refund_account.status == Account.Status.closed:
+                        return Response({'error': 'La cassa della transazione ESNcard è chiusa.'}, status=409)
+
+                    if refund_account.balance - emission_amount < 0:
+                        return Response({'error': 'Saldo insufficiente per effettuare il rimborso ESNcard.'}, status=409)
+
+                    refund_tx = Transaction(
+                        type=Transaction.TransactionType.RIMBORSO_ESNCARD,
+                        account=refund_account,
+                        executor=request.user,
+                        amount=-emission_amount,
+                        description=(
+                            f"Rimborso ESNcard revocata {esncard.number}: "
+                            f"{esncard.profile.name} {esncard.profile.surname} "
+                            f"(emissione #{emission_tx.id})"
+                        )
+                    )
+                    try:
+                        refund_tx.save()
+                    except (PermissionDenied, ValueError) as refund_error:
+                        return Response({'error': str(refund_error)}, status=409)
+
+                    refund_transaction_id = refund_tx.id
+
+                revoked_number = esncard.number
+                esncard.delete()
+
+            msg = 'ESNcard revocata con successo.'
+            if original_transaction_id and refund_transaction_id:
+                msg += ' Creata transazione di rimborso in tesoreria.'
+            else:
+                msg += ' Nessuna transazione di emissione trovata da rimborsare.'
+
+            return Response({
+                'message': msg,
+                'revoked_esncard_number': revoked_number,
+                'original_transaction_id': original_transaction_id,
+                'refund_transaction_id': refund_transaction_id,
+            }, status=200)
         else:
             return Response({'error': "Metodo non consentito"}, status=405)
     except ESNcard.DoesNotExist:
-        return Response({'error': 'La ESNcard non esiste'}, status=400)
+        not_found_status = 404 if request.method == 'DELETE' else 400
+        return Response({'error': 'La ESNcard non esiste'}, status=not_found_status)
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
@@ -365,6 +452,7 @@ def transaction_detail(request, pk):
             # Allow deletion only for specific transaction types
             list_deleteable = [
                 Transaction.TransactionType.RIMBORSO_CAUZIONE,
+                Transaction.TransactionType.RIMBORSO_ESNCARD,
                 Transaction.TransactionType.REIMBURSEMENT,
                 Transaction.TransactionType.RIMBORSO_QUOTA,
                 Transaction.TransactionType.DEPOSIT,
@@ -944,6 +1032,8 @@ def transactions_export(request):
     def build_attivita(tx_obj):
         if tx_obj.type == Transaction.TransactionType.ESNCARD:
             return "Quota Associativa"
+        if tx_obj.type == Transaction.TransactionType.RIMBORSO_ESNCARD:
+            return "Rimborso ESNcard"
         if tx_obj.type == Transaction.TransactionType.DEPOSIT:
             return "Deposito"
         if tx_obj.type == Transaction.TransactionType.WITHDRAWAL:
@@ -973,6 +1063,8 @@ def transactions_export(request):
         # New computed description column.
         if tx_obj.type == Transaction.TransactionType.ESNCARD:
             return f"Quota Associativa {_academic_year(tx_obj.created_at)}"
+        if tx_obj.type == Transaction.TransactionType.RIMBORSO_ESNCARD:
+            return f"Rimborso Quota Associativa {_academic_year(tx_obj.created_at)}"
         ev = None
         if getattr(tx_obj, 'subscription_id', None) and getattr(tx_obj.subscription, 'event', None):
             ev = tx_obj.subscription.event
