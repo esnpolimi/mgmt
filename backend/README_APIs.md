@@ -3,13 +3,13 @@ python, using [Django](https://www.djangoproject.com) and [Django Rest Framework
 The code is divided into 4 apps that handle different functionalities
 of the management platform.
 
-- **profiles**: manages the registration of new profiles (erasmus or esners), adding or editing documents or matricole,
+- **profiles**: manages registration of new profiles (Erasmus or ESNers), including documents and student IDs (`matricole`),
   releasing esncards, retrieving data and search through it.
 
 - **events**: manages events, i.e. creation, editing, registering a profile to an event, etc.
 
 - **treasury**: manages transactions (created when a payment is issued, for example when registering to an event or
-  releasing an esncard) and accounts (i.e. casse)
+  releasing an ESNcard) and cash accounts
 
 - **users**: handles authentication
 
@@ -37,7 +37,7 @@ The structure of every app is as follows:
 
 `POST /profiles`
 
-Creates a profile with related document and matricola. `verified` field is initialized to false.
+Creates a profile with related document and student ID (`matricola`). `verified` field is initialized to false.
 
 #### **Parameters:**
 
@@ -62,14 +62,14 @@ Creates a profile with related document and matricola. `verified` field is initi
 
 `GET /profiles`
 
-Returns all profiles without linked documents, matricole or ESNcards.
+Returns all profiles without linked documents, student IDs, or ESNcards.
 
 ### Fetch specified profile *
 
 `GET /profiles/<str:pk>`
 
 If existing, returns detailed profile corresponding to the primary key (pk), including list of the profile's documents,
-matricole and ESNcards.
+student IDs and ESNcards.
 
 ### Update specified profile *
 
@@ -137,13 +137,13 @@ Updates the fields of the specified document.
 
 Deletes the specified document.
 
-# Matricola endpoints
+# Student ID (`matricola`) Endpoints
 
-### Create matricola
+### Create Student ID (`matricola`)
 
 `POST /matricole/`
 
-Creates a new matricola associated to the specified profile.
+Creates a new student ID (`matricola`) associated with the specified profile.
 
 #### **Parameters**
 
@@ -153,18 +153,18 @@ Creates a new matricola associated to the specified profile.
 | number     | string    | yes       | document number                               |
 | expiration | timestamp | yes       | expiration date                               |
 
-### Update matricola
+### Update Student ID (`matricola`)
 
 `PATCH /matricole/<str:pk>`
 
-Updates the fields of the specified matricola.
+Updates the fields of the specified student ID (`matricola`).
 
 | name       | type      | mandatory | description     |
 |------------|-----------|-----------|-----------------|
 | number     | string    | no        | document number |
 | expiration | timestamp | no        | expiration date |
 
-### Delete matricola
+### Delete Student ID (`matricola`)
 
 `DELETE /matricole/<str:pk>`
 
@@ -172,32 +172,59 @@ Deletes the specified
 
 # ESNcard endpoints
 
-### Create ESNcard
+### Emit ESNcard
 
-`POST /esncards`
+`POST /esncard_emission/`
 
-Creates a new ESNcard associated to the specified profile.
+Creates a new ESNcard associated to the specified profile and registers the related treasury transaction
+(`type=esncard`) on the selected account.
 
 #### **Parameters**
 
-| name       | type      | mandatory | description                                   |
-|------------|-----------|-----------|-----------------------------------------------|
-| email      | string    | yes       | email corresponding to the associated profile |
-| number     | string    | yes       | document number                               |
-| expiration | timestamp | yes       | expiration date                               |
+| name          | type   | mandatory | description        |
+|---------------|--------|-----------|--------------------|
+| profile_id    | int    | yes       | profile identifier |
+| esncard_number| string | yes       | ESNcard number     |
+| account_id    | int    | yes       | treasury account   |
 
 ### Update ESNcard
 
-`PATCH /esncards/<str:pk>`
+`PATCH /esncard/<str:pk>/`
 
-Updates the fields of the specified ESNcard.
+Updates editable fields of the specified ESNcard.
 
 #### **Parameters**
 
-| name       | type      | mandatory | description     |
-|------------|-----------|-----------|-----------------|
-| number     | string    | no        | document number |
-| expiration | timestamp | no        | expiration date |
+| name   | type   | mandatory | description   |
+|--------|--------|-----------|---------------|
+| number | string | no        | ESNcard number|
+
+### Revoke ESNcard (Board only)
+
+`DELETE /esncard/<str:pk>/`
+
+Revokes the specified ESNcard.
+
+Behavior:
+
+- deletes the ESNcard record
+- keeps the original ESNcard emission transaction
+- creates a new treasury refund transaction (`type=rimborso_esncard`) with negative amount on the same account
+
+#### **Response fields**
+
+| name                    | type   | description |
+|-------------------------|--------|-------------|
+| message                 | string | operation result summary |
+| revoked_esncard_number  | string | revoked card number |
+| original_transaction_id | int\|null | ESNcard emission transaction id |
+| refund_transaction_id   | int\|null | generated refund transaction id |
+
+#### **Common errors**
+
+- `401`: caller is not a Board member
+- `404`: ESNcard does not exist
+- `409`: automatic revoke blocked (linked anomalous transactions, multiple linked emissions, closed account, insufficient balance)
 
 # User endpoints
 
@@ -205,7 +232,7 @@ Updates the fields of the specified ESNcard.
 
 `POST /users`
 
-Creates a user and its associated profile, document and matricola. Profile's `verified` field is initialized to false.
+Creates a user and its associated profile, document, and student ID (`matricola`). Profile's `verified` field is initialized to false.
 
 #### **Parameters:**
 
@@ -343,7 +370,7 @@ Updates specific subscription.
 
 Deletes subscription. Possible only if there are no transactions related to the subscription.
 
-# Account (cassa)
+# Cash Account
 
 ### Fetch accounts
 

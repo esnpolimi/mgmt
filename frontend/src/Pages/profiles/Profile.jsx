@@ -89,6 +89,8 @@ export default function Profile() {
     const [financePerms, setFinancePerms] = useState(null); // new
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [deletingProfile, setDeletingProfile] = useState(false);
+    const [revokeESNcardConfirmOpen, setRevokeESNcardConfirmOpen] = useState(false);
+    const [revokingESNcard, setRevokingESNcard] = useState(false);
     const navigate = useNavigate();
     //console.log("ProfileModal profile:", profile);
     // Qua puoi disattivare manualmente i permessi degli utenti
@@ -185,6 +187,7 @@ export default function Profile() {
 
     const isBoardMember = user?.groups?.includes('Board');
     const isProfileOwner = user?.profile?.id === profile?.id;
+    const latestESNcard = profile?.latest_esncard || null;
     const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
     const canManualVerify =
         isBoardMember &&
@@ -895,6 +898,37 @@ export default function Profile() {
         });
     };
 
+    const handleOpenRevokeESNcardDialog = () => {
+        if (!latestESNcard) {
+            setPopup({message: "Nessuna ESNcard da revocare.", state: "error", id: Date.now()});
+            return;
+        }
+        setRevokeESNcardConfirmOpen(true);
+    };
+
+    const confirmRevokeESNcard = () => {
+        if (!latestESNcard?.id) {
+            setPopup({message: "Nessuna ESNcard valida da revocare.", state: "error", id: Date.now()});
+            setRevokeESNcardConfirmOpen(false);
+            return;
+        }
+
+        setRevokingESNcard(true);
+        fetchCustom("DELETE", `/esncard/${latestESNcard.id}/`, {
+            onSuccess: (res) => {
+                setPopup({
+                    message: res?.message || "ESNcard revocata e rimborso registrato in tesoreria!",
+                    state: "success",
+                    id: Date.now()
+                });
+                setRevokeESNcardConfirmOpen(false);
+                refreshProfileData();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setRevokingESNcard(false)
+        });
+    };
+
     // Helper: copy formatted number (prefix + number) or simple number
     const handleCopyNumber = async (prefix, number, label = 'Numero') => {
         const plainNumber = (prefix ? `${prefix} ${number || ''}` : (number || '')).trim();
@@ -1459,12 +1493,34 @@ export default function Profile() {
                                     <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
                                         <CreditCardIcon sx={{color: 'primary.main', mr: 2}}/>
                                         <Typography variant="h5" sx={{flexGrow: 1}}>ESNcards</Typography>
+                                        {isBoardMember && (
+                                            <Tooltip
+                                                title={
+                                                    latestESNcard
+                                                        ? "Revoca l'ultima ESNcard e registra il rimborso in tesoreria"
+                                                        : "Nessuna ESNcard da revocare"
+                                                }
+                                                arrow
+                                            >
+                                                <span>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="error"
+                                                        size="small"
+                                                        onClick={handleOpenRevokeESNcardDialog}
+                                                        disabled={!latestESNcard || revokingESNcard}
+                                                    >
+                                                        {revokingESNcard ? "Revoca in corso..." : "Revoca Ultima ESNcard"}
+                                                    </Button>
+                                                </span>
+                                            </Tooltip>
+                                        )}
                                     </Box>
                                     <CrudTable
                                         cols={esncard_columns}
                                         canCreate={user.permissions.includes('add_esncard')}
                                         onCreate={handleOpenESNcardModal}
-                                        createText={!profile.latest_esncard ? "Rilascia" : (profile.latest_esncard.is_valid ? "Card Smarrita" : "Rinnova")}
+                                        createText={!latestESNcard ? "Rilascia" : (latestESNcard.is_valid ? "Card Smarrita" : "Rinnova")}
                                         canEdit={user.permissions.includes('change_esncard')}
                                         onSave={saveESNcard}
                                         initialData={data.esncards}
@@ -1570,6 +1626,38 @@ export default function Profile() {
                     </Box>
                 </>
             )}
+            <Dialog
+                open={revokeESNcardConfirmOpen}
+                onClose={() => !revokingESNcard && setRevokeESNcardConfirmOpen(false)}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>Conferma Revoca ESNcard</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" sx={{mb: 1.5}}>
+                        Questa azione cancellerà la ESNcard e creerà una transazione di rimborso in tesoreria.
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                        ESNcard: {latestESNcard?.number || "N/D"}
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={() => setRevokeESNcardConfirmOpen(false)}
+                        disabled={revokingESNcard}
+                    >
+                        Annulla
+                    </Button>
+                    <Button
+                        color="error"
+                        variant="contained"
+                        onClick={confirmRevokeESNcard}
+                        disabled={revokingESNcard || !latestESNcard}
+                    >
+                        {revokingESNcard ? "Revoco..." : "Conferma Revoca"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
             <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>Conferma Eliminazione</DialogTitle>
                 <DialogContent>

@@ -13,7 +13,7 @@ import ReceiptFileUpload from '../common/ReceiptFileUpload';
 import {ToggleButton, ToggleButtonGroup} from '@mui/material';
 
 // List of transaction types that can be deleted
-const deletableTranTypes = ['rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal'];
+const deletableTranTypes = ['rimborso_esncard', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal'];
 
 export default function TransactionModal({open, onClose, transaction}) {
     const [isLoading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ export default function TransactionModal({open, onClose, transaction}) {
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
-    const negative_types = ['withdrawal', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement'];
+    const negative_types = ['withdrawal', 'rimborso_esncard', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement'];
 
     const [data, setData] = useState({
         executor: null,

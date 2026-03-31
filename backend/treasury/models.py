@@ -76,6 +76,7 @@ class Transaction(BaseEntity):
     class TransactionType(models.TextChoices):
         SUBSCRIPTION = "subscription", _("Subscription")
         ESNCARD = "esncard", _("ESNcard")
+        RIMBORSO_ESNCARD = "rimborso_esncard", _("Rimborso ESNcard")
         DEPOSIT = "deposit", _("Deposit")  # Manual deposit (not cauzione)
         WITHDRAWAL = "withdrawal", _("Withdrawal")
         REIMBURSEMENT = "reimbursement", _("Reimbursement"),
@@ -110,6 +111,11 @@ class Transaction(BaseEntity):
             raise ValueError("Le transazioni di Rimborso Servizi devono avere un'Iscrizione.")
         if self.type == self.TransactionType.ESNCARD and not self.esncard:
             raise ValueError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
+        if self.type == self.TransactionType.RIMBORSO_ESNCARD:
+            if self.subscription:
+                raise ValueError("Le transazioni di Rimborso ESNcard non devono avere un'Iscrizione.")
+            if self.esncard:
+                raise ValueError("Le transazioni di Rimborso ESNcard non devono avere una ESNcard associata.")
         if self.type == self.TransactionType.CAUZIONE:
             if not self.subscription:
                 raise ValueError("Le transazioni di Cauzione devono avere un'Iscrizione.")

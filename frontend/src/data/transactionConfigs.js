@@ -7,6 +7,7 @@ export const TRANSACTION_CONFIGS = {
     withdrawal: {label: names.tran_type["withdrawal"], color: 'error'},
     reimbursement: {label: names.tran_type["reimbursement"], color: 'info'},
     cauzione: {label: names.tran_type["cauzione"], color: 'warning'},
+    rimborso_esncard: {label: names.tran_type["rimborso_esncard"], color: 'default'},
     rimborso_cauzione: {label: names.tran_type["rimborso_cauzione"], color: 'default'},
     rimborso_quota: {label: names.tran_type["rimborso_quota"], color: 'default'},
     service: {label: names.tran_type["service"], color: 'primary'},
