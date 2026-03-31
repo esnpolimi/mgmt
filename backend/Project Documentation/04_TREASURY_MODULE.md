@@ -160,6 +160,14 @@ Quota/servizi:
 3. rimborso opzionale servizi associati
 4. controllo saldo account disponibile
 
+Orchestrazione UI unificata (single icon):
+
+1. il frontend puo selezionare piu voci (quota/servizi/cauzione) in una singola azione utente
+2. lato backend restano endpoint separati (reimburse_quota, reimburse_deposits)
+3. il flusso non e atomico cross-endpoint: possibili successi parziali
+4. in caso di successo parziale, ogni voce mantiene il proprio stato e puo essere ritentata
+5. motivazione errore per singola voce propagata al client per retry guidato
+
 ## 6. Query, Filters and Export
 
 transactions list supporta:
