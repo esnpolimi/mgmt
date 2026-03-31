@@ -1,33 +1,33 @@
-# Eventi
-Obiettivo: integrare le funzionalità di gestione degli eventi e delle iscrizioni in un'unica piattaforma, eliminando la necessità di utilizzare sia un gestionale che un foglio Excel. La piattaforma permetterà di gestire i pagamenti, i rimborsi e l'organizzazione degli eventi in modo più efficiente e centralizzato.
+# Events
+Goal: integrate event and subscription management features into a single platform, removing the need to use both a management tool and an Excel sheet. The platform supports payments, reimbursements, and event operations in a more efficient and centralized way.
 
-### Funzionalità Principali
+### Main Features
 
-1. **Creazione e Gestione degli Eventi**
-   - Ogni evento può avere attributi come nome, data, descrizione, RE ed RS.
-   - È possibile specificare diverse tabelle per ogni evento, ad esempio "Main List" e "Waiting List", con nome e capienza.
+1. **Event Creation and Management**
+   - Each event can include attributes such as name, date, description, RE, and RS.
+   - Multiple lists can be configured per event, such as "Main List" and "Waiting List", each with its own name and capacity.
 
-2. **Iscrizioni (Subscriptions)**
-   - Ogni riga di una tabella è associata a un'iscrizione, che rappresenta l'iscrizione di un profilo a un evento.
-   - Una subscription può essere presente in una sola tabella alla volta.
+2. **Subscriptions**
+   - Each row in a list is linked to a subscription, representing one profile enrolled in one event.
+   - A subscription can belong to only one list at a time.
 
-3. **Colonne delle Tabelle**
-   - **Profile Fields**: Colonne che includono dati anagrafici degli iscritti (nome, cognome, numero di telefono, ESN card, ecc.). Queste colonne sono immutabili e vengono popolate automaticamente dal database.
-   - **Form Fields**: Colonne che vengono riempite con le risposte fornite dagli iscritti attraverso un form. Queste colonne sono modificabili dagli organizzatori.
-   - **Additional Fields**: Colonne aggiuntive compilabili direttamente dagli organizzatori per supportare l'organizzazione dell'evento (es. annotazioni, richieste di noleggio, ecc.). Ogni campo ha attributi booleani per la visibilità e l'editabilità da parte dell'ufficio.
+3. **List Columns**
+   - **Profile Fields**: Columns containing participant profile data (name, surname, phone number, ESN card, and so on). These columns are immutable and automatically populated from the database.
+   - **Form Fields**: Columns populated with answers submitted by participants through a form. These columns can be edited by organizers.
+   - **Additional Fields**: Extra columns filled directly by organizers to support event operations (for example notes or rental requests). Each field includes boolean attributes for office visibility and editability.
 
-4. **Gestione delle Righe**
-   - Le righe possono essere trasferite da una tabella all'altra rispettando la capienza massima.
-   - È possibile aggiungere manualmente delle righe, associandole a un profilo esistente.
+4. **Row Management**
+   - Rows can be moved between lists while respecting capacity limits.
+   - Organizers can manually add rows by linking them to an existing profile.
 
-5. **Gestione dei Pagamenti**
-   - Ogni riga ha un pulsante che apre un modale con la lista delle transazioni effettuate per quello specifico evento.
-   - Il modale permette di visualizzare lo storico dei pagamenti/rimborsi e di effettuare nuove transazioni.
-   - È possibile creare un campo aggiuntivo "Stato" per indicare manualmente lo stato dei pagamenti (es. "Pagato", "Non pagato", "Rimborsato").
+5. **Payment Management**
+   - Each row has a button that opens a modal with the list of transactions for that specific event.
+   - The modal allows viewing payment/reimbursement history and creating new transactions.
+   - An optional additional field called "Status" can be used to manually track payment state (for example "Paid", "Unpaid", "Reimbursed").
 
-### Vantaggi
+### Benefits
 
-- **Centralizzazione**: Tutte le informazioni e le funzionalità sono integrate in un'unica piattaforma.
-- **Flessibilità**: La possibilità di aggiungere e modificare campi e tabelle permette una gestione personalizzata degli eventi.
-- **Efficienza**: La gestione automatizzata dei dati anagrafici e delle iscrizioni riduce gli errori e semplifica l'organizzazione.
+- **Centralization**: All information and capabilities are available in one platform.
+- **Flexibility**: Custom fields and lists allow tailored event management.
+- **Efficiency**: Automated profile data and subscription flows reduce errors and simplify operations.
 

@@ -2,34 +2,33 @@
 
 ## 1. Module Purpose
 
-Il modulo maintenance gestisce la notifica di manutenzione applicativa verso client autenticati.
+The maintenance module manages application-maintenance notifications for authenticated clients.
 
-Responsabilita:
+Responsibilities:
 
-- esposizione stato manutenzione corrente
-- push eventi tramite SSE con connessioni controllate
-- trigger e clear notifica via pagina admin staff-only
-- persistenza stato notifica su file JSON condiviso
+- expose current maintenance state
+- push events via SSE with controlled connections
+- trigger and clear notifications via staff-only admin page
+- persist notification state in a shared JSON file
 
 ## 2. Domain Model
 
-Il modulo non usa modelli Django dedicati.
+The module does not use dedicated Django models.
 
-Stato applicativo persistito in file:
+Application state is persisted in:
 
 - backend/maintenance_notification.json
 
-Schema payload:
+Payload schema:
 
-- notification_id (UUID o null)
-- message (string)
-- triggered_at (ISO datetime o null)
+- notification_id (UUID or null)
+- triggered_at (ISO datetime or null)
 
-Invarianti:
+Invariants:
 
-1. notification_id null indica assenza notifica attiva.
-2. message mantiene default operativo se non specificato.
-3. triggered_at e valorizzato solo quando notifica e attiva.
+1. `notification_id = null` indicates no active notification.
+2. `message` keeps a default operational text when not provided.
+3. `triggered_at` is set only when notification is active.
 
 ## 3. API Contract Summary
 
@@ -39,92 +38,92 @@ Base path: /backend/
 
 - GET /maintenance/stream/
 
-Comportamento:
+Behavior:
 
-- richiede token JWT access in query param token
-- ritorna HTTP 403 se token assente o invalido
-- invia evento maintenance quando notification_id cambia
-- invia heartbeat periodico per mantenere connessione viva
-- auto-rotate connessione dopo finestra temporale per riciclo worker
+- requires JWT access token in query parameter `token`
+- returns HTTP `403` when token is missing or invalid
+- sends a maintenance event when `notification_id` changes
+- sends periodic heartbeat to keep connection alive
+- auto-rotates connection after a time window to recycle workers
 
 ### 3.2 Polling API
 
 - GET /maintenance/status/
 
-Comportamento:
+Behavior:
 
-- richiede autenticazione (IsAuthenticated)
-- ritorna stato corrente notifica (notification_id, message, triggered_at)
+- requires authentication (`IsAuthenticated`)
+- returns current notification state (`notification_id`, `message`, `triggered_at`)
 
 ### 3.3 Admin Action Endpoint
 
 - GET|POST /admin/maintenance-notify/
 
-Comportamento:
+Behavior:
 
-- accessibile solo a staff member
-- action=send: crea nuova notifica con UUID e timestamp
-- action=clear: resetta stato a notifica assente
+- accessible only to staff members
+- `action=send`: creates a new notification with UUID and timestamp
+- `action=clear`: resets state to no active notification
 
 ## 4. Permission Model
 
-Regole principali:
+Main rules:
 
-1. maintenance stream richiede token JWT valido.
-2. maintenance status richiede utente autenticato.
-3. maintenance admin page richiede staff_member_required.
-4. trigger/clear sono disponibili solo da interfaccia admin autorizzata.
+1. maintenance stream requires valid JWT token.
+2. maintenance status requires an authenticated user.
+3. maintenance admin page requires `staff_member_required`.
+4. trigger/clear are available only from authorized admin UI.
 
 ## 5. Core Business Flows
 
 ### 5.1 Trigger Maintenance Notification
 
-1. staff apre pagina admin maintenance
-2. invia action send
-3. backend genera notification_id e triggered_at
-4. stato scritto su maintenance_notification.json
-5. client SSE rilevano cambio e ricevono evento maintenance
+1. staff opens maintenance admin page
+2. submits `action=send`
+3. backend generates `notification_id` and `triggered_at`
+4. state is written to `maintenance_notification.json`
+5. SSE clients detect change and receive maintenance event
 
 ### 5.2 Clear Maintenance Notification
 
-1. staff invia action clear
-2. backend resetta payload a notification_id null
-3. stato aggiornato su maintenance_notification.json
-4. client polling/SSE non ricevono piu stato attivo
+1. staff submits `action=clear`
+2. backend resets payload with `notification_id = null`
+3. state is updated in `maintenance_notification.json`
+4. polling/SSE clients no longer receive active state
 
 ### 5.3 Client Consumption Flow
 
-1. client autenticato legge stato da /maintenance/status/
-2. opzionalmente apre EventSource su /maintenance/stream/?token=<jwt>
-3. su evento maintenance mostra banner/notifica UI
-4. su clear rimuove banner
+1. authenticated client reads state from `/maintenance/status/`
+2. optionally opens `EventSource` on `/maintenance/stream/?token=<jwt>`
+3. on maintenance event, shows UI banner/notification
+4. on clear, removes banner
 
 ## 6. Operational Constraints
 
-1. persistenza file-based: dipende da accesso filesystem locale condiviso.
-2. SSE su WSGI: connessioni lunghe controllate con timeout/riciclo.
-3. autenticazione stream via query param necessaria per limiti EventSource headers.
-4. heartbeats necessari per prevenire idle timeout infrastrutturali.
+1. File-based persistence depends on shared local filesystem access.
+2. SSE on WSGI relies on controlled long-lived connections with timeout/recycle.
+3. Stream authentication via query param is required due to EventSource header limits.
+4. Heartbeats are required to prevent infrastructure idle timeouts.
 
 ## 7. Operational Risks
 
-1. race condition su scrittura file in ambienti multi-process.
-2. mismatch stato tra istanze se storage non condiviso.
-3. token esposto in query string nei log infrastrutturali.
-4. saturazione worker se stream non limitato/correttamente riciclato.
+1. race condition on file writes in multi-process environments.
+2. state mismatch across instances if storage is not shared.
+3. token exposure in query string inside infrastructure logs.
+4. worker saturation if stream is not limited/recycled correctly.
 
 ## 8. Testing Requirements
 
-1. stream senza token ritorna 403.
-2. stream con token invalido/scaduto ritorna 403.
-3. status richiede autenticazione e ritorna payload completo.
-4. action send crea notification_id e triggered_at.
+1. stream without token returns 403.
+2. stream with invalid/expired token returns 403.
+3. status requires authentication and returns full payload.
+4. `action=send` creates `notification_id` and `triggered_at`.
 5. action clear resetta notification_id e triggered_at.
-6. verifica emissione evento maintenance su cambio notification_id.
+6. verify maintenance-event emission when `notification_id` changes.
 
 ## 9. Canonical Source Files
 
-Per analisi/verifica agenti AI usare come riferimento primario:
+For AI-agent analysis/verification, use these files as primary references:
 
 - backend/maintenance/urls.py
 - backend/maintenance/views.py

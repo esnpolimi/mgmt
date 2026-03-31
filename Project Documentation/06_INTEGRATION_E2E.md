@@ -2,7 +2,7 @@
 
 ## 1. Document Purpose
 
-Questa specifica definisce i flussi cross-modulo che rappresentano la baseline di accettazione funzionale.
+This specification defines the cross-module flows that represent the functional acceptance baseline.
 
 Scope:
 
@@ -15,126 +15,131 @@ Scope:
 
 ## 2. End-to-End Critical Scenarios
 
-### 2.1 Scenario A - ESNer onboarding completo
+### 2.1 Scenario A - Complete ESNer Onboarding
 
-Precondizioni:
+Preconditions:
 
-- email dominio istituzionale valida
-- endpoint verifica email operativo
+- valid institutional email domain
+- working email verification endpoint
 
-Sequenza:
+Sequence:
 
 1. POST profile/initiate-creation con is_esner=true
-2. GET verify-email con uid/token validi
+2. GET verify-email with valid uid/token
 3. POST login
-4. accesso endpoint protetti
-5. verifica gruppo iniziale e stato attivazione
+4. access protected endpoints
+5. verify initial group and activation state
 
-Oracoli di test:
+Test oracles:
 
-- utente attivo
-- profile coerente con ruolo iniziale
-- token lifecycle valido
+- active user
+- profile aligned with initial role
+- valid token lifecycle
 
 ### 2.2 Scenario B - Erasmus onboarding + public form
 
-Precondizioni:
+Preconditions:
 
-- evento con form attivo
+- event with active form
 
-Sequenza:
+Sequence:
 
-1. registrazione erasmus e verifica email
-2. lettura form pubblico
-3. submit payload valido
-4. creazione subscription in form list
-5. invio conferma email
+1. Erasmus registration and email verification
+2. read public form
+3. submit valid payload
+4. create subscription in form list
+5. send confirmation email
 
-Oracoli di test:
+Test oracles:
 
-- persistenza dati form/additional
-- stato subscription corretto
+- persistence of form/additional data
+- correct subscription state
 
 ### 2.3 Scenario C - SumUp payment reconciliation
 
-Precondizioni:
+Preconditions:
 
 - allow_online_payment=true
 
-Sequenza:
+Sequence:
 
 1. formsubmit genera checkout_id
-2. process_payment o webhook conferma stato paid
-3. creazione transazioni locali (quota/cauzione/servizi)
-4. riallineamento payment status subscription
+2. `process_payment` or webhook confirms `paid` status
+3. create local transactions (fee/deposit/services)
+4. payment-status alignment on subscription
 
-Oracoli di test:
+Test oracles:
 
-- idempotenza su webhook duplicati
-- assenza doppia contabilizzazione
+- idempotency on duplicate webhooks
+- no double accounting
 
-### 2.4 Scenario D - Reimbursements (deposit/quota/services)
+### 2.4 Scenario D - Reimbursements (fee/deposit/services)
 
-Precondizioni:
+Preconditions:
 
-- pagamenti originari esistenti
+- original payment transactions exist
 
-Sequenza:
+Sequence:
 
-1. apertura azione unica "Rimborsa" su subscription
-2. selezione voci (quota/servizi/cauzione) con disable automatico voci non valide
+1. open single "Reimburse" action on subscription
+2. select items (fee/services/deposit) with automatic disable for invalid items
 3. orchestrazione chiamate reimburse_quota e/o reimburse_deposits
-4. generazione transazioni rimborso per voci riuscite
-5. aggiornamento saldo account
-6. blocco tentativo doppio rimborso
+4. generate refund transactions for successful items
+5. update account balance
+6. block duplicate reimbursement attempts
 
-Oracoli di test:
+Test oracles:
 
-- vincoli anti-duplicato rispettati
-- gestione esterni senza profile preservata
-- gestione esito parziale: errore puntuale per voce fallita + retry selettivo
+- anti-duplicate constraints respected
+- handling of external users without profile preserved
+- partial-outcome management: precise error for failed item + selective retry
 
-### 2.5 Scenario E - ESNcard emission + accounting
+### 2.5 Scenario E - ESNcard emission/revocation + accounting
 
-Sequenza:
+Sequence:
 
-1. emissione card su profilo valido
-2. calcolo fee corretta per caso d'uso
-3. creazione transazione esncard
-4. verifica balance account
+1. issue card on valid profile
+2. correct fee calculation for the use case
+3. create ESNcard transaction
+4. card revocation by Board user
+5. creation of `rimborso_esncard` transaction on the same account
+6. verify emission transaction remains in history
+7. verify account balance after refund
 
-Oracoli di test:
+Test oracles:
 
-- fee policy corretta
-- consistenza ledger
+- correct fee policy
+- ledger consistency (emission + refund)
+- emission transaction preserved for audit
+- revocation blocked on accounting edge cases (insufficient balance, closed account)
 
 ### 2.6 Scenario F - Content + WhatsApp public workflow
 
-Sequenza:
+Sequence:
 
-1. manager aggiorna whatsapp-config
-2. utente pubblico invia whatsapp-register
-3. invio email link
-4. append audit CSV su Drive
+1. manager updates `whatsapp-config`
+2. public user submits `whatsapp-register`
+3. send email link
+4. append audit CSV on Drive
 
-Oracoli di test:
+Test oracles:
 
-- policy accesso rispettata
-- audit trail presente
+- access policy respected
+- audit trail present
 
 ### 2.7 Scenario G - Maintenance notification
 
-Sequenza:
+Sequence:
 
-1. admin trigger notifica
-2. client autenticati leggono maintenance/status
+1. admin triggers notification
+2. authenticated clients read maintenance/status
 3. banner frontend visibile
-4. clear notifica
+4. clear notification
 
-Oracoli di test:
+Test oracles:
 
-- propagazione stato corretta
-- reset notifica coerente
+- correct state propagation
+- consistent notification reset
 
 ## 3. Test Asset Mapping
 
@@ -143,7 +148,7 @@ Suite integrazione dedicate:
 - backend/test_integration_e2e.py
 - backend/users/test_integration.py
 
-Supporto cross-domain da suite modulo:
+Cross-domain support from module suites:
 
 - backend/events/tests.py
 - backend/treasury/tests.py
@@ -152,46 +157,46 @@ Supporto cross-domain da suite modulo:
 
 ## 4. Release Regression Gate
 
-Checklist minima per ogni release:
+Minimum checklist for each release:
 
 1. login, refresh, logout
-2. registrazione e verifica ESNer/Erasmus
-3. creazione evento + liste principali
-4. iscrizione office e public form
-5. pagamento SumUp + webhook idempotente
-6. rimborsi quota/cauzione/servizi
-7. emissione ESNcard
-8. export transazioni
+2. ESNer/Erasmus registration and verification
+3. event creation + main lists
+4. office subscription and public form
+5. SumUp payment + idempotent webhook
+6. fee/deposit/services reimbursements
+7. ESNcard issue and revocation
+8. transaction export
 9. CRUD content home
 10. whatsapp register end-to-end
 
 ## 5. Cross-Module Risk Register
 
-1. disallineamento pagamento tra events e treasury
-2. race su update balance account
-3. webhook non ordinati o duplicati
-4. mismatch autorizzazioni backend/frontend
-5. regressioni su flussi external subscriptions
+1. payment misalignment between events and treasury
+2. race conditions on account balance updates
+3. out-of-order or duplicate webhooks
+4. backend/frontend authorization mismatch
+5. regressions on external-subscription flows
 
 ## 6. Test Strategy Guidelines
 
-1. unit test per regole locali e permessi
+1. unit tests for local rules and permissions
 2. integration API test per side-effect DB
-3. E2E sintetici su mission-critical flow
-4. mock deterministic per SumUp, Drive, SMTP
+3. synthetic E2E tests on mission-critical flows
+4. deterministic mocks for SumUp, Drive, SMTP
 
 ## 7. Acceptance Baseline
 
-Uno scenario E2E e considerato accettato solo se:
+An E2E scenario is considered accepted only if:
 
-1. stato finale persistito e verificabile
-2. side-effect esterni tracciati (email/webhook/export)
-3. invarianti contabili/autorizzative rispettate
-4. assenza di duplicazioni in operazioni idempotenti
+1. final state is persisted and verifiable
+2. external side effects are tracked (email/webhook/export)
+3. accounting/authorization invariants are respected
+4. no duplication occurs in idempotent operations
 
 ## 8. Traceability Map (Scenario -> Test Assets)
 
-Mappatura di riferimento per troubleshooting rapido agent-driven:
+Reference mapping for quick agent-driven troubleshooting:
 
 - Scenario A: backend/users/test_integration.py, backend/profiles/tests.py
 - Scenario B: backend/profiles/tests.py, backend/events/tests.py
@@ -201,8 +206,8 @@ Mappatura di riferimento per troubleshooting rapido agent-driven:
 - Scenario F: backend/content/tests.py
 - Scenario G: backend/maintenance/views.py (comportamento), backend/test_integration_e2e.py
 
-Nota: la mappa indica i test principali da consultare; non implica copertura esaustiva di ogni edge case.
+Note: this map indicates the primary tests to inspect; it does not imply exhaustive edge-case coverage.
 
-Riferimento documentale scenario G:
+Documentation reference for Scenario G:
 
 - 07_MAINTENANCE_MODULE.md
