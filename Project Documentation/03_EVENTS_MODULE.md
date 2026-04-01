@@ -86,6 +86,11 @@ Base path: /backend/
 - POST /subscription/<pk>/process_payment/
 - POST /sumup/webhook/
 
+Behavior notes:
+
+- `status` can expose a pre-payment block (`payment_blocked=true`, reason `sold_out`) when both Main and Waiting lists are full.
+- `process_payment` returns `409` with `status=BLOCKED` and `error=sold_out` in the same condition.
+
 ### 3.5 Organizer Utilities
 
 - GET /event/<event_id>/printable_liberatorie/
@@ -128,16 +133,18 @@ Additional rules:
 1. load `fields` schema from `Event`
 2. dynamic payload validation
 3. optional file upload (field type `l`) to Drive
-4. insertion into form list
+4. insertion into form list (always, even when Main/Waiting are full)
 5. confirmation email delivery
-6. optional online checkout trigger
+6. optional online checkout trigger (payment remains a separate step)
 
 ### 5.3 Online Payment Reconciliation
 
-1. `process_payment` queries checkout status
-2. webhook asynchronous server-to-server confirmation
-3. idempotent transaction creation
-4. subscription state alignment
+1. pre-check on list capacity for subscriptions outside Main/Waiting
+2. if Main and Waiting are both full: block payment with `409 BLOCKED` (`sold_out`)
+3. otherwise `process_payment` queries checkout status
+4. webhook asynchronous server-to-server confirmation
+5. idempotent transaction creation
+6. subscription state alignment
 
 ### 5.4 Unified Refund UI Flow (Single Icon)
 
@@ -204,6 +211,7 @@ Invarianti:
 6. form file upload and fallback error handling
 7. unified reimbursement: coherent icon/checkbox disable logic and selection validation
 8. partial reimbursement: per-item error messages and selective retry
+9. form submit vs payment separation: form list insertion must stay allowed, payment blocked only on full Main+Waiting
 
 Test reference: `backend/events/tests.py`.
 
