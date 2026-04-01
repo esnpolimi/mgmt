@@ -63,15 +63,18 @@ Preconditions:
 
 Sequence:
 
-1. formsubmit genera checkout_id
-2. `process_payment` or webhook confirms `paid` status
-3. create local transactions (fee/deposit/services)
-4. payment-status alignment on subscription
+1. formsubmit creates subscription in Form List and generates checkout_id
+2. if Main and Waiting are both full, `status` reports `payment_blocked=true` (`sold_out`)
+3. in the same sold-out condition, `process_payment` returns `409 BLOCKED`
+4. otherwise `process_payment` or webhook confirms `paid` status
+5. create local transactions (fee/deposit/services)
+6. payment-status alignment on subscription
 
 Test oracles:
 
 - idempotency on duplicate webhooks
 - no double accounting
+- form submit remains accepted even when payment is blocked by full Main+Waiting capacity
 
 ### 2.4 Scenario D - Reimbursements (fee/deposit/services)
 
@@ -163,7 +166,7 @@ Minimum checklist for each release:
 2. ESNer/Erasmus registration and verification
 3. event creation + main lists
 4. office subscription and public form
-5. SumUp payment + idempotent webhook
+5. SumUp payment + idempotent webhook + sold-out pre-payment block
 6. fee/deposit/services reimbursements
 7. ESNcard issue and revocation
 8. transaction export

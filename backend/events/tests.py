@@ -810,6 +810,34 @@ class EventFormTests(EventsBaseTestCase):
 		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("events.views.create_sumup_checkout", return_value=("chk_form_full_lists", {}))
+	def test_event_form_submit_online_payment_allows_form_list_when_main_waiting_full(self, _):
+		"""Form submission must stay allowed even when Main/Waiting are full; payment remains a separate step."""
+		event = _create_event(enable_form=True, allow_online_payment=True, cost=10)
+		form_list = _create_event_list(event, name="Form List", is_main_list=False, is_waiting_list=False)
+		main_list = _create_event_list(event, name="Main List", capacity=1, is_main_list=True, is_waiting_list=False)
+		waiting_list = _create_event_list(event, name="Waiting List", capacity=1, is_main_list=False, is_waiting_list=True)
+
+		Subscription.objects.create(profile=_create_profile("main_full_form_submit@esnpolimi.it"), event=event, list=main_list)
+		Subscription.objects.create(profile=_create_profile("wait_full_form_submit@esnpolimi.it"), event=event, list=waiting_list)
+
+		profile = _create_profile("form_only_submitter@esnpolimi.it")
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": profile.email,
+			"form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["success"])
+		self.assertEqual(response.data["assigned_list"], "Form List")
+		self.assertTrue(response.data["payment_required"])
+
+		sub = Subscription.objects.get(profile=profile, event=event)
+		self.assertEqual(sub.list, form_list)
+		self.assertEqual(sub.sumup_checkout_id, "chk_form_full_lists")
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_invalid_email(self):
 		"""Invalid email should return 400."""
 		event = _create_event(enable_form=True)
@@ -1518,6 +1546,33 @@ class PaymentStatusEdgeCaseTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["overall_status"], "failed")
 
+	def test_payment_status_reports_blocked_when_lists_full(self):
+		"""Status should report payment as blocked when both Main and Waiting lists are full."""
+		profile = _create_profile("blockedpayer@esnpolimi.it")
+		_create_user(profile)
+
+		event = _create_event(cost=10, allow_online_payment=True)
+		form_list = _create_event_list(event, name="Form List", is_main_list=False, is_waiting_list=False)
+		main_list = _create_event_list(event, name="Main List", capacity=1, is_main_list=True, is_waiting_list=False)
+		waiting_list = _create_event_list(event, name="Waiting List", capacity=1, is_main_list=False, is_waiting_list=True)
+
+		Subscription.objects.create(profile=_create_profile("ml-status@esnpolimi.it"), event=event, list=main_list)
+		Subscription.objects.create(profile=_create_profile("wl-status@esnpolimi.it"), event=event, list=waiting_list)
+
+		sub = Subscription.objects.create(
+			profile=profile,
+			event=event,
+			list=form_list,
+			sumup_checkout_id="chk_blocked_status",
+		)
+
+		response = self.client.get(f"/backend/subscription/{sub.pk}/status/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["payment_blocked"])
+		self.assertEqual(response.data["payment_blocked_reason"], "sold_out")
+		self.assertIn("sold out", response.data["payment_blocked_message"].lower())
+
 
 class SumUpWebhookEdgeCaseTests(EventsBaseTestCase):
 	"""Additional SumUp webhook edge cases."""
@@ -1584,6 +1639,37 @@ class SubscriptionProcessPaymentTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["status"], "PAID")
 		mock_ensure.assert_called_once()
+
+	@patch("events.views._process_sumup_checkout")
+	@patch("events.views._ensure_sumup_transactions")
+	def test_subscription_process_payment_blocked_when_lists_full(self, mock_ensure, mock_process):
+		"""Process payment should be blocked when both Main and Waiting lists are full."""
+		profile = _create_profile("formpayer@esnpolimi.it")
+		_create_user(profile)
+
+		event = _create_event(cost=10, allow_online_payment=True)
+		form_list = _create_event_list(event, name="Form List", is_main_list=False, is_waiting_list=False)
+		main_list = _create_event_list(event, name="Main List", capacity=1, is_main_list=True, is_waiting_list=False)
+		waiting_list = _create_event_list(event, name="Waiting List", capacity=1, is_main_list=False, is_waiting_list=True)
+
+		Subscription.objects.create(profile=_create_profile("ml-full@esnpolimi.it"), event=event, list=main_list)
+		Subscription.objects.create(profile=_create_profile("wl-full@esnpolimi.it"), event=event, list=waiting_list)
+
+		sub = Subscription.objects.create(
+			profile=profile,
+			event=event,
+			list=form_list,
+			sumup_checkout_id="chk_blocked",
+		)
+
+		response = self.client.post(f"/backend/subscription/{sub.pk}/process_payment/", {}, format="json")
+
+		self.assertEqual(response.status_code, 409)
+		self.assertEqual(response.data["status"], "BLOCKED")
+		self.assertEqual(response.data["error"], "sold_out")
+		self.assertIn("sold out", response.data["message"].lower())
+		mock_process.assert_not_called()
+		mock_ensure.assert_not_called()
 
 
 class EventModelTests(EventsBaseTestCase):
