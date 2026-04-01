@@ -3,6 +3,8 @@ import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import {Box, Container, Typography, CircularProgress, Alert} from '@mui/material';
 import {fetchCustom} from '../../api/api';
 
+const SOLD_OUT_MESSAGE = 'All spots are currently sold out. Please wait for a notification from the ESN team.';
+
 export default function EventPayment() {
     const {id} = useParams();
     const location = useLocation();
@@ -33,8 +35,7 @@ export default function EventPayment() {
             setMessage('Missing subscription reference.');
             return;
         }
-        // If we already have checkoutId from state proceed to widget loader (handled by other effect)
-        if (checkoutId) return;
+
         let canceled = false;
         (async () => {
             try {
@@ -50,13 +51,18 @@ export default function EventPayment() {
                             });
                             return;
                         }
-                        if (!data.sumup_checkout_id) {
+                        if (data.payment_blocked) {
+                            setStatus('failed');
+                            setMessage(data.payment_blocked_message || SOLD_OUT_MESSAGE);
+                            return;
+                        }
+                        const checkoutFromStatus = data.sumup_checkout_id || checkoutId;
+                        if (!checkoutFromStatus) {
                             setStatus('failed');
                             setMessage('No online payment session available.');
                             return;
                         }
-                        setCheckoutId(data.sumup_checkout_id);
-                        // proceed to script loading effect
+                        setCheckoutId(checkoutFromStatus);
                     },
                     onError: () => {
                         if (canceled) return;
@@ -71,19 +77,16 @@ export default function EventPayment() {
                 }
             }
         })();
-        return () => {canceled = true;};
-    }, [subscriptionId, checkoutId, id, navigate, assignedList]);
 
-    useEffect(() => {
-        if (!checkoutId || !subscriptionId) return;
-        // existing script loader effect modified
-        if (status !== 'init' && status !== 'widget' && status !== 'failed') return;
-        // existing logic moved to separate effect below
-    }, [checkoutId, subscriptionId, status]);
+        return () => {
+            canceled = true;
+        };
+    }, [subscriptionId, id, navigate, assignedList]);
 
     useEffect(() => {
         if (!checkoutId || !subscriptionId) return;
         if (status !== 'init') return;
+
         let canceled = false;
         (async () => {
             try {
@@ -103,11 +106,15 @@ export default function EventPayment() {
                 }
             }
         })();
-        return () => {canceled = true;};
-    }, [checkoutId, subscriptionId]);
+
+        return () => {
+            canceled = true;
+        };
+    }, [checkoutId, subscriptionId, status]);
 
     useEffect(() => {
         if (status !== 'widget' || sumupMountedRef.current || !window.SumUpCard || !checkoutId) return;
+
         try {
             window.SumUpCard.mount({
                 id: 'sumup-card',
@@ -116,7 +123,6 @@ export default function EventPayment() {
                     if (type === 'success') {
                         setStatus('processing');
                         setMessage('Finalizing payment...');
-                        // No widget payload needed anymore
                         fetchCustom('POST', `/subscription/${subscriptionId}/process_payment/`, {
                             auth: false,
                             body: {},
@@ -141,9 +147,20 @@ export default function EventPayment() {
                                     setMessage('Unexpected payment status.');
                                 }
                             },
-                            onError: () => {
+                            onError: async (errorResponse) => {
+                                let apiMessage = '';
+                                if (errorResponse?.json) {
+                                    try {
+                                        const errorData = await errorResponse.json();
+                                        apiMessage = errorData?.message || errorData?.error || '';
+                                    } catch {
+                                        apiMessage = '';
+                                    }
+                                } else if (errorResponse?.message) {
+                                    apiMessage = errorResponse.message;
+                                }
                                 setStatus('failed');
-                                setMessage('Payment confirmation error.');
+                                setMessage(apiMessage || 'Payment confirmation error.');
                             }
                         });
                     } else if (type === 'error') {
@@ -159,30 +176,28 @@ export default function EventPayment() {
         }
     }, [status, checkoutId, subscriptionId, assignedList, id, navigate]);
 
-    //const finish = () => navigate(`/event/${id}/formresult`, {
-    //    state: {subscriptionId, assignedList, paymentError: status === 'failed'}
-    //});
-
     return (
-        <Container maxWidth="sm" sx={{mt:8}}>
+        <Container maxWidth="sm" sx={{mt: 8}}>
             <Typography variant="h4" align="center" gutterBottom>Event Payment</Typography>
             {status === 'init' && (
-                <Box sx={{display:'flex', flexDirection:'column', alignItems:'center', gap:2}}>
-                    <CircularProgress/><Typography>{message}</Typography>
+                <Box sx={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2}}>
+                    <CircularProgress />
+                    <Typography>{message}</Typography>
                 </Box>
             )}
             {status === 'widget' && (
-                <Box sx={{mt:2}}>
+                <Box sx={{mt: 2}}>
                     <div id="sumup-card"></div>
                 </Box>
             )}
             {status === 'processing' && (
-                <Box sx={{display:'flex', flexDirection:'column', alignItems:'center', gap:2}}>
-                    <CircularProgress/><Typography>{message}</Typography>
+                <Box sx={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2}}>
+                    <CircularProgress />
+                    <Typography>{message}</Typography>
                 </Box>
             )}
             {status === 'failed' && (
-                <Alert severity="error" sx={{mt:2}}>
+                <Alert severity="error" sx={{mt: 2}}>
                     {message}
                 </Alert>
             )}
