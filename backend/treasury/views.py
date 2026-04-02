@@ -170,9 +170,9 @@ def esncard_emission(request):
 def esncard_detail(request, pk):
     try:
         if request.method == 'PATCH':
-            esncard = ESNcard.objects.get(pk=pk)
             if not get_action_permissions('esncard_detail_patch', request.user):
                 return Response({'error': MSG_UNAUTHORIZED}, status=403)
+            esncard = ESNcard.objects.get(pk=pk)
             update_data = {}
             if 'number' in request.data:
                 update_data['number'] = request.data['number']
