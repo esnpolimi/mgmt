@@ -373,7 +373,7 @@ class FinancePermissionsFlowTests(IntegrationBaseTestCase):
 			"description": "Attempt",
 		}, format="json")
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 		self.authenticate(board)
 		response = self.client.patch(

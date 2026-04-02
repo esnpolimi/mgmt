@@ -1,6 +1,7 @@
 import { Box, Typography, Button, Paper } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import PropTypes from 'prop-types';
 
 /**
  * Centered, non-blocking maintenance warning banner.
@@ -102,6 +103,11 @@ const MaintenanceBanner = ({ message, onClose }) => {
             </Paper>
         </Box>
     );
+};
+
+MaintenanceBanner.propTypes = {
+    message: PropTypes.string.isRequired,
+    onClose: PropTypes.func.isRequired,
 };
 
 export default MaintenanceBanner;

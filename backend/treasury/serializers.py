@@ -13,6 +13,9 @@ from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
 from events.models import Event
 
+GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
+DEFAULT_MIMETYPE = 'application/octet-stream'
+
 
 # --- Helper function to find or create a folder in Google Drive ---
 def find_or_create_drive_folder(service, folder_name, parent_id):
@@ -58,11 +61,11 @@ def upload_receipt_to_drive(receipt_file, user, instance_time, prefix):
     SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/drive']
+        scopes=[GOOGLE_DRIVE_SCOPE]
     )
     service = build('drive', 'v3', credentials=credentials)
     receipt_file.seek(0)
-    mimetype = getattr(receipt_file, 'content_type', 'application/octet-stream')
+    mimetype = getattr(receipt_file, 'content_type', DEFAULT_MIMETYPE)
     media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
     ext = os.path.splitext(receipt_file.name)[1].lower()
     filename = f"{prefix}_{user.profile.name}_{user.profile.surname}_{instance_time.strftime('%Y%m%d_%H%M%S')}{ext}"
@@ -95,7 +98,7 @@ def upload_reimbursement_receipt_to_drive(receipt_file, user, instance_time, eve
     SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/drive']
+        scopes=[GOOGLE_DRIVE_SCOPE]
     )
     service = build('drive', 'v3', credentials=credentials)
     
@@ -120,7 +123,7 @@ def upload_reimbursement_receipt_to_drive(receipt_file, user, instance_time, eve
     
     # Upload file to the final folder
     receipt_file.seek(0)
-    mimetype = getattr(receipt_file, 'content_type', 'application/octet-stream')
+    mimetype = getattr(receipt_file, 'content_type', DEFAULT_MIMETYPE)
     media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
     ext = os.path.splitext(receipt_file.name)[1].lower()
     filename = f"rimborso_{user.profile.name}_{user.profile.surname}_{instance_time.strftime('%Y%m%d_%H%M%S')}{ext}"
@@ -157,7 +160,7 @@ def upload_transaction_receipt_to_drive(receipt_file, user, instance_time, event
     SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/drive']
+        scopes=[GOOGLE_DRIVE_SCOPE]
     )
     service = build('drive', 'v3', credentials=credentials)
 
@@ -180,7 +183,7 @@ def upload_transaction_receipt_to_drive(receipt_file, user, instance_time, event
 
     # Upload file to the final folder
     receipt_file.seek(0)
-    mimetype = getattr(receipt_file, 'content_type', 'application/octet-stream')
+    mimetype = getattr(receipt_file, 'content_type', DEFAULT_MIMETYPE)
     media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
     ext = os.path.splitext(receipt_file.name)[1].lower()
     filename = f"transazione_{user.profile.name}_{user.profile.surname}_{instance_time.strftime('%Y%m%d_%H%M%S')}{ext}"

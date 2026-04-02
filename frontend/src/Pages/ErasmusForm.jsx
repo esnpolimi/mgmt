@@ -116,7 +116,10 @@ export default function ErasmusForm() {
         });
 
         // Validate WhatsApp fields only when a separate number is provided
-        if (!sameWAasPhone) {
+        if (sameWAasPhone) {
+            newErrors.whatsapp_prefix = [false, ''];
+            newErrors.whatsapp_number = [false, ''];
+        } else {
             ['whatsapp_prefix', 'whatsapp_number'].forEach(field => {
                 if (!formData[field] || (typeof formData[field] === 'string' && formData[field].trim() === '')) {
                     newErrors[field] = [true, 'This field is required'];
@@ -125,9 +128,6 @@ export default function ErasmusForm() {
                     newErrors[field] = [false, ''];
                 }
             });
-        } else {
-            newErrors.whatsapp_prefix = [false, ''];
-            newErrors.whatsapp_number = [false, ''];
         }
         // Validate matricola (exactly 6 digits)
         const matricolaRegex = /^\d{6}$/;
@@ -268,10 +268,7 @@ export default function ErasmusForm() {
         let startIndex = -1;
         for (let i = 0; i < futureAnchors.length; i++) {
             const month = futureAnchors[i].month(); // 0-indexed: Jan=0, Feb=1, Jul=6
-            if (isAutumn && month === 1) { // Looking for February
-                startIndex = i;
-                break;
-            } else if (!isAutumn && month === 6) { // Looking for July
+            if ((isAutumn && month === 1) || (!isAutumn && month === 6)) {
                 startIndex = i;
                 break;
             }
@@ -281,7 +278,7 @@ export default function ErasmusForm() {
         // Each semester alternates between Feb and Jul
         const targetIndex = startIndex + (s - 1);
         
-        return futureAnchors[targetIndex] || futureAnchors[futureAnchors.length - 1];
+        return futureAnchors[targetIndex] || futureAnchors.at(-1);
     };
 
     const handleSemestersChange = (_e, value) => {
