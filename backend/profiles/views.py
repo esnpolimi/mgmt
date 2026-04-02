@@ -19,6 +19,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 from django.core.paginator import InvalidPage
 
+MSG_INTERNAL_ERROR = 'Errore interno del server.'
+
 from events.models import Subscription, EventOrganizer
 from events.serializers import SubscriptionSerializer, OrganizedEventSerializer
 from profiles.models import Profile, Document
@@ -158,7 +160,7 @@ def profile_list(request, is_esner):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['POST'])
@@ -286,7 +288,7 @@ def initiate_profile_creation(request):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['GET'])
@@ -351,7 +353,7 @@ def verify_email_and_enable_profile(request, uid, token):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-    return Response({'error': 'Errore interno del server.'}, status=500)
+    return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['POST'])
@@ -397,7 +399,7 @@ def manual_verify_profile_email(request, pk):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 # Endpoint to view in detail, edit, delete a profile
@@ -483,7 +485,7 @@ def profile_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 # Endpoint to create document
@@ -502,7 +504,7 @@ def document_creation(request):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['PATCH', 'DELETE'])
@@ -531,7 +533,7 @@ def document_detail(request, pk):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['GET'])
@@ -573,7 +575,7 @@ def search_profiles(request):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['GET'])
@@ -611,7 +613,7 @@ def profile_subscriptions(request, pk):
     except Exception as e:
         logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
 @api_view(['POST'])

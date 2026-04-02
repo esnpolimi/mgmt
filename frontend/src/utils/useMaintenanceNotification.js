@@ -16,7 +16,7 @@ const useMaintenanceNotification = (accessToken) => {
             return;
         }
 
-        const apiHost = window.API_HOST || '';
+        const apiHost = globalThis.API_HOST || '';
         const url = `${apiHost}/maintenance/status/`;
 
         let lastNotificationId = null;
@@ -51,8 +51,8 @@ const useMaintenanceNotification = (accessToken) => {
         // Check immediately
         checkStatus();
 
-        // Then poll every 30 seconds
-        const intervalId = setInterval(checkStatus, 30000);
+        // Then poll every 5 minutes
+        const intervalId = setInterval(checkStatus, 300000);
 
         return () => {
             clearInterval(intervalId);

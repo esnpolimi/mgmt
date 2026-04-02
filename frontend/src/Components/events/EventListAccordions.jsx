@@ -13,8 +13,7 @@ import {
 import {
     PersonAdd as PersonAddIcon,
     Ballot as BallotIcon,
-    Euro as EuroIcon,
-    AddCard as AddCardIcon,
+    PriceCheck as PriceCheckIcon,
     OpenInNew as OpenInNewIcon,
     ExpandMore as ExpandMoreIcon,
     ExpandLess as ExpandLessIcon,
@@ -33,7 +32,7 @@ export default memo(function EventListAccordions({
                                                      onEditSubscription,
                                                      onMoveToList,
                                                      onOpenReimburseDeposits,
-                                                     onOpenReimburseQuota,
+                                                     onOpenReimburseMenu,
                                                      onOpenPrintableLibetatorie,
                                                      onOpenEditAnswers,
                                                      canChangeSubscription,
@@ -438,7 +437,8 @@ export default memo(function EventListAccordions({
             }
 
             // Actions column (sticky/pinned left)
-            const actionsColumn = hasDeposit || hasQuota ? {
+            const hasAnyRefundCategory = hasDeposit || hasQuota || (Array.isArray(data?.services) && data.services.length > 0);
+            const actionsColumn = hasAnyRefundCategory ? {
                 accessorKey: 'actions',
                 header: 'Azioni',
                 size: 120,
@@ -446,9 +446,10 @@ export default memo(function EventListAccordions({
                 enableColumnActions: false,
                 Cell: ({row}) => {
                     const sub = row.original;
-                    const canReimburseQuota = (hasQuota && sub.status_quota === 'paid') ||
-                        (sub.status_quota === 'reimbursed' && sub.status_services === 'paid');
+                    const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
+                    const canReimburseServices = sub.status_services === 'paid';
                     const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
+                    const canReimburseAny = canReimburseQuota || canReimburseServices || canReimburseDeposit;
 
                     // --- Disable reimbursement if event.reimbursements_by_organizers_only is true and user is not allowed ---
                     const reimbursementsRestricted = data.reimbursements_by_organizers_only && !(isBoardMember || isOrganizer);
@@ -465,33 +466,18 @@ export default memo(function EventListAccordions({
                         >
                             <EditNoteIcon/>
                         </IconButton>
-                        {hasQuota && (
-                            <IconButton
-                                title="Rimborsa Quota"
-                                color="secondary"
-                                disabled={!canReimburseQuota || reimbursementsRestricted}
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    if (!reimbursementsRestricted) onOpenReimburseQuota(sub);
-                                }}
-                            >
-                                <EuroIcon/>
-                            </IconButton>
-                        )}
-                        {hasDeposit && (
-                            <IconButton
-                                title="Rimborsa Cauzione"
-                                color="primary"
-                                disabled={!canReimburseDeposit || reimbursementsRestricted}
-                                onClick={e => {
-                                    e.stopPropagation();
-                                    if (!reimbursementsRestricted) onOpenReimburseDeposits(sub);
-                                }}
-                                style={reimbursementsRestricted ? {opacity: 0.5, pointerEvents: 'none'} : {}}
-                            >
-                                <AddCardIcon/>
-                            </IconButton>
-                        )}
+                        <IconButton
+                            title={reimbursementsRestricted ? 'Rimborso riservato a organizzatori/Board' : 'Rimborsa'}
+                            color="secondary"
+                            disabled={!canReimburseAny || reimbursementsRestricted}
+                            onClick={e => {
+                                e.stopPropagation();
+                                if (!reimbursementsRestricted && canReimburseAny) onOpenReimburseMenu(sub);
+                            }}
+                            style={reimbursementsRestricted ? {opacity: 0.5, pointerEvents: 'none'} : {}}
+                        >
+                            <PriceCheckIcon/>
+                        </IconButton>
                     </>);
                 },
             } : {
@@ -605,9 +591,9 @@ export default memo(function EventListAccordions({
                                         // Check if there's a data-copy-value attribute (for drive links)
                                         const copyValueElement = td.querySelector('[data-copy-value]');
                                         if (copyValueElement) {
-                                            return copyValueElement.getAttribute('data-copy-value');
+                                            return copyValueElement.dataset.copyValue;
                                         }
-                                        return td.innerText.replace(/\s+/g, ' ').trim();
+                                        return td.innerText.replaceAll(/\s+/g, ' ').trim();
                                     })
                                     // Excel-safe transform
                                     .map(toExcelSafe);
@@ -712,7 +698,7 @@ export default memo(function EventListAccordions({
                 formAspectCaption
             };
         });
-    }, [data, hasDeposit, hasQuota, isBoardMember, onOpenEditAnswers, onOpenReimburseQuota, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns, showProfileColumns]);
+    }, [data, hasDeposit, hasQuota, isBoardMember, isOrganizer, onOpenEditAnswers, onOpenReimburseMenu, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns, showProfileColumns]);
 
     // Build a vCard 3.0 file for an array of subscription objects
     const buildVCard = (subs) => {

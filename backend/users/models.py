@@ -15,7 +15,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_login = models.DateTimeField(null=True, blank=True)  # Override last_login, to be NULL initially
     can_manage_casse = models.BooleanField(default=False)  # Board-granted for Aspiranti
     can_view_casse_import = models.BooleanField(default=False)  # Board-granted for Aspiranti
-    can_manage_content = models.BooleanField(default=False)  # Board-granted for Aspiranti/Attivi
+    can_manage_content = models.BooleanField(default=False)  # Explicitly granted; Board has implicit access
 
     USERNAME_FIELD = 'profile'
     REQUIRED_FIELDS = []
