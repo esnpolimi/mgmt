@@ -116,20 +116,6 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                     />
                 );
             case 'c':
-                return (
-                    <TextField
-                        select
-                        fullWidth
-                        value={value || ''}
-                        onChange={e => onChange(field, e.target.value)}
-                        size="small"
-                        variant="outlined"
-                    >
-                        {(field.choices || []).map(choice => (
-                            <MenuItem key={choice} value={choice}>{choice}</MenuItem>
-                        ))}
-                    </TextField>
-                );
             case 's':
                 return (
                     <TextField
@@ -300,7 +286,7 @@ export default function EditAnswersModal({open, onClose, event, subscription}) {
                             {additionalFields.map((field, idx) => (
                                 <Grid key={idx} size={{xs: 12, sm: 6, md: 4}}>
                                     <Typography variant="body2" sx={{mb: 0.5}}>{field.name}</Typography>
-                                    {renderFieldInput(field, additionalData[field.name], handleAdditionalFieldChange, true)}
+                                    {renderFieldInput(field, additionalData[field.name], handleAdditionalFieldChange)}
                                 </Grid>
                             ))}
                         </Grid>

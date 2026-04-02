@@ -112,7 +112,7 @@ class ContentSectionTests(ContentBaseTestCase):
 		self.assertTrue(ContentSection.objects.filter(title="LINK_UTILI").exists())
 
 	def test_section_create_as_attivi(self):
-		"""Attivi can create sections (finance permission)."""
+		"""Attivi without explicit content role cannot create sections."""
 		profile = _create_profile("attivo@esnpolimi.it")
 		user = _create_user(profile)
 		user.groups.add(self.group_attivi)
@@ -122,10 +122,10 @@ class ContentSectionTests(ContentBaseTestCase):
 			"title": "WIKI_TUTORIAL",
 		})
 
-		self.assertEqual(response.status_code, 201)
+		self.assertEqual(response.status_code, 403)
 
 	def test_section_create_as_aspirante_with_flag(self):
-		"""Aspiranti with can_manage_casse can create sections."""
+		"""Aspiranti with finance-only flag cannot create sections."""
 		profile = _create_profile("aspirante@esnpolimi.it")
 		user = _create_user(profile)
 		user.groups.add(self.group_aspiranti)
@@ -135,6 +135,20 @@ class ContentSectionTests(ContentBaseTestCase):
 
 		response = self.client.post("/backend/content/sections/", {
 			"title": "LINK_UTILI",
+		})
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_section_create_with_explicit_content_role(self):
+		"""Users with explicit content-management role can create sections."""
+		profile = _create_profile("content.manager@esnpolimi.it")
+		user = _create_user(profile)
+		user.can_manage_content = True
+		user.save(update_fields=["can_manage_content"])
+		self.authenticate(user)
+
+		response = self.client.post("/backend/content/sections/", {
+			"title": "WIKI_TUTORIAL",
 		})
 
 		self.assertEqual(response.status_code, 201)
@@ -606,7 +620,7 @@ class WhatsAppEndpointsTests(ContentBaseTestCase):
 		self.assertEqual(config.whatsapp_link, "https://chat.whatsapp.com/board-link")
 
 	def test_whatsapp_config_patch_allowed_for_attivi(self):
-		"""PATCH whatsapp-config should succeed for Attivi users."""
+		"""PATCH whatsapp-config should be forbidden for Attivi without explicit role."""
 		profile = _create_profile("attivo@esnpolimi.it")
 		user = _create_user(profile)
 		user.groups.add(self.group_attivi)
@@ -618,9 +632,25 @@ class WhatsAppEndpointsTests(ContentBaseTestCase):
 			format="json",
 		)
 
+		self.assertEqual(response.status_code, 403)
+
+	def test_whatsapp_config_patch_allowed_for_explicit_content_role(self):
+		"""PATCH whatsapp-config should succeed for users with explicit content role."""
+		profile = _create_profile("content.manager@esnpolimi.it")
+		user = _create_user(profile)
+		user.can_manage_content = True
+		user.save(update_fields=["can_manage_content"])
+		self.authenticate(user)
+
+		response = self.client.patch(
+			"/backend/content/whatsapp-config/",
+			{"whatsapp_link": "https://chat.whatsapp.com/content-manager-link"},
+			format="json",
+		)
+
 		self.assertEqual(response.status_code, 200)
 		config = WhatsAppConfig.get_instance()
-		self.assertEqual(config.whatsapp_link, "https://chat.whatsapp.com/attivi-link")
+		self.assertEqual(config.whatsapp_link, "https://chat.whatsapp.com/content-manager-link")
 
 	@patch("content.views.send_mail")
 	@patch("content.views._append_to_whatsapp_log")

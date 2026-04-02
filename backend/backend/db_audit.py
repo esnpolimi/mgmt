@@ -217,7 +217,7 @@ def _on_m2m_changed(sender, instance, action, reverse, model, pk_set, **kwargs):
             "operation": action,
             "reverse": reverse,
             "related_model": model._meta.label,
-            "related_pks": sorted(list(pk_set)) if pk_set else [],
+            "related_pks": sorted(pk_set) if pk_set else [],
         }
     )
 

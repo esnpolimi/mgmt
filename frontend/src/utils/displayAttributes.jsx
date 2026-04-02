@@ -65,6 +65,7 @@ export const transactionDisplayNames = {
         subscription: 'Iscrizione',
         cauzione: 'Cauzione',
         reimbursement: 'Richiesta Rimborso',
+        rimborso_esncard: 'Rimborso ESNcard',
         rimborso_cauzione: 'Rimborso Cauzione Evento',
         rimborso_quota: 'Rimborso Quota Evento',
         service: 'Acquisto Servizio',
