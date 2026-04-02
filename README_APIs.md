@@ -222,7 +222,7 @@ Behavior:
 
 #### **Common errors**
 
-- `401`: caller is not a Board member
+- `403`: caller is not a Board member
 - `404`: ESNcard does not exist
 - `409`: automatic revoke blocked (linked anomalous transactions, multiple linked emissions, closed account, insufficient balance)
 
