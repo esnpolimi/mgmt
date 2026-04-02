@@ -28,13 +28,13 @@ from treasury.serializers import TransactionViewSerializer, AccountDetailedViewS
 from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
-
-MSG_UNAUTHORIZED = 'Non autorizzato.'
 from django.utils import timezone
 try:
     from zoneinfo import ZoneInfo
 except Exception:
     ZoneInfo = None
+
+MSG_UNAUTHORIZED = 'Non autorizzato.'
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ def esncard_detail(request, pk):
         if request.method == 'PATCH':
             esncard = ESNcard.objects.get(pk=pk)
             if not get_action_permissions('esncard_detail_patch', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             update_data = {}
             if 'number' in request.data:
                 update_data['number'] = request.data['number']
@@ -185,7 +185,7 @@ def esncard_detail(request, pk):
 
         elif request.method == 'DELETE':
             if not get_action_permissions('esncard_detail_delete', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
             with transaction.atomic():
                 esncard = ESNcard.objects.select_for_update().select_related('profile').get(pk=pk)
@@ -302,7 +302,7 @@ def esncard_fees(_):
 def transaction_add(request):
     try:
         if not get_action_permissions('transaction_add', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
         transaction_serializer = TransactionCreateSerializer(data=request.data, context={'request': request})
         if not transaction_serializer.is_valid():
@@ -311,7 +311,7 @@ def transaction_add(request):
         transaction_type = transaction_serializer.validated_data['type']
         if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
             if not request.user.has_perm('treasury.add_transaction'):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
         try:
             tx = transaction_serializer.save()
@@ -401,7 +401,7 @@ def transaction_detail(request, pk):
 
         elif request.method == 'PATCH':
             if not get_action_permissions('transaction_detail_patch', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
             # Executor handling: optional & nullable
             executor_raw = request.data.get('executor', '__not_provided__')
@@ -451,7 +451,7 @@ def transaction_detail(request, pk):
 
         elif request.method == 'DELETE':
             if not get_action_permissions('transaction_detail_delete', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             # Allow deletion only for specific transaction types
             list_deleteable = [
                 Transaction.TransactionType.RIMBORSO_CAUZIONE,
@@ -463,7 +463,7 @@ def transaction_detail(request, pk):
             ]
             if transaction_obj.type in list_deleteable:
                 if not (request.user.has_perm('treasury.delete_transaction') or request.user.can_manage_casse):
-                    return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                    return Response({'error': MSG_UNAUTHORIZED}, status=403)
                 transaction_obj.delete()
                 return Response(status=204)
             else:
@@ -499,7 +499,7 @@ def accounts_list(request):
 def account_creation(request):
     try:
         if not get_action_permissions('account_creation', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
         account_serializer = AccountCreateSerializer(data=request.data)
         if not account_serializer.is_valid():
@@ -537,10 +537,10 @@ def account_detail(request, pk):
 
             if not status_only:
                 if not get_action_permissions('account_detail_patch', request.user):
-                    return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                    return Response({'error': MSG_UNAUTHORIZED}, status=403)
             else:
                 if not is_casse_manager:
-                    return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                    return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
             data = request.data.copy()
             data['changed_by'] = request.user
@@ -616,7 +616,7 @@ def reimbursement_request_detail(request, pk):
 
         elif request.method == 'PATCH':
             if not get_action_permissions('reimbursement_request_detail_patch', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             if request.user.has_perm('treasury.change_reimbursementrequest'):
                 allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
                 data = {k: v for k, v in request.data.items() if k in allowed_fields}
@@ -633,11 +633,11 @@ def reimbursement_request_detail(request, pk):
                         return Response(ve.detail, status=400)
                 return Response(serializer.errors, status=400)
             else:
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
         elif request.method == 'DELETE':
             if not get_action_permissions('reimbursement_request_detail_delete', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             try:
                 instance.delete()
                 return Response(status=204)
@@ -719,7 +719,7 @@ def reimburse_deposits(request):
     """
     try:
         if not get_action_permissions('reimburse_deposits', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
         event_id = request.data.get('event')
         subscription_ids = request.data.get('subscription_ids', [])
@@ -854,7 +854,7 @@ def reimburse_quota(request):
     """
     try:
         if not get_action_permissions('reimburse_quota', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
         event_id = request.data.get('event')
         subscription_id = request.data.get('subscription_id')

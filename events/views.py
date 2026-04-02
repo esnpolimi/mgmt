@@ -310,8 +310,8 @@ def _get_main_waiting_lists(event, lock=False):
     if lock:
         # Evaluate to acquire row-level locks on all involved lists
         all_lists = list(lists_qs.select_for_update().order_by('id'))
-        main_list = next((l for l in all_lists if l.is_main_list), None)
-        waiting_list = next((l for l in all_lists if l.is_waiting_list), None)
+        main_list = next((lst for lst in all_lists if lst.is_main_list), None)
+        waiting_list = next((lst for lst in all_lists if lst.is_waiting_list), None)
         return main_list, waiting_list
 
     main_list = lists_qs.filter(is_main_list=True).first()
@@ -2095,29 +2095,15 @@ def event_form_submit(request, event_id):
             external_whatsapp_number=external_whatsapp_number
         )
 
-        # --- SumUp integration (widget-only) ---
-        payment_error = None
         total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0')) + _services_total(normalized_selected)
 
-        if event.allow_online_payment and total_cost > 0:
-            try:
-                checkout_id, _ = create_sumup_checkout(sub, total_cost, currency="EUR")
-                sub.sumup_checkout_id = checkout_id
-                sub.save(update_fields=['sumup_checkout_id'])
-            except Exception as e:
-                payment_error = "online_payment_unavailable"
-                print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
-                logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
-
-        online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error)
-        payment_required = online_payment_required or total_cost > 0
-
+        # --- Capacity check (must happen before SumUp checkout creation) ---
         assigned_label = ''
         capacity_blocked = False
 
-        # Compute availability hint for payment email/UI.
         # Subscription is always created in Form List and is never rejected here due to Main/Waiting capacity.
-        if online_payment_required:
+        # Capacity information is used to decide whether to create a live payment checkout.
+        if event.allow_online_payment and total_cost > 0:
             main_list, waiting_list = _get_main_waiting_lists(event)
 
             if _list_has_space(main_list):
@@ -2127,6 +2113,21 @@ def event_form_submit(request, event_id):
             else:
                 assigned_label = "Form List"
                 capacity_blocked = True
+
+        # --- SumUp integration (widget-only) — only create checkout when capacity is available ---
+        payment_error = None
+        if event.allow_online_payment and total_cost > 0 and not capacity_blocked:
+            try:
+                checkout_id, _ = create_sumup_checkout(sub, total_cost, currency="EUR")
+                sub.sumup_checkout_id = checkout_id
+                sub.save(update_fields=['sumup_checkout_id'])
+            except Exception as e:
+                payment_error = "online_payment_unavailable"
+                print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
+                logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
+
+        online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error and not capacity_blocked)
+        payment_required = online_payment_required or total_cost > 0
 
         _send_form_subscription_email(
             sub, 
@@ -2226,31 +2227,8 @@ def subscription_process_payment(request, pk):
         or Decimal(event.deposit or 0) > 0
         or _services_total(sub.selected_services or []) > 0
     )
-    should_block_payment = bool(
-        event.allow_online_payment
-        and has_payable_amount
-        and not _subscription_payment_already_registered(sub)
-        and _is_payment_blocked_by_full_lists(sub)
-    )
-    if should_block_payment:
-        # Double check if the sumup checkout is actually already completed before blocking
-        status_flag, remote = _process_sumup_checkout(sub, None)
-        if status_flag == 'PAID':
-            _ensure_sumup_transactions(sub)
-            return Response(
-                {"status": status_flag, **remote},
-                status=200
-            )
-        
-        return Response(
-            {
-                "status": "BLOCKED",
-                "error": "sold_out",
-                "message": PAYMENT_SOLD_OUT_MESSAGE,
-            },
-            status=409,
-        )
 
+    # Parse token from request before entering the DB transaction (no DB access here).
     payload = request.data or {}
     widget_payload = payload.get('widget_payload') or {}
 
@@ -2268,16 +2246,47 @@ def subscription_process_payment(request, pk):
         candidates.append(card_obj.get('token') or card_obj.get('id'))
     token = next((c for c in candidates if isinstance(c, str) and c.strip()), None)
 
-    # Proceed even if token is None
-    status_flag, remote = _process_sumup_checkout(sub, token)
+    with transaction.atomic():
+        # Re-fetch the subscription under a row-level lock so concurrent requests
+        # serialize here and the capacity re-check below is race-free.
+        sub = Subscription.objects.select_related('event').select_for_update().get(pk=pk)
+        event = sub.event
 
-    if status_flag == 'PAID':
-        _ensure_sumup_transactions(sub)
+        should_block_payment = bool(
+            event.allow_online_payment
+            and has_payable_amount
+            and not _subscription_payment_already_registered(sub)
+            and _is_payment_blocked_by_full_lists(sub)
+        )
+        if should_block_payment:
+            # Double check if the sumup checkout is actually already completed before blocking
+            status_flag, remote = _process_sumup_checkout(sub, None)
+            if status_flag == 'PAID':
+                _ensure_sumup_transactions(sub)
+                return Response(
+                    {"status": status_flag, **remote},
+                    status=200
+                )
 
-    return Response(
-        {"status": status_flag, **remote},
-        status=200 if status_flag not in ['ERROR'] else 500
-    )
+            return Response(
+                {
+                    "status": "BLOCKED",
+                    "error": "sold_out",
+                    "message": PAYMENT_SOLD_OUT_MESSAGE,
+                },
+                status=409,
+            )
+
+        # Proceed even if token is None
+        status_flag, remote = _process_sumup_checkout(sub, token)
+
+        if status_flag == 'PAID':
+            _ensure_sumup_transactions(sub)
+
+        return Response(
+            {"status": status_flag, **remote},
+            status=200 if status_flag not in ['ERROR'] else 500
+        )
 
 
 @api_view(["POST"])

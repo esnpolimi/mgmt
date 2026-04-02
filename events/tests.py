@@ -832,10 +832,12 @@ class EventFormTests(EventsBaseTestCase):
 		self.assertTrue(response.data["success"])
 		self.assertEqual(response.data["assigned_list"], "Form List")
 		self.assertTrue(response.data["payment_required"])
+		self.assertTrue(response.data["capacity_blocked"])
 
 		sub = Subscription.objects.get(profile=profile, event=event)
 		self.assertEqual(sub.list, form_list)
-		self.assertEqual(sub.sumup_checkout_id, "chk_form_full_lists")
+		# No checkout should be created when capacity is blocked (no live checkout exposed for sold-out)
+		self.assertIsNone(sub.sumup_checkout_id)
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_invalid_email(self):
@@ -1669,6 +1671,8 @@ class SubscriptionProcessPaymentTests(EventsBaseTestCase):
 		self.assertEqual(response.data["error"], "sold_out")
 		self.assertIn("sold out", response.data["message"].lower())
 		mock_ensure.assert_not_called()
+		# Reconciliation probe must still run to catch already-paid-remotely edge case
+		mock_process.assert_called_once()
 
 
 class EventModelTests(EventsBaseTestCase):
