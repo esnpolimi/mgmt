@@ -8,7 +8,7 @@ This module allows dynamic management of homepage content through an administrat
 
 - **Two predefined categories**: USEFUL LINKS and WIKI AND TUTORIALS
 - **Mandatory fields for each link**: Title, Description, URL, and Color
-- **Full admin-panel management**: only Board members can modify content
+- **Full admin-panel management**: Board members and users with can_manage_content=True can modify content
 - **All links are loaded from the database**: no hardcoded content
 
 ## Structure
@@ -20,7 +20,7 @@ This module allows dynamic management of homepage content through an administrat
   - `ContentLink`: single link inside a section
 
 - **serializers.py**: REST serializers for API payloads
-- **views.py**: ViewSets with permission checks (only Board can modify)
+- **views.py**: ViewSets with permission checks (Board members or users with can_manage_content=True can modify)
 - **urls.py**: API routes for content management
 - **admin.py**: Django Admin integration
 
@@ -32,7 +32,7 @@ This module allows dynamic management of homepage content through an administrat
 
 ## API Endpoints
 
-```
+```text
 GET    /backend/content/sections/                  - list sections
 GET    /backend/content/sections/active_sections/  - list active sections with links
 POST   /backend/content/sections/                  - create section (Board or users with can_manage_content)
@@ -103,9 +103,11 @@ All `name`, `description`, `url`, and `color` fields are mandatory.
 
 ## Access to Content Manager
 
-The content management page is available only to Board members via:
+The content management page is available to Board members and users with the Content Manager role (grantable by Board members via the Profiles page) via:
 - sidebar item: "Content Management"
 - direct URL: `/content-manager`
+
+Access is controlled by the `can_manage_content=True` permission.
 
 ## Content Manager Capabilities
 
