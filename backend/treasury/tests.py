@@ -136,7 +136,7 @@ class AccountTests(TreasuryBaseTestCase):
 			"name": "New Account",
 		})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_account_detail_patch_status_only_allowed_for_casse_manager(self):
 		"""Status-only changes should be allowed for casse managers."""
@@ -165,7 +165,7 @@ class AccountTests(TreasuryBaseTestCase):
 			"name": "Updated",
 		})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_account_detail_get_masks_balance_for_non_viewers(self):
 		"""Balance should be masked for non-allowed users (e.g., Aspiranti)."""
@@ -274,7 +274,7 @@ class ESNcardTests(TreasuryBaseTestCase):
 
 		response = self.client.patch(f"/backend/esncard/{card.pk}/", {"number": "ESN-00000"})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_esncard_detail_patch_success(self):
 		"""ESNcard update should work with permission."""
@@ -303,7 +303,7 @@ class ESNcardTests(TreasuryBaseTestCase):
 
 		response = self.client.delete(f"/backend/esncard/{card.pk}/")
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 		self.assertTrue(ESNcard.objects.filter(pk=card.pk).exists())
 
 	def test_esncard_detail_delete_success_creates_refund_and_reverts_balance(self):
@@ -506,7 +506,7 @@ class TransactionTests(TreasuryBaseTestCase):
 			"description": "Test",
 		}, format="json")
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_transaction_add_success(self):
 		"""Adding transaction should update account balance."""
@@ -571,7 +571,7 @@ class TransactionTests(TreasuryBaseTestCase):
 
 		response = self.client.patch(f"/backend/transaction/{tx.pk}/", {"description": "Updated"})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_transaction_detail_delete_only_allowed_types(self):
 		"""Deleting non-refund transactions should be blocked."""
@@ -780,7 +780,7 @@ class ReimbursementRequestTests(TreasuryBaseTestCase):
 
 		response = self.client.patch(f"/backend/reimbursement_request/{req.pk}/", {"description": "Updated"})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_reimbursement_request_delete_requires_board(self):
 		"""DELETE should be restricted to Board or delete permission."""
@@ -797,7 +797,7 @@ class ReimbursementRequestTests(TreasuryBaseTestCase):
 
 		response = self.client.delete(f"/backend/reimbursement_request/{req.pk}/")
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_reimbursement_request_patch_creates_transaction(self):
 		"""Board with change permission can assign account and create reimbursement tx."""

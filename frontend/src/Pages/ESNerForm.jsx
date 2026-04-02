@@ -242,12 +242,12 @@ export default function ESNerForm() {
     const handleChange = (e) => {
         let { name, value } = e.target;
         if (name === 'person_code') {
-            value = value.replaceAll(/\D/g, '');
+            value = value.replace(/\D/g, '');
             if (value.length > 8) value = value.slice(0, 8);
         }
         if (name === 'matricola_number') {
             // Only accept numeric digits, max 6
-            value = value.replaceAll(/\D/g, '');
+            value = value.replace(/\D/g, '');
             if (value.length > 6) value = value.slice(0, 6);
         }
         setFormData({
