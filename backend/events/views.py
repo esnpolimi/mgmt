@@ -23,6 +23,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from rest_framework.decorators import api_view, permission_classes
+
+PERM_VIEW_EVENT = 'events.view_event'
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -45,6 +47,11 @@ from profiles.models import Profile
 from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
+
+PAYMENT_SOLD_OUT_MESSAGE = (
+    "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. "
+    "Thank you for filling out the form. Please wait for any notifications from the ESN team."
+)
 
 # --- Allowed file types for 'link' form fields (mirrors treasury) ---
 FORM_UPLOAD_ALLOWED_MIMETYPES = [
@@ -134,7 +141,7 @@ def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id,
     return event_folder_id
 
 
-def _upload_form_file_to_drive(file_obj, event_id, field_name, event_name=None, event_date=None):
+def _upload_form_file_to_drive(file_obj, event_id, _field_name, event_name=None, event_date=None):
     """
     Uploads file for form 'l' field to Drive and returns public link.
     Creates a dedicated folder for the event if event_name is provided.
@@ -290,6 +297,49 @@ def _services_total(selected_services):
     return total
 
 
+def _list_has_space(target_list):
+    if not target_list:
+        return False
+    if target_list.capacity == 0:
+        return True
+    return target_list.subscription_count < target_list.capacity
+
+
+def _get_main_waiting_lists(event, lock=False):
+    lists_qs = event.lists.all()
+    if lock:
+        # Evaluate to acquire row-level locks on all involved lists
+        all_lists = list(lists_qs.select_for_update().order_by('id'))
+        main_list = next((lst for lst in all_lists if lst.is_main_list), None)
+        waiting_list = next((lst for lst in all_lists if lst.is_waiting_list), None)
+        return main_list, waiting_list
+
+    main_list = lists_qs.filter(is_main_list=True).first()
+    waiting_list = lists_qs.filter(is_waiting_list=True).first()
+    return main_list, waiting_list
+
+
+def _is_payment_blocked_by_full_lists(subscription):
+    """
+    True when subscription is outside Main/Waiting and there is no space in both Main and Waiting.
+    Missing waiting list is treated as full.
+    """
+    if not subscription or not subscription.event:
+        return False
+
+    current_list = subscription.list
+    if current_list and (current_list.is_main_list or current_list.is_waiting_list):
+        return False
+
+    with transaction.atomic():
+        main_list, waiting_list = _get_main_waiting_lists(subscription.event, lock=True)
+        if not main_list:
+            return False
+        main_full = not _list_has_space(main_list)
+        waiting_full = not _list_has_space(waiting_list) if waiting_list else True
+    return main_full and waiting_full
+
+
 # --- Helper to auto-move from any non-ML/WL to ML/WL after payment ---
 def attempt_move_from_form_list(subscription):
     """
@@ -326,22 +376,14 @@ def attempt_move_from_form_list(subscription):
         if not paid_flag:
             return {'status': 'stayed', 'reason': 'not_paid'}
 
-        lists_qs = event.lists.all()
-        main_list = lists_qs.filter(is_main_list=True).first()
-        waiting_list = lists_qs.filter(is_waiting_list=True).first()
+        with transaction.atomic():
+            main_list, waiting_list = _get_main_waiting_lists(event, lock=True)
 
-        def has_space(target):
-            if not target:
-                return False
-            if target.capacity == 0:
-                return True
-            return target.subscriptions.count() < target.capacity
-
-        for target in [main_list, waiting_list]:
-            if has_space(target):
-                subscription.list = target
-                subscription.save(update_fields=['list'])
-                return {'status': 'moved', 'list': target.name}
+            for target in [main_list, waiting_list]:
+                if _list_has_space(target):
+                    subscription.list = target
+                    subscription.save(update_fields=['list'])
+                    return {'status': 'moved', 'list': target.name}
 
         return {'status': 'stayed', 'reason': 'no_capacity'}
     except Exception as e:
@@ -358,7 +400,7 @@ def get_action_permissions(request, action, default_perm=None):
     """
     # Define permissions per action
     perms_map = {
-        'event_detail_GET': 'events.view_event',
+        'event_detail_GET': PERM_VIEW_EVENT,
         'event_detail_PATCH': 'events.change_event',
         'event_detail_DELETE': 'events.delete_event',
         'subscription_detail_GET': 'events.view_subscription',
@@ -367,11 +409,11 @@ def get_action_permissions(request, action, default_perm=None):
         'event_creation_POST': 'events.add_event',
         'subscription_create_POST': 'events.add_subscription',
         'move_subscriptions_POST': 'events.change_subscription',
-        'events_list_GET': 'events.view_event',
+        'events_list_GET': PERM_VIEW_EVENT,
         'generate_liberatorie_pdf_POST': None,  # Special case: Board only (handled below)
         'printable_liberatorie_GET': None,  # Special case: Board only (handled below)
         'link_event_to_lists_POST': 'events.change_event',
-        'available_events_for_sharing_GET': 'events.view_event',
+        'available_events_for_sharing_GET': PERM_VIEW_EVENT,
     }
     
     # Special case: allow Board group for liberatorie actions
@@ -431,7 +473,7 @@ def _send_email(subject, html_content, to_email):
         return False
 
 
-def _send_form_subscription_email(subscription, assigned_label, online_payment_required, payment_required):
+def _send_form_subscription_email(subscription, assigned_label, online_payment_required, payment_required, capacity_blocked=False):
     # Only for form-created subscriptions; send once
     if not getattr(subscription, 'created_by_form', False):
         return
@@ -443,7 +485,9 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
         return
 
     event = subscription.event
-    waiting = 'wait' in (assigned_label or '').lower()
+    assigned_label_lower = (assigned_label or '').lower()
+    waiting = 'wait' in assigned_label_lower
+    main_available = 'main' in assigned_label_lower
     notify_lists = getattr(event, 'notify_list', True)
     subject = f"{event.name} - Subscription received"
     html_parts = [
@@ -451,7 +495,9 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
         "<p>We received your subscription!</p>",
     ]
 
-    if payment_required:
+    if capacity_blocked:
+        html_parts.append("<p style='color:#b00020'>All spots are currently sold out, so we cannot accept payment at the moment. Please wait for a notification from the ESN team in case new spots open up.</p>")
+    elif payment_required:
         if online_payment_required:
             base = settings.SCHEME_HOST
             pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
@@ -460,7 +506,7 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
             if notify_lists:
                 if waiting:
                     html_parts.append("<p style='color:#b06500'>Spots are only available in the Waiting List at the moment.</p>")
-                else:
+                elif main_available:
                     html_parts.append("<p style='color:#0a5db3'>Spots are available in the Main List at the moment.</p>")
             html_parts.append(
                 "<p>Use the link below to complete your payment:<br/>"
@@ -2049,11 +2095,28 @@ def event_form_submit(request, event_id):
             external_whatsapp_number=external_whatsapp_number
         )
 
-        # --- SumUp integration (widget-only) ---
-        payment_error = None
         total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0')) + _services_total(normalized_selected)
 
+        # --- Capacity check (must happen before SumUp checkout creation) ---
+        assigned_label = ''
+        capacity_blocked = False
+
+        # Subscription is always created in Form List and is never rejected here due to Main/Waiting capacity.
+        # Capacity information is used to decide whether to create a live payment checkout.
         if event.allow_online_payment and total_cost > 0:
+            main_list, waiting_list = _get_main_waiting_lists(event)
+
+            if _list_has_space(main_list):
+                assigned_label = "Main List"
+            elif _list_has_space(waiting_list):
+                assigned_label = "Waiting List"
+            else:
+                assigned_label = "Form List"
+                capacity_blocked = True
+
+        # --- SumUp integration (widget-only) — only create checkout when capacity is available ---
+        payment_error = None
+        if event.allow_online_payment and total_cost > 0 and not capacity_blocked:
             try:
                 checkout_id, _ = create_sumup_checkout(sub, total_cost, currency="EUR")
                 sub.sumup_checkout_id = checkout_id
@@ -2063,32 +2126,16 @@ def event_form_submit(request, event_id):
                 print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
                 logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
 
-        online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error)
+        online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error and not capacity_blocked)
         payment_required = online_payment_required or total_cost > 0
 
-        assigned_label = ''
-
-        # Determine available list for only online payments (main, else waiting)
-        if online_payment_required:
-            event_lists = EventList.objects.filter(events=event)
-            main_list = event_lists.filter(is_main_list=True).first()
-            waiting_list = event_lists.filter(is_waiting_list=True).first()
-
-            def has_space(lst):
-                if not lst:
-                    return False
-                if lst.capacity == 0:
-                    return True
-                return lst.subscription_count < lst.capacity
-
-            if has_space(main_list):
-                assigned_label = "Main List"
-            elif has_space(waiting_list):
-                assigned_label = "Waiting List"
-            else:
-                return Response({"error": "No available spot for subscription. All lists are full."}, status=400)
-
-        _send_form_subscription_email(sub, assigned_label, online_payment_required, payment_required)
+        _send_form_subscription_email(
+            sub, 
+            assigned_label, 
+            online_payment_required, 
+            payment_required, 
+            capacity_blocked=capacity_blocked
+        )
 
         return Response({
             "success": True,
@@ -2096,7 +2143,8 @@ def event_form_submit(request, event_id):
             "assigned_list": assigned_label,
             "payment_required": bool(event.allow_online_payment and total_cost > 0 and not payment_error),
             "checkout_id": sub.sumup_checkout_id,
-            "payment_error": payment_error
+            "payment_error": payment_error,
+            "capacity_blocked": capacity_blocked
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -2140,6 +2188,14 @@ def subscription_payment_status(_, pk):
     else:
         overall = 'none'
 
+    payment_required = cost_needed or dep_needed or services_needed
+    payment_blocked = bool(
+        sub.event.allow_online_payment
+        and payment_required
+        and not _subscription_payment_already_registered(sub)
+        and _is_payment_blocked_by_full_lists(sub)
+    )
+
     return Response({
         "subscription_id": sub.pk,
         "overall_status": overall,
@@ -2148,6 +2204,9 @@ def subscription_payment_status(_, pk):
         "services_status": services_status,
         "sumup_checkout_id": sub.sumup_checkout_id,
         "sumup_transaction_id": sub.sumup_transaction_id,
+        "payment_blocked": payment_blocked,
+        "payment_blocked_reason": "sold_out" if payment_blocked else None,
+        "payment_blocked_message": PAYMENT_SOLD_OUT_MESSAGE if payment_blocked else "",
     }, status=200)
 
 
@@ -2162,6 +2221,14 @@ def subscription_process_payment(request, pk):
     except Subscription.DoesNotExist:
         return Response({"error": "Subscription not found"}, status=404)
 
+    event = sub.event
+    has_payable_amount = bool(
+        Decimal(event.cost or 0) > 0
+        or Decimal(event.deposit or 0) > 0
+        or _services_total(sub.selected_services or []) > 0
+    )
+
+    # Parse token from request before entering the DB transaction (no DB access here).
     payload = request.data or {}
     widget_payload = payload.get('widget_payload') or {}
 
@@ -2179,16 +2246,47 @@ def subscription_process_payment(request, pk):
         candidates.append(card_obj.get('token') or card_obj.get('id'))
     token = next((c for c in candidates if isinstance(c, str) and c.strip()), None)
 
-    # Proceed even if token is None
-    status_flag, remote = _process_sumup_checkout(sub, token)
+    with transaction.atomic():
+        # Re-fetch the subscription under a row-level lock so concurrent requests
+        # serialize here and the capacity re-check below is race-free.
+        sub = Subscription.objects.select_related('event').select_for_update().get(pk=pk)
+        event = sub.event
 
-    if status_flag == 'PAID':
-        _ensure_sumup_transactions(sub)
+        should_block_payment = bool(
+            event.allow_online_payment
+            and has_payable_amount
+            and not _subscription_payment_already_registered(sub)
+            and _is_payment_blocked_by_full_lists(sub)
+        )
+        if should_block_payment:
+            # Double check if the sumup checkout is actually already completed before blocking
+            status_flag, remote = _process_sumup_checkout(sub, None)
+            if status_flag == 'PAID':
+                _ensure_sumup_transactions(sub)
+                return Response(
+                    {"status": status_flag, **remote},
+                    status=200
+                )
 
-    return Response(
-        {"status": status_flag, **remote},
-        status=200 if status_flag not in ['ERROR'] else 500
-    )
+            return Response(
+                {
+                    "status": "BLOCKED",
+                    "error": "sold_out",
+                    "message": PAYMENT_SOLD_OUT_MESSAGE,
+                },
+                status=409,
+            )
+
+        # Proceed even if token is None
+        status_flag, remote = _process_sumup_checkout(sub, token)
+
+        if status_flag == 'PAID':
+            _ensure_sumup_transactions(sub)
+
+        return Response(
+            {"status": status_flag, **remote},
+            status=200 if status_flag not in ['ERROR'] else 500
+        )
 
 
 @api_view(["POST"])

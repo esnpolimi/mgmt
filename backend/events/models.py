@@ -149,7 +149,6 @@ def validate_selected_services(event_services, selected_services):
             svc = by_name.get(name)
         if not svc:
             errors.append(f"Unknown service for selection at index {idx}")
-            continue
     return errors
 
 

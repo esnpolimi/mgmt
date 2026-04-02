@@ -136,7 +136,7 @@ class AccountTests(TreasuryBaseTestCase):
 			"name": "New Account",
 		})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_account_detail_patch_status_only_allowed_for_casse_manager(self):
 		"""Status-only changes should be allowed for casse managers."""
@@ -165,7 +165,7 @@ class AccountTests(TreasuryBaseTestCase):
 			"name": "Updated",
 		})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_account_detail_get_masks_balance_for_non_viewers(self):
 		"""Balance should be masked for non-allowed users (e.g., Aspiranti)."""
@@ -274,7 +274,7 @@ class ESNcardTests(TreasuryBaseTestCase):
 
 		response = self.client.patch(f"/backend/esncard/{card.pk}/", {"number": "ESN-00000"})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_esncard_detail_patch_success(self):
 		"""ESNcard update should work with permission."""
@@ -291,6 +291,202 @@ class ESNcardTests(TreasuryBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		card.refresh_from_db()
 		self.assertEqual(card.number, "ESN-00000")
+
+	def test_esncard_detail_delete_requires_board(self):
+		"""ESNcard revoke must be restricted to Board members."""
+		profile = _create_profile("editor@esnpolimi.it")
+		user = _create_user(profile)
+		self.authenticate(user)
+
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-001")
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 403)
+		self.assertTrue(ESNcard.objects.filter(pk=card.pk).exists())
+
+	def test_esncard_detail_delete_success_creates_refund_and_reverts_balance(self):
+		"""Revoking a card should keep emission tx and create a refund tx restoring balance."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		account = _create_account("Main", user=user, balance="0.00")
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-002")
+		tx = Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.ESNCARD,
+			esncard=card,
+			amount=Decimal("10.00"),
+			description="Emissione ESNcard test",
+		)
+
+		account.refresh_from_db()
+		self.assertEqual(account.balance, Decimal("10.00"))
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertFalse(ESNcard.objects.filter(pk=card.pk).exists())
+		self.assertTrue(Transaction.objects.filter(pk=tx.pk).exists())
+
+		refund_tx = Transaction.objects.filter(
+			type=Transaction.TransactionType.RIMBORSO_ESNCARD,
+			account=account,
+		).first()
+		self.assertIsNotNone(refund_tx)
+		self.assertEqual(refund_tx.amount, Decimal("-10.00"))
+		self.assertIn("ESN-DEL-002", refund_tx.description)
+		self.assertEqual(response.data.get("original_transaction_id"), tx.pk)
+		self.assertEqual(response.data.get("refund_transaction_id"), refund_tx.pk)
+
+		account.refresh_from_db()
+		self.assertEqual(account.balance, Decimal("0.00"))
+
+	def test_esncard_detail_delete_success_without_linked_emission(self):
+		"""Revoking should still work when no linked ESNcard emission tx is present."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-003")
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertFalse(ESNcard.objects.filter(pk=card.pk).exists())
+		self.assertIsNone(response.data.get("original_transaction_id"))
+		self.assertIsNone(response.data.get("refund_transaction_id"))
+
+	def test_esncard_detail_delete_rejects_insufficient_balance_for_refund(self):
+		"""Revoking should fail if account balance is insufficient for ESNcard refund."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		account = _create_account("Main", user=user, balance="0.00")
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-006")
+		emission_tx = Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.ESNCARD,
+			esncard=card,
+			amount=Decimal("10.00"),
+			description="Emissione ESNcard test",
+		)
+		Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.WITHDRAWAL,
+			amount=Decimal("-10.00"),
+			description="Prelievo test",
+		)
+
+		account.refresh_from_db()
+		self.assertEqual(account.balance, Decimal("0.00"))
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 409)
+		self.assertTrue(ESNcard.objects.filter(pk=card.pk).exists())
+		self.assertTrue(Transaction.objects.filter(pk=emission_tx.pk).exists())
+		self.assertFalse(Transaction.objects.filter(type=Transaction.TransactionType.RIMBORSO_ESNCARD).exists())
+
+	def test_esncard_detail_delete_rejects_closed_account_for_refund(self):
+		"""Revoking should fail if emission account is closed before refund."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		account = _create_account("Main", user=user, balance="0.00")
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-007")
+		emission_tx = Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.ESNCARD,
+			esncard=card,
+			amount=Decimal("10.00"),
+			description="Emissione ESNcard test",
+		)
+		account.status = Account.Status.closed
+		account.save(update_fields=["status"])
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 409)
+		self.assertTrue(ESNcard.objects.filter(pk=card.pk).exists())
+		self.assertTrue(Transaction.objects.filter(pk=emission_tx.pk).exists())
+		self.assertFalse(Transaction.objects.filter(type=Transaction.TransactionType.RIMBORSO_ESNCARD).exists())
+
+	def test_esncard_detail_delete_rejects_multiple_linked_emissions(self):
+		"""Revoking should fail if more than one ESNcard emission tx is linked."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		account = _create_account("Main", user=user, balance="0.00")
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-004")
+		Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.ESNCARD,
+			esncard=card,
+			amount=Decimal("10.00"),
+			description="Emissione ESNcard 1",
+		)
+		Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.ESNCARD,
+			esncard=card,
+			amount=Decimal("10.00"),
+			description="Emissione ESNcard 2",
+		)
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 409)
+		self.assertTrue(ESNcard.objects.filter(pk=card.pk).exists())
+		self.assertEqual(Transaction.objects.filter(esncard=card, type=Transaction.TransactionType.ESNCARD).count(), 2)
+
+	def test_esncard_detail_delete_rejects_unexpected_transaction_types(self):
+		"""Revoking should fail if the card is linked to non-ESNcard transaction types."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		account = _create_account("Main", user=user, balance="0.00")
+		card_owner = _create_profile("owner@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=card_owner, number="ESN-DEL-005")
+
+		tx = Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.DEPOSIT,
+			amount=Decimal("10.00"),
+			description="Deposito test",
+		)
+		# Simulate legacy/corrupted data by linking the ESNcard post-save.
+		Transaction.objects.filter(pk=tx.pk).update(esncard=card)
+
+		response = self.client.delete(f"/backend/esncard/{card.pk}/")
+
+		self.assertEqual(response.status_code, 409)
+		self.assertTrue(ESNcard.objects.filter(pk=card.pk).exists())
+		self.assertTrue(Transaction.objects.filter(pk=tx.pk).exists())
 
 
 class TransactionTests(TreasuryBaseTestCase):
@@ -310,7 +506,7 @@ class TransactionTests(TreasuryBaseTestCase):
 			"description": "Test",
 		}, format="json")
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_transaction_add_success(self):
 		"""Adding transaction should update account balance."""
@@ -375,7 +571,7 @@ class TransactionTests(TreasuryBaseTestCase):
 
 		response = self.client.patch(f"/backend/transaction/{tx.pk}/", {"description": "Updated"})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_transaction_detail_delete_only_allowed_types(self):
 		"""Deleting non-refund transactions should be blocked."""
@@ -584,7 +780,7 @@ class ReimbursementRequestTests(TreasuryBaseTestCase):
 
 		response = self.client.patch(f"/backend/reimbursement_request/{req.pk}/", {"description": "Updated"})
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_reimbursement_request_delete_requires_board(self):
 		"""DELETE should be restricted to Board or delete permission."""
@@ -601,7 +797,7 @@ class ReimbursementRequestTests(TreasuryBaseTestCase):
 
 		response = self.client.delete(f"/backend/reimbursement_request/{req.pk}/")
 
-		self.assertEqual(response.status_code, 401)
+		self.assertEqual(response.status_code, 403)
 
 	def test_reimbursement_request_patch_creates_transaction(self):
 		"""Board with change permission can assign account and create reimbursement tx."""
@@ -1030,6 +1226,38 @@ class ReimbursementsTests(TreasuryBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertFalse(any(r["id"] == sub.pk for r in response.data))
+
+	def test_reimbursable_deposits_supports_external_subscription(self):
+		"""External subscriptions (without profile) should not crash endpoint."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		self.authenticate(user)
+
+		event = _create_event(cost=10, deposit=5)
+		list_main = _create_event_list(event)
+		account = _create_account("Main", user=user)
+		sub = Subscription.objects.create(
+			profile=None,
+			external_name="John External",
+			event=event,
+			list=list_main,
+		)
+		Transaction.objects.create(
+			subscription=sub,
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.CAUZIONE,
+			amount=5,
+			description="Cauzione"
+		)
+
+		response = self.client.get(f"/backend/reimbursable_deposits/?event={event.pk}&list={list_main.pk}")
+
+		self.assertEqual(response.status_code, 200)
+		entry = next((r for r in response.data if r["id"] == sub.pk), None)
+		self.assertIsNotNone(entry)
+		self.assertIsNone(entry["profile_id"])
+		self.assertEqual(entry["profile_name"], "John External")
 
 
 class TransactionsExportTests(TreasuryBaseTestCase):
@@ -1531,7 +1759,7 @@ class ESNcardComplexEdgeCaseTests(TreasuryBaseTestCase):
 		profile1 = _create_profile("owner1@uni.it", is_esner=False)
 		profile2 = _create_profile("owner2@uni.it", is_esner=False)
 
-		card1 = ESNcard.objects.create(profile=profile1, number="ESN-FIRST")
+		ESNcard.objects.create(profile=profile1, number="ESN-FIRST")
 		card2 = ESNcard.objects.create(profile=profile2, number="ESN-SECOND")
 
 		response = self.client.patch(f"/backend/esncard/{card2.pk}/", {
@@ -1744,7 +1972,7 @@ class DepositReimbursementEdgeCaseTests(TreasuryBaseTestCase):
 		self.assertIn(response1.status_code, [200, 201])
 
 		# Second reimbursement (should fail)
-		response2 = self.client.post("/backend/reimburse_deposits/", {
+		self.client.post("/backend/reimburse_deposits/", {
 			"event": event.pk,
 			"subscription_ids": [sub.pk],
 			"account": account.pk,
@@ -1806,7 +2034,7 @@ class AccountVisibilityEdgeCaseTests(TreasuryBaseTestCase):
 		board_user = _create_user(board_profile)
 		board_user.groups.add(self.group_board)
 
-		account = _create_account("Public", user=board_user)
+		_create_account("Public", user=board_user)
 		# No groups assigned = visible to all
 
 		viewer_profile = _create_profile("aspiranti@esnpolimi.it")

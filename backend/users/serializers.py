@@ -70,11 +70,8 @@ class UserReactSerializer(serializers.ModelSerializer):
         user_permissions = obj.user_permissions.values_list('codename', flat=True)
         group_permissions = obj.groups.values_list('permissions__codename', flat=True)
         permissions = set(user_permissions).union(set(group_permissions))
-        # Virtual permission: manage_content — granted to Board, Attivi, or flagged users
-        if (
-            obj.groups.filter(name__in=['Board', 'Attivi']).exists()
-            or getattr(obj, 'can_manage_content', False)
-        ):
+        # Virtual permission: manage_content — implicit for Board, explicit for flagged users.
+        if obj.groups.filter(name='Board').exists() or getattr(obj, 'can_manage_content', False):
             permissions.add('manage_content')
         return list(permissions)
 
@@ -97,11 +94,7 @@ class UserReactSerializer(serializers.ModelSerializer):
         )
 
     def get_effective_can_manage_content(self, obj):
-        return (
-            obj.can_manage_content
-            or self._is_in(obj, 'Attivi')
-            or self._is_in(obj, 'Board')
-        )
+        return obj.can_manage_content or self._is_in(obj, 'Board')
 
     def get_restricted_accounts(self, obj):
         if self._is_in(obj, 'Board'):

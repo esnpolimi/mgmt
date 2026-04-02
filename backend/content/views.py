@@ -32,6 +32,14 @@ _CSV_HEADERS = [
 _drive_log_lock = threading.Lock()
 
 
+def _can_manage_content(user):
+    """Centralize content management authorization across endpoints."""
+    return (
+        user.groups.filter(name='Board').exists()
+        or getattr(user, 'can_manage_content', False)
+    )
+
+
 def _get_drive_service():
     credentials = service_account.Credentials.from_service_account_file(
         settings.GOOGLE_SERVICE_ACCOUNT_FILE,
@@ -113,7 +121,7 @@ def _append_to_whatsapp_log(data, outcome):
         logger.info(f"WhatsApp CSV log appended for {data['email']} — {outcome}")
         return None
     except Exception as e:
-        logger.exception("Drive CSV logging failed")
+        logger.exception(f"Drive CSV logging failed: {e}")
         return "Drive logging failed"
 
 
@@ -121,7 +129,7 @@ class IsContentManagerOrReadOnly(permissions.BasePermission):
     """
     Custom permission for content management.
     - GET: All authenticated users
-    - POST/PUT/PATCH/DELETE: Board, Attivi, or users with can_manage_content flag
+    - POST/PUT/PATCH/DELETE: Board users or users with explicit content-management flag
     """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
@@ -131,15 +139,7 @@ class IsContentManagerOrReadOnly(permissions.BasePermission):
         if not user or not user.is_authenticated:
             return False
         
-        # Board and Attivi always have permission
-        if user.groups.filter(name__in=['Board', 'Attivi']).exists():
-            return True
-        
-        # Users with content/finance management flags
-        if getattr(user, 'can_manage_content', False) or getattr(user, 'can_manage_casse', False):
-            return True
-        
-        return False
+        return _can_manage_content(user)
 
 
 class ContentSectionViewSet(viewsets.ModelViewSet):
@@ -189,7 +189,7 @@ class ContentLinkViewSet(viewsets.ModelViewSet):
 def whatsapp_config(request):
     """
     GET  /backend/content/whatsapp-config/  → returns the current WhatsApp link.
-    PATCH /backend/content/whatsapp-config/ → updates the link (board/attivi only).
+    PATCH /backend/content/whatsapp-config/ → updates the link (authorized managers).
     """
     instance = WhatsAppConfig.get_instance()
 
@@ -197,12 +197,9 @@ def whatsapp_config(request):
         serializer = WhatsAppConfigSerializer(instance)
         return Response(serializer.data)
 
-    # PATCH – board/attivi or content managers can edit
+    # PATCH - authorized content managers can edit
     user = request.user
-    can_edit = (
-        user.groups.filter(name__in=['Board', 'Attivi']).exists()
-        or getattr(user, 'can_manage_content', False)
-    )
+    can_edit = _can_manage_content(user)
     if not can_edit:
         return Response({'detail': 'Permission denied.'}, status=drf_status.HTTP_403_FORBIDDEN)
 

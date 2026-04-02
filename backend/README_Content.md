@@ -1,136 +1,138 @@
-# Sistema di Gestione Contenuti Dinamici
+# Dynamic Content Management System
 
-## Descrizione
+## Description
 
-Questo modulo permette di gestire dinamicamente i contenuti della home page attraverso un'interfaccia di amministrazione. Il sistema è progettato per gestire due categorie fisse di contenuti: **LINK UTILI** e **WIKI E TUTORIAL**.
+This module allows dynamic management of homepage content through an administration interface. The system is designed around two fixed content categories: **USEFUL LINKS** and **WIKI AND TUTORIALS**.
 
-## Caratteristiche Principali
+## Main Features
 
-- **Due categorie predefinite**: LINK UTILI e WIKI E TUTORIAL
-- **Campi obbligatori per ogni link**: Titolo, Descrizione, URL e Colore
-- **Gestione completa dal pannello admin**: Solo membri Board possono modificare
-- **Tutti i link vengono letti dal database**: Nessun contenuto hardcoded
+- **Two predefined categories**: USEFUL LINKS and WIKI AND TUTORIALS
+- **Mandatory fields for each link**: Title, Description, URL, and Color
+- **Full admin-panel management**: Board members and users with can_manage_content=True can modify content
+- **All links are loaded from the database**: no hardcoded content
 
-## Struttura
+## Structure
 
 ### Backend (`backend/content/`)
 
-- **models.py**: Definisce i modelli `ContentSection` e `ContentLink`
-  - `ContentSection`: Sezione di contenuti (es: "LINK UTILI")
-  - `ContentLink`: Singolo link all'interno di una sezione
+- **models.py**: defines `ContentSection` and `ContentLink`
+  - `ContentSection`: content section (for example "USEFUL LINKS")
+  - `ContentLink`: single link inside a section
 
-- **serializers.py**: Serializer REST per le API
-- **views.py**: ViewSet con permessi (solo Board può modificare)
-- **urls.py**: Route API per gestione contenuti
-- **admin.py**: Interfaccia Django Admin
+- **serializers.py**: REST serializers for API payloads
+- **views.py**: ViewSets with permission checks (Board members or users with can_manage_content=True can modify)
+- **urls.py**: API routes for content management
+- **admin.py**: Django Admin integration
 
 ### Frontend
 
-- **Pages/ContentManager.jsx**: Pagina di amministrazione per gestire sezioni e link
-- **Pages/Home.jsx**: Pagina home aggiornata per leggere contenuti dinamici
-- **Components/ProtectedRoute.jsx**: Aggiornato per supportare `requiredGroup`
+- **Pages/ContentManager.jsx**: admin page for sections and links
+- **Pages/Home.jsx**: homepage rendering dynamic content
+- **Components/ProtectedRoute.jsx**: supports `requiredGroup`
 
 ## API Endpoints
 
+```text
+GET    /backend/content/sections/                  - list sections
+GET    /backend/content/sections/active_sections/  - list active sections with links
+POST   /backend/content/sections/                  - create section (Board or users with can_manage_content)
+PATCH  /backend/content/sections/{id}/             - update section (Board or users with can_manage_content)
+DELETE /backend/content/sections/{id}/             - delete section (Board or users with can_manage_content)
+
+GET    /backend/content/links/                     - list links
+POST   /backend/content/links/                     - create link (Board or users with can_manage_content)
+PATCH  /backend/content/links/{id}/                - update link (Board or users with can_manage_content)
+DELETE /backend/content/links/{id}/                - delete link (Board or users with can_manage_content)
 ```
-GET    /backend/content/sections/              - Lista sezioni
-GET    /backend/content/sections/active_sections/  - Sezioni attive con link
-POST   /backend/content/sections/              - Crea sezione (solo Board)
-PATCH  /backend/content/sections/{id}/         - Modifica sezione (solo Board)
-DELETE /backend/content/sections/{id}/         - Elimina sezione (solo Board)
 
-GET    /backend/content/links/                 - Lista link
-POST   /backend/content/links/                 - Crea link (solo Board)
-PATCH  /backend/content/links/{id}/            - Modifica link (solo Board)
-DELETE /backend/content/links/{id}/            - Elimina link (solo Board)
-```
+## Permissions
 
-## Permessi
+- **Read**: all authenticated users
+- **Write**: Board members and users with can_manage_content=True
 
-- **Lettura**: Tutti gli utenti autenticati
-- **Modifica**: Solo membri del Board
+## Setup and Migration
 
-## Setup e Migrazione
-
-1. **Eseguire le migrazioni**:
+1. **Run migrations**:
 ```bash
 cd backend
 python manage.py migrate
 ```
 
-2. **Popolare il database con i dati iniziali**:
+2. **Populate initial content data**:
 ```bash
 python manage.py populate_content
 ```
 
-Questo comando creerà automaticamente le due sezioni (LINK UTILI e WIKI E TUTORIAL) e popolerà i link iniziali.
+This command automatically creates the two fixed sections (USEFUL LINKS and WIKI AND TUTORIALS) and populates initial links.
 
-## Modelli
+## Models
 
 ### ContentSection
-- `title`: Categoria (LINK_UTILI o WIKI_TUTORIAL) - **Campo unico**
-- `order`: Ordine di visualizzazione
-- `is_active`: Flag per attivare/disattivare
-- `created_by`: Utente creatore
-- `created_at`/`updated_at`: Timestamp
+- `title`: category (`LINK_UTILI` or `WIKI_TUTORIAL`) - **unique field**
+- `order`: display order
+- `is_active`: active/inactive flag
+- `created_by`: creator user
+- `created_at`/`updated_at`: timestamps
 
-**Nota**: Le sezioni sono fisse, solo due categorie possibili.
+Note: sections are fixed to two categories by design.
 
 ### ContentLink
-- `section`: ForeignKey a ContentSection
-- `name`: Titolo del link - **Obbligatorio**
-- `description`: Descrizione del link - **Obbligatorio**
-- `url`: URL del link - **Obbligatorio**
-- `color`: Colore esadecimale (es: #1976d2) - **Obbligatorio**
-- `order`: Ordine all'interno della sezione
-- `is_active`: Flag per attivare/disattivare
-- `created_by`: Utente creatore
-- `created_at`/`updated_at`: Timestamp
+- `section`: foreign key to `ContentSection`
+- `name`: link title - **required**
+- `description`: link description - **required**
+- `url`: link URL - **required**
+- `color`: hexadecimal color (for example `#1976d2`) - **required**
+- `order`: order inside the section
+- `is_active`: active/inactive flag
+- `created_by`: creator user
+- `created_at`/`updated_at`: timestamps
 
-**Tutti i campi name, description, url e color sono obbligatori.**
+All `name`, `description`, `url`, and `color` fields are mandatory.
 
-## Azioni Speciali
+## Special Actions
 
-~~Per link che devono eseguire azioni custom (come aprire modali), impostare il campo `action_type`~~
+~~For links that should trigger custom actions (for example opening a modal), set `action_type`.~~
 
-**Rimosso**: Il campo `action_type` è stato rimosso. Tutti i link ora sono link standard che aprono URL.
+**Removed**: `action_type` has been removed. All links are standard URL links.
 
-## Fallback
+## Fallback Behavior
 
-~~Se il caricamento dei contenuti dinamici fallisce, la home page usa automaticamente i contenuti statici hardcoded come fallback.~~
+~~If dynamic content loading fails, the homepage automatically uses static hardcoded fallback content.~~
 
-**Aggiornato**: Tutti i contenuti ora vengono caricati dal database. Non ci sono più contenuti statici di fallback. In caso di errore, viene mostrato un messaggio di errore all'utente.
+**Updated**: all content is loaded from the database. Static fallback content is no longer used. If loading fails, the user sees an error message.
 
-## Accesso alla Pagina di Gestione
+## Access to Content Manager
 
-La pagina di gestione contenuti è accessibile solo ai membri del Board tramite:
-- Menu laterale: "Gestione Contenuti"
-- URL diretto: `/content-manager`
+The content management page is available to Board members and users with the Content Manager role (grantable by Board members via the Profiles page) via:
+- sidebar item: "Content Management"
+- direct URL: `/content-manager`
 
-## Funzionalità della Pagina di Gestione
+Access is controlled by the `can_manage_content=True` permission.
 
-### Sezioni
-- **Due sezioni fisse**: LINK UTILI e WIKI E TUTORIAL
-- Solo visualizzazione, non si possono creare/eliminare sezioni
-- Ogni sezione mostra il numero di link contenuti
+## Content Manager Capabilities
 
-### Link
-- Aggiunta link a una sezione
-- **Campi obbligatori**:
-  - **Titolo**: Nome del link
-  - **Descrizione**: Testo descrittivo del link
-  - **Link/URL**: URL completo (es: https://...)
-  - **Colore**: Colore in formato esadecimale (es: #1976d2)
-- Impostazione ordine di visualizzazione
-- Attivazione/disattivazione
-- Eliminazione
+### Sections
+- **Two fixed sections**: USEFUL LINKS and WIKI AND TUTORIALS
+- display-only for sections (no create/delete in UI)
+- each section shows the current number of links
 
-### Validazione
-La pagina di gestione valida che tutti i campi obbligatori siano compilati prima di salvare.
+### Links
+- add a link to a section
+- **required fields**:
+  - **Title**: link name
+  - **Description**: descriptive text
+  - **Link/URL**: full URL (for example `https://...`)
+  - **Color**: hexadecimal color (for example `#1976d2`)
+- set display order
+- activate/deactivate
+- delete
 
-## Note Tecniche
+### Validation
+The page validates required fields before save.
 
-- I contenuti vengono caricati all'apertura della home page
-- La cache non è implementata (ogni visita alla home carica i dati freschi)
-- I contenuti inattivi non vengono mostrati agli utenti
-- L'ordine dei contenuti è gestibile tramite il campo `order`
+## Technical Notes
+
+- Content is loaded whenever the homepage is opened.
+- Caching is currently not implemented (fresh data on each homepage visit).
+- Inactive content is not shown to users.
+- Display ordering is controlled by the `order` field.
