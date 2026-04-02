@@ -23,6 +23,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 from rest_framework.decorators import api_view, permission_classes
+
+PERM_VIEW_EVENT = 'events.view_event'
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -47,8 +49,8 @@ from treasury.models import Transaction, Account
 logger = logging.getLogger(__name__)
 
 PAYMENT_SOLD_OUT_MESSAGE = (
-    "All spots are currently sold out. "
-    "Please wait for a notification from the ESN team."
+    "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. "
+    "Thank you for filling out the form. Please wait for any notifications from the ESN team."
 )
 
 # --- Allowed file types for 'link' form fields (mirrors treasury) ---
@@ -139,7 +141,7 @@ def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id,
     return event_folder_id
 
 
-def _upload_form_file_to_drive(file_obj, event_id, field_name, event_name=None, event_date=None):
+def _upload_form_file_to_drive(file_obj, event_id, _field_name, event_name=None, event_date=None):
     """
     Uploads file for form 'l' field to Drive and returns public link.
     Creates a dedicated folder for the event if event_name is provided.
@@ -303,8 +305,15 @@ def _list_has_space(target_list):
     return target_list.subscription_count < target_list.capacity
 
 
-def _get_main_waiting_lists(event):
+def _get_main_waiting_lists(event, lock=False):
     lists_qs = event.lists.all()
+    if lock:
+        # Evaluate to acquire row-level locks on all involved lists
+        all_lists = list(lists_qs.select_for_update().order_by('id'))
+        main_list = next((l for l in all_lists if l.is_main_list), None)
+        waiting_list = next((l for l in all_lists if l.is_waiting_list), None)
+        return main_list, waiting_list
+
     main_list = lists_qs.filter(is_main_list=True).first()
     waiting_list = lists_qs.filter(is_waiting_list=True).first()
     return main_list, waiting_list
@@ -322,9 +331,12 @@ def _is_payment_blocked_by_full_lists(subscription):
     if current_list and (current_list.is_main_list or current_list.is_waiting_list):
         return False
 
-    main_list, waiting_list = _get_main_waiting_lists(subscription.event)
-    main_full = not _list_has_space(main_list)
-    waiting_full = not _list_has_space(waiting_list) if waiting_list else True
+    with transaction.atomic():
+        main_list, waiting_list = _get_main_waiting_lists(subscription.event, lock=True)
+        if not main_list:
+            return False
+        main_full = not _list_has_space(main_list)
+        waiting_full = not _list_has_space(waiting_list) if waiting_list else True
     return main_full and waiting_full
 
 
@@ -364,13 +376,14 @@ def attempt_move_from_form_list(subscription):
         if not paid_flag:
             return {'status': 'stayed', 'reason': 'not_paid'}
 
-        main_list, waiting_list = _get_main_waiting_lists(event)
+        with transaction.atomic():
+            main_list, waiting_list = _get_main_waiting_lists(event, lock=True)
 
-        for target in [main_list, waiting_list]:
-            if _list_has_space(target):
-                subscription.list = target
-                subscription.save(update_fields=['list'])
-                return {'status': 'moved', 'list': target.name}
+            for target in [main_list, waiting_list]:
+                if _list_has_space(target):
+                    subscription.list = target
+                    subscription.save(update_fields=['list'])
+                    return {'status': 'moved', 'list': target.name}
 
         return {'status': 'stayed', 'reason': 'no_capacity'}
     except Exception as e:
@@ -387,7 +400,7 @@ def get_action_permissions(request, action, default_perm=None):
     """
     # Define permissions per action
     perms_map = {
-        'event_detail_GET': 'events.view_event',
+        'event_detail_GET': PERM_VIEW_EVENT,
         'event_detail_PATCH': 'events.change_event',
         'event_detail_DELETE': 'events.delete_event',
         'subscription_detail_GET': 'events.view_subscription',
@@ -396,11 +409,11 @@ def get_action_permissions(request, action, default_perm=None):
         'event_creation_POST': 'events.add_event',
         'subscription_create_POST': 'events.add_subscription',
         'move_subscriptions_POST': 'events.change_subscription',
-        'events_list_GET': 'events.view_event',
+        'events_list_GET': PERM_VIEW_EVENT,
         'generate_liberatorie_pdf_POST': None,  # Special case: Board only (handled below)
         'printable_liberatorie_GET': None,  # Special case: Board only (handled below)
         'link_event_to_lists_POST': 'events.change_event',
-        'available_events_for_sharing_GET': 'events.view_event',
+        'available_events_for_sharing_GET': PERM_VIEW_EVENT,
     }
     
     # Special case: allow Board group for liberatorie actions
@@ -460,7 +473,7 @@ def _send_email(subject, html_content, to_email):
         return False
 
 
-def _send_form_subscription_email(subscription, assigned_label, online_payment_required, payment_required):
+def _send_form_subscription_email(subscription, assigned_label, online_payment_required, payment_required, capacity_blocked=False):
     # Only for form-created subscriptions; send once
     if not getattr(subscription, 'created_by_form', False):
         return
@@ -482,7 +495,9 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
         "<p>We received your subscription!</p>",
     ]
 
-    if payment_required:
+    if capacity_blocked:
+        html_parts.append("<p style='color:#b00020'>All spots are currently sold out, so we cannot accept payment at the moment. Please wait for a notification from the ESN team in case new spots open up.</p>")
+    elif payment_required:
         if online_payment_required:
             base = settings.SCHEME_HOST
             pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
@@ -2098,6 +2113,7 @@ def event_form_submit(request, event_id):
         payment_required = online_payment_required or total_cost > 0
 
         assigned_label = ''
+        capacity_blocked = False
 
         # Compute availability hint for payment email/UI.
         # Subscription is always created in Form List and is never rejected here due to Main/Waiting capacity.
@@ -2110,8 +2126,15 @@ def event_form_submit(request, event_id):
                 assigned_label = "Waiting List"
             else:
                 assigned_label = "Form List"
+                capacity_blocked = True
 
-        _send_form_subscription_email(sub, assigned_label, online_payment_required, payment_required)
+        _send_form_subscription_email(
+            sub, 
+            assigned_label, 
+            online_payment_required, 
+            payment_required, 
+            capacity_blocked=capacity_blocked
+        )
 
         return Response({
             "success": True,
@@ -2119,7 +2142,8 @@ def event_form_submit(request, event_id):
             "assigned_list": assigned_label,
             "payment_required": bool(event.allow_online_payment and total_cost > 0 and not payment_error),
             "checkout_id": sub.sumup_checkout_id,
-            "payment_error": payment_error
+            "payment_error": payment_error,
+            "capacity_blocked": capacity_blocked
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -2209,6 +2233,15 @@ def subscription_process_payment(request, pk):
         and _is_payment_blocked_by_full_lists(sub)
     )
     if should_block_payment:
+        # Double check if the sumup checkout is actually already completed before blocking
+        status_flag, remote = _process_sumup_checkout(sub, None)
+        if status_flag == 'PAID':
+            _ensure_sumup_transactions(sub)
+            return Response(
+                {"status": status_flag, **remote},
+                status=200
+            )
+        
         return Response(
             {
                 "status": "BLOCKED",

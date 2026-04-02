@@ -16,7 +16,7 @@ const useMaintenanceNotification = (accessToken) => {
             return;
         }
 
-        const apiHost = window.API_HOST || '';
+        const apiHost = globalThis.API_HOST || '';
         const url = `${apiHost}/maintenance/status/`;
 
         let lastNotificationId = null;

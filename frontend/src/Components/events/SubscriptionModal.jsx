@@ -201,7 +201,9 @@ export default function SubscriptionModal({
                 // Fetch profile data to check matricola status
                 fetchCustom("GET", `/profile/${profileId}/`, {
                     onSuccess: (profileData) => {
-                        if (!profileData.is_esner) {
+                        if (profileData.is_esner) {
+                            setMatricolaStatus({ isMissing: false, isExpired: false });
+                        } else {
                             setProfileHasEsncard(Boolean(profileData.latest_esncard));
                             const matricolaMissing = !profileData.matricola_number || !profileData.person_code;
                             const matricolaExpired = profileData.matricola_expiration ? 
@@ -210,8 +212,6 @@ export default function SubscriptionModal({
                                 isMissing: matricolaMissing,
                                 isExpired: matricolaExpired
                             });
-                        } else {
-                            setMatricolaStatus({ isMissing: false, isExpired: false });
                         }
                     },
                     onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup)

@@ -591,9 +591,9 @@ export default memo(function EventListAccordions({
                                         // Check if there's a data-copy-value attribute (for drive links)
                                         const copyValueElement = td.querySelector('[data-copy-value]');
                                         if (copyValueElement) {
-                                            return copyValueElement.getAttribute('data-copy-value');
+                                            return copyValueElement.dataset.copyValue;
                                         }
-                                        return td.innerText.replace(/\s+/g, ' ').trim();
+                                        return td.innerText.replaceAll(/\s+/g, ' ').trim();
                                     })
                                     // Excel-safe transform
                                     .map(toExcelSafe);

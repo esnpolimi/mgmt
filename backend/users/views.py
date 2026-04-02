@@ -49,7 +49,7 @@ def get_action_permissions(action, user):
     return True
 
 
-def userinfo(claims, user):
+def userinfo(_claims, user):
     """Return user info for DokuWiki OIDC"""
     ret = {
         "sub": str(user.id),

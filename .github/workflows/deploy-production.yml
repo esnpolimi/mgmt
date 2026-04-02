@@ -5,12 +5,11 @@ on:
     branches:
       - main  # Si attiva quando pushhi su main (dopo merge da staging)
 
-permissions:
-  contents: write  # Necessario per push di tag e branches
-
 jobs:
   create-release-tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Necessario per push di tag
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
     
@@ -51,6 +50,8 @@ jobs:
 
   deploy-backend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Necessario per push di branches
     needs: create-release-tag
     
     steps:
@@ -87,6 +88,8 @@ jobs:
 
   deploy-frontend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Necessario per push di branches
     needs: create-release-tag
     
     steps:

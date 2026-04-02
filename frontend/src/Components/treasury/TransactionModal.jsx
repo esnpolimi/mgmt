@@ -13,7 +13,7 @@ import ReceiptFileUpload from '../common/ReceiptFileUpload';
 import {ToggleButton, ToggleButtonGroup} from '@mui/material';
 
 // List of transaction types that can be deleted
-const deletableTranTypes = ['rimborso_esncard', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal'];
+const deletableTranTypes = new Set(['rimborso_esncard', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement', 'deposit', 'withdrawal']);
 
 export default function TransactionModal({open, onClose, transaction}) {
     const [isLoading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ export default function TransactionModal({open, onClose, transaction}) {
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({open: false, action: null, message: ''});
-    const negative_types = ['withdrawal', 'rimborso_esncard', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement'];
+    const negative_types = new Set(['withdrawal', 'rimborso_esncard', 'rimborso_cauzione', 'rimborso_quota', 'reimbursement']);
 
     const [data, setData] = useState({
         executor: null,
@@ -62,7 +62,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                         formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
                     }
                     let amount = transaction.amount || 0;
-                    if (transaction.type && negative_types.includes(transaction.type))
+                    if (transaction.type && negative_types.has(transaction.type))
                         amount = -amount;
                     setData({
                         executor: transaction.executor || null,
@@ -115,7 +115,7 @@ export default function TransactionModal({open, onClose, transaction}) {
         if (!validate()) return;
         // Confirm dialog for account amount change
         let amount = data.amount;
-        if (negative_types.includes(data.type) && parseFloat(amount) > 0)
+        if (negative_types.has(data.type) && Number.parseFloat(amount) > 0)
             amount = -amount;
         const payload = {
             executor: data.executor.id || data.executor.email,
@@ -164,7 +164,7 @@ export default function TransactionModal({open, onClose, transaction}) {
     };
 
     const handleDelete = () => {
-        if (!transaction || !deletableTranTypes.includes(transaction.type)) {
+        if (!transaction || !deletableTranTypes.has(transaction.type)) {
             setPopup({message: 'Transazione non eliminabile', state: 'error', id: Date.now()});
             return;
         }
@@ -367,7 +367,7 @@ export default function TransactionModal({open, onClose, transaction}) {
                                 disabled={submitting || deleting}>
                             {submitting ? <CircularProgress size={24} color="inherit"/> : "Salva Modifiche"}
                         </Button>
-                        {transaction && deletableTranTypes.includes(transaction.type) && (
+                        {transaction && deletableTranTypes.has(transaction.type) && (
                             <Button fullWidth
                                     variant="outlined"
                                     color="error"
