@@ -61,8 +61,10 @@ Main filters:
 | Endpoint | Method | Auth |
 |---|---|---|
 | /profile/initiate-creation/ | POST | public |
-| /api/profile/verify-email/<uid>/<token>/ | GET | public |
+| /api/profile/verify-email/\<uid>/\<token>/ | GET | public |
 | /profile/<pk>/manual-verify-email/ | POST | Board |
+
+> **Note:** The verify-email endpoint uses the `api/` sub-path within the `backend/` prefix, so its full absolute URL is `/backend/api/profile/verify-email/<uid>/<token>/`. All other endpoints in this module resolve directly under `/backend/` (e.g., `/backend/profile/initiate-creation/`).
 
 ### 3.3 Detail and Related Data
 

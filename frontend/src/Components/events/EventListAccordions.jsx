@@ -437,7 +437,7 @@ export default memo(function EventListAccordions({
             }
 
             // Actions column (sticky/pinned left)
-            const hasAnyRefundCategory = hasDeposit || hasQuota || (Array.isArray(data?.services) && data.services.length > 0);
+            const hasAnyRefundCategory = hasDeposit || hasQuota || true;
             const actionsColumn = hasAnyRefundCategory ? {
                 accessorKey: 'actions',
                 header: 'Azioni',
@@ -447,7 +447,7 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const canReimburseQuota = hasQuota && sub.status_quota === 'paid';
-                    const canReimburseServices = sub.status_services === 'paid';
+                    const canReimburseServices = sub.selected_services?.length > 0 && sub.status_services === 'paid';
                     const canReimburseDeposit = hasDeposit && sub.status_cauzione === 'paid';
                     const canReimburseAny = canReimburseQuota || canReimburseServices || canReimburseDeposit;
 

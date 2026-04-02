@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import Group
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 
@@ -104,46 +104,48 @@ class Transaction(BaseEntity):
     def clean(self):
         # Validate fields based on transaction type
         if self.type == self.TransactionType.SUBSCRIPTION and not self.subscription:
-            raise ValueError("Le transazioni di Iscrizione devono avere un'Iscrizione.")
+            raise ValidationError("Le transazioni di Iscrizione devono avere un'Iscrizione.")
         if self.type == self.TransactionType.SERVICE and not self.subscription:
-            raise ValueError("Le transazioni di Servizi devono avere un'Iscrizione.")
+            raise ValidationError("Le transazioni di Servizi devono avere un'Iscrizione.")
         if self.type == self.TransactionType.RIMBORSO_SERVICE and not self.subscription:
-            raise ValueError("Le transazioni di Rimborso Servizi devono avere un'Iscrizione.")
+            raise ValidationError("Le transazioni di Rimborso Servizi devono avere un'Iscrizione.")
         if self.type == self.TransactionType.ESNCARD and not self.esncard:
-            raise ValueError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
+            raise ValidationError("Le transazioni di Emissione ESNcard devono avere una ESNcard.")
         if self.type == self.TransactionType.RIMBORSO_ESNCARD:
             if self.subscription:
-                raise ValueError("Le transazioni di Rimborso ESNcard non devono avere un'Iscrizione.")
+                raise ValidationError("Le transazioni di Rimborso ESNcard non devono avere un'Iscrizione.")
             if self.esncard:
-                raise ValueError("Le transazioni di Rimborso ESNcard non devono avere una ESNcard associata.")
+                raise ValidationError("Le transazioni di Rimborso ESNcard non devono avere una ESNcard associata.")
+            if self.amount is not None and Decimal(str(self.amount)) >= 0:
+                raise ValidationError("Le transazioni di Rimborso ESNcard devono avere un importo negativo.")
         if self.type == self.TransactionType.CAUZIONE:
             if not self.subscription:
-                raise ValueError("Le transazioni di Cauzione devono avere un'Iscrizione.")
+                raise ValidationError("Le transazioni di Cauzione devono avere un'Iscrizione.")
             if self.esncard:
-                raise ValueError("Le transazioni di Cauzione non devono avere una ESNcard.")
+                raise ValidationError("Le transazioni di Cauzione non devono avere una ESNcard.")
         if self.type == self.TransactionType.DEPOSIT:
             if self.subscription or self.esncard:
-                raise ValueError("Le transazioni di Deposito manuale non devono avere un'Iscrizione o una ESNcard.")
+                raise ValidationError("Le transazioni di Deposito manuale non devono avere un'Iscrizione o una ESNcard.")
         if self.type == self.TransactionType.WITHDRAWAL:
             if self.subscription or self.esncard:
-                raise ValueError("Le transazioni di Prelievo non devono avere un'Iscrizione o una ESNcard.")
+                raise ValidationError("Le transazioni di Prelievo non devono avere un'Iscrizione o una ESNcard.")
         if self.account.status == "closed":
             raise PermissionDenied("La cassa è chiusa.")
         if self.event_reference_manual:
             # Only allowed for manual deposit / withdrawal
             if self.type not in (self.TransactionType.DEPOSIT, self.TransactionType.WITHDRAWAL):
-                raise ValueError("event_reference_manual consentito solo per deposit o withdrawal.")
+                raise ValidationError("event_reference_manual consentito solo per deposit o withdrawal.")
             # Must remain a pure manual transaction (no subscription / esncard)
             if self.subscription or self.esncard:
-                raise ValueError("Le transazioni manuali legate a un evento non devono avere iscrizioni o ESNcards associate.")
+                raise ValidationError("Le transazioni manuali legate a un evento non devono avere iscrizioni o ESNcards associate.")
         # Prevent negative balance for all transaction types except manual withdrawals
         if self.type != self.TransactionType.WITHDRAWAL:
             amount = Decimal(str(self.amount))
             balance = Decimal(str(self.account.balance))
             if amount < 0 and abs(amount) > balance:
-                raise ValueError("Il saldo non può andare in negativo.")
+                raise ValidationError("Il saldo non può andare in negativo.")
             if amount + balance < 0:
-                raise ValueError("Il saldo non può andare in negativo.")
+                raise ValidationError("Il saldo non può andare in negativo.")
         super(Transaction, self).clean()
 
     def save(self, *args, **kwargs):

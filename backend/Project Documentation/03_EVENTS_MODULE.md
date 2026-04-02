@@ -56,7 +56,7 @@ Attributes:
 - created_by_form
 - sumup_checkout_id, sumup_transaction_id
 
-Constraint: `unique(profile, event)`.
+Constraint: `unique(profile, event)` — enforced at the database level only for rows where `profile` is non-null (standard SQL `UNIQUE` behaviour treats each `NULL` as distinct, so multiple external subscriptions with `profile=null` on the same event are not blocked by the DB). Deduplication of external subscribers (identified by `external_name`) is enforced at the application level in the subscription creation and move-subscription views.
 
 ## 3. API Contract Summary
 

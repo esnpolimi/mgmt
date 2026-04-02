@@ -160,7 +160,7 @@ Account visibility:
 
 ### 5.4 Event Reimbursements
 
-Depositi:
+Deposits:
 
 1. bulk `subscription_ids` input
 2. original deposit transaction verification
@@ -174,7 +174,7 @@ Fee/services:
 3. optional reimbursement for related services
 4. available account-balance check
 
-Orchestrazione UI unificata (single icon):
+Unified UI Orchestration (single icon):
 
 1. frontend can select multiple items (fee/services/deposit) in one user action
 2. backend still uses separate endpoints (`reimburse_quota`, `reimburse_deposits`)
@@ -200,8 +200,8 @@ Note: `rimborso_esncard` is exported with a dedicated description.
 ## 7. Cross-Module Dependencies
 
 - events: source of truth for `Subscription`/`Event` data used in reimbursements
-- profiles/users: identita attore e ownership richieste
-- notification/email: avvisi operativi su operazioni sensibili
+- profiles/users: actor identity and ownership requirements
+- notification/email: operational notifications for sensitive operations
 
 ## 8. Operational Risks
 
