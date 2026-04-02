@@ -86,7 +86,7 @@ Sequence:
 
 1. open single "Reimburse" action on subscription
 2. select items (fee/services/deposit) with automatic disable for invalid items
-3. orchestrazione chiamate reimburse_quota e/o reimburse_deposits
+3. orchestrate calls to reimburse_quota and/or reimburse_deposits
 4. generate refund transactions for successful items
 5. update account balance
 6. block duplicate reimbursement attempts
@@ -136,7 +136,7 @@ Sequence:
 
 1. admin triggers notification
 2. authenticated clients read maintenance/status
-3. banner frontend visibile
+3. banner frontend visible
 4. clear notification
 
 Test oracles:
@@ -146,7 +146,7 @@ Test oracles:
 
 ## 3. Test Asset Mapping
 
-Suite integrazione dedicate:
+Dedicated integration suites:
 
 - backend/test_integration_e2e.py
 - backend/users/test_integration.py

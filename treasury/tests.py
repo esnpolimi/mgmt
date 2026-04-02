@@ -1759,7 +1759,7 @@ class ESNcardComplexEdgeCaseTests(TreasuryBaseTestCase):
 		profile1 = _create_profile("owner1@uni.it", is_esner=False)
 		profile2 = _create_profile("owner2@uni.it", is_esner=False)
 
-		card1 = ESNcard.objects.create(profile=profile1, number="ESN-FIRST")
+		ESNcard.objects.create(profile=profile1, number="ESN-FIRST")
 		card2 = ESNcard.objects.create(profile=profile2, number="ESN-SECOND")
 
 		response = self.client.patch(f"/backend/esncard/{card2.pk}/", {
@@ -1972,7 +1972,7 @@ class DepositReimbursementEdgeCaseTests(TreasuryBaseTestCase):
 		self.assertIn(response1.status_code, [200, 201])
 
 		# Second reimbursement (should fail)
-		response2 = self.client.post("/backend/reimburse_deposits/", {
+		self.client.post("/backend/reimburse_deposits/", {
 			"event": event.pk,
 			"subscription_ids": [sub.pk],
 			"account": account.pk,
@@ -2034,7 +2034,7 @@ class AccountVisibilityEdgeCaseTests(TreasuryBaseTestCase):
 		board_user = _create_user(board_profile)
 		board_user.groups.add(self.group_board)
 
-		account = _create_account("Public", user=board_user)
+		_create_account("Public", user=board_user)
 		# No groups assigned = visible to all
 
 		viewer_profile = _create_profile("aspiranti@esnpolimi.it")

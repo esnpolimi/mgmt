@@ -121,7 +121,7 @@ def _append_to_whatsapp_log(data, outcome):
         logger.info(f"WhatsApp CSV log appended for {data['email']} — {outcome}")
         return None
     except Exception as e:
-        logger.exception("Drive CSV logging failed")
+        logger.exception(f"Drive CSV logging failed: {e}")
         return "Drive logging failed"
 
 
@@ -197,7 +197,7 @@ def whatsapp_config(request):
         serializer = WhatsAppConfigSerializer(instance)
         return Response(serializer.data)
 
-    # PATCH – authorized content managers can edit
+    # PATCH - authorized content managers can edit
     user = request.user
     can_edit = _can_manage_content(user)
     if not can_edit:

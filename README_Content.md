@@ -35,20 +35,20 @@ This module allows dynamic management of homepage content through an administrat
 ```
 GET    /backend/content/sections/                  - list sections
 GET    /backend/content/sections/active_sections/  - list active sections with links
-POST   /backend/content/sections/                  - create section (Board only)
-PATCH  /backend/content/sections/{id}/             - update section (Board only)
-DELETE /backend/content/sections/{id}/             - delete section (Board only)
+POST   /backend/content/sections/                  - create section (Board or users with can_manage_content)
+PATCH  /backend/content/sections/{id}/             - update section (Board or users with can_manage_content)
+DELETE /backend/content/sections/{id}/             - delete section (Board or users with can_manage_content)
 
 GET    /backend/content/links/                     - list links
-POST   /backend/content/links/                     - create link (Board only)
-PATCH  /backend/content/links/{id}/                - update link (Board only)
-DELETE /backend/content/links/{id}/                - delete link (Board only)
+POST   /backend/content/links/                     - create link (Board or users with can_manage_content)
+PATCH  /backend/content/links/{id}/                - update link (Board or users with can_manage_content)
+DELETE /backend/content/links/{id}/                - delete link (Board or users with can_manage_content)
 ```
 
 ## Permissions
 
 - **Read**: all authenticated users
-- **Write**: Board members only
+- **Write**: Board members and users with can_manage_content=True
 
 ## Setup and Migration
 
