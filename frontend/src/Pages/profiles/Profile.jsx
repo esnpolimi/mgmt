@@ -188,6 +188,7 @@ export default function Profile() {
     const isBoardMember = user?.groups?.includes('Board');
     const isProfileOwner = user?.profile?.id === profile?.id;
     const latestESNcard = profile?.latest_esncard || null;
+    const createButtonText = latestESNcard ? (latestESNcard.is_valid ? 'Card Smarrita' : 'Rinnova') : 'Rilascia';
     const canViewReimbursements = (isBoardMember || isProfileOwner) && profileType === 'ESNer';
     const canManualVerify =
         isBoardMember &&
@@ -1523,7 +1524,7 @@ export default function Profile() {
                                         cols={esncard_columns}
                                         canCreate={user.permissions.includes('add_esncard')}
                                         onCreate={handleOpenESNcardModal}
-                                        createText={latestESNcard ? (latestESNcard.is_valid ? "Card Smarrita" : "Rinnova") : "Rilascia"}
+                                        createText={createButtonText}
                                         canEdit={user.permissions.includes('change_esncard')}
                                         onSave={saveESNcard}
                                         initialData={data.esncards}

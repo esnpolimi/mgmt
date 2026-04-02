@@ -203,6 +203,7 @@ export default function SubscriptionModal({
                     onSuccess: (profileData) => {
                         if (profileData.is_esner) {
                             setMatricolaStatus({ isMissing: false, isExpired: false });
+                            setProfileHasEsncard(null);
                         } else {
                             setProfileHasEsncard(Boolean(profileData.latest_esncard));
                             const matricolaMissing = !profileData.matricola_number || !profileData.person_code;

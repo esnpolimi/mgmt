@@ -104,7 +104,7 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
             });
         }
 
-        const hasServices = servicesTotal > 0 || servicesStatus !== null && servicesStatus !== undefined;
+        const hasServices = servicesTotal > 0 || (servicesStatus !== null && servicesStatus !== undefined);
         if (hasServices) {
             let disabled = false;
             let reason = '';
