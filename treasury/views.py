@@ -5,7 +5,7 @@ from decimal import Decimal
 import sentry_sdk
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db import transaction, IntegrityError
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.http import HttpResponse
 from django.utils.dateparse import parse_datetime
 from openpyxl import Workbook
@@ -28,6 +28,8 @@ from treasury.serializers import TransactionViewSerializer, AccountDetailedViewS
 from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
+
+MSG_UNAUTHORIZED = 'Non autorizzato.'
 from django.utils import timezone
 try:
     from zoneinfo import ZoneInfo
@@ -170,7 +172,7 @@ def esncard_detail(request, pk):
         if request.method == 'PATCH':
             esncard = ESNcard.objects.get(pk=pk)
             if not get_action_permissions('esncard_detail_patch', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
             update_data = {}
             if 'number' in request.data:
                 update_data['number'] = request.data['number']
@@ -183,7 +185,7 @@ def esncard_detail(request, pk):
 
         elif request.method == 'DELETE':
             if not get_action_permissions('esncard_detail_delete', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
             with transaction.atomic():
                 esncard = ESNcard.objects.select_for_update().select_related('profile').get(pk=pk)
@@ -245,7 +247,8 @@ def esncard_detail(request, pk):
                     try:
                         refund_tx.save()
                     except (PermissionDenied, ValueError) as refund_error:
-                        return Response({'error': str(refund_error)}, status=409)
+                        logger.exception("Errore durante il salvataggio della transazione di rimborso ESNcard: %s", refund_error)
+                        return Response({'error': "Errore durante il salvataggio della transazione di rimborso ESNcard."}, status=409)
 
                     refund_transaction_id = refund_tx.id
 
@@ -299,7 +302,7 @@ def esncard_fees(_):
 def transaction_add(request):
     try:
         if not get_action_permissions('transaction_add', request.user):
-            return Response({'error': 'Non autorizzato.'}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
         transaction_serializer = TransactionCreateSerializer(data=request.data, context={'request': request})
         if not transaction_serializer.is_valid():
@@ -308,7 +311,7 @@ def transaction_add(request):
         transaction_type = transaction_serializer.validated_data['type']
         if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
             if not request.user.has_perm('treasury.add_transaction'):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
         try:
             tx = transaction_serializer.save()
@@ -398,7 +401,7 @@ def transaction_detail(request, pk):
 
         elif request.method == 'PATCH':
             if not get_action_permissions('transaction_detail_patch', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
             # Executor handling: optional & nullable
             executor_raw = request.data.get('executor', '__not_provided__')
@@ -448,7 +451,7 @@ def transaction_detail(request, pk):
 
         elif request.method == 'DELETE':
             if not get_action_permissions('transaction_detail_delete', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
             # Allow deletion only for specific transaction types
             list_deleteable = [
                 Transaction.TransactionType.RIMBORSO_CAUZIONE,
@@ -460,7 +463,7 @@ def transaction_detail(request, pk):
             ]
             if transaction_obj.type in list_deleteable:
                 if not (request.user.has_perm('treasury.delete_transaction') or request.user.can_manage_casse):
-                    return Response({'error': 'Non autorizzato.'}, status=401)
+                    return Response({'error': MSG_UNAUTHORIZED}, status=401)
                 transaction_obj.delete()
                 return Response(status=204)
             else:
@@ -496,7 +499,7 @@ def accounts_list(request):
 def account_creation(request):
     try:
         if not get_action_permissions('account_creation', request.user):
-            return Response({'error': 'Non autorizzato.'}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
         account_serializer = AccountCreateSerializer(data=request.data)
         if not account_serializer.is_valid():
@@ -534,10 +537,10 @@ def account_detail(request, pk):
 
             if not status_only:
                 if not get_action_permissions('account_detail_patch', request.user):
-                    return Response({'error': 'Non autorizzato.'}, status=401)
+                    return Response({'error': MSG_UNAUTHORIZED}, status=401)
             else:
                 if not is_casse_manager:
-                    return Response({'error': 'Non autorizzato.'}, status=401)
+                    return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
             data = request.data.copy()
             data['changed_by'] = request.user
@@ -613,7 +616,7 @@ def reimbursement_request_detail(request, pk):
 
         elif request.method == 'PATCH':
             if not get_action_permissions('reimbursement_request_detail_patch', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
             if request.user.has_perm('treasury.change_reimbursementrequest'):
                 allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
                 data = {k: v for k, v in request.data.items() if k in allowed_fields}
@@ -630,11 +633,11 @@ def reimbursement_request_detail(request, pk):
                         return Response(ve.detail, status=400)
                 return Response(serializer.errors, status=400)
             else:
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
         elif request.method == 'DELETE':
             if not get_action_permissions('reimbursement_request_detail_delete', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
             try:
                 instance.delete()
                 return Response(status=204)
@@ -664,7 +667,7 @@ def reimbursement_requests_list(request):
             # Allow only board or the profile owner
             req_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
             if not user_is_board(request.user) and req_profile_id != profile_id_int:
-                return Response({'error': 'Non autorizzato.'}, status=403)
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             requests = requests.filter(user__profile__id=profile_id_int)
         search = request.GET.get('search', '').strip()
         if search:
@@ -716,7 +719,7 @@ def reimburse_deposits(request):
     """
     try:
         if not get_action_permissions('reimburse_deposits', request.user):
-            return Response({'error': 'Non autorizzato.'}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
         event_id = request.data.get('event')
         subscription_ids = request.data.get('subscription_ids', [])
@@ -807,12 +810,20 @@ def reimbursable_deposits(request):
         event = Event.objects.get(id=event_id)
 
         # Subscriptions in this list, with a paid cauzione transaction, not yet reimbursed
-        subs = Subscription.objects.filter(event=event, list__id=list_id)
+        subs = Subscription.objects.filter(
+            event=event, list__id=list_id
+        ).select_related('profile').prefetch_related(
+            Prefetch('transaction_set', queryset=Transaction.objects.select_related('account'))
+        )
         result = []
         for sub in subs:
-            deposit_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.CAUZIONE).first()
-            reimbursed = Transaction.objects.filter(subscription=sub,
-                                                    type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
+            sub_transactions = sub.transaction_set.all()
+            deposit_tx = next(
+                (tx for tx in sub_transactions if tx.type == Transaction.TransactionType.CAUZIONE), None
+            )
+            reimbursed = any(
+                tx.type == Transaction.TransactionType.RIMBORSO_CAUZIONE for tx in sub_transactions
+            )
             if deposit_tx and not reimbursed:
                 profile_id = sub.profile.id if sub.profile else None
                 if sub.profile:
@@ -843,7 +854,7 @@ def reimburse_quota(request):
     """
     try:
         if not get_action_permissions('reimburse_quota', request.user):
-            return Response({'error': 'Non autorizzato.'}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=401)
 
         event_id = request.data.get('event')
         subscription_id = request.data.get('subscription_id')

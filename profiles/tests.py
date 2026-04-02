@@ -164,9 +164,9 @@ class ProfileListTests(ProfilesBaseTestCase):
 
 		valid_profile = _create_profile("valid@uni.it", is_esner=False)
 		expired_profile = _create_profile("expired@uni.it", is_esner=False)
-		absent_profile = _create_profile("absent@uni.it", is_esner=False)
+		_create_profile("absent@uni.it", is_esner=False)
 
-		valid_card = ESNcard.objects.create(profile=valid_profile, number="VALID123")
+		_valid_card = ESNcard.objects.create(profile=valid_profile, number="VALID123")
 		expired_card = ESNcard.objects.create(profile=expired_profile, number="EXPIRED123")
 
 		past_date = timezone.now() - timedelta(days=800)
@@ -388,7 +388,7 @@ class VerifyEmailTests(ProfilesBaseTestCase):
 			expiration=timezone.now().date() + timedelta(days=365),
 			enabled=False,
 		)
-		user = _create_user(profile)
+		_create_user(profile)
 
 		uid = urlsafe_base64_encode(force_bytes(profile.pk))
 		token = email_verification_token.make_token(profile)
@@ -1026,7 +1026,7 @@ class ProfileModelTests(ProfilesBaseTestCase):
 		profile = _create_profile("test@uni.it", is_esner=False)
 
 		# Create two ESNcards with different creation times
-		old_card = ESNcard.objects.create(profile=profile, number="OLD-123", enabled=True)
+		ESNcard.objects.create(profile=profile, number="OLD-123", enabled=True)
 		sleep(0.01)  # Small delay to ensure different created_at timestamps
 		newer_card = ESNcard.objects.create(profile=profile, number="NEW-456", enabled=True)
 
