@@ -947,7 +947,7 @@ export default function Profile() {
     return (
         <Box>
             <Sidebar/>
-            {loading ? <Loader/> : (<>
+            {loading ? <Loader/> : (
                     <Box sx={{mx: '5%'}}>
                         <Box sx={{display: 'flex', alignItems: 'center', mb: 4}}>
                             <IconButton
@@ -1408,8 +1408,10 @@ export default function Profile() {
                                         </Tooltip>
                                     )}
                                     {/* Content Manager role toggle (Board → ESNer; Board target users inherit the role) */}
-                                    {user?.groups?.includes('Board') && profileType === 'ESNer' && (
-                                        financePerms && financePerms.can_manage_content !== financePerms.effective_can_manage_content ? (
+                                    {user?.groups?.includes('Board') && profileType === 'ESNer' && (() => {
+                                        const isInheritedFromBoard = profile?.group === 'Board' && financePerms?.effective_can_manage_content;
+                                        return (
+                                        financePerms && isInheritedFromBoard ? (
                                             <Tooltip title="Il permesso è implicito per il gruppo Board e non può essere revocato da qui" arrow>
                                                 <span>
                                                     <Button
@@ -1436,7 +1438,8 @@ export default function Profile() {
                                                 </Button>
                                             </Tooltip>
                                         )
-                                    )}
+                                        );
+                                    })()}
                                 </Box>
                             </Toolbar>
                             {ESNcardModalOpen &&
@@ -1520,7 +1523,7 @@ export default function Profile() {
                                         cols={esncard_columns}
                                         canCreate={user.permissions.includes('add_esncard')}
                                         onCreate={handleOpenESNcardModal}
-                                        createText={!latestESNcard ? "Rilascia" : (latestESNcard.is_valid ? "Card Smarrita" : "Rinnova")}
+                                        createText={latestESNcard ? (latestESNcard.is_valid ? "Card Smarrita" : "Rinnova") : "Rilascia"}
                                         canEdit={user.permissions.includes('change_esncard')}
                                         onSave={saveESNcard}
                                         initialData={data.esncards}
@@ -1624,7 +1627,6 @@ export default function Profile() {
                         </Grid>
                         {popup && <Popup key={popup.id} message={popup.message} state={popup.state}/>}
                     </Box>
-                </>
             )}
             <Dialog
                 open={revokeESNcardConfirmOpen}

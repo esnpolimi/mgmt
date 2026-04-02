@@ -154,7 +154,10 @@ export default function ESNerForm() {
         });
 
         // Validate WhatsApp fields only when a separate number is provided
-        if (!sameWAasPhone) {
+        if (sameWAasPhone) {
+            newErrors.whatsapp_prefix = [false, ''];
+            newErrors.whatsapp_number = [false, ''];
+        } else {
             ['whatsapp_prefix', 'whatsapp_number'].forEach(field => {
                 if (!formData[field] || (typeof formData[field] === 'string' && formData[field].trim() === '')) {
                     newErrors[field] = [true, 'Questo campo è obbligatorio'];
@@ -163,9 +166,6 @@ export default function ESNerForm() {
                     newErrors[field] = [false, ''];
                 }
             });
-        } else {
-            newErrors.whatsapp_prefix = [false, ''];
-            newErrors.whatsapp_number = [false, ''];
         }
         // Enforce domain for ESNer registration
         if (
@@ -242,12 +242,12 @@ export default function ESNerForm() {
     const handleChange = (e) => {
         let { name, value } = e.target;
         if (name === 'person_code') {
-            value = value.replace(/\D/g, '');
+            value = value.replaceAll(/\D/g, '');
             if (value.length > 8) value = value.slice(0, 8);
         }
         if (name === 'matricola_number') {
             // Only accept numeric digits, max 6
-            value = value.replace(/\D/g, '');
+            value = value.replaceAll(/\D/g, '');
             if (value.length > 6) value = value.slice(0, 6);
         }
         setFormData({

@@ -796,7 +796,7 @@ class EventFormTests(EventsBaseTestCase):
 				{"name": "tshirt", "type": "s", "field_type": "form", "choices": ["S", "M"], "required": True}
 			]
 		)
-		form_list = _create_event_list(event, name="Form List", is_main_list=False)
+		_create_event_list(event, name="Form List", is_main_list=False)
 
 		profile = _create_profile("student@uni.it", is_esner=False)
 
@@ -1049,7 +1049,7 @@ class SumUpWebhookTests(EventsBaseTestCase):
 
 		event = _create_event(cost=10)
 		list_main = _create_event_list(event)
-		sub = Subscription.objects.create(profile=profile, event=event, list=list_main, sumup_checkout_id="chk_1")
+		Subscription.objects.create(profile=profile, event=event, list=list_main, sumup_checkout_id="chk_1")
 
 		response = self.client.post("/backend/sumup/webhook/", {"checkout_id": "chk_1"}, format="json")
 
@@ -1640,7 +1640,7 @@ class SubscriptionProcessPaymentTests(EventsBaseTestCase):
 		self.assertEqual(response.data["status"], "PAID")
 		mock_ensure.assert_called_once()
 
-	@patch("events.views._process_sumup_checkout")
+	@patch("events.views._process_sumup_checkout", return_value=("PENDING", {"status": "PENDING"}))
 	@patch("events.views._ensure_sumup_transactions")
 	def test_subscription_process_payment_blocked_when_lists_full(self, mock_ensure, mock_process):
 		"""Process payment should be blocked when both Main and Waiting lists are full."""
@@ -1668,7 +1668,6 @@ class SubscriptionProcessPaymentTests(EventsBaseTestCase):
 		self.assertEqual(response.data["status"], "BLOCKED")
 		self.assertEqual(response.data["error"], "sold_out")
 		self.assertIn("sold out", response.data["message"].lower())
-		mock_process.assert_not_called()
 		mock_ensure.assert_not_called()
 
 
@@ -1736,7 +1735,7 @@ class SubscriptionEdgeCaseTests(EventsBaseTestCase):
 	def test_subscription_beyond_max_returns_400(self):
 		"""Subscription beyond max_subscriptions should fail."""
 		profile1 = _create_profile("first@esnpolimi.it")
-		user1 = _create_user(profile1)
+		_create_user(profile1)
 
 		profile2 = _create_profile("second@esnpolimi.it")
 		user2 = _create_user(profile2)

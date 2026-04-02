@@ -111,9 +111,12 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
             if (servicesStatus === 'reimbursed') {
                 disabled = true;
                 reason = 'Servizi gia rimborsati';
+            } else if (servicesTotal <= 0) {
+                disabled = true;
+                reason = 'Nessun servizio selezionato';
             } else if (servicesStatus !== 'paid') {
                 disabled = true;
-                reason = servicesTotal > 0 ? 'Servizi non pagati' : 'Nessun servizio selezionato';
+                reason = 'Servizi non pagati';
             }
             items.push({
                 key: 'services',
@@ -162,7 +165,7 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)
         });
-    }, [open, refundItems]);
+    }, [open, subscription?.id]);
 
     const selectedCount = Object.values(selectedItems).filter(Boolean).length;
 

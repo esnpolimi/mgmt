@@ -118,7 +118,7 @@ Main rules:
 2. stream with invalid/expired token returns 403.
 3. status requires authentication and returns full payload.
 4. `action=send` creates `notification_id` and `triggered_at`.
-5. action clear resetta notification_id e triggered_at.
+5. action clear resets notification_id and triggered_at.
 6. verify maintenance-event emission when `notification_id` changes.
 
 ## 9. Canonical Source Files

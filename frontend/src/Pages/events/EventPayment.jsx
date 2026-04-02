@@ -3,7 +3,8 @@ import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import {Box, Container, Typography, CircularProgress, Alert} from '@mui/material';
 import {fetchCustom} from '../../api/api';
 
-const SOLD_OUT_MESSAGE = 'All spots are currently sold out. Please wait for a notification from the ESN team.';
+const SOLD_OUT_MESSAGE = "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. " +
+    "Thank you for filling out the form. Please wait for any notifications from the ESN team.";
 
 export default function EventPayment() {
     const {id} = useParams();
@@ -56,7 +57,7 @@ export default function EventPayment() {
                             setMessage(data.payment_blocked_message || SOLD_OUT_MESSAGE);
                             return;
                         }
-                        const checkoutFromStatus = data.sumup_checkout_id || checkoutId;
+                        const checkoutFromStatus = data.sumup_checkout_id || stateCheckout;
                         if (!checkoutFromStatus) {
                             setStatus('failed');
                             setMessage('No online payment session available.');
@@ -81,7 +82,7 @@ export default function EventPayment() {
         return () => {
             canceled = true;
         };
-    }, [subscriptionId, id, navigate, assignedList]);
+    }, [subscriptionId, id, navigate, assignedList, stateCheckout]);
 
     useEffect(() => {
         if (!checkoutId || !subscriptionId) return;
