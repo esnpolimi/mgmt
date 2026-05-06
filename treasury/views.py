@@ -25,6 +25,7 @@ from treasury.serializers import TransactionViewSerializer, AccountDetailedViewS
     AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer, \
     TransactionUpdateSerializer
+from treasury.reports import generate_accounts_report, generate_transactions_report, ReportDateError
 from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
@@ -67,6 +68,13 @@ def get_action_permissions(action, user):
         return user_is_board(user)
     if action == 'reimbursement_request_detail_delete':
         return user_is_board(user) or user.has_perm('treasury.delete_reimbursementrequest')
+    if action == 'treasury_report_generate':
+        return (
+            user_is_board(user)
+            or getattr(user, 'can_manage_casse', False)
+            or user.has_perm('treasury.add_transaction')
+            or user.has_perm('treasury.view_account')
+        )
     # Default: allow
     return True
 
@@ -1175,3 +1183,59 @@ def transactions_export(request):
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
     return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def treasury_accounts_report(request):
+    if not get_action_permissions('treasury_report_generate', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
+
+    report_date = request.data.get('date') or request.query_params.get('date')
+    try:
+        result = generate_accounts_report(report_date=report_date)
+        return Response({
+            'status': 'ok',
+            'reportDate': result['report_date'].strftime('%Y-%m-%d'),
+            'filename': result['filename'],
+            'fileId': result.get('file_id'),
+            'action': result['action']
+        }, status=200)
+    except ReportDateError as exc:
+        return Response({'error': str(exc)}, status=400)
+    except HttpError as exc:
+        logger.error(f"Drive upload failed: {exc}")
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore Drive durante la generazione report.'}, status=502)
+    except Exception as exc:
+        logger.error(str(exc))
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def treasury_transactions_report(request):
+    if not get_action_permissions('treasury_report_generate', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
+
+    report_date = request.data.get('date') or request.query_params.get('date')
+    try:
+        result = generate_transactions_report(report_date=report_date)
+        return Response({
+            'status': 'ok',
+            'reportDate': result['report_date'].strftime('%Y-%m-%d'),
+            'filename': result['filename'],
+            'fileId': result.get('file_id'),
+            'action': result['action']
+        }, status=200)
+    except ReportDateError as exc:
+        return Response({'error': str(exc)}, status=400)
+    except HttpError as exc:
+        logger.error(f"Drive upload failed: {exc}")
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore Drive durante la generazione report.'}, status=502)
+    except Exception as exc:
+        logger.error(str(exc))
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore interno del server.'}, status=500)

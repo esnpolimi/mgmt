@@ -11,6 +11,7 @@ The treasury module manages application accounting and financial rules:
 - reimbursement request workflow
 - automatic event-flow reimbursements (fee/deposit/services)
 - transaction export for operational reporting
+- daily Drive report generation (manual + scheduled)
 
 ## 2. Domain Model
 
@@ -90,6 +91,11 @@ Base path: /backend/
 - GET /transactions/
 - GET|PATCH|DELETE /transaction/<pk>/
 - GET /transactions_export/
+
+### 3.5 Report APIs
+
+- POST /reports/accounts/
+- POST /reports/transactions/
 
 ### 3.3 Account APIs
 
@@ -194,6 +200,12 @@ Unified UI Orchestration (single icon):
 - limit per dashboard
 
 `transactions_export` produces XLSX with accounting metadata and operational descriptions.
+
+Daily Drive reports:
+
+- two XLSX files stored in `Treasury-Reports/Casse` and `Treasury-Reports/Transazioni`
+- filenames use `DD-MM-YYYY.xlsx`
+- scheduled job runs at 23:50 Europe/Rome (snapshot at run time)
 
 Note: `rimborso_esncard` is exported with a dedicated description.
 
