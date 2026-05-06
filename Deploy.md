@@ -18,6 +18,16 @@ git subtree push --prefix frontend/build origin deploy-frontend
 git subtree push --prefix backend origin deploy-backend
 ```
 
+## Scheduled Jobs
+
+Add this cron entry to generate treasury reports daily at 23:50 (Europe/Rome):
+
+```bash
+50 23 * * * /home/fazucrdl/virtualenv/mgmt.esnpolimi.it/3.11/bin/python /home/fazucrdl/mgmt.esnpolimi.it/backend/manage.py generate_treasury_reports
+```
+
+If the server timezone is not Europe/Rome, adjust the cron time accordingly.
+
 ## Notes
 
 After having updated the deploy-xxxxxend branch, access to the server's console and execute the script:
