@@ -3,7 +3,7 @@ from datetime import timedelta, datetime
 from decimal import Decimal
 
 import sentry_sdk
-from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
+from django.core.exceptions import PermissionDenied, ObjectDoesNotExist, ValidationError
 from django.db import transaction, IntegrityError
 from django.db.models import Q, Prefetch
 from django.http import HttpResponse
@@ -153,6 +153,7 @@ def esncard_emission(request):
             return Response(response_data, status=200)
 
     except PermissionDenied as e:
+        sentry_sdk.capture_exception(e)
         return Response({'error': str(e)}, status=403)
     except IntegrityError as e:
         # Handle duplicate ESNcard number
@@ -161,8 +162,10 @@ def esncard_emission(request):
                 'esncard_number': ['Questo numero ESNcard è già in uso.']
             }, status=400)
         logger.error(f"IntegrityError non gestito: {str(e)}")
+        sentry_sdk.capture_exception(e)
         return Response({'error': 'Errore di integrità dei dati.'}, status=400)
-    except (ObjectDoesNotExist, ValueError) as e:
+    except (ObjectDoesNotExist, ValueError, ValidationError) as e:
+        sentry_sdk.capture_exception(e)
         return Response({'error': str(e)}, status=400)
 @api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
@@ -245,8 +248,9 @@ def esncard_detail(request, pk):
                     )
                     try:
                         refund_tx.save()
-                    except (PermissionDenied, ValueError) as refund_error:
+                    except (PermissionDenied, ValueError, ValidationError) as refund_error:
                         logger.exception("Errore durante il salvataggio della transazione di rimborso ESNcard: %s", refund_error)
+                        sentry_sdk.capture_exception(refund_error)
                         return Response({'error': "Errore durante il salvataggio della transazione di rimborso ESNcard."}, status=409)
 
                     refund_transaction_id = refund_tx.id

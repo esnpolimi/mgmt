@@ -437,7 +437,7 @@ export default memo(function EventListAccordions({
             }
 
             // Actions column (sticky/pinned left)
-            const hasAnyRefundCategory = hasDeposit || hasQuota || true;
+            const hasAnyRefundCategory = hasDeposit || hasQuota;
             const actionsColumn = hasAnyRefundCategory ? {
                 accessorKey: 'actions',
                 header: 'Azioni',

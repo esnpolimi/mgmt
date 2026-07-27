@@ -263,6 +263,7 @@ def initiate_profile_creation(request):
             logger.info(f"Email sent to {profile.email}")
         except Exception as e:
             logger.info(f"Email error: {str(e)}")
+            sentry_sdk.capture_exception(e)
             return Response({"error": f"{error_message}{str(e)}"}, status=500)
 
         return Response({"message": success_message}, status=201)
