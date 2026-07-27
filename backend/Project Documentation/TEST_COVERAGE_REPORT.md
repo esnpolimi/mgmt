@@ -1,6 +1,6 @@
 # Test Coverage Report - ESN Polimi Management
 
-Last update date: 2026-04-01  
+Last update date: 2026-07-27  
 Scope: Django backend (users, profiles, events, treasury, content)
 
 ## 1. Quality Scope
