@@ -218,7 +218,7 @@ Guard behavior:
 
 Required GitHub Actions secrets for remote cPanel deploy:
 
-- `CPANEL_HOST`
+- `CPANEL_SSH_HOST` (origin server hostname or IP; not the Cloudflare-proxied public domain)
 - `CPANEL_USERNAME`
 - `CPANEL_SSH_KEY`
 - `CPANEL_SSH_PORT` (optional)
