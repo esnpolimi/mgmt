@@ -7,13 +7,12 @@ from django.conf import settings
 from django.db.models import Case, Count, DecimalField, Sum, Value, When
 from django.utils import timezone
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
 from treasury.models import Account, Transaction
+from utils.google_drive import get_drive_service, find_or_create_folder
 
 try:
     from zoneinfo import ZoneInfo
@@ -22,7 +21,6 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 EXCEL_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ROOT_FOLDER_NAME = "Treasury-Reports"
 ACCOUNTS_FOLDER_NAME = "Casse"
@@ -58,45 +56,6 @@ def get_day_bounds(report_date, tz):
         start_dt = timezone.make_aware(start_dt, tz)
     end_dt = start_dt + timedelta(days=1)
     return start_dt, end_dt
-
-
-def _get_drive_service():
-    credentials = service_account.Credentials.from_service_account_file(
-        settings.GOOGLE_SERVICE_ACCOUNT_FILE,
-        scopes=[DRIVE_SCOPE],
-    )
-    return build("drive", "v3", credentials=credentials)
-
-
-def _find_or_create_drive_folder(service, folder_name, parent_id):
-    escaped_folder_name = folder_name.replace("'", "\\'")
-    query = (
-        f"name='{escaped_folder_name}' and '{parent_id}' in parents "
-        "and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    )
-    results = service.files().list(
-        q=query,
-        spaces="drive",
-        fields="files(id, name)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
-    ).execute()
-
-    folders = results.get("files", [])
-    if folders:
-        return folders[0]["id"]
-
-    folder_metadata = {
-        "name": folder_name,
-        "mimeType": "application/vnd.google-apps.folder",
-        "parents": [parent_id],
-    }
-    folder = service.files().create(
-        body=folder_metadata,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
-    return folder["id"]
 
 
 def _find_file_id(service, folder_id, filename):
@@ -160,9 +119,9 @@ def _workbook_to_stream(workbook):
 
 
 def ensure_report_folders(service, parent_folder_id):
-    root_folder_id = _find_or_create_drive_folder(service, ROOT_FOLDER_NAME, parent_folder_id)
-    accounts_folder_id = _find_or_create_drive_folder(service, ACCOUNTS_FOLDER_NAME, root_folder_id)
-    transactions_folder_id = _find_or_create_drive_folder(service, TRANSACTIONS_FOLDER_NAME, root_folder_id)
+    root_folder_id = find_or_create_folder(service, ROOT_FOLDER_NAME, parent_folder_id)
+    accounts_folder_id = find_or_create_folder(service, ACCOUNTS_FOLDER_NAME, root_folder_id)
+    transactions_folder_id = find_or_create_folder(service, TRANSACTIONS_FOLDER_NAME, root_folder_id)
     return root_folder_id, accounts_folder_id, transactions_folder_id
 
 
@@ -319,7 +278,7 @@ def generate_accounts_report(report_date=None, tz=None, dry_run=False):
             "report_date": report_date,
         }
 
-    service = _get_drive_service()
+    service = get_drive_service()
     _, accounts_folder_id, _ = ensure_report_folders(service, settings.GOOGLE_DRIVE_FOLDER_ID)
     stream = _workbook_to_stream(workbook)
     file_id, action = _upload_excel(service, accounts_folder_id, filename, stream)
@@ -345,7 +304,7 @@ def generate_transactions_report(report_date=None, tz=None, dry_run=False):
             "report_date": report_date,
         }
 
-    service = _get_drive_service()
+    service = get_drive_service()
     _, _, transactions_folder_id = ensure_report_folders(service, settings.GOOGLE_DRIVE_FOLDER_ID)
     stream = _workbook_to_stream(workbook)
     file_id, action = _upload_excel(service, transactions_folder_id, filename, stream)
@@ -373,7 +332,7 @@ def generate_daily_reports(report_date=None, tz=None, dry_run=False):
             "transactions": {"filename": filename, "action": "dry-run"},
         }
 
-    service = _get_drive_service()
+    service = get_drive_service()
     _, accounts_folder_id, transactions_folder_id = ensure_report_folders(
         service, settings.GOOGLE_DRIVE_FOLDER_ID
     )
