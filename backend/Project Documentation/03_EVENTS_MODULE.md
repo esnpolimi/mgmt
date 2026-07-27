@@ -88,8 +88,8 @@ Base path: /backend/
 
 Behavior notes:
 
-- `status` can expose a pre-payment block (`payment_blocked=true`, reason `sold_out`) when both Main and Waiting lists are full.
-- `process_payment` returns `409` with `status=BLOCKED` and `error=sold_out` in the same condition.
+- `status` is computed primarily from local subscription/transaction state and can expose a pre-payment block (`payment_blocked=true`, reason `sold_out`) when both Main and Waiting lists are full.
+- in sold-out conditions, `process_payment` returns `409` with `status=BLOCKED` and `error=sold_out`, except when the remote checkout is already confirmed as paid (in that case it finalizes local transactions and returns success).
 
 ### 3.5 Organizer Utilities
 
@@ -140,13 +140,24 @@ Additional rules:
 ### 5.3 Online Payment Reconciliation
 
 1. pre-check on list capacity for subscriptions outside Main/Waiting
-2. if Main and Waiting are both full: block payment with `409 BLOCKED` (`sold_out`)
-3. otherwise `process_payment` queries checkout status
-4. webhook asynchronous server-to-server confirmation
-5. idempotent transaction creation
-6. subscription state alignment
+2. if Main and Waiting are both full: `status` reports `payment_blocked=true` (`sold_out`)
+3. in the same sold-out condition, `process_payment` returns `409 BLOCKED` unless remote checkout is already paid
+4. otherwise `process_payment` queries checkout status
+5. webhook asynchronous server-to-server confirmation
+6. idempotent transaction creation
+7. subscription state alignment
 
-### 5.4 Unified Refund UI Flow (Single Icon)
+### 5.4 Form Status Capacity Gate
+
+`event/<event_id>/formstatus/` uses Form List as the primary online-capacity gate.
+
+Compatibility notes:
+
+1. `form_list_full` is the main indicator for public-form availability.
+2. `main_list_full` and `waiting_list_full` are still returned for backward compatibility.
+3. sold-out payment blocking remains based on Main/Waiting capacity rules at payment time.
+
+### 5.5 Unified Refund UI Flow (Single Icon)
 
 For each subscription in list view, a single "Reimburse" action is available.
 

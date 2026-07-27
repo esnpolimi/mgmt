@@ -7,8 +7,6 @@ from datetime import datetime
 import sentry_sdk
 from django.conf import settings
 from django.core.mail import send_mail
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action, api_view, permission_classes
@@ -19,6 +17,7 @@ from .serializers import (
     ContentSectionSerializer, ContentLinkSerializer,
     WhatsAppConfigSerializer, WhatsAppRegistrationSerializer,
 )
+from utils.google_drive import get_drive_service
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +39,6 @@ def _can_manage_content(user):
     )
 
 
-def _get_drive_service():
-    credentials = service_account.Credentials.from_service_account_file(
-        settings.GOOGLE_SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/drive'],
-    )
-    return build('drive', 'v3', credentials=credentials)
-
-
 def _append_to_whatsapp_log(data, outcome):
     """
     Append one registration row to a CSV file on Google Drive.
@@ -56,7 +47,7 @@ def _append_to_whatsapp_log(data, outcome):
     """
     try:
         folder_id = settings.GOOGLE_DRIVE_FOLDER_ID
-        drive = _get_drive_service()
+        drive = get_drive_service()
 
         with _drive_log_lock:
             # Search for existing CSV file in the Drive folder

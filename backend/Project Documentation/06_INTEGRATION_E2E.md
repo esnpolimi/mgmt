@@ -65,7 +65,7 @@ Sequence:
 
 1. formsubmit creates subscription in Form List and generates checkout_id
 2. if Main and Waiting are both full, `status` reports `payment_blocked=true` (`sold_out`)
-3. in the same sold-out condition, `process_payment` returns `409 BLOCKED`
+3. in the same sold-out condition, `process_payment` returns `409 BLOCKED` unless the checkout is already remotely confirmed as paid
 4. otherwise `process_payment` or webhook confirms `paid` status
 5. create local transactions (fee/deposit/services)
 6. payment-status alignment on subscription
