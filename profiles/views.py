@@ -29,6 +29,7 @@ from profiles.serializers import ProfileListViewSerializer, ProfileCreateSeriali
 from profiles.tokens import email_verification_token
 from users.models import User
 from users.serializers import UserGroupEditSerializer
+from utils.permissions import user_is_board
 
 logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
@@ -39,10 +40,6 @@ SEARCHABLE_PROFILE_FIELDS = [
     if hasattr(f, 'attname') and isinstance(f, (models.CharField, models.TextField, models.EmailField))
     and f.name not in ['password']
 ]
-
-
-def user_is_board(user):
-    return user.groups.filter(name="Board").exists()
 
 
 def get_action_permissions(action, user):
@@ -64,295 +61,277 @@ def get_action_permissions(action, user):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def profile_list(request, is_esner):
-    try:
-        profiles = Profile.objects.filter(is_esner=is_esner)
-        # Ordering (simplified whitelist + composite handling)
-        ordering_param = request.GET.get('ordering', '-created_at').strip()
-        if ordering_param:
-            desc = ordering_param.startswith('-')
-            base = ordering_param.lstrip('-')
-            normalized = base.replace('.', '__')
+    profiles = Profile.objects.filter(is_esner=is_esner)
+    # Ordering (simplified whitelist + composite handling)
+    ordering_param = request.GET.get('ordering', '-created_at').strip()
+    if ordering_param:
+        desc = ordering_param.startswith('-')
+        base = ordering_param.lstrip('-')
+        normalized = base.replace('.', '__')
 
-            if base == 'fullPhoneNumber':
-                order_expressions = [
-                    ('-phone_prefix' if desc else 'phone_prefix'),
-                    ('-phone_number' if desc else 'phone_number'),
-                ]
-            elif base == 'fullWANumber':
-                order_expressions = [
-                    ('-whatsapp_prefix' if desc else 'whatsapp_prefix'),
-                    ('-whatsapp_number' if desc else 'whatsapp_number'),
-                ]
-            elif base == 'document':
-                # DB-side annotation of latest enabled document number
-                latest_doc_number_sq = Subquery(
-                    Document.objects.filter(
-                        profile=OuterRef('pk'),
-                        enabled=True
-                    ).order_by('-created_at').values('number')[:1]
-                )
-                profiles = profiles.annotate(
-                    _latest_doc_number=Coalesce(latest_doc_number_sq, Value(''))
-                )
-                order_expressions = ['-_latest_doc_number' if desc else '_latest_doc_number']
-            else:
-                order_expressions = [f'-{normalized}' if desc else normalized]
-
-            if order_expressions:
-                profiles = profiles.order_by(*order_expressions)
+        if base == 'fullPhoneNumber':
+            order_expressions = [
+                ('-phone_prefix' if desc else 'phone_prefix'),
+                ('-phone_number' if desc else 'phone_number'),
+            ]
+        elif base == 'fullWANumber':
+            order_expressions = [
+                ('-whatsapp_prefix' if desc else 'whatsapp_prefix'),
+                ('-whatsapp_number' if desc else 'whatsapp_number'),
+            ]
+        elif base == 'document':
+            # DB-side annotation of latest enabled document number
+            latest_doc_number_sq = Subquery(
+                Document.objects.filter(
+                    profile=OuterRef('pk'),
+                    enabled=True
+                ).order_by('-created_at').values('number')[:1]
+            )
+            profiles = profiles.annotate(
+                _latest_doc_number=Coalesce(latest_doc_number_sq, Value(''))
+            )
+            order_expressions = ['-_latest_doc_number' if desc else '_latest_doc_number']
         else:
-            profiles = profiles.order_by('-created_at')
+            order_expressions = [f'-{normalized}' if desc else normalized]
 
-        search = request.GET.get('search', '').strip()
-        if search:
-            # Support multi-token search: each token must appear in at least one field (AND across tokens)
-            tokens = [t for t in search.split() if t]
-            for token in tokens:
-                token_q = Q()
-                for field_name in SEARCHABLE_PROFILE_FIELDS:
-                    print(f"Searching in field: {field_name}")
-                    token_q |= Q(**{f"{field_name}__icontains": token})
-                # Extra related / composite fields
-                token_q |= Q(esncard__number__icontains=token)
-                token_q |= Q(document__enabled=True, document__number__icontains=token)
-                token_q |= Q(phone_prefix__icontains=token) | Q(phone_number__icontains=token)
-                token_q |= Q(whatsapp_prefix__icontains=token) | Q(whatsapp_number__icontains=token)
-                profiles = profiles.filter(token_q)
-            profiles = profiles.distinct()
+        if order_expressions:
+            profiles = profiles.order_by(*order_expressions)
+    else:
+        profiles = profiles.order_by('-created_at')
 
-        # Filter by user's group (only if ESNer)
-        if is_esner:
-            group_param = request.GET.get('group', '')
-            if group_param:
-                group_names = [g.strip() for g in group_param.split(',') if g.strip()]
-                if group_names:
-                    user_profile_ids = User.objects.filter(groups__name__in=group_names) \
-                        .values_list('profile__id', flat=True).distinct()
-                    profiles = profiles.filter(id__in=user_profile_ids)
+    search = request.GET.get('search', '').strip()
+    if search:
+        # Support multi-token search: each token must appear in at least one field (AND across tokens)
+        tokens = [t for t in search.split() if t]
+        for token in tokens:
+            token_q = Q()
+            for field_name in SEARCHABLE_PROFILE_FIELDS:
+                print(f"Searching in field: {field_name}")
+                token_q |= Q(**{f"{field_name}__icontains": token})
+            # Extra related / composite fields
+            token_q |= Q(esncard__number__icontains=token)
+            token_q |= Q(document__enabled=True, document__number__icontains=token)
+            token_q |= Q(phone_prefix__icontains=token) | Q(phone_number__icontains=token)
+            token_q |= Q(whatsapp_prefix__icontains=token) | Q(whatsapp_number__icontains=token)
+            profiles = profiles.filter(token_q)
+        profiles = profiles.distinct()
 
-        # Updated ESNcard validity multi-selection filtering (union logic)
-        esncard_validity_param = request.GET.get('esncardValidity', '')
-        if esncard_validity_param:
-            validity_values = [v.strip() for v in esncard_validity_param.split(',') if v.strip()]
-            profiles = profiles.prefetch_related('esncard_set')
-            profiles_list = list(profiles)
-            union_ids = set()
-            for profile in profiles_list:
-                card = profile.latest_esncard
-                if card:
-                    if card.is_valid and 'valid' in validity_values:
-                        union_ids.add(profile.id)
-                    elif not card.is_valid and 'expired' in validity_values:
-                        union_ids.add(profile.id)
-                else:
-                    if 'absent' in validity_values:
-                        union_ids.add(profile.id)
-            profiles = profiles.filter(id__in=union_ids) if union_ids else profiles.none()
+    # Filter by user's group (only if ESNer)
+    if is_esner:
+        group_param = request.GET.get('group', '')
+        if group_param:
+            group_names = [g.strip() for g in group_param.split(',') if g.strip()]
+            if group_names:
+                user_profile_ids = User.objects.filter(groups__name__in=group_names) \
+                    .values_list('profile__id', flat=True).distinct()
+                profiles = profiles.filter(id__in=user_profile_ids)
 
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        try:
-            page = paginator.paginate_queryset(profiles, request=request)
-        except (NotFound, InvalidPage):
-            return Response({'error': 'Invalid page.'}, status=400)
-        serializer = ProfileListViewSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
+    # Updated ESNcard validity multi-selection filtering (union logic)
+    esncard_validity_param = request.GET.get('esncardValidity', '')
+    if esncard_validity_param:
+        validity_values = [v.strip() for v in esncard_validity_param.split(',') if v.strip()]
+        profiles = profiles.prefetch_related('esncard_set')
+        profiles_list = list(profiles)
+        union_ids = set()
+        for profile in profiles_list:
+            card = profile.latest_esncard
+            if card:
+                if card.is_valid and 'valid' in validity_values:
+                    union_ids.add(profile.id)
+                elif not card.is_valid and 'expired' in validity_values:
+                    union_ids.add(profile.id)
+            else:
+                if 'absent' in validity_values:
+                    union_ids.add(profile.id)
+        profiles = profiles.filter(id__in=union_ids) if union_ids else profiles.none()
 
-
+    paginator = PageNumberPagination()
+    paginator.page_size_query_param = 'page_size'
+    try:
+        page = paginator.paginate_queryset(profiles, request=request)
+    except (NotFound, InvalidPage):
+        return Response({'error': 'Invalid page.'}, status=400)
+    serializer = ProfileListViewSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
 @api_view(['POST'])
 def initiate_profile_creation(request):
-    try:
-        data = request.data
+    data = request.data
 
-        # Enforce esnpolimi.it domain for ESNer registration
-        is_esner = data.get('is_esner', False)
-        email = data.get('email', '')
-        if is_esner and (not isinstance(email, str) or not email.endswith('@esnpolimi.it')):
-            return Response({'email': 'Solo email @esnpolimi.it sono ammesse per la registrazione.'}, status=400)
+    # Enforce esnpolimi.it domain for ESNer registration
+    is_esner = data.get('is_esner', False)
+    email = data.get('email', '')
+    if is_esner and (not isinstance(email, str) or not email.endswith('@esnpolimi.it')):
+        return Response({'email': 'Solo email @esnpolimi.it sono ammesse per la registrazione.'}, status=400)
 
-        # Validate data but don't save yet
-        profile_serializer = ProfileCreateSerializer(data=data)
-        document_serializer = DocumentCreateSerializer(
-            data={k[9:]: v for k, v in data.items() if k.startswith('document_')},
-            partial=True
-        )
+    # Validate data but don't save yet
+    profile_serializer = ProfileCreateSerializer(data=data)
+    document_serializer = DocumentCreateSerializer(
+        data={k[9:]: v for k, v in data.items() if k.startswith('document_')},
+        partial=True
+    )
 
-        profile_valid = profile_serializer.is_valid()
-        document_valid = document_serializer.is_valid()
+    profile_valid = profile_serializer.is_valid()
+    document_valid = document_serializer.is_valid()
 
-        if profile_valid and document_valid:
-            with transaction.atomic():
-                # Store validated data, set flags and create profile
-                profile_data = profile_serializer.validated_data.copy()
-                profile_data['enabled'] = False
-                profile_data['email_is_verified'] = False
-                if is_esner:
-                    profile_data['matricola_expiration'] = None  # Null for ESNers
-                profile = Profile.objects.create(**profile_data)
-
-                # Create document (disabled until email verification) and create it
-                document_data = document_serializer.validated_data.copy()
-                document_data['enabled'] = False
-                Document.objects.create(profile=profile, **document_data)
-
-                # Create user if ESN member
-                is_esner = profile_data.get('is_esner', False)
-                password = data.get('password')
-                if is_esner and password:
-                    try:
-                        user = User.objects.create_user(profile=profile, password=password)
-                        user.is_active = False
-                        aspiranti_group, created = Group.objects.get_or_create(name="Aspiranti")
-                        user.save()  # Ensure user is saved before adding group
-                        user.groups.add(aspiranti_group)
-                        user.save()  # Explicit save after group assignment
-                        logger.info(f"User created for profile {profile.email}")
-                    except Exception as e:
-                        Document.objects.filter(profile=profile).delete()
-                        profile.delete()
-                        logger.error(f"User creation failed for profile {profile.email}: {str(e)}")
-                        sentry_sdk.capture_exception(e)
-                        return Response({"error": f"User creation failed: {str(e)}"}, status=500)
-
-            # Generate verification token and send verification email
-            uid = urlsafe_base64_encode(force_bytes(profile.pk))
-            token = email_verification_token.make_token(profile)
-            verification_link = f"{SCHEME_HOST}/verify-email/{uid}/{token}"
-
-            # Language selection
+    if profile_valid and document_valid:
+        with transaction.atomic():
+            # Store validated data, set flags and create profile
+            profile_data = profile_serializer.validated_data.copy()
+            profile_data['enabled'] = False
+            profile_data['email_is_verified'] = False
             if is_esner:
-                subject = "Verifica email per ESN Polimi"
-                from_email = settings.DEFAULT_FROM_EMAIL
-                to_email = [profile.email]
-                html_content = f"""
-                <html>
-                <body>
-                    <h2>Benvenuto/a in ESN Polimi!</h2>
-                    <p>Per favore, clicca sul seguente link per verificare la tua email:</p>
-                    <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verifica indirizzo email</a></p>
-                    <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
-                    <p>{verification_link}</p>
-                    <p>Questo link scadrà tra 7 giorni.</p>
-                </body>
-                </html>
-                """
-                success_message = "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
-                error_message = "Errore nell'invio dell'email: "
-            else:
-                subject = "Email verification for ESN Polimi"
-                from_email = settings.DEFAULT_FROM_EMAIL
-                to_email = [profile.email]
-                html_content = f"""
-                <html>
-                <body>
-                    <h2>Welcome to ESN Polimi!</h2>
-                    <p>Please click the following link to verify your email:</p>
-                    <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verify Email Address</a></p>
-                    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-                    <p>{verification_link}</p>
-                    <p>This link will expire in 7 days.</p>
-                </body>
-                </html>
-                """
-                success_message = "Verification email sent. Check your inbox to complete registration."
-                error_message = "Error sending email: "
+                profile_data['matricola_expiration'] = None  # Null for ESNers
+            profile = Profile.objects.create(**profile_data)
 
-            try:
-                # Plain HTML email (empty text fallback)
-                send_mail(
-                    subject=subject,
-                    message='',
-                    from_email=from_email,
-                    recipient_list=to_email,
-                    html_message=html_content,
-                    fail_silently=False
-                )
-                logger.info(f"Email sent to {profile.email}")
-            except Exception as e:
-                logger.info(f"Email error: {str(e)}")
-                return Response({"error": f"{error_message}{str(e)}"}, status=500)
+            # Create document (disabled until email verification) and create it
+            document_data = document_serializer.validated_data.copy()
+            document_data['enabled'] = False
+            Document.objects.create(profile=profile, **document_data)
 
-            return Response({"message": success_message}, status=201)
+            # Create user if ESN member
+            is_esner = profile_data.get('is_esner', False)
+            password = data.get('password')
+            if is_esner and password:
+                try:
+                    user = User.objects.create_user(profile=profile, password=password)
+
+                    aspiranti_group, created = Group.objects.get_or_create(name="Aspiranti")
+                    user.save()  # Ensure user is saved before adding group
+                    user.groups.add(aspiranti_group)
+                    user.save()  # Explicit save after group assignment
+                    logger.info(f"User created for profile {profile.email}")
+                except Exception as e:
+                    Document.objects.filter(profile=profile).delete()
+                    profile.delete()
+                    logger.error(f"User creation failed for profile {profile.email}: {str(e)}")
+                    sentry_sdk.capture_exception(e)
+                    return Response({"error": f"User creation failed: {str(e)}"}, status=500)
+
+        # Generate verification token and send verification email
+        uid = urlsafe_base64_encode(force_bytes(profile.pk))
+        token = email_verification_token.make_token(profile)
+        verification_link = f"{SCHEME_HOST}/verify-email/{uid}/{token}"
+
+        # Language selection
+        if is_esner:
+            subject = "Verifica email per ESN Polimi"
+            from_email = settings.DEFAULT_FROM_EMAIL
+            to_email = [profile.email]
+            html_content = f"""
+            <html>
+            <body>
+                <h2>Benvenuto/a in ESN Polimi!</h2>
+                <p>Per favore, clicca sul seguente link per verificare la tua email:</p>
+                <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verifica indirizzo email</a></p>
+                <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
+                <p>{verification_link}</p>
+                <p>Questo link scadrà tra 7 giorni.</p>
+            </body>
+            </html>
+            """
+            success_message = "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
+            error_message = "Errore nell'invio dell'email: "
         else:
-            # Return validation errors
-            errors = {}
-            if not profile_valid:
-                errors.update({k: v[0] for k, v in profile_serializer.errors.items()})
-            if not document_valid:
-                errors.update({'document_' + k: v[0] for k, v in document_serializer.errors.items()})
-            return Response(errors, status=400)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
+            subject = "Email verification for ESN Polimi"
+            from_email = settings.DEFAULT_FROM_EMAIL
+            to_email = [profile.email]
+            html_content = f"""
+            <html>
+            <body>
+                <h2>Welcome to ESN Polimi!</h2>
+                <p>Please click the following link to verify your email:</p>
+                <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verify Email Address</a></p>
+                <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+                <p>{verification_link}</p>
+                <p>This link will expire in 7 days.</p>
+            </body>
+            </html>
+            """
+            success_message = "Verification email sent. Check your inbox to complete registration."
+            error_message = "Error sending email: "
 
+        try:
+            # Plain HTML email (empty text fallback)
+            send_mail(
+                subject=subject,
+                message='',
+                from_email=from_email,
+                recipient_list=to_email,
+                html_message=html_content,
+                fail_silently=False
+            )
+            logger.info(f"Email sent to {profile.email}")
+        except Exception as e:
+            logger.info(f"Email error: {str(e)}")
+            return Response({"error": f"{error_message}{str(e)}"}, status=500)
 
+        return Response({"message": success_message}, status=201)
+    else:
+        # Return validation errors
+        errors = {}
+        if not profile_valid:
+            errors.update({k: v[0] for k, v in profile_serializer.errors.items()})
+        if not document_valid:
+            errors.update({'document_' + k: v[0] for k, v in document_serializer.errors.items()})
+        return Response(errors, status=400)
 @api_view(['GET'])
 def verify_email_and_enable_profile(request, uid, token):
+    # Get profile from uid
     try:
-        # Get profile from uid
-        try:
-            uid = force_str(urlsafe_base64_decode(uid))
-            profile = Profile.objects.get(pk=uid)
-        except (TypeError, ValueError, OverflowError, Profile.DoesNotExist):
-            return Response({'error': 'Link di verifica non valido.'}, status=400)
+        uid = force_str(urlsafe_base64_decode(uid))
+        profile = Profile.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, Profile.DoesNotExist):
+        return Response({'error': 'Link di verifica non valido.'}, status=400)
 
-        if profile.email_is_verified:
-            if profile.is_esner:
-                return Response({'message': 'Email già verificata.'}, status=200)
-            else:
-                return Response({'message': 'Email already verified.'}, status=200)
+    if profile.email_is_verified:
+        if profile.is_esner:
+            return Response({'message': 'Email già verificata.'}, status=200)
+        else:
+            return Response({'message': 'Email already verified.'}, status=200)
 
-        if not email_verification_token.check_token(profile, token):
-            if profile.is_esner:
-                return Response({'error': 'Link di verifica non valido o scaduto.'}, status=400)
-            else:
-                return Response(
-                    {'error': 'Invalid or expired verification link. Please contact us at informatica@esnpolimi.it'},
-                    status=400)
+    if not email_verification_token.check_token(profile, token):
+        if profile.is_esner:
+            return Response({'error': 'Link di verifica non valido o scaduto.'}, status=400)
+        else:
+            return Response(
+                {'error': 'Invalid or expired verification link. Please contact us at informatica@esnpolimi.it'},
+                status=400)
 
-        # Activate profile and related objects
-        with transaction.atomic():
-            profile.email_is_verified = True
-            profile.enabled = True
-            profile.save()
+    # Activate profile and related objects
+    with transaction.atomic():
+        profile.email_is_verified = True
+        profile.enabled = True
+        profile.save()
 
-            # Enable document
-            Document.objects.filter(profile=profile).update(enabled=True)
+        # Enable document
+        Document.objects.filter(profile=profile).update(enabled=True)
 
-            # Activate user if esner
-            if profile.is_esner:
-                try:
-                    user = User.objects.get(profile=profile)
-                    user.is_active = True
-                    user.save()
-                except User.DoesNotExist:
-                    return Response({'error': "L'utente associato a questo profilo non esiste."}, status=500)
-
-        # Send confirmation email to secretary if ESNer has confirmed its email
+        # Activate user if esner
         if profile.is_esner:
             try:
-                send_mail(
-                    subject="Nuova iscrizione ESNer a gestionale completata",
-                    message=f"L'ESNer {profile.name} {profile.surname} ({profile.email}) ha completato la sua iscrizione a gestionale e verificato la sua email.",
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=["segretario@esnpolimi.it"],
-                    fail_silently=False
-                )
-            except Exception as e:
-                logger.error(f"Errore invio email segretario: {str(e)}")
-                sentry_sdk.capture_exception(e)
-                # Do not block the response for secretary email errors
+                user = User.objects.get(profile=profile)
+                user.is_active = True
+                user.save()
+            except User.DoesNotExist:
+                return Response({'error': "L'utente associato a questo profilo non esiste."}, status=500)
 
-        return Response({'message': 'Email verificata e profilo attivato con successo!'})
+    # Send confirmation email to secretary if ESNer has confirmed its email
+    if profile.is_esner:
+        try:
+            send_mail(
+                subject="Nuova iscrizione ESNer a gestionale completata",
+                message=f"L'ESNer {profile.name} {profile.surname} ({profile.email}) ha completato la sua iscrizione a gestionale e verificato la sua email.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=["segretario@esnpolimi.it"],
+                fail_silently=False
+            )
+        except Exception as e:
+            logger.error(f"Errore invio email segretario: {str(e)}")
+            sentry_sdk.capture_exception(e)
+            # Do not block the response for secretary email errors
 
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
+    return Response({'message': 'Email verificata e profilo attivato con successo!'})
+
     return Response({'error': MSG_INTERNAL_ERROR}, status=500)
 
 
@@ -363,45 +342,38 @@ def manual_verify_profile_email(request, pk):
     Board-only endpoint to manually mark profiles (Erasmus or ESNer) as email-verified and enabled.
     Useful when users do not complete email verification flow.
     """
+    if not user_is_board(request.user):
+        return Response({'error': 'Solo Board può attivare manualmente i profili.'}, status=403)
+
     try:
-        if not user_is_board(request.user):
-            return Response({'error': 'Solo Board può attivare manualmente i profili.'}, status=403)
+        profile = Profile.objects.get(pk=pk)
+    except Profile.DoesNotExist:
+        return Response({'error': 'Il profilo non esiste.'}, status=404)
 
-        try:
-            profile = Profile.objects.get(pk=pk)
-        except Profile.DoesNotExist:
-            return Response({'error': 'Il profilo non esiste.'}, status=404)
+    if profile.enabled and profile.email_is_verified:
+        return Response({'message': 'Profilo già attivo e email già verificata.'}, status=200)
 
-        if profile.enabled and profile.email_is_verified:
-            return Response({'message': 'Profilo già attivo e email già verificata.'}, status=200)
-
-        with transaction.atomic():
-            profile.enabled = True
-            profile.email_is_verified = True
-            profile.save(update_fields=['enabled', 'email_is_verified'])
-            Document.objects.filter(profile=profile).update(enabled=True)
+    with transaction.atomic():
+        profile.enabled = True
+        profile.email_is_verified = True
+        profile.save(update_fields=['enabled', 'email_is_verified'])
+        Document.objects.filter(profile=profile).update(enabled=True)
             
-            if profile.is_esner:
-                try:
-                    user = User.objects.get(profile=profile)
-                    user.is_active = True
-                    user.save()
-                except User.DoesNotExist:
-                    logger.error(f"manual_verify_profile_email: No User found for is_esner profile {profile.pk}")
-                    profile.enabled = False
-                    profile.email_is_verified = False
-                    profile.save(update_fields=['enabled', 'email_is_verified'])
-                    Document.objects.filter(profile=profile).update(enabled=False)
-                    return Response({'error': 'L\'utente associato a questo profilo non esiste. Impossibile attivare il profilo.'}, status=409)
+        if profile.is_esner:
+            try:
+                user = User.objects.get(profile=profile)
+                user.is_active = True
+                user.save()
+            except User.DoesNotExist:
+                logger.error(f"manual_verify_profile_email: No User found for is_esner profile {profile.pk}")
+                profile.enabled = False
+                profile.email_is_verified = False
+                profile.save(update_fields=['enabled', 'email_is_verified'])
+                Document.objects.filter(profile=profile).update(enabled=False)
+                return Response({'error': 'L\'utente associato a questo profilo non esiste. Impossibile attivare il profilo.'}, status=409)
 
-        profile_type_label = 'ESNer' if profile.is_esner else 'Erasmus'
-        return Response({'message': f'Profilo {profile_type_label} attivato e email verificata manualmente.'}, status=200)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
-
-
+    profile_type_label = 'ESNer' if profile.is_esner else 'Erasmus'
+    return Response({'message': f'Profilo {profile_type_label} attivato e email verificata manualmente.'}, status=200)
 # Endpoint to view in detail, edit, delete a profile
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
@@ -482,31 +454,18 @@ def profile_detail(request, pk):
             return Response({'error': 'Metodo non supportato.'}, status=405)
     except Profile.DoesNotExist:
         return Response({'error': 'Il profilo non esiste.'}, status=404)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
-
-
 # Endpoint to create document
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def document_creation(request):
-    try:
-        document_serializer = DocumentCreateSerializer(data=request.data, partial=True)
+    document_serializer = DocumentCreateSerializer(data=request.data, partial=True)
 
-        if document_serializer.is_valid():
-            document_serializer.save()
-            return Response(document_serializer.data, status=200)
+    if document_serializer.is_valid():
+        document_serializer.save()
+        return Response(document_serializer.data, status=200)
 
-        else:
-            return Response(document_serializer.errors, status=400)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
-
-
+    else:
+        return Response(document_serializer.errors, status=400)
 @api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def document_detail(request, pk):
@@ -530,54 +489,41 @@ def document_detail(request, pk):
             return Response({'error': 'Metodo non supportato.'}, status=405)
     except Document.DoesNotExist:
         return Response({'error': 'Il documento non esiste.'}, status=404)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def search_profiles(request):
-    try:
-        query = request.GET.get('q', '').strip()
-        valid_only = request.GET.get('valid_only', 'false').lower() == 'true'
-        esner_only = request.GET.get('esner_only', 'false').lower() == 'true'
+    query = request.GET.get('q', '').strip()
+    valid_only = request.GET.get('valid_only', 'false').lower() == 'true'
+    esner_only = request.GET.get('esner_only', 'false').lower() == 'true'
 
-        if len(query) < 2:
-            return Response({"results": []})
+    if len(query) < 2:
+        return Response({"results": []})
 
-        # Search by name, surname, or esncard
-        tokens = query.split()
-        q_filter = Q()
-        for token in tokens:
-            q_filter &= (
-                    Q(name__icontains=token) |
-                    Q(surname__icontains=token) |
-                    Q(esncard__enabled=True, esncard__number__icontains=token)
-            )
-        profiles = Profile.objects.filter(q_filter).distinct()
+    # Search by name, surname, or esncard
+    tokens = query.split()
+    q_filter = Q()
+    for token in tokens:
+        q_filter &= (
+                Q(name__icontains=token) |
+                Q(surname__icontains=token) |
+                Q(esncard__enabled=True, esncard__number__icontains=token)
+        )
+    profiles = Profile.objects.filter(q_filter).distinct()
 
-        if valid_only:
-            profiles = profiles.filter(enabled=True, email_is_verified=True)
+    if valid_only:
+        profiles = profiles.filter(enabled=True, email_is_verified=True)
 
-        if esner_only:
-            profiles = profiles.filter(is_esner=True)
+    if esner_only:
+        profiles = profiles.filter(is_esner=True)
 
-        # Order by most relevant (exact matches first, then contains)
-        profiles = profiles.order_by('-created_at')
+    # Order by most relevant (exact matches first, then contains)
+    profiles = profiles.order_by('-created_at')
 
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(profiles, request=request)
-        serializer = ProfileListViewSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
-
-
+    paginator = PageNumberPagination()
+    paginator.page_size_query_param = 'page_size'
+    page = paginator.paginate_queryset(profiles, request=request)
+    serializer = ProfileListViewSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def profile_subscriptions(request, pk):
@@ -610,12 +556,6 @@ def profile_subscriptions(request, pk):
         return Response(serializer.data, status=200)
     except Profile.DoesNotExist:
         return Response({'error': 'Profilo non trovato.'}, status=404)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': MSG_INTERNAL_ERROR}, status=500)
-
-
 @api_view(['POST'])
 def check_erasmus_email(request):
     """
