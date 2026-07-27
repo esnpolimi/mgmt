@@ -213,10 +213,12 @@ Frontend CI runtime requirement:
 
 Guard behavior:
 
-- the `deploy-cpanel` job always starts and performs a runtime secrets check.
-- if mandatory secrets are missing, the SSH deploy step is skipped without failing the whole workflow.
+- the `deploy-cpanel` job confirms that both deploy branches are available.
+- the cPanel server applies updates through its local pull deployment script, scheduled independently of GitHub Actions or run manually by an operator.
 
-Required GitHub Actions secrets for remote cPanel deploy:
+The cPanel pull deployment script runs from `/home/fazucrdl/mgmt.esnpolimi.it/deploy_local.sh` and updates the backend and frontend from their respective deploy branches before applying Django migrations, static files, checks, and the Passenger restart marker.
+
+No GitHub Actions SSH secrets are required for cPanel deployment.
 
 - `CPANEL_SSH_HOST` (origin server hostname or IP; not the Cloudflare-proxied public domain)
 - `CPANEL_USERNAME`
