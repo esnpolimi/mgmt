@@ -234,6 +234,7 @@ Note: `rimborso_esncard` is exported with a dedicated description.
 6. export with combined filters and non-trivial datasets
 7. ESNcard revocation with `rimborso_esncard` creation and balance consistency
 8. ESNcard revocation blocks on edge cases (multiple emissions, anomalous references, insufficient balance, closed account)
+9. report endpoints (`/reports/accounts/`, `/reports/transactions/`) with permission checks and success/error response shapes, including Drive-upload failures
 
 Test reference: `backend/treasury/tests.py`.
 

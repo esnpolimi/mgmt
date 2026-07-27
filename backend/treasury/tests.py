@@ -4,11 +4,14 @@ import unittest
 from io import BytesIO
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.test import override_settings
 from django.utils import timezone
+from googleapiclient.errors import HttpError
+from httplib2 import Response as HttpLib2Response
 from openpyxl import load_workbook
 from rest_framework.test import APITestCase
 
@@ -1312,6 +1315,63 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		# Column 7 = "Commenti" and column 9 = "Eseguito da".
 		self.assertEqual(ws.cell(row=2, column=7).value, "John External")
 		self.assertEqual(ws.cell(row=2, column=9).value, "Mario Rossi")
+
+
+class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
+	"""Tests for treasury Drive report endpoints."""
+
+	def test_reports_endpoints_require_treasury_report_permission(self):
+		"""Users without Board/flags/perms should get 403."""
+		profile = _create_profile("basic@esnpolimi.it")
+		user = _create_user(profile)
+		self.authenticate(user)
+
+		for path in ["/backend/reports/accounts/", "/backend/reports/transactions/"]:
+			response = self.client.post(path, {"date": "2026-07-27"}, format="json")
+			self.assertEqual(response.status_code, 403)
+			self.assertEqual(response.data.get("error"), "Non autorizzato.")
+
+	@patch("treasury.views.generate_accounts_report")
+	def test_accounts_report_success_shape(self, mock_generate_accounts_report):
+		"""Accounts report should return expected success payload shape."""
+		profile = _create_profile("manager@esnpolimi.it")
+		user = _create_user(profile)
+		user.can_manage_casse = True
+		user.save(update_fields=["can_manage_casse"])
+		self.authenticate(user)
+
+		report_date = timezone.datetime(2026, 7, 27).date()
+		mock_generate_accounts_report.return_value = {
+			"report_date": report_date,
+			"filename": "27-07-2026.xlsx",
+			"file_id": "drive-file-123",
+			"action": "created",
+		}
+
+		response = self.client.post("/backend/reports/accounts/", {"date": "2026-07-27"}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data.get("status"), "ok")
+		self.assertEqual(response.data.get("reportDate"), "2026-07-27")
+		self.assertEqual(response.data.get("filename"), "27-07-2026.xlsx")
+		self.assertEqual(response.data.get("fileId"), "drive-file-123")
+		self.assertEqual(response.data.get("action"), "created")
+
+	@patch("treasury.views.generate_transactions_report")
+	def test_transactions_report_drive_error_returns_502(self, mock_generate_transactions_report):
+		"""Drive upload failures should return 502 with explicit error message."""
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		http_error = HttpError(HttpLib2Response({"status": "503", "reason": "Drive unavailable"}), b"drive down")
+		mock_generate_transactions_report.side_effect = http_error
+
+		response = self.client.post("/backend/reports/transactions/", {"date": "2026-07-27"}, format="json")
+
+		self.assertEqual(response.status_code, 502)
+		self.assertEqual(response.data.get("error"), "Errore Drive durante la generazione report.")
 
 
 class AccountModelTests(TreasuryBaseTestCase):
