@@ -71,6 +71,7 @@ Base path: /backend/
 2. Valid credentials are mandatory.
 3. `profile.email_is_verified` must be `true`.
 4. Response includes token pair and user metadata.
+5. ESNer users stay inactive until email verification completes.
 
 ### 4.2 Refresh Rules
 

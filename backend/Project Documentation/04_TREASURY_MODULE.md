@@ -11,6 +11,7 @@ The treasury module manages application accounting and financial rules:
 - reimbursement request workflow
 - automatic event-flow reimbursements (fee/deposit/services)
 - transaction export for operational reporting
+- daily Drive report generation (manual + scheduled)
 
 ## 2. Domain Model
 
@@ -61,6 +62,7 @@ Accounting invariants:
 1. Transaction create/update/delete always realigns account balance.
 2. Closed accounts do not accept new mutating operations.
 3. For constrained types, negative balance is blocked.
+4. Model validation errors on treasury writes are returned to the client as 400 responses.
 
 ### 2.5 ReimbursementRequest
 
@@ -90,6 +92,11 @@ Base path: /backend/
 - GET /transactions/
 - GET|PATCH|DELETE /transaction/<pk>/
 - GET /transactions_export/
+
+### 3.5 Report APIs
+
+- POST /reports/accounts/
+- POST /reports/transactions/
 
 ### 3.3 Account APIs
 
@@ -160,7 +167,7 @@ Account visibility:
 
 ### 5.4 Event Reimbursements
 
-Depositi:
+Deposits:
 
 1. bulk `subscription_ids` input
 2. original deposit transaction verification
@@ -174,7 +181,7 @@ Fee/services:
 3. optional reimbursement for related services
 4. available account-balance check
 
-Orchestrazione UI unificata (single icon):
+Unified UI Orchestration (single icon):
 
 1. frontend can select multiple items (fee/services/deposit) in one user action
 2. backend still uses separate endpoints (`reimburse_quota`, `reimburse_deposits`)
@@ -195,13 +202,19 @@ Orchestrazione UI unificata (single icon):
 
 `transactions_export` produces XLSX with accounting metadata and operational descriptions.
 
+Daily Drive reports:
+
+- two XLSX files stored in `Treasury-Reports/Casse` and `Treasury-Reports/Transazioni`
+- filenames use `DD-MM-YYYY.xlsx`
+- scheduled job runs at 23:50 Europe/Rome (snapshot at run time)
+
 Note: `rimborso_esncard` is exported with a dedicated description.
 
 ## 7. Cross-Module Dependencies
 
 - events: source of truth for `Subscription`/`Event` data used in reimbursements
-- profiles/users: identita attore e ownership richieste
-- notification/email: avvisi operativi su operazioni sensibili
+- profiles/users: actor identity and ownership requirements
+- notification/email: operational notifications for sensitive operations
 
 ## 8. Operational Risks
 

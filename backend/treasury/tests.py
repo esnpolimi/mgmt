@@ -1402,6 +1402,7 @@ class ESNcardEdgeCaseTests(TreasuryBaseTestCase):
 		board_profile = _create_profile("board@esnpolimi.it")
 		board_user = _create_user(board_profile)
 		board_user.groups.add(self.group_board)
+		board_user.user_permissions.add(self.perm_change_esncard)
 		self.authenticate(board_user)
 
 		response = self.client.patch("/backend/esncard/99999/", {

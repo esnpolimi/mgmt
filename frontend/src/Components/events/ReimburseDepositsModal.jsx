@@ -48,7 +48,7 @@ export default function ReimburseDepositsModal({open, onClose, event, listId, su
         fetchCustom("GET", `/reimbursable_deposits/?event=${event.id}&list=${listId}`, {
             onSuccess: (data) => {
                 setSubscriptions(data);
-                setSelectedSubs(data.map(s => s.id));
+                setSelectedSubs([]);
             },
             onError: (err) => defaultErrorHandler(err, setPopup),
             onFinally: () => setLoading(false)

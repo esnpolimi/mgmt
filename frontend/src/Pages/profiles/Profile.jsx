@@ -918,7 +918,9 @@ export default function Profile() {
         fetchCustom("DELETE", `/esncard/${latestESNcard.id}/`, {
             onSuccess: (res) => {
                 setPopup({
-                    message: res?.message || "ESNcard revocata e rimborso registrato in tesoreria!",
+                    message: res?.message || (res?.refund_transaction_id
+                        ? "ESNcard revocata e rimborso registrato in tesoreria!"
+                        : "ESNcard revocata."),
                     state: "success",
                     id: Date.now()
                 });

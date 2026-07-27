@@ -15,3 +15,5 @@ scripts
 logs
 backend/maintenance_notification.json
 migrations
+specs
+.spec2cloud
