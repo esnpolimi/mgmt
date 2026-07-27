@@ -175,6 +175,7 @@ Operational note:
 - combined flow uses separate calls to `reimburse_quota` and `reimburse_deposits`
 - in partial errors, successful items stay confirmed and failed items can be retried
 - with current backend logic, "services only" is allowed only if fee is already reimbursed
+- frontend action rendering enables reimburse menu also for service-only events (no fee/deposit), based on presence of configured event services and paid service status on subscription
 
 ## 6. Dynamic Field Schema
 
