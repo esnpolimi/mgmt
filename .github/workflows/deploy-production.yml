@@ -237,51 +237,7 @@ jobs:
     needs: [create-release-tag, deploy-backend, deploy-frontend, create-github-release]
 
     steps:
-    - name: Check cPanel secrets
-      id: cpanel-secrets
-      env:
-        HAS_CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST != '' }}
-        HAS_CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME != '' }}
-        HAS_CPANEL_SSH_KEY: ${{ secrets.CPANEL_SSH_KEY != '' }}
+    - name: Confirm cPanel pull deployment
       run: |
-        set -e
-        if [ "$HAS_CPANEL_SSH_HOST" = "true" ] && [ "$HAS_CPANEL_USERNAME" = "true" ] && [ "$HAS_CPANEL_SSH_KEY" = "true" ]; then
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "enabled=false" >> "$GITHUB_OUTPUT"
-          echo "cPanel deploy skipped: required secrets are not configured."
-        fi
-
-    - name: Deploy Backend + Frontend on cPanel via SSH
-      if: ${{ steps.cpanel-secrets.outputs.enabled == 'true' }}
-      uses: appleboy/ssh-action@v1.2.0
-      with:
-        host: ${{ secrets.CPANEL_SSH_HOST }}
-        username: ${{ secrets.CPANEL_USERNAME }}
-        key: ${{ secrets.CPANEL_SSH_KEY }}
-        port: ${{ secrets.CPANEL_SSH_PORT || '22' }}
-        script: |
-          set -e
-
-          APP_ROOT="${{ secrets.CPANEL_PYTHON_APP_ROOT || '/home/fazucrdl/mgmt.esnpolimi.it/backend' }}"
-
-          cd /home/fazucrdl/mgmt.esnpolimi.it
-
-          # Aggiorna backend e frontend dai branch deploy-* già pubblicati dalla pipeline.
-          ./gitpull_backend.sh
-          ./gitpull_frontend.sh
-
-          # Verifiche e allineamenti backend post-deploy.
-          source /home/fazucrdl/virtualenv/mgmt.esnpolimi.it/3.11/bin/activate
-          cd /home/fazucrdl/mgmt.esnpolimi.it/backend
-          pip install -r requirements.txt
-          python manage.py makemigrations --noinput
-          python manage.py migrate --noinput
-          python manage.py collectstatic --noinput
-          python manage.py check
-
-          # Restart Python App (Passenger/cPanel) dopo deploy + migrazioni.
-          mkdir -p "$APP_ROOT/tmp"
-          touch "$APP_ROOT/tmp/restart.txt"
-
-          echo "cPanel deploy completato per release ${{ needs.create-release-tag.outputs.new_tag }}"
+        echo "Release ${{ needs.create-release-tag.outputs.new_tag }} is available on deploy-backend and deploy-frontend."
+        echo "cPanel applies it through its local scheduled or manual pull deployment."
