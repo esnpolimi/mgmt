@@ -90,7 +90,7 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
             let reason = '';
             if (quotaStatus === 'reimbursed') {
                 disabled = true;
-                reason = 'Gia rimborsata';
+                reason = 'Già rimborsata';
             } else if (quotaStatus !== 'paid') {
                 disabled = true;
                 reason = 'Non pagata';
@@ -110,7 +110,7 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
             let reason = '';
             if (servicesStatus === 'reimbursed') {
                 disabled = true;
-                reason = 'Servizi gia rimborsati';
+                reason = 'Servizi già rimborsati';
             } else if (servicesTotal <= 0) {
                 disabled = true;
                 reason = 'Nessun servizio selezionato';
@@ -133,7 +133,7 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
             let reason = '';
             if (depositStatus === 'reimbursed') {
                 disabled = true;
-                reason = 'Gia rimborsata';
+                reason = 'Già rimborsata';
             } else if (depositStatus !== 'paid') {
                 disabled = true;
                 reason = 'Non pagata';
@@ -204,7 +204,7 @@ export default function ReimburseSelectionModal({open, onClose, onRefresh, event
 
         if (selectedItems.services && !selectedItems.quota && quotaStatus !== 'reimbursed') {
             setPopup({
-                message: 'Con la logica attuale puoi rimborsare solo i servizi separatamente solo se la quota e gia rimborsata.',
+                message: 'Con la logica attuale puoi rimborsare solo i servizi separatamente solo se la quota è già rimborsata.',
                 state: 'error',
                 id: Date.now()
             });
