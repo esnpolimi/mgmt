@@ -3,7 +3,7 @@ from datetime import timedelta, datetime
 from decimal import Decimal
 
 import sentry_sdk
-from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
+from django.core.exceptions import PermissionDenied, ObjectDoesNotExist, ValidationError
 from django.db import transaction, IntegrityError
 from django.db.models import Q, Prefetch
 from django.http import HttpResponse
@@ -25,10 +25,12 @@ from treasury.serializers import TransactionViewSerializer, AccountDetailedViewS
     AccountCreateSerializer, ESNcardEmissionSerializer, TransactionCreateSerializer, \
     ESNcardSerializer, AccountListViewSerializer, ReimbursementRequestSerializer, ReimbursementRequestViewSerializer, \
     TransactionUpdateSerializer
+from treasury.reports import generate_accounts_report, generate_transactions_report, ReportDateError
 from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
 from django.utils import timezone
+from utils.permissions import user_is_board
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -37,10 +39,6 @@ except Exception:
 MSG_UNAUTHORIZED = 'Non autorizzato.'
 
 logger = logging.getLogger(__name__)
-
-
-def user_is_board(user):
-    return user.groups.filter(name="Board").exists()
 
 
 def get_action_permissions(action, user):
@@ -67,6 +65,13 @@ def get_action_permissions(action, user):
         return user_is_board(user)
     if action == 'reimbursement_request_detail_delete':
         return user_is_board(user) or user.has_perm('treasury.delete_reimbursementrequest')
+    if action == 'treasury_report_generate':
+        return (
+            user_is_board(user)
+            or getattr(user, 'can_manage_casse', False)
+            or user.has_perm('treasury.add_transaction')
+            or user.has_perm('treasury.view_account')
+        )
     # Default: allow
     return True
 
@@ -148,6 +153,7 @@ def esncard_emission(request):
             return Response(response_data, status=200)
 
     except PermissionDenied as e:
+        sentry_sdk.capture_exception(e)
         return Response({'error': str(e)}, status=403)
     except IntegrityError as e:
         # Handle duplicate ESNcard number
@@ -156,23 +162,19 @@ def esncard_emission(request):
                 'esncard_number': ['Questo numero ESNcard è già in uso.']
             }, status=400)
         logger.error(f"IntegrityError non gestito: {str(e)}")
-        return Response({'error': 'Errore di integrità dei dati.'}, status=400)
-    except (ObjectDoesNotExist, ValueError) as e:
-        return Response({'error': str(e)}, status=400)
-    except Exception as e:
-        logger.error(str(e))
         sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+        return Response({'error': 'Errore di integrità dei dati.'}, status=400)
+    except (ObjectDoesNotExist, ValueError, ValidationError) as e:
+        sentry_sdk.capture_exception(e)
+        return Response({'error': str(e)}, status=400)
 @api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def esncard_detail(request, pk):
     try:
         if request.method == 'PATCH':
-            esncard = ESNcard.objects.get(pk=pk)
             if not get_action_permissions('esncard_detail_patch', request.user):
                 return Response({'error': MSG_UNAUTHORIZED}, status=403)
+            esncard = ESNcard.objects.get(pk=pk)
             update_data = {}
             if 'number' in request.data:
                 update_data['number'] = request.data['number']
@@ -246,8 +248,9 @@ def esncard_detail(request, pk):
                     )
                     try:
                         refund_tx.save()
-                    except (PermissionDenied, ValueError) as refund_error:
+                    except (PermissionDenied, ValueError, ValidationError) as refund_error:
                         logger.exception("Errore durante il salvataggio della transazione di rimborso ESNcard: %s", refund_error)
+                        sentry_sdk.capture_exception(refund_error)
                         return Response({'error': "Errore durante il salvataggio della transazione di rimborso ESNcard."}, status=409)
 
                     refund_transaction_id = refund_tx.id
@@ -272,122 +275,95 @@ def esncard_detail(request, pk):
     except ESNcard.DoesNotExist:
         not_found_status = 404 if request.method == 'DELETE' else 400
         return Response({'error': 'La ESNcard non esiste'}, status=not_found_status)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 # Endpoint to retrieve ensncard fees
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def esncard_fees(_):
-    try:
-        # Get the settings and add fee information
-        settings = Settings.get()
-        response = Response({
-            'esncard_release_fee': str(settings.esncard_release_fee),
-            'esncard_lost_fee': str(settings.esncard_lost_fee)
-        }, status=200)
-        return response
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    # Get the settings and add fee information
+    settings = Settings.get()
+    response = Response({
+        'esncard_release_fee': str(settings.esncard_release_fee),
+        'esncard_lost_fee': str(settings.esncard_lost_fee)
+    }, status=200)
+    return response
 #   Endpoint for adding a transaction
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def transaction_add(request):
-    try:
-        if not get_action_permissions('transaction_add', request.user):
+    if not get_action_permissions('transaction_add', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
+
+    transaction_serializer = TransactionCreateSerializer(data=request.data, context={'request': request})
+    if not transaction_serializer.is_valid():
+        return Response(transaction_serializer.errors, status=400)
+
+    transaction_type = transaction_serializer.validated_data['type']
+    if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
+        if not request.user.has_perm('treasury.add_transaction'):
             return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
-        transaction_serializer = TransactionCreateSerializer(data=request.data, context={'request': request})
-        if not transaction_serializer.is_valid():
-            return Response(transaction_serializer.errors, status=400)
+    try:
+        tx = transaction_serializer.save()
+    except ValueError as ve:
+        return Response({'error': str(ve)}, status=400)
+    except PermissionDenied as pe:
+        return Response({'error': str(pe)}, status=403)
 
-        transaction_type = transaction_serializer.validated_data['type']
+    # --- Email notification for manual deposit / withdrawal ---
+    if 'localhost' in settings.SCHEME_HOST:
+        print("Skipping email notification in localhost environment.")
+    else:
         if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
-            if not request.user.has_perm('treasury.add_transaction'):
-                return Response({'error': MSG_UNAUTHORIZED}, status=403)
+            try:
+                executor_profile = getattr(tx.executor, 'profile', None)
+                executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
+                executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
+                receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
+                subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
+                body = (
+                    f"Tipo: {transaction_type}\n"
+                    f"Importo: {tx.amount} EUR\n"
+                    f"Cassa: {tx.account.name}\n"
+                    f"Esecutore: {executor_name} ({executor_email})\n"
+                    f"Descrizione: {tx.description}\n"
+                    f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Ricevuta: {receipt_info}\n"
+                )
+                send_mail(
+                    subject=subject,
+                    message=body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    recipient_list=['tesoriere@esnpolimi.it'],
+                    fail_silently=True
+                )
+            except Exception as mail_exc:
+                logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
 
-        try:
-            tx = transaction_serializer.save()
-        except ValueError as ve:
-            return Response({'error': str(ve)}, status=400)
-        except PermissionDenied as pe:
-            return Response({'error': str(pe)}, status=403)
-
-        # --- Email notification for manual deposit / withdrawal ---
-        if 'localhost' in settings.SCHEME_HOST:
-            print("Skipping email notification in localhost environment.")
-        else:
-            if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
-                try:
-                    executor_profile = getattr(tx.executor, 'profile', None)
-                    executor_name = f"{executor_profile.name} {executor_profile.surname}" if executor_profile else "N/D"
-                    executor_email = executor_profile.email if executor_profile else (getattr(tx.executor, 'email', 'N/D'))
-                    receipt_info = tx.receipt_link if tx.receipt_link else "Nessuna ricevuta caricata"
-                    subject = f"Nuova transazione manuale: {'Deposito' if transaction_type == Transaction.TransactionType.DEPOSIT else 'Prelievo'}"
-                    body = (
-                        f"Tipo: {transaction_type}\n"
-                        f"Importo: {tx.amount} EUR\n"
-                        f"Cassa: {tx.account.name}\n"
-                        f"Esecutore: {executor_name} ({executor_email})\n"
-                        f"Descrizione: {tx.description}\n"
-                        f"Data: {tx.created_at.strftime('%d/%m/%Y %H:%M')}\n"
-                        f"Ricevuta: {receipt_info}\n"
-                    )
-                    send_mail(
-                        subject=subject,
-                        message=body,
-                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                        recipient_list=['tesoriere@esnpolimi.it'],
-                        fail_silently=True
-                    )
-                except Exception as mail_exc:
-                    logger.warning(f"Errore invio email tesoriere (transazione manuale): {mail_exc}")
-
-        return Response(status=200)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    return Response(status=200)
 #   Endpoint to retrieve list of transactions
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def transactions_list(request):
-    try:
-        transactions = Transaction.objects.all().order_by('-created_at')
-        transactions = apply_transaction_filters(transactions, request)
-        # Support limit param for dashboard
-        limit = request.GET.get('limit')
-        if limit:
-            try:
-                limit = int(limit)
-                transactions = transactions[:limit]
-                serializer = TransactionViewSerializer(transactions, many=True)
-                return Response({'results': serializer.data,
-                                 'count': transactions.count() if hasattr(transactions, 'count') else len(
-                                     transactions)})
-            except ValueError:
-                return Response({'error': 'Parametro limit non valido.'}, status=400)
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(transactions, request=request)
-        serializer = TransactionViewSerializer(page, many=True)
-        # Returns paginated response, use .results in frontend
-        return paginator.get_paginated_response(serializer.data)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    transactions = Transaction.objects.all().order_by('-created_at')
+    transactions = apply_transaction_filters(transactions, request)
+    # Support limit param for dashboard
+    limit = request.GET.get('limit')
+    if limit:
+        try:
+            limit = int(limit)
+            transactions = transactions[:limit]
+            serializer = TransactionViewSerializer(transactions, many=True)
+            return Response({'results': serializer.data,
+                             'count': transactions.count() if hasattr(transactions, 'count') else len(
+                                 transactions)})
+        except ValueError:
+            return Response({'error': 'Parametro limit non valido.'}, status=400)
+    paginator = PageNumberPagination()
+    paginator.page_size_query_param = 'page_size'
+    page = paginator.paginate_queryset(transactions, request=request)
+    serializer = TransactionViewSerializer(page, many=True)
+    # Returns paginated response, use .results in frontend
+    return paginator.get_paginated_response(serializer.data)
 # Endpoint to retrive transaction details based on id
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
@@ -472,47 +448,27 @@ def transaction_detail(request, pk):
             return Response({'error': "Metodo non consentito"}, status=405)
     except Transaction.DoesNotExist:
         return Response({'error': 'Transazione non trovata.'}, status=404)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 # Endpoint to retrieve all accounts
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def accounts_list(request):
-    try:
-        accounts = Account.objects.all().order_by('id')
-        visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
-        serializer = AccountListViewSerializer(visible_accounts, many=True, context={'request': request})
-        return Response(serializer.data, status=200)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    accounts = Account.objects.all().order_by('id')
+    visible_accounts = [account for account in accounts if account.is_visible_to_user(request.user)]
+    serializer = AccountListViewSerializer(visible_accounts, many=True, context={'request': request})
+    return Response(serializer.data, status=200)
 # Endpoint to create new account
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def account_creation(request):
-    try:
-        if not get_action_permissions('account_creation', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+    if not get_action_permissions('account_creation', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
-        account_serializer = AccountCreateSerializer(data=request.data)
-        if not account_serializer.is_valid():
-            return Response(account_serializer.errors, status=400)
+    account_serializer = AccountCreateSerializer(data=request.data)
+    if not account_serializer.is_valid():
+        return Response(account_serializer.errors, status=400)
 
-        account_serializer.save(changed_by=request.user)
-        return Response(status=200)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    account_serializer.save(changed_by=request.user)
+    return Response(status=200)
 # Endpoint to retrieve account info / edit account
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
@@ -553,163 +509,136 @@ def account_detail(request, pk):
             return Response({'error': "Metodo non consentito"}, status=405)
     except Account.DoesNotExist:
         return Response({'error': 'Account non trovato.'}, status=404)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def reimbursement_request_creation(request):
-    try:
-        serializer = ReimbursementRequestSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            instance = serializer.save()
-            # --- Email notification for reimbursement request creation ---
-            if 'localhost' in settings.SCHEME_HOST:
-                print("Skipping email notification in localhost environment.")
-            else:
-                try:
-                    profile = getattr(instance.user, 'profile', None)
-                    user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
-                    receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
-                    subject = f"Nuova richiesta di rimborso #{instance.id}"
-                    body = (
-                        f"Richiedente: {user_name}\n"
-                        f"Importo: {instance.amount} EUR\n"
-                        f"Metodo pagamento: {instance.payment}\n"
-                        f"Descrizione: {instance.description}\n"
-                        f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
-                        f"Ricevuta: {receipt_info}\n"
-                    )
-                    send_mail(
-                        subject=subject,
-                        message=body,
-                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                        recipient_list=['tesoriere@esnpolimi.it'],
-                        fail_silently=True
-                    )
-                except Exception as mail_exc:
-                    logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
+    serializer = ReimbursementRequestSerializer(data=request.data, context={'request': request})
+    if serializer.is_valid():
+        instance = serializer.save()
+        # --- Email notification for reimbursement request creation ---
+        if 'localhost' in settings.SCHEME_HOST:
+            print("Skipping email notification in localhost environment.")
+        else:
+            try:
+                profile = getattr(instance.user, 'profile', None)
+                user_name = f"{profile.name} {profile.surname}" if profile else getattr(instance.user, 'email', 'N/D')
+                receipt_info = instance.receipt_link if instance.receipt_link else "Nessuna ricevuta caricata"
+                subject = f"Nuova richiesta di rimborso #{instance.id}"
+                body = (
+                    f"Richiedente: {user_name}\n"
+                    f"Importo: {instance.amount} EUR\n"
+                    f"Metodo pagamento: {instance.payment}\n"
+                    f"Descrizione: {instance.description}\n"
+                    f"Data richiesta: {instance.created_at.strftime('%d/%m/%Y %H:%M')}\n"
+                    f"Ricevuta: {receipt_info}\n"
+                )
+                send_mail(
+                    subject=subject,
+                    message=body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    recipient_list=['tesoriere@esnpolimi.it'],
+                    fail_silently=True
+                )
+            except Exception as mail_exc:
+                logger.warning(f"Errore invio email tesoriere (richiesta rimborso): {mail_exc}")
 
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def reimbursement_request_detail(request, pk):
     try:
-        try:
-            instance = ReimbursementRequest.objects.get(pk=pk)
-        except ReimbursementRequest.DoesNotExist:
-            return Response({'error': 'Richiesta di rimborso non trovata.'}, status=404)
+        instance = ReimbursementRequest.objects.get(pk=pk)
+    except ReimbursementRequest.DoesNotExist:
+        return Response({'error': 'Richiesta di rimborso non trovata.'}, status=404)
 
-        if request.method == 'GET':
-            serializer = ReimbursementRequestViewSerializer(instance)
-            return Response(serializer.data, status=200)
+    if request.method == 'GET':
+        serializer = ReimbursementRequestViewSerializer(instance)
+        return Response(serializer.data, status=200)
 
-        elif request.method == 'PATCH':
-            if not get_action_permissions('reimbursement_request_detail_patch', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=403)
-            if request.user.has_perm('treasury.change_reimbursementrequest'):
-                allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
-                data = {k: v for k, v in request.data.items() if k in allowed_fields}
-                serializer = ReimbursementRequestSerializer(instance, data=data, partial=True,
-                                                            context={'request': request})
-                if serializer.is_valid():
-                    try:
-                        serializer.save()
-                        # Reload instance to reflect changes (e.g., account deduction)
-                        instance.refresh_from_db()
-                        response_serializer = ReimbursementRequestViewSerializer(instance)
-                        return Response(response_serializer.data, status=200)
-                    except serializers.ValidationError as ve:
-                        return Response(ve.detail, status=400)
-                return Response(serializer.errors, status=400)
-            else:
-                return Response({'error': MSG_UNAUTHORIZED}, status=403)
-
-        elif request.method == 'DELETE':
-            if not get_action_permissions('reimbursement_request_detail_delete', request.user):
-                return Response({'error': MSG_UNAUTHORIZED}, status=403)
-            try:
-                instance.delete()
-                return Response(status=204)
-            except Exception as del_exc:
-                logger.error(f"Errore eliminazione richiesta rimborso #{pk}: {del_exc}")
-                return Response({'error': 'Errore durante l\'eliminazione.'}, status=500)
+    elif request.method == 'PATCH':
+        if not get_action_permissions('reimbursement_request_detail_patch', request.user):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+        if request.user.has_perm('treasury.change_reimbursementrequest'):
+            allowed_fields = {'description', 'receipt_link', 'account', 'amount'}
+            data = {k: v for k, v in request.data.items() if k in allowed_fields}
+            serializer = ReimbursementRequestSerializer(instance, data=data, partial=True,
+                                                        context={'request': request})
+            if serializer.is_valid():
+                try:
+                    serializer.save()
+                    # Reload instance to reflect changes (e.g., account deduction)
+                    instance.refresh_from_db()
+                    response_serializer = ReimbursementRequestViewSerializer(instance)
+                    return Response(response_serializer.data, status=200)
+                except serializers.ValidationError as ve:
+                    return Response(ve.detail, status=400)
+            return Response(serializer.errors, status=400)
         else:
-            return Response({'error': "Metodo non consentito"}, status=405)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
-
+    elif request.method == 'DELETE':
+        if not get_action_permissions('reimbursement_request_detail_delete', request.user):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+        try:
+            instance.delete()
+            return Response(status=204)
+        except Exception as del_exc:
+            logger.error(f"Errore eliminazione richiesta rimborso #{pk}: {del_exc}")
+            return Response({'error': 'Errore durante l\'eliminazione.'}, status=500)
+    else:
+        return Response({'error': "Metodo non consentito"}, status=405)
 # Endpoint to retrieve list of reimbursement requests
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def reimbursement_requests_list(request):
-    try:
-        requests = ReimbursementRequest.objects.all().order_by('-created_at')
-        profile_id = request.GET.get('profile')
-        if profile_id:
-            try:
-                profile_id_int = int(profile_id)
-            except ValueError:
-                return Response({'error': 'Parametro profile non valido.'}, status=400)
-            # Allow only board or the profile owner
-            req_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
-            if not user_is_board(request.user) and req_profile_id != profile_id_int:
-                return Response({'error': MSG_UNAUTHORIZED}, status=403)
-            requests = requests.filter(user__profile__id=profile_id_int)
-        search = request.GET.get('search', '').strip()
-        if search:
-            requests = requests.filter(
-                Q(description__icontains=search) |
-                Q(user__profile__name__icontains=search) |
-                Q(user__profile__surname__icontains=search) |
-                Q(user__profile__email__icontains=search)
-            )
-        # Filtering by payment (multi)
-        payments = request.GET.getlist('payment')
-        if payments:
-            requests = requests.filter(payment__in=payments)
-        # Filtering by dateFrom/dateTo
-        date_from = request.GET.get('dateFrom')
-        if date_from:
-            requests = requests.filter(created_at__gte=date_from)
-        date_to = request.GET.get('dateTo')
-        if date_to:
-            requests = requests.filter(created_at__lte=parse_datetime(date_to) + timedelta(days=1))
-        # Support limit param for dashboard
-        limit = request.GET.get('limit')
-        if limit:
-            try:
-                limit = int(limit)
-                requests = requests[:limit]
-                serializer = ReimbursementRequestViewSerializer(requests, many=True)
-                return Response({'results': serializer.data,
-                                 'count': requests.count() if hasattr(requests, 'count') else len(requests)})
-            except ValueError:
-                return Response({'error': 'Parametro limit non valido.'}, status=400)
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(requests, request=request)
-        serializer = ReimbursementRequestViewSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    requests = ReimbursementRequest.objects.all().order_by('-created_at')
+    profile_id = request.GET.get('profile')
+    if profile_id:
+        try:
+            profile_id_int = int(profile_id)
+        except ValueError:
+            return Response({'error': 'Parametro profile non valido.'}, status=400)
+        # Allow only board or the profile owner
+        req_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+        if not user_is_board(request.user) and req_profile_id != profile_id_int:
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+        requests = requests.filter(user__profile__id=profile_id_int)
+    search = request.GET.get('search', '').strip()
+    if search:
+        requests = requests.filter(
+            Q(description__icontains=search) |
+            Q(user__profile__name__icontains=search) |
+            Q(user__profile__surname__icontains=search) |
+            Q(user__profile__email__icontains=search)
+        )
+    # Filtering by payment (multi)
+    payments = request.GET.getlist('payment')
+    if payments:
+        requests = requests.filter(payment__in=payments)
+    # Filtering by dateFrom/dateTo
+    date_from = request.GET.get('dateFrom')
+    if date_from:
+        requests = requests.filter(created_at__gte=date_from)
+    date_to = request.GET.get('dateTo')
+    if date_to:
+        requests = requests.filter(created_at__lte=parse_datetime(date_to) + timedelta(days=1))
+    # Support limit param for dashboard
+    limit = request.GET.get('limit')
+    if limit:
+        try:
+            limit = int(limit)
+            requests = requests[:limit]
+            serializer = ReimbursementRequestViewSerializer(requests, many=True)
+            return Response({'results': serializer.data,
+                             'count': requests.count() if hasattr(requests, 'count') else len(requests)})
+        except ValueError:
+            return Response({'error': 'Parametro limit non valido.'}, status=400)
+    paginator = PageNumberPagination()
+    paginator.page_size_query_param = 'page_size'
+    page = paginator.paginate_queryset(requests, request=request)
+    serializer = ReimbursementRequestViewSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def reimburse_deposits(request):
@@ -717,83 +646,76 @@ def reimburse_deposits(request):
     Reimburse deposits for a list of subscriptions.
     Expects: { "event": <event_id>, "subscription_ids": [<id1>, <id2>, ...], "account": <account_id>, "notes": <optional> }
     """
-    try:
-        if not get_action_permissions('reimburse_deposits', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+    if not get_action_permissions('reimburse_deposits', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
-        event_id = request.data.get('event')
-        subscription_ids = request.data.get('subscription_ids', [])
-        account_id = request.data.get('account')
-        notes = request.data.get('notes', '')
+    event_id = request.data.get('event')
+    subscription_ids = request.data.get('subscription_ids', [])
+    account_id = request.data.get('account')
+    notes = request.data.get('notes', '')
 
-        if not event_id or not subscription_ids or not account_id:
-            return Response({'error': 'Dati mancanti.'}, status=400)
+    if not event_id or not subscription_ids or not account_id:
+        return Response({'error': 'Dati mancanti.'}, status=400)
 
-        event = Event.objects.get(id=event_id)
-        account = Account.objects.get(id=account_id)
-        subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
+    event = Event.objects.get(id=event_id)
+    account = Account.objects.get(id=account_id)
+    subscriptions = Subscription.objects.filter(id__in=subscription_ids, event=event)
 
-        # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
-        if getattr(event, 'reimbursements_by_organizers_only', False):
-            is_board = user_is_board(request.user)
-            organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
-            user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
-            if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
-                return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
+    # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
+    if getattr(event, 'reimbursements_by_organizers_only', False):
+        is_board = user_is_board(request.user)
+        organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
+        user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+        if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
+            return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
 
-        if not subscriptions.exists():
-            return Response({'error': 'Nessuna iscrizione valida trovata.'}, status=400)
+    if not subscriptions.exists():
+        return Response({'error': 'Nessuna iscrizione valida trovata.'}, status=400)
 
-        deposit_amount = event.deposit or Decimal('0.00')
+    deposit_amount = event.deposit or Decimal('0.00')
 
-        with transaction.atomic():
-            account_locked = Account.objects.select_for_update().get(pk=account.pk)
-            created = []
-            for sub in subscriptions:
-                if Transaction.objects.filter(subscription=sub,
-                                              type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists():
-                    continue
-                cauzione_tx = Transaction.objects.filter(subscription=sub,
-                                                         type=Transaction.TransactionType.CAUZIONE).first()
-                if not cauzione_tx:
-                    # Fix: handle external subscriptions gracefully
-                    sub_name = None
-                    if sub.profile:
-                        sub_name = f"{sub.profile.name} {sub.profile.surname}"
-                    elif sub.external_name:
-                        sub_name = sub.external_name
-                    else:
-                        sub_name = "Esterno"
-                    return Response({'error': f'Nessuna cauzione rimborsabile trovata per {sub_name}'}, status=400)
-                if account_locked.status == "closed":
-                    return Response({'error': 'La cassa è chiusa.'}, status=400)
-                if account_locked.balance < deposit_amount:
-                    return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
-                # Fix: handle external subscriptions for description
+    with transaction.atomic():
+        account_locked = Account.objects.select_for_update().get(pk=account.pk)
+        created = []
+        for sub in subscriptions:
+            if Transaction.objects.filter(subscription=sub,
+                                          type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists():
+                continue
+            cauzione_tx = Transaction.objects.filter(subscription=sub,
+                                                     type=Transaction.TransactionType.CAUZIONE).first()
+            if not cauzione_tx:
+                # Fix: handle external subscriptions gracefully
+                sub_name = None
                 if sub.profile:
                     sub_name = f"{sub.profile.name} {sub.profile.surname}"
                 elif sub.external_name:
                     sub_name = sub.external_name
                 else:
                     sub_name = "Esterno"
-                tx = Transaction.objects.create(
-                    type=Transaction.TransactionType.RIMBORSO_CAUZIONE,
-                    subscription=sub,
-                    executor=request.user,
-                    account=account_locked,
-                    amount=-deposit_amount,
-                    description=f"Rimborso cauzione {sub_name} - {event.name}" + (f" - {notes}" if notes else "")
-                )
-                created.append(tx)
-            # Return the created transactions
-            serializer = TransactionViewSerializer(created, many=True)
-            return Response(serializer.data, status=201)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+                return Response({'error': f'Nessuna cauzione rimborsabile trovata per {sub_name}'}, status=400)
+            if account_locked.status == "closed":
+                return Response({'error': 'La cassa è chiusa.'}, status=400)
+            if account_locked.balance < deposit_amount:
+                return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
+            # Fix: handle external subscriptions for description
+            if sub.profile:
+                sub_name = f"{sub.profile.name} {sub.profile.surname}"
+            elif sub.external_name:
+                sub_name = sub.external_name
+            else:
+                sub_name = "Esterno"
+            tx = Transaction.objects.create(
+                type=Transaction.TransactionType.RIMBORSO_CAUZIONE,
+                subscription=sub,
+                executor=request.user,
+                account=account_locked,
+                amount=-deposit_amount,
+                description=f"Rimborso cauzione {sub_name} - {event.name}" + (f" - {notes}" if notes else "")
+            )
+            created.append(tx)
+        # Return the created transactions
+        serializer = TransactionViewSerializer(created, many=True)
+        return Response(serializer.data, status=201)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def reimbursable_deposits(request):
@@ -801,50 +723,43 @@ def reimbursable_deposits(request):
     Returns a list of subscriptions for a given event and list that are eligible for deposit reimbursement.
     Query params: event=<event_id>&list=<list_id>
     """
-    try:
-        event_id = request.GET.get('event')
-        list_id = request.GET.get('list')
-        if not event_id or not list_id:
-            return Response({'error': 'Evento e Lista richiesti.'}, status=400)
+    event_id = request.GET.get('event')
+    list_id = request.GET.get('list')
+    if not event_id or not list_id:
+        return Response({'error': 'Evento e Lista richiesti.'}, status=400)
 
-        event = Event.objects.get(id=event_id)
+    event = Event.objects.get(id=event_id)
 
-        # Subscriptions in this list, with a paid cauzione transaction, not yet reimbursed
-        subs = Subscription.objects.filter(
-            event=event, list__id=list_id
-        ).select_related('profile').prefetch_related(
-            Prefetch('transaction_set', queryset=Transaction.objects.select_related('account'))
+    # Subscriptions in this list, with a paid cauzione transaction, not yet reimbursed
+    subs = Subscription.objects.filter(
+        event=event, list__id=list_id
+    ).select_related('profile').prefetch_related(
+        Prefetch('transaction_set', queryset=Transaction.objects.select_related('account'))
+    )
+    result = []
+    for sub in subs:
+        sub_transactions = sub.transaction_set.all()
+        deposit_tx = next(
+            (tx for tx in sub_transactions if tx.type == Transaction.TransactionType.CAUZIONE), None
         )
-        result = []
-        for sub in subs:
-            sub_transactions = sub.transaction_set.all()
-            deposit_tx = next(
-                (tx for tx in sub_transactions if tx.type == Transaction.TransactionType.CAUZIONE), None
-            )
-            reimbursed = any(
-                tx.type == Transaction.TransactionType.RIMBORSO_CAUZIONE for tx in sub_transactions
-            )
-            if deposit_tx and not reimbursed:
-                profile_id = sub.profile.id if sub.profile else None
-                if sub.profile:
-                    profile_name = f"{sub.profile.name} {sub.profile.surname}"
-                elif sub.external_name:
-                    profile_name = sub.external_name
-                else:
-                    profile_name = "Esterno"
-                result.append({
-                    "id": sub.pk,
-                    "profile_id": profile_id,
-                    "profile_name": profile_name,
-                    "account_name": deposit_tx.account.name if deposit_tx.account else None
-                })
-        return Response(result, status=200)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+        reimbursed = any(
+            tx.type == Transaction.TransactionType.RIMBORSO_CAUZIONE for tx in sub_transactions
+        )
+        if deposit_tx and not reimbursed:
+            profile_id = sub.profile.id if sub.profile else None
+            if sub.profile:
+                profile_name = f"{sub.profile.name} {sub.profile.surname}"
+            elif sub.external_name:
+                profile_name = sub.external_name
+            else:
+                profile_name = "Esterno"
+            result.append({
+                "id": sub.pk,
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "account_name": deposit_tx.account.name if deposit_tx.account else None
+            })
+    return Response(result, status=200)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def reimburse_quota(request):
@@ -852,138 +767,131 @@ def reimburse_quota(request):
     Reimburse the main event cost ("Quota") for a subscription.
     Expects: { "event": <event_id>, "subscription_id": <id>, "account": <account_id>, "notes": <optional>, "include_services": <optional bool> }
     """
-    try:
-        if not get_action_permissions('reimburse_quota', request.user):
-            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+    if not get_action_permissions('reimburse_quota', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
-        event_id = request.data.get('event')
-        subscription_id = request.data.get('subscription_id')
-        account_id = request.data.get('account')
-        notes = request.data.get('notes', '')
-        include_services_raw = request.data.get('include_services', False)
+    event_id = request.data.get('event')
+    subscription_id = request.data.get('subscription_id')
+    account_id = request.data.get('account')
+    notes = request.data.get('notes', '')
+    include_services_raw = request.data.get('include_services', False)
 
-        def _as_bool(val):
-            if isinstance(val, bool):
-                return val
-            if val is None:
-                return False
-            return str(val).strip().lower() in ['1', 'true', 'yes', 'y', 'on']
+    def _as_bool(val):
+        if isinstance(val, bool):
+            return val
+        if val is None:
+            return False
+        return str(val).strip().lower() in ['1', 'true', 'yes', 'y', 'on']
 
-        include_services = _as_bool(include_services_raw)
+    include_services = _as_bool(include_services_raw)
 
-        if not event_id or not subscription_id or not account_id:
-            return Response({'error': 'Dati mancanti.'}, status=400)
+    if not event_id or not subscription_id or not account_id:
+        return Response({'error': 'Dati mancanti.'}, status=400)
 
-        event = Event.objects.get(id=event_id)
-        account = Account.objects.get(id=account_id)
+    event = Event.objects.get(id=event_id)
+    account = Account.objects.get(id=account_id)
 
-        sub = Subscription.objects.select_related('event', 'list').get(id=subscription_id)
+    sub = Subscription.objects.select_related('event', 'list').get(id=subscription_id)
 
-        # Ensure the subscription's list is actually attached to the requested event (shared lists scenario)
-        if event not in sub.list.events.all():
-            return Response({'error': 'La sottoscrizione non appartiene alle liste di questo evento.'}, status=400)
+    # Ensure the subscription's list is actually attached to the requested event (shared lists scenario)
+    if event not in sub.list.events.all():
+        return Response({'error': 'La sottoscrizione non appartiene alle liste di questo evento.'}, status=400)
 
-        # Use the subscription's owning event for quota metadata (cost, name, etc.)
-        sub_event = sub.event
+    # Use the subscription's owning event for quota metadata (cost, name, etc.)
+    sub_event = sub.event
 
-        # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
-        if getattr(event, 'reimbursements_by_organizers_only', False):
-            is_board = user_is_board(request.user)
-            organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
-            user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
-            if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
-                return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
+    # --- Restrict reimbursement if event.reimbursements_by_organizers_only is True ---
+    if getattr(event, 'reimbursements_by_organizers_only', False):
+        is_board = user_is_board(request.user)
+        organizer_ids = set(event.organizers.values_list('profile_id', flat=True))
+        user_profile_id = getattr(getattr(request.user, 'profile', None), 'id', None)
+        if not (is_board or (user_profile_id and user_profile_id in organizer_ids)):
+            return Response({'error': 'Solo gli organizzatori o Board possono rimborsare per questo evento.'}, status=403)
 
-        # Only allow if event is not free and subscription has a paid transaction
-        if not sub_event.cost or float(sub_event.cost) <= 0:
-            return Response({'error': 'L\'evento è gratuito, nessuna quota da rimborsare.'}, status=400)
-        if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).exists():
-            return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'},
+    # Only allow if event is not free and subscription has a paid transaction
+    if not sub_event.cost or float(sub_event.cost) <= 0:
+        return Response({'error': 'L\'evento è gratuito, nessuna quota da rimborsare.'}, status=400)
+    if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).exists():
+        return Response({'error': 'La quota può essere rimborsata solo se è stato effettuato il pagamento.'},
+                        status=400)
+
+    quota_already_reimbursed = Transaction.objects.filter(
+        subscription=sub,
+        type=Transaction.TransactionType.RIMBORSO_QUOTA
+    ).exists()
+    if quota_already_reimbursed and not include_services:
+        return Response({'error': 'Quota già rimborsata.'}, status=400)
+
+    quota_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).first()
+    if not quota_tx:
+        return Response({'error': 'Nessun pagamento quota trovato per questa iscrizione.'}, status=400)
+
+    if account.status == "closed":
+        return Response({'error': 'La cassa è chiusa.'}, status=400)
+
+    services_total = Decimal('0')
+    if include_services:
+        selected_services = sub.selected_services or []
+        if not selected_services:
+            return Response({'error': 'Nessun servizio selezionato per questa iscrizione.'}, status=400)
+        if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SERVICE).exists():
+            return Response({'error': 'I servizi possono essere rimborsati solo se è stato effettuato il pagamento.'},
                             status=400)
+        if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_SERVICE).exists():
+            return Response({'error': 'Servizi già rimborsati.'}, status=400)
+        for s in selected_services:
+            try:
+                price = Decimal(str(s.get('price_at_purchase') or s.get('price') or 0))
+            except Exception:
+                price = Decimal('0')
+            try:
+                qty = int(s.get('quantity') or 1)
+            except Exception:
+                qty = 1
+            if qty > 0:
+                services_total += (price * qty)
+        if services_total <= 0:
+            return Response({'error': 'Importo servizi non valido.'}, status=400)
 
-        quota_already_reimbursed = Transaction.objects.filter(
-            subscription=sub,
-            type=Transaction.TransactionType.RIMBORSO_QUOTA
-        ).exists()
-        if quota_already_reimbursed and not include_services:
-            return Response({'error': 'Quota già rimborsata.'}, status=400)
+    quota_amount = Decimal(str(sub_event.cost)) if not quota_already_reimbursed else Decimal('0')
+    total_refund = quota_amount + services_total
+    if account.balance < total_refund:
+        return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
-        quota_tx = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).first()
-        if not quota_tx:
-            return Response({'error': 'Nessun pagamento quota trovato per questa iscrizione.'}, status=400)
+    # Fix: handle external subscriptions for description
+    if sub.profile:
+        sub_name = f"{sub.profile.name} {sub.profile.surname}"
+    elif sub.external_name:
+        sub_name = sub.external_name
+    else:
+        sub_name = "Esterno"
 
-        if account.status == "closed":
-            return Response({'error': 'La cassa è chiusa.'}, status=400)
-
-        services_total = Decimal('0')
-        if include_services:
-            selected_services = sub.selected_services or []
-            if not selected_services:
-                return Response({'error': 'Nessun servizio selezionato per questa iscrizione.'}, status=400)
-            if not Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SERVICE).exists():
-                return Response({'error': 'I servizi possono essere rimborsati solo se è stato effettuato il pagamento.'},
-                                status=400)
-            if Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.RIMBORSO_SERVICE).exists():
-                return Response({'error': 'Servizi già rimborsati.'}, status=400)
-            for s in selected_services:
-                try:
-                    price = Decimal(str(s.get('price_at_purchase') or s.get('price') or 0))
-                except Exception:
-                    price = Decimal('0')
-                try:
-                    qty = int(s.get('quantity') or 1)
-                except Exception:
-                    qty = 1
-                if qty > 0:
-                    services_total += (price * qty)
-            if services_total <= 0:
-                return Response({'error': 'Importo servizi non valido.'}, status=400)
-
-        quota_amount = Decimal(str(sub_event.cost)) if not quota_already_reimbursed else Decimal('0')
-        total_refund = quota_amount + services_total
-        if account.balance < total_refund:
-            return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
-
-        # Fix: handle external subscriptions for description
-        if sub.profile:
-            sub_name = f"{sub.profile.name} {sub.profile.surname}"
-        elif sub.external_name:
-            sub_name = sub.external_name
-        else:
-            sub_name = "Esterno"
-
-        with transaction.atomic():
-            quota_tx = None
-            if not quota_already_reimbursed:
-                quota_tx = Transaction.objects.create(
-                    type=Transaction.TransactionType.RIMBORSO_QUOTA,
-                    subscription=sub,
-                    executor=request.user,
-                    account=account,
-                    amount=-sub_event.cost,
-                    description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
-                )
-            services_tx = None
-            if include_services and services_total > 0:
-                services_tx = Transaction.objects.create(
-                    type=Transaction.TransactionType.RIMBORSO_SERVICE,
-                    subscription=sub,
-                    executor=request.user,
-                    account=account,
-                    amount=-services_total,
-                    description=f"Rimborso servizi {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
-                )
-            payload = {
-                'quota': TransactionViewSerializer(quota_tx).data if quota_tx else None,
-                'services': TransactionViewSerializer(services_tx).data if services_tx else None
-            }
-            return Response(payload, status=201)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    with transaction.atomic():
+        quota_tx = None
+        if not quota_already_reimbursed:
+            quota_tx = Transaction.objects.create(
+                type=Transaction.TransactionType.RIMBORSO_QUOTA,
+                subscription=sub,
+                executor=request.user,
+                account=account,
+                amount=-sub_event.cost,
+                description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
+            )
+        services_tx = None
+        if include_services and services_total > 0:
+            services_tx = Transaction.objects.create(
+                type=Transaction.TransactionType.RIMBORSO_SERVICE,
+                subscription=sub,
+                executor=request.user,
+                account=account,
+                amount=-services_total,
+                description=f"Rimborso servizi {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
+            )
+        payload = {
+            'quota': TransactionViewSerializer(quota_tx).data if quota_tx else None,
+            'services': TransactionViewSerializer(services_tx).data if services_tx else None
+        }
+        return Response(payload, status=201)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def transactions_export(request):
@@ -1175,3 +1083,59 @@ def transactions_export(request):
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
     return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def treasury_accounts_report(request):
+    if not get_action_permissions('treasury_report_generate', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
+
+    report_date = request.data.get('date') or request.query_params.get('date')
+    try:
+        result = generate_accounts_report(report_date=report_date)
+        return Response({
+            'status': 'ok',
+            'reportDate': result['report_date'].strftime('%Y-%m-%d'),
+            'filename': result['filename'],
+            'fileId': result.get('file_id'),
+            'action': result['action']
+        }, status=200)
+    except ReportDateError as exc:
+        return Response({'error': str(exc)}, status=400)
+    except HttpError as exc:
+        logger.error(f"Drive upload failed: {exc}")
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore Drive durante la generazione report.'}, status=502)
+    except Exception as exc:
+        logger.error(str(exc))
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore interno del server.'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def treasury_transactions_report(request):
+    if not get_action_permissions('treasury_report_generate', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
+
+    report_date = request.data.get('date') or request.query_params.get('date')
+    try:
+        result = generate_transactions_report(report_date=report_date)
+        return Response({
+            'status': 'ok',
+            'reportDate': result['report_date'].strftime('%Y-%m-%d'),
+            'filename': result['filename'],
+            'fileId': result.get('file_id'),
+            'action': result['action']
+        }, status=200)
+    except ReportDateError as exc:
+        return Response({'error': str(exc)}, status=400)
+    except HttpError as exc:
+        logger.error(f"Drive upload failed: {exc}")
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore Drive durante la generazione report.'}, status=502)
+    except Exception as exc:
+        logger.error(str(exc))
+        sentry_sdk.capture_exception(exc)
+        return Response({'error': 'Errore interno del server.'}, status=500)

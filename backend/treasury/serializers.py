@@ -4,53 +4,15 @@ from datetime import datetime
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import transaction
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from rest_framework import serializers
 
 from profiles.models import Profile
 from treasury.models import ESNcard, Transaction, Account, ReimbursementRequest
 from events.models import Event
+from utils.google_drive import get_drive_service, find_or_create_folder
 
-GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 DEFAULT_MIMETYPE = 'application/octet-stream'
-
-
-# --- Helper function to find or create a folder in Google Drive ---
-def find_or_create_drive_folder(service, folder_name, parent_id):
-    """
-    Find or create a folder with the given name in the specified parent folder.
-    Returns the folder ID.
-    """
-    # Search for existing folder
-    # Sanitize folder_name by escaping single quotes for Drive query syntax
-    escaped_folder_name = folder_name.replace("'", "\\'")
-    query = f"name='{escaped_folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    results = service.files().list(
-        q=query,
-        spaces='drive',
-        fields='files(id, name)',
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
-    
-    folders = results.get('files', [])
-    if folders:
-        return folders[0]['id']
-    
-    # Create folder if it doesn't exist
-    folder_metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-        'parents': [parent_id]
-    }
-    folder = service.files().create(
-        body=folder_metadata,
-        fields='id',
-        supportsAllDrives=True
-    ).execute()
-    return folder['id']
 
 
 # --- Shared Drive upload helper for receipts (transactions + reimbursements) ---
@@ -58,12 +20,7 @@ def upload_receipt_to_drive(receipt_file, user, instance_time, prefix):
     if not receipt_file:
         return None
     GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=[GOOGLE_DRIVE_SCOPE]
-    )
-    service = build('drive', 'v3', credentials=credentials)
+    service = get_drive_service()
     receipt_file.seek(0)
     mimetype = getattr(receipt_file, 'content_type', DEFAULT_MIMETYPE)
     media = MediaIoBaseUpload(receipt_file, mimetype=mimetype)
@@ -95,31 +52,26 @@ def upload_reimbursement_receipt_to_drive(receipt_file, user, instance_time, eve
         return None
     
     GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=[GOOGLE_DRIVE_SCOPE]
-    )
-    service = build('drive', 'v3', credentials=credentials)
+    service = get_drive_service()
     
     # Create folder structure: {Year}/Rimborsi/{rimborsi generici or EventName_EventDate}
     current_year = instance_time.year
     
     # Find or create year folder (e.g., "2026")
-    year_folder_id = find_or_create_drive_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)
+    year_folder_id = find_or_create_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)
     
     # Find or create "Rimborsi" folder
-    rimborsi_folder_id = find_or_create_drive_folder(service, "Rimborsi", year_folder_id)
+    rimborsi_folder_id = find_or_create_folder(service, "Rimborsi", year_folder_id)
     
     # Determine final folder based on event
     if event:
         # Format: EventName_EventDate (e.g., "Winter Trip_2026-02-15")
         event_date_str = event.date.strftime('%Y-%m-%d') if event.date else 'NoDate'
         event_folder_name = f"{event.name}_{event_date_str}"
-        final_folder_id = find_or_create_drive_folder(service, event_folder_name, rimborsi_folder_id)
+        final_folder_id = find_or_create_folder(service, event_folder_name, rimborsi_folder_id)
     else:
         # Use "rimborsi generici" folder
-        final_folder_id = find_or_create_drive_folder(service, "rimborsi generici", rimborsi_folder_id)
+        final_folder_id = find_or_create_folder(service, "rimborsi generici", rimborsi_folder_id)
     
     # Upload file to the final folder
     receipt_file.seek(0)
@@ -157,29 +109,24 @@ def upload_transaction_receipt_to_drive(receipt_file, user, instance_time, event
         return None
 
     GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=[GOOGLE_DRIVE_SCOPE]
-    )
-    service = build('drive', 'v3', credentials=credentials)
+    service = get_drive_service()
 
     # Create folder structure: {Year}/Transazioni/{transazioni generiche or EventName_EventDate}
     current_year = instance_time.year
 
     # Find or create year folder (e.g., "2026")
-    year_folder_id = find_or_create_drive_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)
+    year_folder_id = find_or_create_folder(service, str(current_year), GOOGLE_DRIVE_FOLDER_ID)
 
     # Find or create "Transazioni" folder
-    transazioni_folder_id = find_or_create_drive_folder(service, "Transazioni", year_folder_id)
+    transazioni_folder_id = find_or_create_folder(service, "Transazioni", year_folder_id)
 
     # Determine final folder based on event
     if event:
         event_date_str = event.date.strftime('%Y-%m-%d') if event.date else 'NoDate'
         event_folder_name = f"{event.name}_{event_date_str}"
-        final_folder_id = find_or_create_drive_folder(service, event_folder_name, transazioni_folder_id)
+        final_folder_id = find_or_create_folder(service, event_folder_name, transazioni_folder_id)
     else:
-        final_folder_id = find_or_create_drive_folder(service, "transazioni generiche", transazioni_folder_id)
+        final_folder_id = find_or_create_folder(service, "transazioni generiche", transazioni_folder_id)
 
     # Upload file to the final folder
     receipt_file.seek(0)

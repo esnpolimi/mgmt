@@ -1,4 +1,4 @@
-import random
+import secrets
 from django.contrib.auth.models import BaseUserManager
 from django.utils.translation import gettext_lazy as _
 
@@ -13,10 +13,10 @@ class UserManager(BaseUserManager):
         if not profile:
             raise ValueError(_("The profile must be set"))
 
-        extra_fields.pop('is_active', None)
+        is_active = extra_fields.pop('is_active', False)
         user = self.model(profile=profile, **extra_fields)
         user.set_password(password)
-        user.is_active = True
+        user.is_active = is_active
         return user
 
     def create_superuser(self, profile, password, **extra_fields):
@@ -43,4 +43,4 @@ class UserManager(BaseUserManager):
                              allowed_chars='abcdefghjkmnpqrstuvwxyz'
                                            'ABCDEFGHJKLMNPQRSTUVWXYZ'
                                            '23456789'):
-        return ''.join(random.choice(allowed_chars) for _ in range(length))
+        return ''.join(secrets.choice(allowed_chars) for _ in range(length))
