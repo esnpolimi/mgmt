@@ -1,5 +1,28 @@
 # Deploy your backend and frontend applications
 
+## Automatic Deploy (GitHub Actions -> cPanel)
+
+The production workflow in `.github/workflows/deploy-production.yml` now performs the full release flow automatically:
+
+1. creates release tag on `main`
+2. pushes backend subtree to `deploy-backend`
+3. builds frontend and pushes `frontend/build` to `deploy-frontend`
+4. creates GitHub release
+5. connects to cPanel via SSH and runs:
+	- `./gitpull_backend.sh`
+	- `./gitpull_frontend.sh`
+	- backend post-deploy commands (`pip install`, `migrate`, `collectstatic`, `check`)
+
+Configure these repository secrets in GitHub (`Settings -> Secrets and variables -> Actions`):
+
+- `CPANEL_HOST`
+- `CPANEL_USERNAME`
+- `CPANEL_SSH_KEY` (private key used for SSH login)
+- `CPANEL_SSH_PORT` (optional, defaults to `22`)
+- `CPANEL_PYTHON_APP_ROOT` (optional, defaults to `/home/fazucrdl/mgmt.esnpolimi.it/backend`)
+
+If one of the required SSH secrets is missing, the cPanel deploy step is skipped.
+
 ## Frontend Deployment
 
 ```bash
@@ -55,3 +78,27 @@ python manage.py check
 ```
 
 Lastly, restart the backend service from the cPanel Python WEB APPLICATIONS console
+
+### Script names expected by CI
+
+The automatic job expects these executable scripts in `/home/fazucrdl/mgmt.esnpolimi.it`:
+
+- `gitpull_backend.sh`
+- `gitpull_frontend.sh`
+
+If your current script names are different, either rename them or update the workflow script accordingly.
+
+### Automatic migrations and Python app restart
+
+The workflow already runs:
+
+- `python manage.py makemigrations --noinput`
+- `python manage.py migrate --noinput`
+
+`makemigrations` generates migrations on server if model changes are detected; `migrate` then applies pending migrations.
+
+After backend checks, the workflow restarts the cPanel Python app by touching:
+
+- `$CPANEL_PYTHON_APP_ROOT/tmp/restart.txt`
+
+If your app root differs from the default path, set `CPANEL_PYTHON_APP_ROOT` in GitHub secrets.
