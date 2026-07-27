@@ -185,3 +185,44 @@ Current coverage:
 - maintenance module: detailed
 - E2E integration baseline: present
 - qualitative coverage: present
+
+## 15. CI/CD and Production Deployment
+
+Production release automation is managed by `.github/workflows/deploy-production.yml`.
+
+Current flow:
+
+1. trigger on push to `main`
+2. semantic tag creation (`vMAJOR.MINOR.PATCH` with current project policy)
+3. backend deploy branch update (`deploy-backend` from `backend/` subtree)
+4. frontend build + deploy branch update (`deploy-frontend` from `frontend/build` subtree)
+5. GitHub release generation with changelog
+6. remote cPanel deploy via SSH (if secrets are configured)
+
+Required GitHub Actions secrets for remote cPanel deploy:
+
+- `CPANEL_HOST`
+- `CPANEL_USERNAME`
+- `CPANEL_SSH_KEY`
+- `CPANEL_SSH_PORT` (optional)
+
+Remote cPanel execution expects:
+
+- `/home/fazucrdl/mgmt.esnpolimi.it/gitpull_backend.sh`
+- `/home/fazucrdl/mgmt.esnpolimi.it/gitpull_frontend.sh`
+
+Then backend post-deploy commands run automatically:
+
+- `pip install -r requirements.txt`
+- `python manage.py makemigrations --noinput`
+- `python manage.py migrate --noinput`
+- `python manage.py collectstatic --noinput`
+- `python manage.py check`
+
+Python app restart is performed at the end of the deploy via Passenger/cPanel convention:
+
+- `touch $CPANEL_PYTHON_APP_ROOT/tmp/restart.txt`
+
+If `CPANEL_PYTHON_APP_ROOT` is not configured, the workflow defaults to:
+
+- `/home/fazucrdl/mgmt.esnpolimi.it/backend`
