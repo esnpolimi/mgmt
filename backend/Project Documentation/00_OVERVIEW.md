@@ -207,6 +207,10 @@ Current flow:
 5. GitHub release generation with changelog
 6. remote cPanel deploy via SSH (if secrets are configured)
 
+Frontend CI runtime requirement:
+
+- GitHub Actions frontend build uses Node.js 22 (required by Vite 7 / Rollup compatibility).
+
 Guard behavior:
 
 - the `deploy-cpanel` job always starts and performs a runtime secrets check.
