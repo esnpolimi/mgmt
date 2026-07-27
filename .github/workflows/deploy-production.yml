@@ -229,3 +229,43 @@ jobs:
           _Deploy automatico by GitHub Actions_
         draft: false
         prerelease: false
+
+  deploy-cpanel:
+    runs-on: ubuntu-latest
+    needs: [create-release-tag, deploy-backend, deploy-frontend, create-github-release]
+    # Esegue il deploy su cPanel solo se i secret SSH sono configurati.
+    if: ${{ secrets.CPANEL_HOST != '' && secrets.CPANEL_USERNAME != '' && secrets.CPANEL_SSH_KEY != '' }}
+
+    steps:
+    - name: Deploy Backend + Frontend on cPanel via SSH
+      uses: appleboy/ssh-action@v1.2.0
+      with:
+        host: ${{ secrets.CPANEL_HOST }}
+        username: ${{ secrets.CPANEL_USERNAME }}
+        key: ${{ secrets.CPANEL_SSH_KEY }}
+        port: ${{ secrets.CPANEL_SSH_PORT || '22' }}
+        script: |
+          set -e
+
+          APP_ROOT="${{ secrets.CPANEL_PYTHON_APP_ROOT || '/home/fazucrdl/mgmt.esnpolimi.it/backend' }}"
+
+          cd /home/fazucrdl/mgmt.esnpolimi.it
+
+          # Aggiorna backend e frontend dai branch deploy-* già pubblicati dalla pipeline.
+          ./gitpull_backend.sh
+          ./gitpull_frontend.sh
+
+          # Verifiche e allineamenti backend post-deploy.
+          source /home/fazucrdl/virtualenv/mgmt.esnpolimi.it/3.11/bin/activate
+          cd /home/fazucrdl/mgmt.esnpolimi.it/backend
+          pip install -r requirements.txt
+          python manage.py makemigrations --noinput
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+          python manage.py check
+
+          # Restart Python App (Passenger/cPanel) dopo deploy + migrazioni.
+          mkdir -p "$APP_ROOT/tmp"
+          touch "$APP_ROOT/tmp/restart.txt"
+
+          echo "cPanel deploy completato per release ${{ needs.create-release-tag.outputs.new_tag }}"
