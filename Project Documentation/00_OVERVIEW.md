@@ -78,6 +78,10 @@ The system covers ESN Polimi core processes:
 
 Common backend prefix: /backend/
 
+Routing note:
+
+- API prefixes are centralized in `backend/backend/urls.py` (`BACKEND_API_PREFIX`, `BACKEND_CONTENT_PREFIX`) to keep route declarations consistent and reduce duplication-driven regressions.
+
 - users: /login/, /logout/, /api/token/*, /users/*, /groups/
 - profiles: /erasmus_profiles/, /esner_profiles/, /profile/*, /document/*
 - events: /events/, /event/*, /subscription/*, /event/*/form*, /sumup/webhook/
@@ -106,6 +110,10 @@ Primary settings files:
 - backend/settings/dev.py
 - backend/settings/prod.py
 - backend/settings/test.py
+
+REST framework exception handling:
+
+- custom handler `utils.exceptions.api_exception_handler` is configured in base and test settings to keep unknown-exception behavior aligned across runtime and CI tests
 
 Primary sensitive variables:
 
@@ -198,6 +206,11 @@ Current flow:
 4. frontend build + deploy branch update (`deploy-frontend` from `frontend/build` subtree)
 5. GitHub release generation with changelog
 6. remote cPanel deploy via SSH (if secrets are configured)
+
+Guard behavior:
+
+- the `deploy-cpanel` job always starts and performs a runtime secrets check.
+- if mandatory secrets are missing, the SSH deploy step is skipped without failing the whole workflow.
 
 Required GitHub Actions secrets for remote cPanel deploy:
 
