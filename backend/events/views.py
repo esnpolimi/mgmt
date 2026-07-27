@@ -30,9 +30,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import os
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from utils.google_drive import get_drive_service, find_or_create_folder
 import json
 
 from events.models import Event, Subscription, EventOrganizer
@@ -78,67 +77,16 @@ def _validate_form_upload(file_obj):
     return True
 
 
-def _find_or_create_drive_folder(service, folder_name, parent_id):
-    """
-    Find or create a folder with the given name in the specified parent folder.
-    Returns the folder ID.
-    """
-    # Search for existing folder
-    query = f"name='{folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    results = service.files().list(
-        q=query,
-        spaces='drive',
-        fields='files(id, name)',
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
-    
-    folders = results.get('files', [])
-    if folders:
-        return folders[0]['id']
-    
-    # Create folder if it doesn't exist
-    folder_metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-        'parents': [parent_id]
-    }
-    folder = service.files().create(
-        body=folder_metadata,
-        fields='id',
-        supportsAllDrives=True
-    ).execute()
-    return folder['id']
-
-
 def _get_or_create_event_folder(service, parent_folder_id, event_name, event_id, event_date=None):
-    """
-    Gets or creates a folder for the event with structure: {Anno}/Viaggi/{NomeEvento_Data}
-    Returns the folder ID.
-    """
-    # Create folder structure: {Anno}/Viaggi/{NomeEvento}
     current_year = datetime.now().year
-    
-    # Find or create year folder
-    year_folder_id = _find_or_create_drive_folder(service, str(current_year), parent_folder_id)
-    
-    # Find or create "Viaggi" folder
-    viaggi_folder_id = _find_or_create_drive_folder(service, "Viaggi", year_folder_id)
-    
-    # Sanitize event name for folder name
+    year_folder_id = find_or_create_folder(service, str(current_year), parent_folder_id)
+    viaggi_folder_id = find_or_create_folder(service, "Viaggi", year_folder_id)
     safe_event_name = "".join(c for c in event_name if c.isalnum() or c in (' ', '-', '_'))[:100]
-    
-    # Include event date in folder name if available
     if event_date:
-        date_str = event_date.strftime('%Y-%m-%d')
-        folder_name = f"{safe_event_name} ({date_str})"
+        folder_name = f"{safe_event_name} ({event_date.strftime('%Y-%m-%d')})"
     else:
         folder_name = f"{safe_event_name} (ID_{event_id})"
-    
-    # Find or create event folder inside Viaggi
-    event_folder_id = _find_or_create_drive_folder(service, folder_name, viaggi_folder_id)
-    
-    return event_folder_id
+    return find_or_create_folder(service, folder_name, viaggi_folder_id)
 
 
 def _upload_form_file_to_drive(file_obj, event_id, _field_name, event_name=None, event_date=None):
@@ -147,12 +95,7 @@ def _upload_form_file_to_drive(file_obj, event_id, _field_name, event_name=None,
     Creates a dedicated folder for the event if event_name is provided.
     """
     GOOGLE_DRIVE_FOLDER_ID = settings.GOOGLE_DRIVE_FOLDER_ID
-    SERVICE_ACCOUNT_FILE = settings.GOOGLE_SERVICE_ACCOUNT_FILE
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/drive']
-    )
-    service = build('drive', 'v3', credentials=credentials)
+    service = get_drive_service()
     
     # Get or create event-specific folder
     if event_name:
@@ -1005,61 +948,47 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
 def events_list(request):
     if not get_action_permissions(request, 'events_list_GET'):
         return Response({'error': 'Non hai i permessi per visualizzare gli eventi.'}, status=403)
-    try:
-        events = Event.objects.all().order_by('-created_at')
-        # --- Filter out board-only events unless user is board member ---
-        if not request.user.groups.filter(name__in=['Board']).exists():
-            events = events.filter(visible_to_board_only=False)
+    events = Event.objects.all().order_by('-created_at')
+    # --- Filter out board-only events unless user is board member ---
+    if not request.user.groups.filter(name__in=['Board']).exists():
+        events = events.filter(visible_to_board_only=False)
 
-        search = request.GET.get('search', '').strip()
-        if search:
-            events = events.filter(Q(name__icontains=search))
+    search = request.GET.get('search', '').strip()
+    if search:
+        events = events.filter(Q(name__icontains=search))
 
-        status_param = request.GET.get('status', '').strip()
-        if status_param:
-            status_set = {s.strip() for s in status_param.split(',') if s.strip()}
-            if status_set:
-                matching_ids = [e.id for e in events if e.status in status_set]
-                events = events.filter(id__in=matching_ids)
+    status_param = request.GET.get('status', '').strip()
+    if status_param:
+        status_set = {s.strip() for s in status_param.split(',') if s.strip()}
+        if status_set:
+            matching_ids = [e.id for e in events if e.status in status_set]
+            events = events.filter(id__in=matching_ids)
 
-        date_from = request.GET.get('dateFrom')
-        if date_from:
-            events = events.filter(date__gte=date_from)
-        date_to = request.GET.get('dateTo')
-        if date_to:
-            events = events.filter(date__lte=parse_datetime(date_to) + timedelta(days=1))
+    date_from = request.GET.get('dateFrom')
+    if date_from:
+        events = events.filter(date__gte=date_from)
+    date_to = request.GET.get('dateTo')
+    if date_to:
+        events = events.filter(date__lte=parse_datetime(date_to) + timedelta(days=1))
 
-        paginator = PageNumberPagination()
-        paginator.page_size_query_param = 'page_size'
-        page = paginator.paginate_queryset(events, request=request)
-        serializer = EventsListSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    paginator = PageNumberPagination()
+    paginator.page_size_query_param = 'page_size'
+    page = paginator.paginate_queryset(events, request=request)
+    serializer = EventsListSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)
 # Endpoint to create event
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def event_creation(request):
     if not get_action_permissions(request, 'event_creation_POST'):
         return Response({'error': 'Non hai i permessi per creare eventi.'}, status=403)
-    try:
-        event_serializer = EventCreationSerializer(data=request.data)
+    event_serializer = EventCreationSerializer(data=request.data)
 
-        if event_serializer.is_valid():
-            event_serializer.save()
-            return Response(event_serializer.data, status=200)
-        else:
-            return Response(event_serializer.errors, status=400)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
+    if event_serializer.is_valid():
+        event_serializer.save()
+        return Response(event_serializer.data, status=200)
+    else:
+        return Response(event_serializer.errors, status=400)
 # Endpoint to edit/view/delete event in detail
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
@@ -1125,12 +1054,6 @@ def event_detail(request, pk):
         return Response(getattr(e, 'detail', {'error': str(e)}), status=400)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def subscription_create(request):
@@ -1220,12 +1143,6 @@ def subscription_create(request):
         return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 # Endpoint to edit/view/delete subscription in detail
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
@@ -1356,12 +1273,6 @@ def subscription_detail(request, pk):
         return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def move_subscriptions(request):
@@ -1466,12 +1377,6 @@ def move_subscriptions(request):
         return Response({'message': "Iscrizioni spostate con successo"}, status=200)
     except ValidationError as e:
         return Response({'error': str(e)}, status=400)
-    except Exception as e:
-        logger.error(f"Errore nello spostamento delle iscrizioni: {str(e)}")
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_liberatorie_pdf(request):
@@ -1632,12 +1537,6 @@ def generate_liberatorie_pdf(request):
 
     except Event.DoesNotExist:
         return Response({'error': "Event not found"}, status=404)
-    except Exception as e:
-        logger.error(f"Error generating PDF: {e}")
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'An error occurred while generating the PDF.'}, status=500)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def printable_liberatorie(request, event_id):
@@ -1674,12 +1573,6 @@ def printable_liberatorie(request, event_id):
 
     except Event.DoesNotExist:
         return Response({'error': "L'evento non esiste"}, status=404)
-    except Exception as e:
-        logger.error(str(e))
-        sentry_sdk.capture_exception(e)
-        return Response({'error': 'Errore interno del server.'}, status=500)
-
-
 # --- SumUp helpers ---
 _SUMUP_TOKEN_CACHE = {"token": None, "expires_at": 0}
 

@@ -18,4 +18,6 @@ urlpatterns = [
     path('reimbursable_deposits/', views.reimbursable_deposits),
     path('reimburse_quota/', views.reimburse_quota),
     path('transactions_export/', views.transactions_export),
+    path('reports/accounts/', views.treasury_accounts_report),
+    path('reports/transactions/', views.treasury_transactions_report),
 ]

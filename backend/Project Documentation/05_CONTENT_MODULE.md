@@ -54,6 +54,10 @@ Base path: /backend/content/
 - PATCH /sections/<id>/
 - DELETE /sections/<id>/
 
+Behavior note:
+
+- `GET /sections/` and `GET /sections/active_sections/` both expose active sections (filtered server-side by `is_active=true`).
+
 ### 3.2 Links APIs
 
 - GET /links/
@@ -110,6 +114,12 @@ Sequence:
 3. verify configured `whatsapp_link` presence
 4. send email with group link
 5. append audit CSV to Google Drive with timestamp/outcome
+
+Error-path notes:
+
+1. non-international users are rejected with `403`.
+2. missing WhatsApp link configuration returns `503`.
+3. email delivery failures return `500` and are logged to Sentry + CSV audit.
 
 Target CSV: `cronologia richieste gruppo whatsapp.csv`.
 
