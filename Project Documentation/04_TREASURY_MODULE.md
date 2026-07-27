@@ -62,6 +62,7 @@ Accounting invariants:
 1. Transaction create/update/delete always realigns account balance.
 2. Closed accounts do not accept new mutating operations.
 3. For constrained types, negative balance is blocked.
+4. Model validation errors on treasury writes are returned to the client as 400 responses.
 
 ### 2.5 ReimbursementRequest
 
