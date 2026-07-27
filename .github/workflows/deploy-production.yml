@@ -240,12 +240,12 @@ jobs:
     - name: Check cPanel secrets
       id: cpanel-secrets
       env:
-        HAS_CPANEL_HOST: ${{ secrets.CPANEL_HOST != '' }}
+        HAS_CPANEL_SSH_HOST: ${{ secrets.CPANEL_SSH_HOST != '' }}
         HAS_CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME != '' }}
         HAS_CPANEL_SSH_KEY: ${{ secrets.CPANEL_SSH_KEY != '' }}
       run: |
         set -e
-        if [ "$HAS_CPANEL_HOST" = "true" ] && [ "$HAS_CPANEL_USERNAME" = "true" ] && [ "$HAS_CPANEL_SSH_KEY" = "true" ]; then
+        if [ "$HAS_CPANEL_SSH_HOST" = "true" ] && [ "$HAS_CPANEL_USERNAME" = "true" ] && [ "$HAS_CPANEL_SSH_KEY" = "true" ]; then
           echo "enabled=true" >> "$GITHUB_OUTPUT"
         else
           echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -256,7 +256,7 @@ jobs:
       if: ${{ steps.cpanel-secrets.outputs.enabled == 'true' }}
       uses: appleboy/ssh-action@v1.2.0
       with:
-        host: ${{ secrets.CPANEL_HOST }}
+        host: ${{ secrets.CPANEL_SSH_HOST }}
         username: ${{ secrets.CPANEL_USERNAME }}
         key: ${{ secrets.CPANEL_SSH_KEY }}
         port: ${{ secrets.CPANEL_SSH_PORT || '22' }}
