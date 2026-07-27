@@ -20,10 +20,10 @@ Methodology note:
 | backend/users/test_integration.py | 14 |
 | backend/profiles/tests.py | 70 |
 | backend/events/tests.py | 114 |
-| backend/treasury/tests.py | 83 |
+| backend/treasury/tests.py | 86 |
 | backend/content/tests.py | 43 |
 | backend/test_integration_e2e.py | 6 |
-| Total | 370 |
+| Total | 373 |
 
 ## 3. Functional Coverage Matrix
 
@@ -62,6 +62,7 @@ Methodology note:
 - reimbursement request lifecycle
 - deposit/fee/services reimbursements
 - export XLSX
+- report APIs (`/reports/accounts/`, `/reports/transactions/`) including permission and Drive-error handling
 
 ### 3.5 Content
 
