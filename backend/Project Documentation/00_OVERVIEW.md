@@ -245,3 +245,15 @@ Python app restart is performed at the end of the deploy via Passenger/cPanel co
 If `CPANEL_PYTHON_APP_ROOT` is not configured, the workflow defaults to:
 
 - `/home/fazucrdl/mgmt.esnpolimi.it/backend`
+
+## 16. Recent Quality Hardening (2026-09-01)
+
+- Sonar-driven low-risk fixes applied on events/treasury/frontend modules.
+- Repeated literals reduced via shared constants in serializers and report generation.
+- Exception logging improved in treasury report endpoints using `logger.exception(...)`.
+- Frontend call-site mismatch fixed in event modal profile-fields ordering call.
+- Added `frontend/.dockerignore` entries to prevent Docker build-context failures caused by local `node_modules` artifacts on Windows.
+- Extended `logger.exception(...)` adoption in users/profiles/events exception paths for better diagnostics.
+- Applied step-1 complexity refactor on events flows: extraction helpers in backend form-fields patch endpoint and frontend list accordion copy/render logic.
+- Applied step-2 complexity refactor: `event_form_submit` decomposed into 5 focused helpers (submitter resolution, duplicate check, link uploads, capacity assignment, SumUp checkout), full backend test suite (373 tests) verified green.
+- Applied step-3 complexity refactor: `subscription_detail` decomposed into focused helpers for reimbursement checks, PATCH payload normalization, auto-move response mapping, and DELETE transaction cleanup; events tests and full backend suite remain green.

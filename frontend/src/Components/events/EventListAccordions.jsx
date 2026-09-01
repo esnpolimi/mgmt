@@ -26,6 +26,152 @@ import {MRT_Localization_IT} from "material-react-table/locales/it";
 import dayjs from "dayjs";
 import {profileDisplayNames} from '../../utils/displayAttributes';
 
+function renderDynamicFieldValue(fieldType, value) {
+    if (fieldType === 'l') {
+        if (!value) return '';
+        return (
+            <span data-copy-value={value}>
+                <Button
+                    variant="text"
+                    color="primary"
+                    sx={{textTransform: 'none', padding: 0, minWidth: 0}}
+                    endIcon={<OpenInNewIcon fontSize="small"/>}
+                    onClick={() => window.open(value, '_blank', 'noopener,noreferrer')}
+                >
+                    Link Drive
+                </Button>
+            </span>
+        );
+    }
+    if (fieldType === 'm' && Array.isArray(value)) return value.join(', ');
+    if (fieldType === 'b') return value === true ? 'Si' : value === false ? 'No' : '';
+    return value ?? '';
+}
+
+function toExcelSafe(value) {
+    if (typeof value !== 'string') return value;
+    const s = value.trim();
+    return s.startsWith('+') ? `'${s}` : value;
+}
+
+function extractCopyableHeaderValues(headerRow) {
+    if (!headerRow) return [];
+    const ths = Array.from(headerRow.querySelectorAll('th'));
+    return ths
+        .filter(th => {
+            if (th.querySelector('button[title="Copia nomi colonne (Excel)"]')) return false;
+            if (th.querySelector('input[type="checkbox"]')) return false;
+            if (th.hasAttribute('data-profile-header')) return false;
+            const txt = th.innerText.trim();
+            if (txt === 'Profilo') return false;
+            return txt !== 'Azioni';
+        })
+        .map(th => th.innerText.replace(/\s+/g, ' ').trim())
+        .map(txt => txt.replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+}
+
+function extractCopyableRowValues(rowElement) {
+    if (!rowElement) return [];
+    const tds = Array.from(rowElement.querySelectorAll('td'));
+    return tds
+        .filter(td => {
+            if (td.querySelector('button[title="Copia riga (Excel)"]')) return false;
+            if (td.querySelector('input[type="checkbox"]')) return false;
+            if (td.hasAttribute('data-profile-cell')) return false;
+            if (td.querySelector('button[title="Modifica Risposte Form"]')) return false;
+            return true;
+        })
+        .map(td => {
+            const copyValueElement = td.querySelector('[data-copy-value]');
+            if (copyValueElement) return copyValueElement.dataset.copyValue;
+            return td.innerText.replaceAll(/\s+/g, ' ').trim();
+        })
+        .map(toExcelSafe);
+}
+
+function extractFallbackRowValues(row) {
+    const visibleCells = row.getVisibleCells()
+        .filter(c => !['copy', 'profile_name', 'actions', 'mrt-row-select'].includes(c.column.id));
+    return visibleCells.map(cell => {
+        if (cell.column.id === 'subscribed_at') {
+            const dt = row.original?.subscribed_at;
+            const s = dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : '';
+            return toExcelSafe(s);
+        }
+        let raw = cell.getValue();
+        if (raw === null || raw === undefined) return '';
+        if (Array.isArray(raw)) raw = raw.join(', ');
+        if (typeof raw === 'object') raw = '';
+        const s = String(raw).replace(/\s+/g, ' ').trim();
+        return toExcelSafe(s);
+    });
+}
+
+const CopyHeadersButton = memo(function CopyHeadersButton() {
+    const [copiedHead, setCopiedHead] = React.useState(false);
+
+    const handleCopyHeaders = async (e) => {
+        e.stopPropagation();
+        try {
+            const thead = e.currentTarget.closest('thead');
+            if (!thead) return;
+            const headerRow = thead.querySelector('tr');
+            const values = extractCopyableHeaderValues(headerRow);
+            if (!values.length) return;
+            await navigator.clipboard.writeText(values.join('\t'));
+            setCopiedHead(true);
+            setTimeout(() => setCopiedHead(false), 1500);
+        } catch (err) {
+            console.error('Header copy failed', err);
+        }
+    };
+
+    return (
+        <Box sx={{display: 'flex', alignItems: 'center'}}>
+            <IconButton size="small" onClick={handleCopyHeaders} title="Copia nomi colonne (Excel)">
+                {copiedHead ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
+            </IconButton>
+            {copiedHead && (
+                <Typography variant="caption" color="success.main" sx={{ml: 0.5}}>
+                    Copiato
+                </Typography>
+            )}
+        </Box>
+    );
+});
+
+const CopyRowButton = memo(function CopyRowButton({row}) {
+    const [copied, setCopied] = React.useState(false);
+
+    const handleCopy = async (e) => {
+        e.stopPropagation();
+        try {
+            const rowEl = e.currentTarget.closest('tr');
+            let values = extractCopyableRowValues(rowEl);
+            if (!values.length) values = extractFallbackRowValues(row);
+            await navigator.clipboard.writeText(values.join('\t'));
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch (err) {
+            console.error('Row copy failed', err);
+        }
+    };
+
+    return (
+        <Box sx={{display: 'flex', alignItems: 'center'}}>
+            <IconButton size="small" onClick={handleCopy} title="Copia riga (Excel)">
+                {copied ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
+            </IconButton>
+            {copied && (
+                <Typography variant="caption" color="success.main" sx={{ml: 0.5}}>
+                    Copiato
+                </Typography>
+            )}
+        </Box>
+    );
+});
+
 export default memo(function EventListAccordions({
                                                      data,
                                                      onOpenSubscriptionModal,
@@ -209,25 +355,7 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.form_data?.[field.name];
-                    if (field.type === 'l') {
-                        if (val) {
-                            return (
-                                <span data-copy-value={val}>
-                                    <Button variant="text"
-                                            color="primary"
-                                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                                            endIcon={<OpenInNewIcon fontSize="small"/>}
-                                            onClick={() => window.open(val, '_blank', 'noopener,noreferrer')}>
-                                        Link Drive
-                                    </Button>
-                                </span>
-                            );
-                        }
-                        return '';
-                    }
-                    if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
-                    if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
-                    return val ?? '';
+                    return renderDynamicFieldValue(field.type, val);
                 },
                 muiTableHeadCellProps: {sx: {color: 'orange'}}
             })) : [];
@@ -249,25 +377,7 @@ export default memo(function EventListAccordions({
                 Cell: ({row}) => {
                     const sub = row.original;
                     const val = sub.additional_data?.[field.name];
-                    if (field.type === 'l') {
-                        if (val) {
-                            return (
-                                <span data-copy-value={val}>
-                                    <Button variant="text"
-                                            color="primary"
-                                            sx={{textTransform: 'none', padding: 0, minWidth: 0}}
-                                            endIcon={<OpenInNewIcon fontSize="small"/>}
-                                            onClick={() => window.open(val, '_blank', 'noopener,noreferrer')}>
-                                        Link Drive
-                                    </Button>
-                                </span>
-                            );
-                        }
-                        return '';
-                    }
-                    if (field.type === 'm' && Array.isArray(val)) return val.join(', ');
-                    if (field.type === 'b') return val === true ? 'Sì' : val === false ? 'No' : '';
-                    return val ?? '';
+                    return renderDynamicFieldValue(field.type, val);
                 },
                 muiTableHeadCellProps: {sx: {color: 'mediumvioletred'}}
             })) : [];
@@ -511,132 +621,8 @@ export default memo(function EventListAccordions({
                 size: 40,
                 enableSorting: false,
                 enableColumnActions: false,
-                Header: () => {
-                    const [copiedHead, setCopiedHead] = React.useState(false);
-                    const handleCopyHeaders = async (e) => {
-                        e.stopPropagation();
-                        try {
-                            const thead = e.currentTarget.closest('thead');
-                            if (!thead) return;
-                            const headerRow = thead.querySelector('tr');
-                            if (!headerRow) return;
-                            const ths = Array.from(headerRow.querySelectorAll('th'));
-                            const values = ths
-                                .filter(th => {
-                                    if (th.querySelector('button[title="Copia nomi colonne (Excel)"]')) return false;
-                                    if (th.querySelector('input[type="checkbox"]')) return false;
-                                    if (th.hasAttribute('data-profile-header')) return false; // Robust Profilo exclusion
-                                    const txt = th.innerText.trim();
-                                    if (txt === 'Profilo') return false;
-                                    return txt !== 'Azioni';
-
-                                })
-                                .map(th => {
-                                    let txt = th.innerText.replace(/\s+/g, ' ').trim();
-                                    // Remove standalone numbers (e.g., spurious "0")
-                                    txt = txt.replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
-                                    return txt;
-                                })
-                                .filter(v => v.length);
-                            if (values.length) {
-                                await navigator.clipboard.writeText(values.join('\t'));
-                                setCopiedHead(true);
-                                setTimeout(() => setCopiedHead(false), 1500);
-                            }
-                        } catch (err) {
-                            console.error('Header copy failed', err);
-                        }
-                    };
-                    return (
-                        <Box sx={{display: 'flex', alignItems: 'center'}}>
-                            <IconButton
-                                size="small"
-                                onClick={handleCopyHeaders}
-                                title="Copia nomi colonne (Excel)"
-                            >
-                                {copiedHead ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
-                            </IconButton>
-                            {copiedHead && (
-                                <Typography variant="caption" color="success.main" sx={{ml: 0.5}}>
-                                    Copiato
-                                </Typography>
-                            )}
-                        </Box>
-                    );
-                },
-                Cell: ({row}) => {
-                    const [copied, setCopied] = React.useState(false);
-                    const handleCopy = async (e) => {
-                        e.stopPropagation();
-                        const toExcelSafe = (val) => {
-                            if (typeof val !== 'string') return val;
-                            const s = val.trim();
-                            // Excel-safe: treat +NN as text to avoid formula error
-                            if (s.startsWith('+')) return `'${s}`;
-                            return val;
-                        };
-                        try {
-                            const rowEl = e.currentTarget.closest('tr');
-                            let values = [];
-                            if (rowEl) {
-                                const tds = Array.from(rowEl.querySelectorAll('td'));
-                                values = tds
-                                    .filter(td => {
-                                        if (td.querySelector('button[title="Copia riga (Excel)"]')) return false; // copy cell
-                                        if (td.querySelector('input[type="checkbox"]')) return false; // selection
-                                        if (td.hasAttribute('data-profile-cell')) return false; // Profilo (incl. external name)
-                                        if (td.querySelector('button[title="Modifica Risposte Form"]')) return false; // Azioni
-                                        return true;
-                                    })
-                                    .map(td => {
-                                        // Check if there's a data-copy-value attribute (for drive links)
-                                        const copyValueElement = td.querySelector('[data-copy-value]');
-                                        if (copyValueElement) {
-                                            return copyValueElement.dataset.copyValue;
-                                        }
-                                        return td.innerText.replaceAll(/\s+/g, ' ').trim();
-                                    })
-                                    // Excel-safe transform
-                                    .map(toExcelSafe);
-                            }
-                            if (!values.length) {
-                                const visibleCells = row.getVisibleCells()
-                                    .filter(c => !['copy', 'profile_name', 'actions', 'mrt-row-select'].includes(c.column.id));
-                                values = visibleCells.map(cell => {
-                                    // Format subscribed_at like the UI
-                                    if (cell.column.id === 'subscribed_at') {
-                                        const dt = row.original?.subscribed_at;
-                                        const s = dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : '';
-                                        return toExcelSafe(s);
-                                    }
-                                    let raw = cell.getValue();
-                                    if (raw === null || raw === undefined) return '';
-                                    if (Array.isArray(raw)) raw = raw.join(', ');
-                                    if (typeof raw === 'object') raw = '';
-                                    const s = String(raw).replace(/\s+/g, ' ').trim();
-                                    return toExcelSafe(s);
-                                });
-                            }
-                            await navigator.clipboard.writeText(values.join('\t'));
-                            setCopied(true);
-                            setTimeout(() => setCopied(false), 1500);
-                        } catch (err) {
-                            console.error('Row copy failed', err);
-                        }
-                    };
-                    return (
-                        <Box sx={{display: 'flex', alignItems: 'center'}}>
-                            <IconButton size="small" onClick={handleCopy} title="Copia riga (Excel)">
-                                {copied ? <CheckIcon fontSize="inherit" color="success"/> : <ContentCopyIcon fontSize="inherit"/>}
-                            </IconButton>
-                            {copied && (
-                                <Typography variant="caption" color="success.main" sx={{ml: 0.5}}>
-                                    Copiato
-                                </Typography>
-                            )}
-                        </Box>
-                    );
-                },
+                Header: () => <CopyHeadersButton/>,
+                Cell: ({row}) => <CopyRowButton row={row}/>,
                 muiTableHeadCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 3}},
                 muiTableBodyCellProps: {sx: {position: 'sticky', left: 0, backgroundColor: 'background.paper', zIndex: 2}},
             };
