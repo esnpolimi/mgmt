@@ -716,7 +716,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 <Select
                     multiple
                     variant="outlined"
-                    value={orderProfileFields(localData.profile_fields)}
+                    value={orderProfileFields()}
                     onChange={e => {
                         setLocalData({
                             ...localData,

@@ -203,7 +203,7 @@ def initiate_profile_creation(request):
                 except Exception as e:
                     Document.objects.filter(profile=profile).delete()
                     profile.delete()
-                    logger.error(f"User creation failed for profile {profile.email}: {str(e)}")
+                    logger.exception(f"User creation failed for profile {profile.email}")
                     sentry_sdk.capture_exception(e)
                     return Response({"error": f"User creation failed: {str(e)}"}, status=500)
 
@@ -327,7 +327,7 @@ def verify_email_and_enable_profile(request, uid, token):
                 fail_silently=False
             )
         except Exception as e:
-            logger.error(f"Errore invio email segretario: {str(e)}")
+            logger.exception("Errore invio email segretario")
             sentry_sdk.capture_exception(e)
             # Do not block the response for secretary email errors
 

@@ -267,3 +267,9 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/treasury/urls.py
 - backend/treasury/views.py
 - backend/treasury/serializers.py
+
+## 11. Recent Quality Fixes (2026-09-01)
+
+1. Introduced shared constants in `backend/treasury/views.py` for repeated permission/method-not-allowed literals.
+2. Updated report endpoint exception logging to `logger.exception(...)` for traceback-preserving diagnostics.
+3. Introduced `EXCEL_FILE_EXTENSION` constant in `backend/treasury/reports.py` to remove repeated file-extension literals.
