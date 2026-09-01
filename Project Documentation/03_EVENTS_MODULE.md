@@ -235,3 +235,13 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/events/urls.py
 - backend/events/views.py
 - backend/events/serializers.py
+
+## 12. Recent Quality Fixes (2026-09-01)
+
+1. Introduced shared constant `FORM_LIST_NAME` in `backend/events/serializers.py` to avoid repeated hardcoded literals.
+2. Kept existing form-list behavior unchanged while reducing duplication-related static-analysis noise.
+3. Updated multiple exception handlers in `backend/events/views.py` to use `logger.exception(...)` for improved observability without changing business behavior.
+4. Reduced cognitive complexity in `subscription_edit_formfields` by extracting JSON parsing/coercion/merge/validation-flattening helpers while preserving endpoint semantics.
+5. Reduced nesting in `frontend/src/Components/events/EventListAccordions.jsx` by extracting copy and dynamic-field rendering helpers/components.
+6. Reduced cognitive complexity of `event_form_submit` (52 → low) by extracting `_resolve_form_submitter`, `_check_duplicate_form_subscription`, `_apply_form_link_uploads`, `_assign_form_capacity_label`, and `_create_form_payment_checkout` helpers. Endpoint behavior and response payloads are unchanged.
+7. Reduced cognitive complexity of `subscription_detail` by extracting PATCH/DELETE flow helpers and shared payload/serialization utilities (`_normalize_subscription_patch_payload`, `_add_auto_move_info`, `_handle_subscription_detail_patch`, `_handle_subscription_detail_delete`) while keeping API behavior unchanged.
