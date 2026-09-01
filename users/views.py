@@ -26,6 +26,8 @@ from utils.permissions import user_is_board
 
 logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
+MSG_UNAUTHORIZED = 'Non autorizzato.'
+MSG_METHOD_NOT_ALLOWED = 'Metodo non consentito.'
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -133,7 +135,7 @@ def log_out(request):
             token = RefreshToken(refresh_token)
             token.blacklist()
         except Exception as e:
-            logger.error(f"Error blacklisting token: {str(e)}")
+            logger.exception("Error blacklisting token")
     response = Response({'detail': 'Log out avvenuto con successo'}, status=200)
     response.delete_cookie('refresh_token')
     return response
@@ -165,7 +167,7 @@ def user_list(request):
         return Response(serializer.data)
     elif request.method == 'POST':
         if not get_action_permissions('user_create', request.user):
-            return Response({'error': 'Non autorizzato.'}, status=401)
+            return Response({'error': MSG_UNAUTHORIZED}, status=401)
         data = request.data
         serializer = UserSerializer(data=data)
         if serializer.is_valid():
@@ -173,7 +175,7 @@ def user_list(request):
             return Response(status=201)
         return Response(serializer.errors, status=400)
     else:
-        return Response({'error': 'Metodo non consentito.'}, status=405)
+        return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def user_detail(request, pk):
@@ -184,7 +186,7 @@ def user_detail(request, pk):
             return Response(serializer.data)
         elif request.method == 'PATCH':
             if not get_action_permissions('user_modify', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
             data = request.data
             serializer = UserSerializer(user, data=data, partial=True)
             if serializer.is_valid():
@@ -193,11 +195,11 @@ def user_detail(request, pk):
             return Response(serializer.errors, status=400)
         elif request.method == 'DELETE':
             if not get_action_permissions('user_delete', request.user):
-                return Response({'error': 'Non autorizzato.'}, status=401)
+                return Response({'error': MSG_UNAUTHORIZED}, status=401)
             user.delete()
             return Response(status=204)
         else:
-            return Response({'error': 'Metodo non consentito.'}, status=405)
+            return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
     except User.DoesNotExist:
         return Response({'error': 'Utente non trovato.'}, status=404)
 @api_view(['POST'])
@@ -329,6 +331,6 @@ def user_finance_permissions(request):
                     'effective_can_manage_content': effective_content(target),
                 }, status=200)
             return Response(serializer.errors, status=400)
-        return Response({'error': 'Metodo non consentito.'}, status=405)
+        return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
     except User.DoesNotExist:
         return Response({'error': 'Utente non trovato.'}, status=404)

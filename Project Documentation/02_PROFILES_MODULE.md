@@ -172,3 +172,8 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/profiles/urls.py
 - backend/profiles/views.py
 - backend/profiles/serializers.py
+
+## 11. Recent Quality Fixes (2026-09-01)
+
+1. Updated key exception handlers in `backend/profiles/views.py` to use `logger.exception(...)` for traceback-preserving diagnostics.
+2. Functional behavior of profile onboarding/verification flows remains unchanged.

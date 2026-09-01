@@ -141,3 +141,8 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/users/views.py
 - backend/users/serializers.py
 - backend/users/managers.py
+
+## 11. Recent Quality Fixes (2026-09-01)
+
+1. Introduced shared constants in `backend/users/views.py` for repeated authorization and method-not-allowed messages.
+2. Updated token blacklist exception logging to `logger.exception(...)` to keep traceback context.
