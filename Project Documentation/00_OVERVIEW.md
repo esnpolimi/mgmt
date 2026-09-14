@@ -121,6 +121,7 @@ Primary sensitive variables:
 - SIMPLE_JWT_SIGNING_KEY
 - CORS_ALLOWED_ORIGINS
 - EMAIL_HOST_PASSWORD
+- DEV_EMAIL_RECIPIENT (development only; all outgoing emails are redirected here)
 - GOOGLE_DRIVE_FOLDER_ID
 - SUMUP_CLIENT_ID
 - SUMUP_CLIENT_SECRET
@@ -128,6 +129,11 @@ Primary sensitive variables:
 - SUMUP_PAY_TO_EMAIL
 - SUMUP_MERCHANT_CODE
 - SENTRY_DSN
+
+In development, `backend/settings/dev.py` uses `utils.email_backend.DevelopmentEmailBackend`.
+Set `DEV_EMAIL_RECIPIENT` in `.env.development` to the developer's address. Every email keeps
+its original recipients in the `X-Original-Recipients` header and is delivered only to this
+safe address. Production uses the normal SMTP backend and ignores this variable.
 
 ## 8. Observability and Audit
 
