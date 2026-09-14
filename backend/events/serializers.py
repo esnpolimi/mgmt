@@ -165,6 +165,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     fields = serializers.ListField(required=False, default=list)  # Unified fields
     services = serializers.ListField(required=False, default=list)
     enable_form = serializers.BooleanField(required=False, default=False)
+    form_capacity = serializers.IntegerField(required=False, min_value=0, write_only=True)
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
     form_note = serializers.CharField(required=False, allow_blank=True, default='')
@@ -180,7 +181,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'services', 'enable_form',
-            'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
+            'form_capacity', 'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -304,6 +305,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     def create(self, validated_data):
         # Pop related fields that need special handling
         lists_data = validated_data.pop('lists', [])
+        form_capacity = validated_data.pop('form_capacity', None)
         organizers_data = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
         event = Event.objects.create(**validated_data)
@@ -355,7 +357,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 # Sum capacities of ML + WL
                 ml_cap = sum(l.capacity for l in event.lists.filter(is_main_list=True))
                 wl_cap = sum(l.capacity for l in event.lists.filter(is_waiting_list=True))
-                default_cap = ml_cap + wl_cap
+                default_cap = form_capacity if form_capacity is not None else ml_cap + wl_cap
                 form_list = EventList.objects.create(
                     name=FORM_LIST_NAME,
                     capacity=default_cap,
@@ -417,6 +419,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Remove relationship fields that need special handling
         lists_data = validated_data.pop('lists', None)
+        form_capacity = validated_data.pop('form_capacity', None)
         organizers_data = validated_data.pop('organizers', None)
         lead_organizer = validated_data.pop('lead_organizer', None)
 
@@ -595,6 +598,14 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                     'enable_form': "Non è possibile disattivare il form quando ci sono iscrizioni nella Form List. Spostare prima le iscrizioni in un'altra lista."
                 })
 
+        form_list = instance.lists.filter(name=FORM_LIST_NAME).first()
+        if form_capacity is not None and form_list:
+            form_subscription_count = form_list.subscriptions.count()
+            if form_capacity > 0 and form_subscription_count > form_capacity:
+                raise serializers.ValidationError({
+                    'form_capacity': f"Non è possibile impostare una capacità form minore del numero di iscrizioni presenti ({form_subscription_count})"
+                })
+
         # Update the instance with the remaining data
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -672,6 +683,9 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 is_waiting_list=False
             )
             form_list.events.add(instance)
+        elif instance.enable_form and form_capacity is not None:
+            form_list.capacity = form_capacity
+            form_list.save(update_fields=['capacity'])
 
         # Handle organizers
         if organizers_data is not None:
