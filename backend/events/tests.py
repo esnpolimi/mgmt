@@ -199,6 +199,41 @@ class EventCreationTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(Event.objects.filter(name="New Event").exists())
 
+	def test_event_creation_uses_explicit_form_capacity(self):
+		"""Form capacity can be set precisely or to zero for unlimited capacity."""
+		profile = _create_profile("creator-form-capacity@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_add_event)
+		self.authenticate(user)
+
+		response = self.client.post("/backend/event/", {
+			"name": "Event With Form Capacity",
+			"date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"enable_form": True,
+			"form_capacity": 25,
+			"lists": [{"name": "Main List", "capacity": 100, "is_main_list": True}],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		form_list = EventList.objects.get(name="Form List", events__name="Event With Form Capacity")
+		self.assertEqual(form_list.capacity, 25)
+
+		response = self.client.post("/backend/event/", {
+			"name": "Event With Unlimited Form",
+			"date": "2026-06-02",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"enable_form": True,
+			"form_capacity": 0,
+			"lists": [{"name": "Main List", "capacity": 10, "is_main_list": True}],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		unlimited_form_list = EventList.objects.get(name="Form List", events__name="Event With Unlimited Form")
+		self.assertEqual(unlimited_form_list.capacity, 0)
+
 	def test_cannot_create_list_with_form_list_name(self):
 		"""Creating a list with reserved 'Form List' name should fail."""
 		profile = _create_profile("creator@esnpolimi.it")
