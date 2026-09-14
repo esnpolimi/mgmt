@@ -119,6 +119,12 @@ Error-path notes:
 
 1. non-international users are rejected with `403`.
 2. missing WhatsApp link configuration returns `503`.
+
+Applicants who do not have a surname can select the corresponding option in the
+WhatsApp form. In that case `last_name` is sent empty, `no_surname` is set to
+`true`, and the email may use the single-segment format
+`name@mail.polimi.it`; otherwise the existing surname and
+`name.surname@mail.polimi.it` requirements remain active.
 3. email delivery failures return `500` and are logged to Sentry + CSV audit.
 
 Target CSV: `cronologia richieste gruppo whatsapp.csv`.
