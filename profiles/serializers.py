@@ -151,7 +151,7 @@ class ZeroPlaceholderMixin:
 class ProfileFullEditSerializer(ZeroPlaceholderMixin, serializers.ModelSerializer):
     class Meta:
         model = Profile
-        exclude = ['id', 'created_at', 'updated_at', 'enabled', 'email']
+        exclude = ['id', 'created_at', 'updated_at', 'enabled']
         extra_kwargs = {
             'person_code': {'required': False, 'allow_blank': True},
             'matricola_number': {'required': False, 'allow_blank': True},
