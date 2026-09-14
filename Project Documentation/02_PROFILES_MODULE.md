@@ -102,6 +102,7 @@ Board can force profile verification/activation for exceptional cases.
 
 - listing: authentication required
 - patch profile: profiles.change_profile
+- email change: allowed only for profiles whose email is not verified, with `profiles.change_profile`; for ESNers the new email must remain on `@esnpolimi.it`
 - delete profile: Board only
 - delete is blocked if linked `Subscription` records exist
 
@@ -152,7 +153,8 @@ Combined profile search across:
 
 1. Misaligned profile/document/user states during activation flows.
 2. Regressions in group-promotion rules.
-3. Profile deletion with uncaught event dependencies.
+3. Email changes must preserve the linked User account data because User currently references Profile.email as its primary key.
+4. Profile deletion with uncaught event dependencies.
 
 ## 9. Testing Requirements
 
@@ -161,6 +163,7 @@ Combined profile search across:
 3. permission matrix profile/document CRUD
 4. group transition constraints
 5. object-level access profile_subscriptions
+6. authorized email changes for unverified profiles, including preservation of linked User credentials and groups
 
 Test reference: `backend/profiles/tests.py`.
 
