@@ -39,20 +39,31 @@ class WhatsAppConfigSerializer(serializers.ModelSerializer):
 class WhatsAppRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     first_name = serializers.CharField(max_length=100)
-    last_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    no_surname = serializers.BooleanField(required=False)
     is_international = serializers.BooleanField()
     home_university = serializers.CharField(max_length=300)
     course_of_study = serializers.CharField(max_length=300)
 
-    def validate_email(self, value):
-        """Validate that the email matches name.surname@mail.polimi.it (all lowercase)."""
-        value = value.lower()  # always normalise to lowercase
-        # Pattern: at least two lowercase letter-segments (letters, digits, hyphens, apostrophes)
-        # separated by dots, e.g. mario.rossi@mail.polimi.it, mario2.rossi@mail.polimi.it
-        pattern = r"^[a-z][a-z0-9'\-]*(\.[a-z][a-z0-9'\-]*)+@mail\.polimi\.it$"
+    def validate(self, attrs):
+        """Validate the Polimi email format, allowing a single name segment without a surname."""
+        value = attrs['email'].lower()
+        no_surname = attrs.get('no_surname', False)
+        if no_surname and attrs.get('last_name', '').strip():
+            raise serializers.ValidationError({'last_name': 'Last name must be empty when no_surname is selected.'})
+        if not no_surname and not attrs.get('last_name', '').strip():
+            raise serializers.ValidationError({'last_name': 'Last name is required.'})
+
+        pattern = (
+            r"^[a-z][a-z0-9'\-]*@mail\.polimi\.it$"
+            if no_surname
+            else r"^[a-z][a-z0-9'\-]*(\.[a-z][a-z0-9'\-]*)+@mail\.polimi\.it$"
+        )
         if not re.match(pattern, value):
+            email_format = 'name@mail.polimi.it' if no_surname else 'name.surname@mail.polimi.it'
             raise serializers.ValidationError(
-                'Email must follow the format name.surname@mail.polimi.it – '
+                f'Email must follow the format {email_format} – '
                 'no capital letters, no personal code (e.g. "12345678@mail.polimi.it" is not accepted).'
             )
-        return value
+        attrs['email'] = value
+        return attrs

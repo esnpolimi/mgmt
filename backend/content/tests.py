@@ -678,6 +678,51 @@ class WhatsAppEndpointsTests(ContentBaseTestCase):
 
 	@patch("content.views.send_mail")
 	@patch("content.views._append_to_whatsapp_log")
+	def test_whatsapp_register_without_surname_accepts_single_segment_email(
+		self,
+		mock_append_log,
+		mock_send_mail,
+	):
+		"""Applicants without a surname may use a single-segment Polimi email."""
+		mock_append_log.return_value = None
+		config = WhatsAppConfig.get_instance()
+		config.whatsapp_link = "https://chat.whatsapp.com/valid-link"
+		config.save(update_fields=["whatsapp_link"])
+		payload = {
+			**self.registration_payload,
+			"email": "mario@mail.polimi.it",
+			"last_name": "",
+			"no_surname": True,
+		}
+
+		response = self.client.post(
+			"/backend/content/whatsapp-register/",
+			payload,
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		mock_send_mail.assert_called_once()
+
+	def test_whatsapp_register_requires_surname_by_default(self):
+		"""The existing surname and email requirements remain the default."""
+		payload = {
+			**self.registration_payload,
+			"email": "mario@mail.polimi.it",
+			"last_name": "",
+		}
+
+		response = self.client.post(
+			"/backend/content/whatsapp-register/",
+			payload,
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("last_name", response.data)
+
+	@patch("content.views.send_mail")
+	@patch("content.views._append_to_whatsapp_log")
 	def test_whatsapp_register_non_admitted_user_returns_403(
 		self,
 		mock_append_log,
