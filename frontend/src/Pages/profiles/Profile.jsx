@@ -194,6 +194,10 @@ export default function Profile() {
         isBoardMember &&
         !!profile &&
         (!profile.enabled || !profile.email_is_verified);
+    const canEditEmail =
+        !!profile &&
+        !profile.email_is_verified &&
+        user?.permissions?.includes('change_profile');
 
     const fetchFinancePerms = (email) => {
         fetchCustom("GET", `/users/finance-permissions/?email=${encodeURIComponent(email)}`, {
@@ -1086,8 +1090,8 @@ export default function Profile() {
                                             value={updatedData.email}
                                             error={errors.email[0]}
                                             helperText={errors.email[1]}
-                                            slotProps={{input: {readOnly: true}}}
-                                            sx={{backgroundColor: 'grey.200'}}
+                                            slotProps={{input: {readOnly: readOnly.email || !canEditEmail}}}
+                                            sx={{backgroundColor: readOnly.email || !canEditEmail ? 'grey.200' : 'white'}}
                                             onChange={handleChange} fullWidth/>
                                     </Grid>
                                 )}
