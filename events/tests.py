@@ -999,8 +999,9 @@ class EventFormTests(EventsBaseTestCase):
 		self.assertIn("Validation error", response.data["error"])
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-	def test_event_form_submit_allows_expired_esncard(self):
-		event = _create_event(enable_form=True)
+	@patch("events.views.create_sumup_checkout")
+	def test_event_form_submit_blocks_checkout_for_expired_esncard(self, mock_create_checkout):
+		event = _create_event(enable_form=True, allow_online_payment=True, cost=10)
 		_create_event_list(event, name="Form List", is_main_list=False)
 		profile = _create_profile("expired-form@uni.it", is_esner=False)
 		card = ESNcard.objects.create(profile=profile, number="FORM-EXPIRED-001")
@@ -1012,6 +1013,10 @@ class EventFormTests(EventsBaseTestCase):
 		}, format="json")
 
 		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["payment_blocked"])
+		self.assertEqual(response.data["payment_blocked_reason"], "esncard_expired")
+		self.assertIsNone(response.data["checkout_id"])
+		mock_create_checkout.assert_not_called()
 		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")

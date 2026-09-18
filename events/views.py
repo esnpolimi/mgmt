@@ -1989,6 +1989,15 @@ def _create_form_payment_checkout(event, sub, total_cost, capacity_blocked):
         return "online_payment_unavailable"
 
 
+def _form_payment_blocked_by_esncard(event, profile, total_cost):
+    return bool(
+        event.allow_online_payment
+        and total_cost > 0
+        and profile
+        and _get_esncard_status(profile) != 'valid'
+    )
+
+
 @api_view(['POST'])
 def event_form_submit(request, event_id):
     """
@@ -2074,8 +2083,11 @@ def event_form_submit(request, event_id):
         # --- Capacity check (must happen before SumUp checkout creation) ---
         assigned_label, capacity_blocked = _assign_form_capacity_label(event, total_cost)
 
-        # --- SumUp integration (widget-only) — only create checkout when capacity is available ---
-        payment_error = _create_form_payment_checkout(event, sub, total_cost, capacity_blocked)
+        # Do not create a remote checkout until ESNcard eligibility is known.
+        payment_blocked = _form_payment_blocked_by_esncard(event, profile, total_cost)
+        payment_error = None if payment_blocked else _create_form_payment_checkout(
+            event, sub, total_cost, capacity_blocked
+        )
 
         online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error and not capacity_blocked)
         payment_required = online_payment_required or total_cost > 0
@@ -2095,6 +2107,12 @@ def event_form_submit(request, event_id):
             "payment_required": bool(event.allow_online_payment and total_cost > 0 and not payment_error),
             "checkout_id": sub.sumup_checkout_id,
             "payment_error": payment_error,
+            "payment_blocked": payment_blocked,
+            "payment_blocked_reason": "esncard_expired" if payment_blocked else None,
+            "payment_blocked_message": (
+                "A valid ESNcard is required for online payment. Please renew your ESNcard before paying."
+                if payment_blocked else ""
+            ),
             "capacity_blocked": capacity_blocked
         }, status=200)
     except Event.DoesNotExist:

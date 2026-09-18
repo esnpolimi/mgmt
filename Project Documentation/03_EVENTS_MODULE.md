@@ -151,6 +151,8 @@ Additional rules:
 
 Users can submit the event form with an expired or absent ESNcard. When online payment starts, payment status and payment confirmation verify the latest ESNcard. Invalid cards block payment and show an explanatory renewal message.
 
+Public form submission checks ESNcard eligibility before creating a SumUp checkout, so blocked users never receive a remote checkout link.
+
 Integration payment flows use a valid ESNcard fixture because payment validation is enforced server-side.
 
 ### 5.5 Form Status Capacity Gate
@@ -168,6 +170,8 @@ When creating or updating an event with the public form enabled, `form_capacity`
 PATCH enabling an existing event form applies submitted `form_capacity` when creating a missing Form List.
 
 The subscriber grid supports selecting multiple rows and copying their visible values as tab-separated text for spreadsheets.
+
+Spreadsheet exports prefix subscriber-controlled values beginning with `=`, `+`, `-`, or `@` to prevent formula execution.
 
 Event subscriptions require an active profile with verified email, for both public forms and authenticated subscriptions.
 
