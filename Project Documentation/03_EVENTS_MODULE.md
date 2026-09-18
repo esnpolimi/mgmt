@@ -147,7 +147,11 @@ Additional rules:
 6. idempotent transaction creation
 7. subscription state alignment
 
-### 5.4 Form Status Capacity Gate
+### 5.4 ESNcard Gate for Online Payment
+
+Users can submit the event form with an expired or absent ESNcard. When online payment starts, payment status and payment confirmation verify the latest ESNcard. Invalid cards block payment and show an explanatory renewal message.
+
+### 5.5 Form Status Capacity Gate
 
 `event/<event_id>/formstatus/` uses Form List as the primary online-capacity gate.
 
@@ -159,7 +163,7 @@ Compatibility notes:
 
 When creating or updating an event with the public form enabled, `form_capacity` controls the automatic Form List: a positive integer sets the exact number of online form submissions, while `0` means unlimited capacity. If omitted by a legacy API client, creation keeps the previous fallback based on Main + Waiting capacity.
 
-### 5.5 Unified Refund UI Flow (Single Icon)
+### 5.6 Unified Refund UI Flow (Single Icon)
 
 For each subscription in list view, a single "Reimburse" action is available.
 
