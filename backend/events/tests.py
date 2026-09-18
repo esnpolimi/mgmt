@@ -584,6 +584,22 @@ class SubscriptionCreateTests(EventsBaseTestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("già iscritto", response.data["error"])
 
+	def test_subscription_create_requires_verified_email(self):
+		profile = _create_profile("unverified-create@uni.it", is_esner=False, verified=False)
+		user = _create_user(_create_profile("creator-verified@esnpolimi.it"))
+		user.user_permissions.add(self.perm_add_subscription)
+		self.authenticate(user)
+
+		event = _create_event()
+		list_main = _create_event_list(event)
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk,
+			"event": event.pk,
+			"list": list_main.pk,
+		})
+
+		self.assertEqual(response.status_code, 403)
+
 	def test_subscription_create_external_requires_flag(self):
 		"""External name should be required when profile is missing and event allows external."""
 		profile = _create_profile("creator@esnpolimi.it")
@@ -970,6 +986,20 @@ class EventFormTests(EventsBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	def test_event_form_submit_requires_verified_email(self):
+		event = _create_event(enable_form=True)
+		_create_event_list(event, name="Form List", is_main_list=False)
+		profile = _create_profile("unverified-form@uni.it", is_esner=False, verified=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": profile.email,
+			"form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(Subscription.objects.filter(profile=profile, event=event).exists())
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_external_allowed(self):
