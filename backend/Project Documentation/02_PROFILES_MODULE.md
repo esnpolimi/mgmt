@@ -77,6 +77,8 @@ Main filters:
 | /profile_events/<pk>/ | GET | authenticated |
 | /check_erasmus_email/ | POST | public |
 
+`check_erasmus_email` returns `esncard_status` as `valid`, `expired`, or `absent`, plus the latest card number when available.
+
 ## 4. Lifecycle Flows
 
 ### 4.1 Erasmus Registration Flow
