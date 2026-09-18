@@ -16,6 +16,7 @@ services:
     ports:
       - "8080:80"
     environment:
+      UPLOAD_LIMIT: 64M
       PMA_HOST: db
       PMA_PORT: 3306
     depends_on:
