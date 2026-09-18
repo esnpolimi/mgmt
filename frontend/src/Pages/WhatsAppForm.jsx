@@ -8,6 +8,8 @@ import {
     ToggleButton,
     ToggleButtonGroup,
     FormLabel,
+    FormControlLabel,
+    Checkbox,
     CircularProgress,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -25,6 +27,7 @@ export default function WhatsAppForm() {
         email: '',
         first_name: '',
         last_name: '',
+        no_surname: false,
         is_international: null,   // null = not selected, true/false
         home_university: '',
         course_of_study: '',
@@ -54,15 +57,27 @@ export default function WhatsAppForm() {
         setFormErrors((prev) => ({ ...prev, is_international: [false, ''] }));
     };
 
+    const handleNoSurnameChange = (e) => {
+        const noSurname = e.target.checked;
+        setFormData((prev) => ({
+            ...prev,
+            no_surname: noSurname,
+            last_name: noSurname ? '' : prev.last_name,
+        }));
+        setFormErrors((prev) => ({ ...prev, last_name: [false, ''], email: [false, ''] }));
+    };
+
     // Pattern: one or more lowercase letter-segments (letters, digits, hyphens, apostrophes) separated by dots, before @mail.polimi.it
     // Accepts: mario.rossi, mario2.rossi, jean-marie.dupont, maria.della.rocca2
     // Rejects: 12345678@mail.polimi.it (starts with digit), MARIO.ROSSI (capital)
     const POLIMI_EMAIL_PATTERN = /^[a-z][a-z0-9'-]*(\.[a-z][a-z0-9'-]*)+@mail\.polimi\.it$/;
+    const POLIMI_EMAIL_WITHOUT_SURNAME_PATTERN = /^[a-z][a-z0-9'-]*@mail\.polimi\.it$/;
 
-    const validateEmail = (email) => {
+    const validateEmail = (email, noSurname) => {
         if (!email) return 'Email is required.';
-        if (!POLIMI_EMAIL_PATTERN.test(email))
-            return 'Email must follow the format name.surname@mail.polimi.it - no personal code (e.g. "12345678@mail.polimi.it" is not correct).';
+        const emailPattern = noSurname ? POLIMI_EMAIL_WITHOUT_SURNAME_PATTERN : POLIMI_EMAIL_PATTERN;
+        if (!emailPattern.test(email))
+            return `Email must follow the format ${noSurname ? 'name' : 'name.surname'}@mail.polimi.it - no personal code (e.g. "12345678@mail.polimi.it" is not correct).`;
         return '';
     };
 
@@ -70,7 +85,7 @@ export default function WhatsAppForm() {
         const errors = { ...formErrors };
         let valid = true;
 
-        const emailError = validateEmail(formData.email);
+        const emailError = validateEmail(formData.email, formData.no_surname);
         if (emailError) {
             errors.email = [true, emailError];
             valid = false;
@@ -79,7 +94,7 @@ export default function WhatsAppForm() {
             errors.first_name = [true, 'First name is required.'];
             valid = false;
         }
-        if (!formData.last_name.trim()) {
+        if (!formData.no_surname && !formData.last_name.trim()) {
             errors.last_name = [true, 'Last name is required.'];
             valid = false;
         }
@@ -244,16 +259,25 @@ export default function WhatsAppForm() {
                 </Grid>
 
                 {/* ── Last name ── */}
-                <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                        label="Last Name *"
-                        variant="outlined"
-                        name="last_name"
-                        fullWidth
-                        value={formData.last_name}
-                        onChange={handleChange}
-                        error={formErrors.last_name[0]}
-                        helperText={formErrors.last_name[0] ? formErrors.last_name[1] : ''}
+                {!formData.no_surname && (
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                            label="Last Name *"
+                            variant="outlined"
+                            name="last_name"
+                            fullWidth
+                            value={formData.last_name}
+                            onChange={handleChange}
+                            error={formErrors.last_name[0]}
+                            helperText={formErrors.last_name[0] ? formErrors.last_name[1] : ''}
+                        />
+                    </Grid>
+                )}
+
+                <Grid size={{ xs: 12 }}>
+                    <FormControlLabel
+                        control={<Checkbox checked={formData.no_surname} onChange={handleNoSurnameChange} />}
+                        label="I don't have a last name"
                     />
                 </Grid>
 

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(models.Model):
-    esncard_release_fee = models.DecimalField(max_digits=9, decimal_places=2, default=10.0)
+    esncard_release_fee = models.DecimalField(max_digits=9, decimal_places=2, default=15.0)
     esncard_lost_fee = models.DecimalField(max_digits=9, decimal_places=2, default=4.0)
 
     class Meta:
@@ -24,6 +24,10 @@ class Settings(models.Model):
     @classmethod
     def get(cls):
         obj, created = cls.objects.get_or_create(pk=1)
+        if created:
+            obj.esncard_release_fee = 15.0
+            obj.esncard_lost_fee = 4.0
+            obj.save(update_fields=['esncard_release_fee', 'esncard_lost_fee'])
         return obj
 
 

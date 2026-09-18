@@ -121,6 +121,7 @@ Primary sensitive variables:
 - SIMPLE_JWT_SIGNING_KEY
 - CORS_ALLOWED_ORIGINS
 - EMAIL_HOST_PASSWORD
+- DEV_EMAIL_RECIPIENT (development only; all outgoing emails are redirected here)
 - GOOGLE_DRIVE_FOLDER_ID
 - SUMUP_CLIENT_ID
 - SUMUP_CLIENT_SECRET
@@ -128,6 +129,11 @@ Primary sensitive variables:
 - SUMUP_PAY_TO_EMAIL
 - SUMUP_MERCHANT_CODE
 - SENTRY_DSN
+
+In development, `backend/settings/dev.py` uses `utils.email_backend.DevelopmentEmailBackend`.
+Set `DEV_EMAIL_RECIPIENT` in `.env.development` to the developer's address. Every email keeps
+its original recipients in the `X-Original-Recipients` header and is delivered only to this
+safe address. Production uses the normal SMTP backend and ignores this variable.
 
 ## 8. Observability and Audit
 
@@ -245,3 +251,15 @@ Python app restart is performed at the end of the deploy via Passenger/cPanel co
 If `CPANEL_PYTHON_APP_ROOT` is not configured, the workflow defaults to:
 
 - `/home/fazucrdl/mgmt.esnpolimi.it/backend`
+
+## 16. Recent Quality Hardening (2026-09-01)
+
+- Sonar-driven low-risk fixes applied on events/treasury/frontend modules.
+- Repeated literals reduced via shared constants in serializers and report generation.
+- Exception logging improved in treasury report endpoints using `logger.exception(...)`.
+- Frontend call-site mismatch fixed in event modal profile-fields ordering call.
+- Added `frontend/.dockerignore` entries to prevent Docker build-context failures caused by local `node_modules` artifacts on Windows.
+- Extended `logger.exception(...)` adoption in users/profiles/events exception paths for better diagnostics.
+- Applied step-1 complexity refactor on events flows: extraction helpers in backend form-fields patch endpoint and frontend list accordion copy/render logic.
+- Applied step-2 complexity refactor: `event_form_submit` decomposed into 5 focused helpers (submitter resolution, duplicate check, link uploads, capacity assignment, SumUp checkout), full backend test suite (373 tests) verified green.
+- Applied step-3 complexity refactor: `subscription_detail` decomposed into focused helpers for reimbursement checks, PATCH payload normalization, auto-move response mapping, and DELETE transaction cleanup; events tests and full backend suite remain green.

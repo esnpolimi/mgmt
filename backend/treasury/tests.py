@@ -246,6 +246,24 @@ class ESNcardTests(TreasuryBaseTestCase):
 		self.assertTrue(ESNcard.objects.filter(profile=owner_profile).exists())
 		self.assertTrue(Transaction.objects.filter(type=Transaction.TransactionType.ESNCARD).exists())
 
+	def test_esncard_emission_requires_verified_email(self):
+		profile = _create_profile("board@esnpolimi.it")
+		user = _create_user(profile)
+		self.authenticate(user)
+
+		Settings.get()
+		account = _create_account("Main", user=user)
+		owner_profile = _create_profile("unverified@uni.it", is_esner=False, verified=False)
+
+		response = self.client.post("/backend/esncard_emission/", {
+			"profile_id": owner_profile.pk,
+			"account_id": account.pk,
+			"esncard_number": "ESN-UNVERIFIED",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 403)
+		self.assertFalse(ESNcard.objects.filter(profile=owner_profile).exists())
+
 	def test_esncard_emission_duplicate_number(self):
 		"""Duplicate ESNcard numbers should return 400."""
 		profile = _create_profile("board@esnpolimi.it")
