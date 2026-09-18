@@ -716,7 +716,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 <Select
                     multiple
                     variant="outlined"
-                    value={orderProfileFields(localData.profile_fields)}
+                    value={orderProfileFields()}
                     onChange={e => {
                         setLocalData({
                             ...localData,
@@ -1518,12 +1518,27 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Alert severity="info" sx={{mt: 1}}>
                         Abilitando il form viene creata automaticamente la lista &#34;Form List&#34;.
                         Le iscrizioni online finiscono lì e saranno spostate automaticamente in Main/Waiting List al pagamento online,
-                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì (default: illimitata).
+                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì.
                     </Alert>
                 )}
 
                 {localData.enable_form && <Paper elevation={3} sx={{p: 2, my: 2}}>
                     <Typography variant="h5" gutterBottom>Impostazioni Form di Iscrizione Online</Typography>
+
+                    <TextField
+                        label="Capienza Form"
+                        name="form_capacity"
+                        type="number"
+                        value={localData.form_capacity}
+                        slotProps={{htmlInput: {min: "0", step: "1"}}}
+                        onChange={(e) => {
+                            const newCapacity = e.target.value;
+                            setLocalData({...localData, form_capacity: newCapacity});
+                            dataRef.current.form_capacity = newCapacity;
+                        }}
+                        helperText="Inserisci 0 per una capienza illimitata"
+                        fullWidth
+                    />
 
                     {/* Display validation errors if present */}
                     {localErrors.form[0] && (
@@ -1632,6 +1647,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
         reimbursements_by_organizers_only: false,
         organizers: [],
         lists: [{id: '', name: 'Main List', capacity: '', is_main_list: true}], // set default as Main List type
+        form_capacity: 0,
         profile_fields: [],
         fields: [],
         services: [],
@@ -1660,6 +1676,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 fields: Array.isArray(event.fields) ? event.fields : [],
                 services: Array.isArray(event.services) ? event.services : [],
                 enable_form: Boolean(event.enable_form),
+                form_capacity: Array.isArray(event.lists)
+                    ? (event.lists.find(list => list.name === 'Form List')?.capacity ?? 0)
+                    : 0,
                 form_note: typeof event.form_note === 'string' ? event.form_note : '',
                 organizers: Array.isArray(event.organizers)
                     ? event.organizers.map(o => ({
@@ -1719,6 +1738,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             subscription_end_date: formatDateTimeString(rest.subscription_end_date),
             cost: Number(rest.cost || 0).toFixed(2),
             deposit: Number(rest.deposit || 0).toFixed(2),
+            form_capacity: Math.floor(Number(rest.form_capacity || 0)),
             lists: (rest.lists || []).map(t => ({
                 id: t.id || null,
                 name: t.name,

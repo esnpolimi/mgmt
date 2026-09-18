@@ -30,13 +30,15 @@ from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
 from django.utils import timezone
-from utils.permissions import user_is_board
+from utils.permissions import profile_email_verified, user_is_board
 try:
     from zoneinfo import ZoneInfo
 except Exception:
     ZoneInfo = None
 
 MSG_UNAUTHORIZED = 'Non autorizzato.'
+MSG_METHOD_NOT_ALLOWED = 'Metodo non consentito'
+PERM_ADD_TRANSACTION = 'treasury.add_transaction'
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +54,7 @@ def get_action_permissions(action, user):
     if action == 'account_detail_patch':
         return user.has_perm('treasury.change_account')
     if action == 'transaction_add':
-        return user.has_perm('treasury.add_transaction')
+        return user.has_perm(PERM_ADD_TRANSACTION)
     if action == 'transaction_detail_patch':
         return user.has_perm('treasury.change_transaction') or getattr(user, 'can_manage_casse', False)
     if action == 'transaction_detail_delete':
@@ -69,7 +71,7 @@ def get_action_permissions(action, user):
         return (
             user_is_board(user)
             or getattr(user, 'can_manage_casse', False)
-            or user.has_perm('treasury.add_transaction')
+            or user.has_perm(PERM_ADD_TRANSACTION)
             or user.has_perm('treasury.view_account')
         )
     # Default: allow
@@ -117,6 +119,11 @@ def apply_transaction_filters(qs, request):
 def esncard_emission(request):
     try:
         profile = Profile.objects.filter(id=request.data['profile_id']).first()
+        if not profile_email_verified(profile):
+            return Response(
+                {'error': 'Il profilo deve avere una email verificata prima di ricevere una ESNcard.'},
+                status=403
+            )
         latest_card = profile.latest_esncard if profile else None
         logger.info("Latest card for" + str(profile) + ": " + str(latest_card))
         esncard_serializer = ESNcardEmissionSerializer(data=request.data)
@@ -271,7 +278,7 @@ def esncard_detail(request, pk):
                 'refund_transaction_id': refund_transaction_id,
             }, status=200)
         else:
-            return Response({'error': "Metodo non consentito"}, status=405)
+            return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
     except ESNcard.DoesNotExist:
         not_found_status = 404 if request.method == 'DELETE' else 400
         return Response({'error': 'La ESNcard non esiste'}, status=not_found_status)
@@ -299,7 +306,7 @@ def transaction_add(request):
 
     transaction_type = transaction_serializer.validated_data['type']
     if transaction_type in [Transaction.TransactionType.DEPOSIT, Transaction.TransactionType.WITHDRAWAL]:
-        if not request.user.has_perm('treasury.add_transaction'):
+        if not request.user.has_perm(PERM_ADD_TRANSACTION):
             return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
     try:
@@ -445,7 +452,7 @@ def transaction_detail(request, pk):
             else:
                 return Response({'error': 'Solo i Rimborsi possono essere eliminati manualmente.'}, status=400)
         else:
-            return Response({'error': "Metodo non consentito"}, status=405)
+            return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
     except Transaction.DoesNotExist:
         return Response({'error': 'Transazione non trovata.'}, status=404)
 # Endpoint to retrieve all accounts
@@ -506,7 +513,7 @@ def account_detail(request, pk):
             serializer.save()
             return Response(serializer.data, status=200)
         else:
-            return Response({'error': "Metodo non consentito"}, status=405)
+            return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
     except Account.DoesNotExist:
         return Response({'error': 'Account non trovato.'}, status=404)
 @api_view(['POST'])
@@ -587,7 +594,7 @@ def reimbursement_request_detail(request, pk):
             logger.error(f"Errore eliminazione richiesta rimborso #{pk}: {del_exc}")
             return Response({'error': 'Errore durante l\'eliminazione.'}, status=500)
     else:
-        return Response({'error': "Metodo non consentito"}, status=405)
+        return Response({'error': MSG_METHOD_NOT_ALLOWED}, status=405)
 # Endpoint to retrieve list of reimbursement requests
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1104,11 +1111,11 @@ def treasury_accounts_report(request):
     except ReportDateError as exc:
         return Response({'error': str(exc)}, status=400)
     except HttpError as exc:
-        logger.error(f"Drive upload failed: {exc}")
+        logger.exception("Drive upload failed")
         sentry_sdk.capture_exception(exc)
         return Response({'error': 'Errore Drive durante la generazione report.'}, status=502)
     except Exception as exc:
-        logger.error(str(exc))
+        logger.exception("Unexpected error during accounts report generation")
         sentry_sdk.capture_exception(exc)
         return Response({'error': 'Errore interno del server.'}, status=500)
 
@@ -1132,10 +1139,10 @@ def treasury_transactions_report(request):
     except ReportDateError as exc:
         return Response({'error': str(exc)}, status=400)
     except HttpError as exc:
-        logger.error(f"Drive upload failed: {exc}")
+        logger.exception("Drive upload failed")
         sentry_sdk.capture_exception(exc)
         return Response({'error': 'Errore Drive durante la generazione report.'}, status=502)
     except Exception as exc:
-        logger.error(str(exc))
+        logger.exception("Unexpected error during transactions report generation")
         sentry_sdk.capture_exception(exc)
         return Response({'error': 'Errore interno del server.'}, status=500)

@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 EXCEL_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+EXCEL_FILE_EXTENSION = ".xlsx"
 ROOT_FOLDER_NAME = "Treasury-Reports"
 ACCOUNTS_FOLDER_NAME = "Casse"
 TRANSACTIONS_FOLDER_NAME = "Transazioni"
@@ -268,7 +269,7 @@ def generate_accounts_report(report_date=None, tz=None, dry_run=False):
     tz = tz or get_report_timezone()
     report_date = resolve_report_date(report_date, tz)
     start_dt, end_dt = get_day_bounds(report_date, tz)
-    filename = report_date.strftime("%d-%m-%Y") + ".xlsx"
+    filename = report_date.strftime("%d-%m-%Y") + EXCEL_FILE_EXTENSION
 
     workbook = build_accounts_workbook(start_dt, end_dt, report_date)
     if dry_run:
@@ -294,7 +295,7 @@ def generate_transactions_report(report_date=None, tz=None, dry_run=False):
     tz = tz or get_report_timezone()
     report_date = resolve_report_date(report_date, tz)
     start_dt, end_dt = get_day_bounds(report_date, tz)
-    filename = report_date.strftime("%d-%m-%Y") + ".xlsx"
+    filename = report_date.strftime("%d-%m-%Y") + EXCEL_FILE_EXTENSION
 
     workbook = build_transactions_workbook(start_dt, end_dt, tz)
     if dry_run:
@@ -324,7 +325,7 @@ def generate_daily_reports(report_date=None, tz=None, dry_run=False):
     accounts_wb = build_accounts_workbook(start_dt, end_dt, report_date)
     transactions_wb = build_transactions_workbook(start_dt, end_dt, tz)
 
-    filename = report_date.strftime("%d-%m-%Y") + ".xlsx"
+    filename = report_date.strftime("%d-%m-%Y") + EXCEL_FILE_EXTENSION
     if dry_run:
         return {
             "report_date": report_date,

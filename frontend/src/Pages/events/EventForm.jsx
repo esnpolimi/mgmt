@@ -258,6 +258,17 @@ export default function EventForm() {
             auth: false,
             // NOTE: fetchCustom should detect FormData and avoid JSON stringify / set content-type
             onSuccess: (data) => {
+                if (data.payment_blocked) {
+                    navigate(`/event/${eventData.id}/formresult`, {
+                        state: {
+                            subscriptionId: data.subscription_id,
+                            assignedList: data.assigned_list,
+                            paymentBlocked: true,
+                            paymentBlockedMessage: data.payment_blocked_message
+                        }
+                    });
+                    return;
+                }
                 if (data.payment_error) {
                     const offlineMsg = "Online payment currently unavailable. Your subscription is recorded; please contact us for payment.";
                     navigate(`/event/${eventData.id}/formresult`, {

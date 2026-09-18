@@ -23,7 +23,7 @@ Main business attributes:
 - identifiers: `name`, `date`, `description`
 - pricing: `cost`, `deposit`
 - subscription window: `subscription_start_date`, `subscription_end_date`
-- form: `enable_form`, `form_programmed_open_time`, `form_note`
+- form: `enable_form`, `form_programmed_open_time`, `form_note`, `form_capacity`
 - online payment toggle: `allow_online_payment`
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
@@ -147,7 +147,15 @@ Additional rules:
 6. idempotent transaction creation
 7. subscription state alignment
 
-### 5.4 Form Status Capacity Gate
+### 5.4 ESNcard Gate for Online Payment
+
+Users can submit the event form with an expired or absent ESNcard. When online payment starts, payment status and payment confirmation verify the latest ESNcard. Invalid cards block payment and show an explanatory renewal message.
+
+Public form submission checks ESNcard eligibility before creating a SumUp checkout, so blocked users never receive a remote checkout link.
+
+Integration payment flows use a valid ESNcard fixture because payment validation is enforced server-side.
+
+### 5.5 Form Status Capacity Gate
 
 `event/<event_id>/formstatus/` uses Form List as the primary online-capacity gate.
 
@@ -157,7 +165,17 @@ Compatibility notes:
 2. `main_list_full` and `waiting_list_full` are still returned for backward compatibility.
 3. sold-out payment blocking remains based on Main/Waiting capacity rules at payment time.
 
-### 5.5 Unified Refund UI Flow (Single Icon)
+When creating or updating an event with the public form enabled, `form_capacity` controls the automatic Form List: a positive integer sets the exact number of online form submissions, while `0` means unlimited capacity. If omitted by a legacy API client, creation keeps the previous fallback based on Main + Waiting capacity.
+
+PATCH enabling an existing event form applies submitted `form_capacity` when creating a missing Form List.
+
+The subscriber grid supports selecting multiple rows and copying their visible values as tab-separated text for spreadsheets.
+
+Spreadsheet exports prefix subscriber-controlled values beginning with `=`, `+`, `-`, or `@` to prevent formula execution.
+
+Event subscriptions require an active profile with verified email, for both public forms and authenticated subscriptions.
+
+### 5.6 Unified Refund UI Flow (Single Icon)
 
 For each subscription in list view, a single "Reimburse" action is available.
 
@@ -235,3 +253,17 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/events/urls.py
 - backend/events/views.py
 - backend/events/serializers.py
+
+## 12. Recent Quality Fixes (2026-09-01)
+
+1. Introduced shared constant `FORM_LIST_NAME` in `backend/events/serializers.py` to avoid repeated hardcoded literals.
+2. Kept existing form-list behavior unchanged while reducing duplication-related static-analysis noise.
+3. Updated multiple exception handlers in `backend/events/views.py` to use `logger.exception(...)` for improved observability without changing business behavior.
+4. Reduced cognitive complexity in `subscription_edit_formfields` by extracting JSON parsing/coercion/merge/validation-flattening helpers while preserving endpoint semantics.
+5. Reduced nesting in `frontend/src/Components/events/EventListAccordions.jsx` by extracting copy and dynamic-field rendering helpers/components.
+6. Reduced cognitive complexity of `event_form_submit` (52 → low) by extracting `_resolve_form_submitter`, `_check_duplicate_form_subscription`, `_apply_form_link_uploads`, `_assign_form_capacity_label`, and `_create_form_payment_checkout` helpers. Endpoint behavior and response payloads are unchanged.
+7. Reduced cognitive complexity of `subscription_detail` by extracting PATCH/DELETE flow helpers and shared payload/serialization utilities (`_normalize_subscription_patch_payload`, `_add_auto_move_info`, `_handle_subscription_detail_patch`, `_handle_subscription_detail_delete`) while keeping API behavior unchanged.
+
+## 13. Database Compatibility (2026-09-14)
+
+Some local or legacy databases may still contain obsolete payment confirmation columns on `events_event`; these are not part of the current `Event` model and must be removed or aligned during database maintenance rather than handled in application code.

@@ -473,6 +473,50 @@ class ProfileDetailTests(ProfilesBaseTestCase):
 		target_profile.refresh_from_db()
 		self.assertEqual(target_profile.name, "Updated")
 
+	def test_profile_detail_patch_updates_unverified_email_and_preserves_user_data(self):
+		"""An authorized email change updates the User key and preserves its account data."""
+		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		viewer.user_permissions.add(self.perm_change_profile)
+		self.authenticate(viewer)
+
+		target_profile = _create_profile(
+			"pending@esnpolimi.it", is_esner=True, verified=False, enabled=False
+		)
+		target_user = _create_user(target_profile, password="OriginalPass123!")
+		target_user.groups.add(self.group_aspiranti)
+		target_user.can_manage_content = True
+		target_user.save(update_fields=["can_manage_content"])
+
+		response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+			"email": "updated@esnpolimi.it",
+		})
+
+		self.assertEqual(response.status_code, 200)
+		target_profile.refresh_from_db()
+		self.assertEqual(target_profile.email, "updated@esnpolimi.it")
+		self.assertFalse(User.objects.filter(profile_id="pending@esnpolimi.it").exists())
+		updated_user = User.objects.get(profile=target_profile)
+		self.assertTrue(updated_user.check_password("OriginalPass123!"))
+		self.assertTrue(updated_user.groups.filter(name="Aspiranti").exists())
+		self.assertTrue(updated_user.can_manage_content)
+
+	def test_profile_detail_patch_rejects_verified_email_change(self):
+		"""Verified email addresses remain immutable even with profile permission."""
+		viewer_profile = _create_profile("viewer-verified@esnpolimi.it", is_esner=True)
+		viewer = _create_user(viewer_profile)
+		viewer.user_permissions.add(self.perm_change_profile)
+		self.authenticate(viewer)
+
+		target_profile = _create_profile("verified@esnpolimi.it", is_esner=False)
+		response = self.client.patch(f"/backend/profile/{target_profile.pk}/", {
+			"email": "changed@uni.it",
+		})
+
+		self.assertEqual(response.status_code, 400)
+		target_profile.refresh_from_db()
+		self.assertEqual(target_profile.email, "verified@esnpolimi.it")
+
 	def test_profile_detail_group_promotion_requires_board(self):
 		"""Only Board can promote Aspiranti to Attivi/Board."""
 		requester_profile = _create_profile("attivo@esnpolimi.it", is_esner=True)
@@ -909,6 +953,25 @@ class CheckErasmusEmailTests(ProfilesBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["email"], "active@uni.it")
 		self.assertEqual(response.data["esncard_number"], "ESN-123")
+		self.assertEqual(response.data["esncard_status"], "valid")
+
+	def test_check_erasmus_email_returns_expired_card_status(self):
+		profile = _create_profile("expired@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=profile, number="ESN-EXPIRED")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+
+		response = self.client.post("/backend/check_erasmus_email/", {"email": profile.email})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["esncard_status"], "expired")
+
+	def test_check_erasmus_email_returns_absent_card_status(self):
+		profile = _create_profile("absent@uni.it", is_esner=False)
+
+		response = self.client.post("/backend/check_erasmus_email/", {"email": profile.email})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["esncard_status"], "absent")
 
 
 class ProfileSubscriptionsTests(ProfilesBaseTestCase):
@@ -1174,8 +1237,8 @@ class ProfileDetailEdgeCaseTests(ProfilesBaseTestCase):
 
 		self.assertEqual(response.status_code, 404)
 
-	def test_patch_email_is_ignored(self):
-		"""P-PP-003: PATCH email should not change the email field."""
+	def test_patch_verified_email_is_rejected(self):
+		"""Verified profile emails cannot be changed through the profile endpoint."""
 		viewer_profile = _create_profile("viewer@esnpolimi.it", is_esner=True)
 		viewer = _create_user(viewer_profile)
 		viewer.user_permissions.add(self.perm_change_profile)
@@ -1186,9 +1249,9 @@ class ProfileDetailEdgeCaseTests(ProfilesBaseTestCase):
 			"email": "changed@uni.it",
 		})
 
-		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.status_code, 400)
 		target_profile.refresh_from_db()
-		self.assertEqual(target_profile.email, "target@uni.it")  # Email unchanged
+		self.assertEqual(target_profile.email, "target@uni.it")
 
 	def test_delete_profile_not_found_returns_404(self):
 		"""DELETE on nonexistent profile should return 404."""

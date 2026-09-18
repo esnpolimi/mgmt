@@ -18,12 +18,12 @@ Methodology note:
 |---|---:|
 | backend/users/tests.py | 40 |
 | backend/users/test_integration.py | 14 |
-| backend/profiles/tests.py | 70 |
-| backend/events/tests.py | 114 |
+| backend/profiles/tests.py | 72 |
+| backend/events/tests.py | 117 |
 | backend/treasury/tests.py | 86 |
 | backend/content/tests.py | 43 |
 | backend/test_integration_e2e.py | 6 |
-| Total | 373 |
+| Total | 378 |
 
 ## 3. Functional Coverage Matrix
 
@@ -47,6 +47,7 @@ Methodology note:
 - event/list CRUD
 - office and public-form subscriptions
 - dynamic field schema and additional fields
+- ESNcard gating at online payment (valid, expired, and absent cards)
 - optional services with pricing
 - SumUp flows (checkout/process/webhook)
 - sold-out handling: form submission stays allowed in Form List, payment blocked only when Main+Waiting are full

@@ -22,6 +22,7 @@ CANONICAL_PROFILE_ORDER = [
     'phone_prefix', 'phone_number', 'whatsapp_prefix', 'whatsapp_number',
     'latest_document', 'course', 'matricola_expiration', 'person_code', 'matricola_number'
 ]
+FORM_LIST_NAME = 'Form List'
 
 
 def order_profile_fields(fields):
@@ -164,6 +165,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     fields = serializers.ListField(required=False, default=list)  # Unified fields
     services = serializers.ListField(required=False, default=list)
     enable_form = serializers.BooleanField(required=False, default=False)
+    form_capacity = serializers.IntegerField(required=False, min_value=0, write_only=True)
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
     form_note = serializers.CharField(required=False, allow_blank=True, default='')
@@ -179,7 +181,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'services', 'enable_form',
-            'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
+            'form_capacity', 'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -202,7 +204,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             return  # Allow the Form List to keep its name
         
         normalized_name = (list_name or '').strip().lower()
-        if normalized_name == 'form list':
+        if normalized_name == FORM_LIST_NAME.lower():
             raise serializers.ValidationError({
                 'lists': "Il nome 'Form List' è riservato e non può essere usato manualmente. Questa lista viene creata automaticamente quando si attiva il form di iscrizione."
             })
@@ -234,7 +236,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                         # Check if this list is already the Form List for this event
                         try:
                             existing_list = self.instance.lists.get(id=list_id)
-                            is_already_form_list = (existing_list.name == 'Form List')
+                            is_already_form_list = (existing_list.name == FORM_LIST_NAME)
                         except EventList.DoesNotExist:
                             pass
                     self._validate_not_reserved_form_list_name(list_name, is_already_form_list)
@@ -303,6 +305,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     def create(self, validated_data):
         # Pop related fields that need special handling
         lists_data = validated_data.pop('lists', [])
+        form_capacity = validated_data.pop('form_capacity', None)
         organizers_data = validated_data.pop('organizers', [])
         lead_organizer = validated_data.pop('lead_organizer', None)
         event = Event.objects.create(**validated_data)
@@ -349,14 +352,14 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Auto-create form list if form enabled
         if event.enable_form:
-            has_form_list = event.lists.filter(name='Form List').exists()
+            has_form_list = event.lists.filter(name=FORM_LIST_NAME).exists()
             if not has_form_list:
                 # Sum capacities of ML + WL
                 ml_cap = sum(l.capacity for l in event.lists.filter(is_main_list=True))
                 wl_cap = sum(l.capacity for l in event.lists.filter(is_waiting_list=True))
-                default_cap = ml_cap + wl_cap
+                default_cap = form_capacity if form_capacity is not None else ml_cap + wl_cap
                 form_list = EventList.objects.create(
-                    name='Form List',
+                    name=FORM_LIST_NAME,
                     capacity=default_cap,
                     display_order=event.lists.count(),
                     is_main_list=False,
@@ -416,6 +419,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Remove relationship fields that need special handling
         lists_data = validated_data.pop('lists', None)
+        form_capacity = validated_data.pop('form_capacity', None)
         organizers_data = validated_data.pop('organizers', None)
         lead_organizer = validated_data.pop('lead_organizer', None)
 
@@ -578,7 +582,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             removable = set(existing_lists_by_id.keys()) - provided_list_ids
             blocked_lists = [
                 lst.name for rid, lst in existing_lists_by_id.items()
-                if rid in removable and lst.name != 'Form List' and lst.subscriptions.exists()
+                if rid in removable and lst.name != FORM_LIST_NAME and lst.subscriptions.exists()
             ]
             if blocked_lists:
                 blocked_names = ', '.join(blocked_lists)
@@ -588,10 +592,18 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Validate Form List deletion before saving (if enable_form is being disabled)
         if 'enable_form' in validated_data and not validated_data['enable_form']:
-            form_list = instance.lists.filter(name='Form List').first()
+            form_list = instance.lists.filter(name=FORM_LIST_NAME).first()
             if form_list and form_list.subscriptions.exists():
                 raise serializers.ValidationError({
                     'enable_form': "Non è possibile disattivare il form quando ci sono iscrizioni nella Form List. Spostare prima le iscrizioni in un'altra lista."
+                })
+
+        form_list = instance.lists.filter(name=FORM_LIST_NAME).first()
+        if form_capacity is not None and form_list:
+            form_subscription_count = form_list.subscriptions.count()
+            if form_capacity > 0 and form_subscription_count > form_capacity:
+                raise serializers.ValidationError({
+                    'form_capacity': f"Non è possibile impostare una capacità form minore del numero di iscrizioni presenti ({form_subscription_count})"
                 })
 
         # Update the instance with the remaining data
@@ -601,7 +613,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
         # Delete Form List if enable_form was disabled (validation already passed)
         if 'enable_form' in validated_data and not validated_data['enable_form']:
-            form_list = instance.lists.filter(name='Form List').first()
+            form_list = instance.lists.filter(name=FORM_LIST_NAME).first()
             if form_list:
                 form_list.delete()
 
@@ -612,7 +624,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 if list_id:
                     if list_id in existing_lists_by_id:
                         el = existing_lists_by_id[list_id]
-                        if el.name == 'Form List':
+                        if el.name == FORM_LIST_NAME:
                         # Protect form list name
                             if 'capacity' in list_data:
                                 el.capacity = list_data.get('capacity')
@@ -625,7 +637,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                         else:
                             # Validate that we're not renaming to 'Form List'
                             if list_name:
-                                is_already_form_list = (el.name == 'Form List')
+                                is_already_form_list = (el.name == FORM_LIST_NAME)
                                 self._validate_not_reserved_form_list_name(list_name, is_already_form_list)
                             el.name = list_name
                             if 'capacity' in list_data:
@@ -653,24 +665,27 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             # Remove unprovided lists (except form list) if no subscriptions
             for rid in removable:
                 lst = existing_lists_by_id[rid]
-                if lst.name == 'Form List':
+                if lst.name == FORM_LIST_NAME:
                     continue
                 if not lst.subscriptions.exists():
                     lst.delete()
 
         # Ensure form list exists if form enabled
-        if instance.enable_form and not instance.lists.filter(name='Form List').exists():
+        if instance.enable_form and not instance.lists.filter(name=FORM_LIST_NAME).exists():
             ml_cap = sum(l.capacity for l in instance.lists.filter(is_main_list=True))
             wl_cap = sum(l.capacity for l in instance.lists.filter(is_waiting_list=True))
-            default_cap = ml_cap + wl_cap
+            default_cap = form_capacity if form_capacity is not None else ml_cap + wl_cap
             form_list = EventList.objects.create(
-                name='Form List',
+                name=FORM_LIST_NAME,
                 capacity=default_cap,
                 display_order=instance.lists.count(),
                 is_main_list=False,
                 is_waiting_list=False
             )
             form_list.events.add(instance)
+        elif instance.enable_form and form_capacity is not None:
+            form_list.capacity = form_capacity
+            form_list.save(update_fields=['capacity'])
 
         # Handle organizers
         if organizers_data is not None:
