@@ -167,6 +167,8 @@ When creating or updating an event with the public form enabled, `form_capacity`
 
 The subscriber grid supports selecting multiple rows and copying their visible values as tab-separated text for spreadsheets.
 
+Event subscriptions require an active profile with verified email, for both public forms and authenticated subscriptions.
+
 ### 5.6 Unified Refund UI Flow (Single Icon)
 
 For each subscription in list view, a single "Reimburse" action is available.

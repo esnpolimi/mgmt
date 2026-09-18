@@ -43,6 +43,7 @@ from events.serializers import (
     LiberatoriaProfileSerializer
 )
 from profiles.models import Profile
+from utils.permissions import profile_email_verified
 from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
@@ -1064,6 +1065,13 @@ def subscription_create(request):
         event_id = request.data.get('event')
         external_name = request.data.get('external_name', '').strip()
         event = Event.objects.get(id=event_id)
+        if profile:
+            target_profile = Profile.objects.filter(pk=profile).first()
+            if not profile_email_verified(target_profile):
+                return Response(
+                    {'error': 'Il profilo deve avere una email verificata prima di iscriversi a un evento.'},
+                    status=403
+                )
         now = timezone.now()
         if not (event.subscription_start_date and event.subscription_end_date):
             return Response({'error': "Il periodo di iscrizione non è definito"}, status=400)
@@ -1893,7 +1901,13 @@ def event_form_status(_, event_id):
 def _resolve_form_submitter(event, email, request_data):
     """Returns (profile, external_fields, error_response). external_fields is {} when a profile is found."""
     try:
-        return Profile.objects.get(email=email), {}, None
+        profile = Profile.objects.get(email=email)
+        if not profile_email_verified(profile):
+            return None, {}, Response(
+                {'error': 'Il profilo deve avere una email verificata prima di iscriversi a un evento.'},
+                status=403
+            )
+        return profile, {}, None
     except Profile.DoesNotExist:
         if not event.is_allow_external:
             return None, {}, Response({"error": "Profilo non trovato"}, status=404)

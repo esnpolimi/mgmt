@@ -30,7 +30,7 @@ from users.models import User
 from googleapiclient.errors import HttpError
 from django.conf import settings
 from django.utils import timezone
-from utils.permissions import user_is_board
+from utils.permissions import profile_email_verified, user_is_board
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -119,6 +119,11 @@ def apply_transaction_filters(qs, request):
 def esncard_emission(request):
     try:
         profile = Profile.objects.filter(id=request.data['profile_id']).first()
+        if not profile_email_verified(profile):
+            return Response(
+                {'error': 'Il profilo deve avere una email verificata prima di ricevere una ESNcard.'},
+                status=403
+            )
         latest_card = profile.latest_esncard if profile else None
         logger.info("Latest card for" + str(profile) + ": " + str(latest_card))
         esncard_serializer = ESNcardEmissionSerializer(data=request.data)
