@@ -151,6 +151,8 @@ Additional rules:
 
 Users can submit the event form with an expired or absent ESNcard. When online payment starts, payment status and payment confirmation verify the latest ESNcard. Invalid cards block payment and show an explanatory renewal message.
 
+Integration payment flows use a valid ESNcard fixture because payment validation is enforced server-side.
+
 ### 5.5 Form Status Capacity Gate
 
 `event/<event_id>/formstatus/` uses Form List as the primary online-capacity gate.
