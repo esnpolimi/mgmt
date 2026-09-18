@@ -223,6 +223,7 @@ class ErasmusEventSubscriptionFlowTests(IntegrationBaseTestCase):
 
 		profile.refresh_from_db()
 		self.assertTrue(profile.email_is_verified)
+		ESNcard.objects.create(profile=profile, number="IT-POL-INTEGRATION-001")
 
 		mail.outbox.clear()
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
