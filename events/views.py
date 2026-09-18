@@ -1917,6 +1917,13 @@ def _resolve_form_submitter(event, email, request_data):
         }, None
 
 
+def _get_esncard_status(profile):
+    card = profile.latest_esncard
+    if not card:
+        return 'absent'
+    return 'valid' if card.is_valid else 'expired'
+
+
 def _check_duplicate_form_subscription(event, profile, external_name):
     if profile and Subscription.objects.filter(profile=profile, event=event).exists():
         return Response({"error": "Already subscribed to this event"}, status=400)
@@ -2119,12 +2126,21 @@ def subscription_payment_status(_, pk):
         overall = 'none'
 
     payment_required = cost_needed or dep_needed or services_needed
+    esncard_payment_blocked = bool(
+        sub.event.allow_online_payment
+        and payment_required
+        and not _subscription_payment_already_registered(sub)
+        and sub.profile
+        and _get_esncard_status(sub.profile) != 'valid'
+    )
     payment_blocked = bool(
         sub.event.allow_online_payment
         and payment_required
         and not _subscription_payment_already_registered(sub)
         and _is_payment_blocked_by_full_lists(sub)
     )
+    if esncard_payment_blocked:
+        payment_blocked = True
 
     return Response({
         "subscription_id": sub.pk,
@@ -2135,8 +2151,13 @@ def subscription_payment_status(_, pk):
         "sumup_checkout_id": sub.sumup_checkout_id,
         "sumup_transaction_id": sub.sumup_transaction_id,
         "payment_blocked": payment_blocked,
-        "payment_blocked_reason": "sold_out" if payment_blocked else None,
-        "payment_blocked_message": PAYMENT_SOLD_OUT_MESSAGE if payment_blocked else "",
+        "payment_blocked_reason": (
+            "esncard_expired" if esncard_payment_blocked else "sold_out" if payment_blocked else None
+        ),
+        "payment_blocked_message": (
+            "A valid ESNcard is required for online payment. Please renew your ESNcard before paying."
+            if esncard_payment_blocked else PAYMENT_SOLD_OUT_MESSAGE if payment_blocked else ""
+        ),
     }, status=200)
 
 
@@ -2181,6 +2202,19 @@ def subscription_process_payment(request, pk):
         # serialize here and the capacity re-check below is race-free.
         sub = Subscription.objects.select_related('event').select_for_update().get(pk=pk)
         event = sub.event
+
+        if (
+            event.allow_online_payment
+            and has_payable_amount
+            and sub.profile
+            and not _subscription_payment_already_registered(sub)
+            and _get_esncard_status(sub.profile) != 'valid'
+        ):
+            return Response({
+                "status": "BLOCKED",
+                "error": "esncard_expired",
+                "message": "A valid ESNcard is required for online payment. Please renew your ESNcard before paying.",
+            }, status=403)
 
         should_block_payment = bool(
             event.allow_online_payment
