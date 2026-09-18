@@ -165,6 +165,8 @@ Compatibility notes:
 
 When creating or updating an event with the public form enabled, `form_capacity` controls the automatic Form List: a positive integer sets the exact number of online form submissions, while `0` means unlimited capacity. If omitted by a legacy API client, creation keeps the previous fallback based on Main + Waiting capacity.
 
+PATCH enabling an existing event form applies submitted `form_capacity` when creating a missing Form List.
+
 The subscriber grid supports selecting multiple rows and copying their visible values as tab-separated text for spreadsheets.
 
 Event subscriptions require an active profile with verified email, for both public forms and authenticated subscriptions.
