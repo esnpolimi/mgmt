@@ -9,11 +9,13 @@ export default function EventFormResult() {
 
     const navState = location.state || {};
     const paymentError = !!navState.paymentError;
+    const paymentBlocked = !!navState.paymentBlocked;
     const subscriptionId = navState.subscriptionId || new URLSearchParams(location.search).get('subscription_id');
     const assignedList = navState.assignedList || localStorage.getItem('sumup_last_assigned_list');
     const paid = !!navState.paid;
     const noPayment = !!navState.noPayment;
     const paymentRequired = !!navState.paymentRequired;
+    const paymentBlockedMessage = navState.paymentBlockedMessage || 'Online payment is unavailable until you renew your ESNcard.';
 
     // Build concise banner
     let bannerMessage = '';
@@ -35,7 +37,7 @@ export default function EventFormResult() {
         bannerMessage = 'Subscription submitted.';
         bannerState = 'info';
     }
-    // paymentError handled by dedicated alert (no banner to avoid duplication)
+    // paymentError and paymentBlocked use dedicated alerts.
 
     const retryNavigate = () => navigate(`/event/${id}/formlogin`);
     const goToPayment = () => navigate(`/event/${id}/pay?subscriptionId=${subscriptionId}`, {
@@ -43,7 +45,7 @@ export default function EventFormResult() {
     });
 
     // Show the Pay Now button only when payment is pending (not yet paid, no error, checkout expected)
-    const showPayButton = paymentRequired && subscriptionId && !paid && !paymentError;
+    const showPayButton = paymentRequired && subscriptionId && !paid && !paymentError && !paymentBlocked;
 
     return (
         <Container maxWidth="sm">
@@ -60,6 +62,11 @@ export default function EventFormResult() {
                 {paymentError && (
                     <Alert severity="warning" sx={{width:'100%'}}>
                         Subscription saved. Online payment currently unavailable. Please contact us at informatica@esnpolimi.it
+                    </Alert>
+                )}
+                {paymentBlocked && (
+                    <Alert severity="warning" sx={{width:'100%'}}>
+                        Subscription saved. {paymentBlockedMessage}
                     </Alert>
                 )}
                 {showPayButton && (
