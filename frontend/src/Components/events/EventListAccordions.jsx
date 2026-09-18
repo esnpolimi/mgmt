@@ -188,6 +188,7 @@ export default memo(function EventListAccordions({
                                                      isLeadOrganizer,
                                                  }) {
     const [expandedAccordion, setExpandedAccordion] = useState([]);
+    const [copiedSelection, setCopiedSelection] = useState(false);
     const hasDeposit = data?.deposit > 0;
     const hasQuota = data?.cost > 0;
 
@@ -761,6 +762,21 @@ export default memo(function EventListAccordions({
         }, 0);
     };
 
+    const copySelectedRows = async (rows) => {
+        try {
+            const values = rows.map(row => {
+                const rowElement = document.querySelector(`tr[data-index="${row.index}"]`);
+                const renderedValues = extractCopyableRowValues(rowElement);
+                return renderedValues.length ? renderedValues : extractFallbackRowValues(row);
+            });
+            await navigator.clipboard.writeText(values.map(row => row.join('\t')).join('\n'));
+            setCopiedSelection(true);
+            setTimeout(() => setCopiedSelection(false), 1500);
+        } catch (err) {
+            console.error('Selected rows copy failed', err);
+        }
+    };
+
     const lists = useMemo(() => {
         return listConfigs.map(config => ({
             ...config,
@@ -858,6 +874,16 @@ export default memo(function EventListAccordions({
                                         disabled={!canChangeSubscription}
                                     >
                                         Modifica Iscrizione
+                                    </Button>
+                                )}
+                                {selectedCount >= 1 && (
+                                    <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        startIcon={copiedSelection ? <CheckIcon/> : <ContentCopyIcon/>}
+                                        onClick={() => copySelectedRows(selectedRows)}
+                                    >
+                                        {copiedSelection ? 'Copiato' : 'Copia selezionate'}
                                     </Button>
                                 )}
                                 {selectedCount >= 1 && (
