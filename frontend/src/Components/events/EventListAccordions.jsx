@@ -51,7 +51,7 @@ function renderDynamicFieldValue(fieldType, value) {
 function toExcelSafe(value) {
     if (typeof value !== 'string') return value;
     const s = value.trim();
-    return s.startsWith('+') ? `'${s}` : value;
+    return /^[=+\-@]/.test(s) ? `'${s}` : value;
 }
 
 function extractCopyableHeaderValues(headerRow) {
