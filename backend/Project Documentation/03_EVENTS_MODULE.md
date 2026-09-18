@@ -163,6 +163,8 @@ Compatibility notes:
 
 When creating or updating an event with the public form enabled, `form_capacity` controls the automatic Form List: a positive integer sets the exact number of online form submissions, while `0` means unlimited capacity. If omitted by a legacy API client, creation keeps the previous fallback based on Main + Waiting capacity.
 
+The subscriber grid supports selecting multiple rows and copying their visible values as tab-separated text for spreadsheets.
+
 ### 5.6 Unified Refund UI Flow (Single Icon)
 
 For each subscription in list view, a single "Reimburse" action is available.
