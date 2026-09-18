@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
-from treasury.models import Account, Transaction
+from treasury.models import Account, ESNcard, Transaction
 
 
 User = get_user_model()
@@ -834,6 +834,7 @@ class EventFormTests(EventsBaseTestCase):
 		_create_event_list(event, name="Form List", is_main_list=False)
 
 		profile = _create_profile("student@uni.it", is_esner=False)
+		ESNcard.objects.create(profile=profile, number="FORM-VALID-001")
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
 			"email": "student@uni.it",
@@ -857,6 +858,7 @@ class EventFormTests(EventsBaseTestCase):
 		Subscription.objects.create(profile=_create_profile("wait_full_form_submit@esnpolimi.it"), event=event, list=waiting_list)
 
 		profile = _create_profile("form_only_submitter@esnpolimi.it")
+		ESNcard.objects.create(profile=profile, number="FORM-VALID-002")
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
 			"email": profile.email,
@@ -921,6 +923,7 @@ class EventFormTests(EventsBaseTestCase):
 		event = _create_event(enable_form=True)
 		_create_event_list(event, name="Form List", is_main_list=False)
 		profile = _create_profile("student@uni.it", is_esner=False)
+		ESNcard.objects.create(profile=profile, number="FORM-VALID-003")
 		Subscription.objects.create(profile=profile, event=event, list=event.lists.first())
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
@@ -941,7 +944,8 @@ class EventFormTests(EventsBaseTestCase):
 			]
 		)
 		_create_event_list(event, name="Form List", is_main_list=False)
-		_create_profile("student@uni.it", is_esner=False)
+		profile = _create_profile("student@uni.it", is_esner=False)
+		ESNcard.objects.create(profile=profile, number="FORM-VALID-004")
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
 			"email": "student@uni.it",
@@ -950,6 +954,22 @@ class EventFormTests(EventsBaseTestCase):
 
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("Validation error", response.data["error"])
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	def test_event_form_submit_allows_expired_esncard(self):
+		event = _create_event(enable_form=True)
+		_create_event_list(event, name="Form List", is_main_list=False)
+		profile = _create_profile("expired-form@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=profile, number="FORM-EXPIRED-001")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": profile.email,
+			"form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_external_allowed(self):
@@ -1021,7 +1041,8 @@ class EventFormTests(EventsBaseTestCase):
 	def test_event_form_submit_form_list_missing(self):
 		"""Missing Form List should return 400."""
 		event = _create_event(enable_form=True)
-		_create_profile("student@uni.it", is_esner=False)
+		profile = _create_profile("student@uni.it", is_esner=False)
+		ESNcard.objects.create(profile=profile, number="FORM-VALID-005")
 
 		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
 			"email": "student@uni.it",
@@ -1587,6 +1608,7 @@ class PaymentStatusEdgeCaseTests(EventsBaseTestCase):
 		"""Status should report payment as blocked when both Main and Waiting lists are full."""
 		profile = _create_profile("blockedpayer@esnpolimi.it")
 		_create_user(profile)
+		ESNcard.objects.create(profile=profile, number="PAY-VALID-002")
 
 		event = _create_event(cost=10, allow_online_payment=True)
 		form_list = _create_event_list(event, name="Form List", is_main_list=False, is_waiting_list=False)
@@ -1609,6 +1631,20 @@ class PaymentStatusEdgeCaseTests(EventsBaseTestCase):
 		self.assertTrue(response.data["payment_blocked"])
 		self.assertEqual(response.data["payment_blocked_reason"], "sold_out")
 		self.assertIn("sold out", response.data["payment_blocked_message"].lower())
+
+	def test_payment_status_blocks_expired_esncard(self):
+		profile = _create_profile("expired-payment@esnpolimi.it")
+		card = ESNcard.objects.create(profile=profile, number="PAY-EXPIRED-001")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+		event = _create_event(cost=10, allow_online_payment=True)
+		event_list = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=event_list)
+
+		response = self.client.get(f"/backend/subscription/{sub.pk}/status/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["payment_blocked"])
+		self.assertEqual(response.data["payment_blocked_reason"], "esncard_expired")
 
 
 class SumUpWebhookEdgeCaseTests(EventsBaseTestCase):
@@ -1683,6 +1719,7 @@ class SubscriptionProcessPaymentTests(EventsBaseTestCase):
 		"""Process payment should be blocked when both Main and Waiting lists are full."""
 		profile = _create_profile("formpayer@esnpolimi.it")
 		_create_user(profile)
+		ESNcard.objects.create(profile=profile, number="PAY-VALID-001")
 
 		event = _create_event(cost=10, allow_online_payment=True)
 		form_list = _create_event_list(event, name="Form List", is_main_list=False, is_waiting_list=False)
@@ -1708,6 +1745,23 @@ class SubscriptionProcessPaymentTests(EventsBaseTestCase):
 		mock_ensure.assert_not_called()
 		# Reconciliation probe must still run to catch already-paid-remotely edge case
 		mock_process.assert_called_once()
+
+	@patch("events.views._process_sumup_checkout")
+	@patch("events.views._ensure_sumup_transactions")
+	def test_subscription_process_payment_blocks_expired_esncard(self, mock_ensure, mock_process):
+		profile = _create_profile("expired-process@esnpolimi.it")
+		card = ESNcard.objects.create(profile=profile, number="PAY-EXPIRED-002")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+		event = _create_event(cost=10, allow_online_payment=True)
+		event_list = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=event_list)
+
+		response = self.client.post(f"/backend/subscription/{sub.pk}/process_payment/", {}, format="json")
+
+		self.assertEqual(response.status_code, 403)
+		self.assertEqual(response.data["error"], "esncard_expired")
+		mock_process.assert_not_called()
+		mock_ensure.assert_not_called()
 
 
 class EventModelTests(EventsBaseTestCase):

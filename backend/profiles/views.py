@@ -620,10 +620,15 @@ def check_erasmus_email(request):
         return Response({'error': 'email_not_active', 'message': 'This email is not active. Please verify your email or contact support.'}, status=200)
     
     # Email exists and is active - return profile data
+    latest_esncard = profile_exists.latest_esncard
+    esncard_status = 'absent'
+    if latest_esncard:
+        esncard_status = 'valid' if latest_esncard.is_valid else 'expired'
     res = {
         'id': profile_exists.id,
         'email': profile_exists.email,
-        'esncard_number': profile_exists.latest_esncard.number if profile_exists.latest_esncard else '',
+        'esncard_number': latest_esncard.number if latest_esncard else '',
+        'esncard_status': esncard_status,
     }
     return Response(res, status=200)
 

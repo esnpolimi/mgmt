@@ -953,6 +953,25 @@ class CheckErasmusEmailTests(ProfilesBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["email"], "active@uni.it")
 		self.assertEqual(response.data["esncard_number"], "ESN-123")
+		self.assertEqual(response.data["esncard_status"], "valid")
+
+	def test_check_erasmus_email_returns_expired_card_status(self):
+		profile = _create_profile("expired@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=profile, number="ESN-EXPIRED")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+
+		response = self.client.post("/backend/check_erasmus_email/", {"email": profile.email})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["esncard_status"], "expired")
+
+	def test_check_erasmus_email_returns_absent_card_status(self):
+		profile = _create_profile("absent@uni.it", is_esner=False)
+
+		response = self.client.post("/backend/check_erasmus_email/", {"email": profile.email})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["esncard_status"], "absent")
 
 
 class ProfileSubscriptionsTests(ProfilesBaseTestCase):
