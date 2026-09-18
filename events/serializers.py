@@ -674,7 +674,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
         if instance.enable_form and not instance.lists.filter(name=FORM_LIST_NAME).exists():
             ml_cap = sum(l.capacity for l in instance.lists.filter(is_main_list=True))
             wl_cap = sum(l.capacity for l in instance.lists.filter(is_waiting_list=True))
-            default_cap = ml_cap + wl_cap
+            default_cap = form_capacity if form_capacity is not None else ml_cap + wl_cap
             form_list = EventList.objects.create(
                 name=FORM_LIST_NAME,
                 capacity=default_cap,

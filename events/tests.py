@@ -234,6 +234,33 @@ class EventCreationTests(EventsBaseTestCase):
 		unlimited_form_list = EventList.objects.get(name="Form List", events__name="Event With Unlimited Form")
 		self.assertEqual(unlimited_form_list.capacity, 0)
 
+	def test_event_patch_uses_explicit_form_capacity_when_creating_form_list(self):
+		profile = _create_profile("creator-patch-form-capacity@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_add_event, self.perm_change_event)
+		self.authenticate(user)
+
+		event = _create_event(enable_form=False)
+		_create_event_list(event, name="Main List", capacity=100, is_main_list=True)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {
+			"enable_form": True,
+			"form_capacity": 25,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(EventList.objects.get(name="Form List", events=event).capacity, 25)
+
+		event_without_form_list = _create_event(name="Unlimited Patch Event", enable_form=False)
+		_create_event_list(event_without_form_list, name="Main List", capacity=100, is_main_list=True)
+		response = self.client.patch(f"/backend/event/{event_without_form_list.pk}/", {
+			"enable_form": True,
+			"form_capacity": 0,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(EventList.objects.get(name="Form List", events=event_without_form_list).capacity, 0)
+
 	def test_cannot_create_list_with_form_list_name(self):
 		"""Creating a list with reserved 'Form List' name should fail."""
 		profile = _create_profile("creator@esnpolimi.it")
