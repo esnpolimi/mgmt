@@ -22,6 +22,27 @@ Configurable economic parameters:
 - esncard_release_fee
 - esncard_lost_fee
 
+This configuration is centralized in the `Settings` model and is the single source of truth for ESNcard fees. The release fee is currently set to 15.00 EUR, and the lost-card fee remains 4.00 EUR unless updated in the admin.
+
+How to change it:
+
+1. Login to the Django admin panel as a superuser (`/admin`).
+2. Open the `Settings` entry under `Treasury`.
+3. Update `esncard_release_fee` to the desired value and save.
+4. The frontend reads the new value dynamically from `/backend/esncard_fees/`, so no hardcoded copy needs to be edited in the React code.
+
+If you need to change it directly in code or from the shell:
+
+```python
+from treasury.models import Settings
+
+settings = Settings.get()
+settings.esncard_release_fee = 15.00
+settings.save()
+```
+
+This keeps the value consistent across the backend logic and the displayed fee in the app.
+
 ### 2.2 ESNcard
 
 Main attributes:
@@ -246,3 +267,9 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/treasury/urls.py
 - backend/treasury/views.py
 - backend/treasury/serializers.py
+
+## 11. Recent Quality Fixes (2026-09-01)
+
+1. Introduced shared constants in `backend/treasury/views.py` for repeated permission/method-not-allowed literals.
+2. Updated report endpoint exception logging to `logger.exception(...)` for traceback-preserving diagnostics.
+3. Introduced `EXCEL_FILE_EXTENSION` constant in `backend/treasury/reports.py` to remove repeated file-extension literals.

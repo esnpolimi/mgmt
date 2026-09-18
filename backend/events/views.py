@@ -43,6 +43,7 @@ from events.serializers import (
     LiberatoriaProfileSerializer
 )
 from profiles.models import Profile
+from utils.permissions import profile_email_verified
 from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
@@ -330,7 +331,7 @@ def attempt_move_from_form_list(subscription):
 
         return {'status': 'stayed', 'reason': 'no_capacity'}
     except Exception as e:
-        logger.error(f"attempt_move_from_form_list error sub {subscription.pk}: {e}")
+        logger.exception(f"attempt_move_from_form_list error sub {subscription.pk}")
         return {'status': 'stayed', 'reason': 'error'}
 
 
@@ -598,9 +599,9 @@ def process_subscription_checkout(subscription_id, event_id):
             f"in event {event_id}"
         )
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"process_subscription_checkout: failed for sub {subscription_id} "
-            f"in event {event_id}: {e}"
+            f"in event {event_id}"
         )
         sentry_sdk.capture_exception(e)
     finally:
@@ -1064,6 +1065,13 @@ def subscription_create(request):
         event_id = request.data.get('event')
         external_name = request.data.get('external_name', '').strip()
         event = Event.objects.get(id=event_id)
+        if profile:
+            target_profile = Profile.objects.filter(pk=profile).first()
+            if not profile_email_verified(target_profile):
+                return Response(
+                    {'error': 'Il profilo deve avere una email verificata prima di iscriversi a un evento.'},
+                    status=403
+                )
         now = timezone.now()
         if not (event.subscription_start_date and event.subscription_end_date):
             return Response({'error': "Il periodo di iscrizione non è definito"}, status=400)
@@ -1143,126 +1151,144 @@ def subscription_create(request):
         return Response({'error': str(e)}, status=400)
     except PermissionDenied as e:
         return Response({'error': str(e)}, status=403)
+
+
+def _subscription_reimbursement_flags(sub):
+    quota_reimbursed = Transaction.objects.filter(
+        subscription=sub,
+        type=Transaction.TransactionType.RIMBORSO_QUOTA,
+    ).exists()
+    cauzione_reimbursed = Transaction.objects.filter(
+        subscription=sub,
+        type=Transaction.TransactionType.RIMBORSO_CAUZIONE,
+    ).exists()
+    services_reimbursed = Transaction.objects.filter(
+        subscription=sub,
+        type=Transaction.TransactionType.RIMBORSO_SERVICE,
+    ).exists()
+    return quota_reimbursed, cauzione_reimbursed, services_reimbursed
+
+
+def _serialize_subscription_detail(sub):
+    data = SubscriptionSerializer(sub).data
+    _combine_prefix_numbers(data)
+    return data
+
+
+def _add_auto_move_info(data, move_info):
+    if not move_info:
+        return
+    if move_info.get('status') == 'moved':
+        data.update({
+            'auto_move_status': 'moved',
+            'auto_move_list': move_info.get('list'),
+            'auto_move_reason': None,
+        })
+    elif move_info.get('status') == 'stayed':
+        data.update({
+            'auto_move_status': 'stayed',
+            'auto_move_list': None,
+            'auto_move_reason': move_info.get('reason'),
+        })
+
+
+def _normalize_subscription_patch_payload(sub, request_data):
+    mutable_data = request_data.copy()
+    if 'status_quota' not in mutable_data or mutable_data['status_quota'] is None:
+        return None, Response({'error': 'status_quota is required.'}, status=400)
+    if 'status_cauzione' not in mutable_data or mutable_data['status_cauzione'] is None:
+        return None, Response({'error': 'status_cauzione is required.'}, status=400)
+    if 'status_services' not in mutable_data or mutable_data['status_services'] is None:
+        mutable_data['status_services'] = 'pending'
+
+    raw_selected = _parse_selected_services(mutable_data.get('selected_services'))
+    normalized_selected, sel_errors = _build_selected_services(sub.event, raw_selected)
+    if sel_errors:
+        return None, Response({'error': 'Invalid selected services', 'details': sel_errors}, status=400)
+    if 'selected_services' in mutable_data:
+        mutable_data['selected_services'] = normalized_selected
+    return mutable_data, None
+
+
+def _handle_subscription_detail_patch(request, sub, has_reimbursed):
+    if has_reimbursed:
+        return Response({'error': 'Non è possibile modificare una iscrizione con quota, cauzione o servizi rimborsati.'},
+                        status=400)
+    if not get_action_permissions(request, 'subscription_detail_PATCH'):
+        return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
+
+    mutable_data, payload_error = _normalize_subscription_patch_payload(sub, request.data)
+    if payload_error:
+        return payload_error
+
+    serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    with transaction.atomic():
+        updated_sub = serializer.save()
+        account_id = (
+            mutable_data.get('account_id')
+            or mutable_data.get('account')
+            or getattr(serializer, 'account_id', None)
+        )
+        move_info = _handle_payment_status(
+            subscription=updated_sub,
+            account_id=account_id,
+            quota_status=mutable_data['status_quota'],
+            deposit_status=mutable_data['status_cauzione'],
+            services_status=mutable_data.get('status_services', 'pending'),
+            executor=request.user,
+            allow_delete=True,
+            auto_move_on_payment=_get_bool(mutable_data, 'auto_move_after_payment', True),
+            send_email_on_payment=_get_bool(mutable_data, 'send_payment_email', True),
+        )
+
+    resp_data = _serialize_subscription_detail(updated_sub)
+    _add_auto_move_info(resp_data, move_info)
+    return Response(resp_data, status=200)
+
+
+def _handle_subscription_detail_delete(request, sub, has_reimbursed):
+    if not get_action_permissions(request, 'subscription_detail_DELETE'):
+        return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
+    if has_reimbursed:
+        return Response({'error': 'Non è possibile eliminare una iscrizione con quota, cauzione o servizi rimborsati.'},
+                        status=400)
+    if not request.user.has_perm('events.delete_subscription'):
+        return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
+
+    related_transactions = Transaction.objects.filter(
+        subscription=sub,
+        type__in=[
+            Transaction.TransactionType.SUBSCRIPTION,
+            Transaction.TransactionType.CAUZIONE,
+            Transaction.TransactionType.SERVICE,
+        ],
+    )
+    for transaction_item in related_transactions:
+        transaction_item.delete()
+    sub.delete()
+    return Response(status=200)
+
+
 # Endpoint to edit/view/delete subscription in detail
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def subscription_detail(request, pk):
     try:
         sub = Subscription.objects.get(pk=pk)
-
-        # Check if quota, cauzione or services are reimbursed
-        quota_reimbursed = Transaction.objects.filter(subscription=sub,
-                                                      type=Transaction.TransactionType.RIMBORSO_QUOTA).exists()
-        cauzione_reimbursed = Transaction.objects.filter(subscription=sub,
-                                                         type=Transaction.TransactionType.RIMBORSO_CAUZIONE).exists()
-        services_reimbursed = Transaction.objects.filter(subscription=sub,
-                                 type=Transaction.TransactionType.RIMBORSO_SERVICE).exists()
+        reimbursement_flags = _subscription_reimbursement_flags(sub)
+        has_reimbursed = any(reimbursement_flags)
 
         if request.method == 'GET':
             if not get_action_permissions(request, 'subscription_detail_GET'):
                 return Response({'error': 'Non hai i permessi per visualizzare questa iscrizione.'}, status=403)
-            serializer = SubscriptionSerializer(sub)
-            data = serializer.data
-            _combine_prefix_numbers(data)  # merge prefixes into numbers
-            return Response(data, status=200)
+            return Response(_serialize_subscription_detail(sub), status=200)
 
         if request.method == "PATCH":
-            ''' TODO:
-            # if user is  organizer, allow full modification of the subscription
-            if request.user.profile.id in sub.event.organizers:
-                serializer = SubscriptionOfficeEditSerializer(instance=sub, data=request.data, partial=True)
-
-            # if not, check that they have permissions
-            elif request.user.has_perm('events.change_subscription'):
-                serializer = SubscriptionOfficeEditSerializer(instance=sub, data=request.data, partial=True)
-
-            # otherwise return permission denied
-            else:'''
-            if quota_reimbursed or cauzione_reimbursed or services_reimbursed:
-                return Response({'error': 'Non è possibile modificare una iscrizione con quota, cauzione o servizi rimborsati.'},
-                                status=400)
-            if not get_action_permissions(request, 'subscription_detail_PATCH'):
-                return Response({'error': 'Non hai i permessi per modificare questa iscrizione.'}, status=403)
-            # --- Sanitize nullable statuses ---
-            mutable_data = request.data.copy()
-            if 'status_quota' not in mutable_data or mutable_data['status_quota'] is None:
-                return Response({'error': 'status_quota is required.'}, status=400)
-            if 'status_cauzione' not in mutable_data or mutable_data['status_cauzione'] is None:
-                return Response({'error': 'status_cauzione is required.'}, status=400)
-            if 'status_services' not in mutable_data or mutable_data['status_services'] is None:
-                mutable_data['status_services'] = 'pending'
-
-            # Normalize selected services if present
-            raw_selected = _parse_selected_services(mutable_data.get('selected_services'))
-            normalized_selected, sel_errors = _build_selected_services(sub.event, raw_selected)
-            if sel_errors:
-                return Response({'error': 'Invalid selected services', 'details': sel_errors}, status=400)
-            if 'selected_services' in mutable_data:
-                mutable_data['selected_services'] = normalized_selected
-            serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            with transaction.atomic():
-                updated_sub = serializer.save()
-                account_id = (mutable_data.get('account_id')
-                              or mutable_data.get('account')
-                              or getattr(serializer, 'account_id', None))
-
-                status_quota = mutable_data['status_quota']
-                status_cauzione = mutable_data['status_cauzione']
-                status_services = mutable_data.get('status_services', 'pending')
-
-                # Ensure send_email_on_payment is properly handled
-                auto_move = _get_bool(mutable_data, 'auto_move_after_payment', True)
-                send_email = _get_bool(mutable_data, 'send_payment_email', True)
-
-                move_info = _handle_payment_status(
-                    subscription=updated_sub,
-                    account_id=account_id,
-                    quota_status=status_quota,
-                    deposit_status=status_cauzione,
-                    services_status=status_services,
-                    executor=request.user,
-                    allow_delete=True,
-                    auto_move_on_payment=auto_move,
-                    send_email_on_payment=send_email
-                )
-
-            # Re-serialize to reflect possible move
-            resp_data = SubscriptionSerializer(updated_sub).data
-            if move_info:
-                if move_info.get('status') == 'moved':
-                    resp_data.update({
-                        'auto_move_status': 'moved',
-                        'auto_move_list': move_info.get('list'),
-                        'auto_move_reason': None
-                    })
-                elif move_info.get('status') == 'stayed':
-                    resp_data.update({
-                        'auto_move_status': 'stayed',
-                        'auto_move_list': None,
-                        'auto_move_reason': move_info.get('reason')
-                    })
-            _combine_prefix_numbers(resp_data)  # merge prefixes into numbers
-            return Response(resp_data, status=200)
+            return _handle_subscription_detail_patch(request, sub, has_reimbursed)
 
         elif request.method == "DELETE":
-            if not get_action_permissions(request, 'subscription_detail_DELETE'):
-                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
-            if quota_reimbursed or cauzione_reimbursed or services_reimbursed:
-                return Response({'error': 'Non è possibile eliminare una iscrizione con quota, cauzione o servizi rimborsati.'},
-                                status=400)
-            if request.user.has_perm('events.delete_subscription'):
-                related_transactions = Transaction.objects.filter(
-                    subscription=sub,
-                    type__in=[Transaction.TransactionType.SUBSCRIPTION, Transaction.TransactionType.CAUZIONE,
-                              Transaction.TransactionType.SERVICE]
-                )
-                for t in related_transactions:
-                    t.delete()
-                sub.delete()
-                return Response(status=200)
-            else:
-                return Response({'error': 'Non hai i permessi per eliminare questa iscrizione.'}, status=403)
+            return _handle_subscription_detail_delete(request, sub, has_reimbursed)
         else:
             return Response("Metodo non consentito", status=405)
     except Subscription.DoesNotExist:
@@ -1689,7 +1715,7 @@ def _ensure_sumup_transactions(subscription):
         )
 
     except Exception as e:
-        logger.error(f"Failed _ensure_sumup_transactions for sub {subscription.pk}: {e}")
+        logger.exception(f"Failed _ensure_sumup_transactions for sub {subscription.pk}")
 
 
 def _process_sumup_checkout(subscription, card_token):
@@ -1785,7 +1811,7 @@ def _process_sumup_checkout(subscription, card_token):
 
     except Exception as e:
         print(f"[SUMUP] Exception in _process_sumup_checkout: {e}")
-        logger.error(f"[SUMUP] Exception in _process_sumup_checkout: {e}")
+        logger.exception("[SUMUP] Exception in _process_sumup_checkout")
         return 'ERROR', {"error": str(e)}
 
 
@@ -1872,6 +1898,106 @@ def event_form_status(_, event_id):
         return Response({"error": "Event not found"}, status=404)
 
 
+def _resolve_form_submitter(event, email, request_data):
+    """Returns (profile, external_fields, error_response). external_fields is {} when a profile is found."""
+    try:
+        profile = Profile.objects.get(email=email)
+        if not profile_email_verified(profile):
+            return None, {}, Response(
+                {'error': 'Il profilo deve avere una email verificata prima di iscriversi a un evento.'},
+                status=403
+            )
+        return profile, {}, None
+    except Profile.DoesNotExist:
+        if not event.is_allow_external:
+            return None, {}, Response({"error": "Profilo non trovato"}, status=404)
+
+        external_first_name = request_data.get('external_first_name', '').strip()
+        external_last_name = request_data.get('external_last_name', '').strip()
+        external_has_esncard = _get_bool(request_data, 'external_has_esncard', False)
+        external_esncard_number = request_data.get('external_esncard_number', '').strip() if external_has_esncard else None
+        external_whatsapp_number = request_data.get('external_whatsapp_number', '').strip()
+
+        if not external_first_name or not external_last_name:
+            return None, {}, Response({"error": "Nome e cognome sono obbligatori per utenti esterni"}, status=400)
+
+        return None, {
+            'external_name': f"{external_first_name} {external_last_name}",
+            'external_first_name': external_first_name,
+            'external_last_name': external_last_name,
+            'external_has_esncard': external_has_esncard,
+            'external_esncard_number': external_esncard_number,
+            'external_whatsapp_number': external_whatsapp_number,
+        }, None
+
+
+def _get_esncard_status(profile):
+    card = profile.latest_esncard
+    if not card:
+        return 'absent'
+    return 'valid' if card.is_valid else 'expired'
+
+
+def _check_duplicate_form_subscription(event, profile, external_name):
+    if profile and Subscription.objects.filter(profile=profile, event=event).exists():
+        return Response({"error": "Already subscribed to this event"}, status=400)
+    if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
+        return Response({"error": "Already subscribed to this event as external"}, status=400)
+    return None
+
+
+def _apply_form_link_uploads(event, form_data, files):
+    """Uploads any provided 'l' type form fields to Drive, returns (form_data, error_response)."""
+    link_fields = [f['name'] for f in event.form_fields if f.get('type') == 'l']
+    for fname in link_fields:
+        uploaded = files.get(fname)
+        if not uploaded:
+            continue
+        _validate_form_upload(uploaded)
+        try:
+            form_data[fname] = _upload_form_file_to_drive(uploaded, event.id, fname, event.name, event.date)
+        except Exception as up_err:
+            logger.error(f"Upload failed for field {fname}: {up_err}")
+            return form_data, Response({"error": f"Upload failed for field {fname}"}, status=500)
+    return form_data, None
+
+
+def _assign_form_capacity_label(event, total_cost):
+    """Subscriptions always land in the Form List; this only decides the online-payment checkout eligibility."""
+    if not (event.allow_online_payment and total_cost > 0):
+        return '', False
+    main_list, waiting_list = _get_main_waiting_lists(event)
+    if _list_has_space(main_list):
+        return "Main List", False
+    if _list_has_space(waiting_list):
+        return "Waiting List", False
+    return "Form List", True
+
+
+def _create_form_payment_checkout(event, sub, total_cost, capacity_blocked):
+    """Creates the SumUp checkout when eligible; returns a payment_error code or None."""
+    if not (event.allow_online_payment and total_cost > 0 and not capacity_blocked):
+        return None
+    try:
+        checkout_id, _ = create_sumup_checkout(sub, total_cost, currency="EUR")
+        sub.sumup_checkout_id = checkout_id
+        sub.save(update_fields=['sumup_checkout_id'])
+        return None
+    except Exception as e:
+        print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
+        logger.exception(f"Failed SumUp checkout for subscription {sub.pk}")
+        return "online_payment_unavailable"
+
+
+def _form_payment_blocked_by_esncard(event, profile, total_cost):
+    return bool(
+        event.allow_online_payment
+        and total_cost > 0
+        and profile
+        and _get_esncard_status(profile) != 'valid'
+    )
+
+
 @api_view(['POST'])
 def event_form_submit(request, event_id):
     """
@@ -1889,17 +2015,7 @@ def event_form_submit(request, event_id):
     """
     try:
         event = Event.objects.get(pk=event_id)
-        form_data_raw = request.data.get("form_data", {}) or {}
-        # Support multipart where form_data may arrive as JSON string
-        if isinstance(form_data_raw, str):
-            try:
-                form_data = json.loads(form_data_raw)
-                if not isinstance(form_data, dict):
-                    form_data = {}
-            except Exception:
-                form_data = {}
-        else:
-            form_data = form_data_raw
+        form_data = _parse_json_dict_or_empty(request.data.get("form_data", {}) or {})
         form_notes = request.data.get("form_notes", "") or ""
         email = (request.data.get("email") or "").strip()
         raw_selected_services = _parse_selected_services(request.data.get("selected_services"))
@@ -1911,50 +2027,24 @@ def event_form_submit(request, event_id):
         except Exception:
             return Response({"error": "Invalid email format"}, status=400)
 
-        profile = None
-        external_name = None
-        external_first_name = None
-        external_last_name = None
-        external_has_esncard = False  # Default to False to avoid NOT NULL constraint
-        external_esncard_number = None
-        external_whatsapp_number = None
-        
-        try:
-            profile = Profile.objects.get(email=email)
-        except Profile.DoesNotExist:
-            if event.is_allow_external:
-                # Collect external user data
-                external_first_name = request.data.get('external_first_name', '').strip()
-                external_last_name = request.data.get('external_last_name', '').strip()
-                external_has_esncard = _get_bool(request.data, 'external_has_esncard', False)
-                external_esncard_number = request.data.get('external_esncard_number', '').strip() if external_has_esncard else None
-                external_whatsapp_number = request.data.get('external_whatsapp_number', '').strip()
-                
-                if not external_first_name or not external_last_name:
-                    return Response({"error": "Nome e cognome sono obbligatori per utenti esterni"}, status=400)
-                
-                external_name = f"{external_first_name} {external_last_name}"
-            else:
-                return Response({"error": "Profilo non trovato"}, status=404)
+        profile, external_fields, resolve_error = _resolve_form_submitter(event, email, request.data)
+        if resolve_error:
+            return resolve_error
+        external_name = external_fields.get('external_name')
+        external_first_name = external_fields.get('external_first_name')
+        external_last_name = external_fields.get('external_last_name')
+        external_has_esncard = external_fields.get('external_has_esncard', False)
+        external_esncard_number = external_fields.get('external_esncard_number')
+        external_whatsapp_number = external_fields.get('external_whatsapp_number')
 
-        # Duplicate checks
-        if profile and Subscription.objects.filter(profile=profile, event=event).exists():
-            return Response({"error": "Already subscribed to this event"}, status=400)
-        if external_name and Subscription.objects.filter(external_name=external_name, event=event).exists():
-            return Response({"error": "Already subscribed to this event as external"}, status=400)
+        duplicate_error = _check_duplicate_form_subscription(event, profile, external_name)
+        if duplicate_error:
+            return duplicate_error
 
         # --- Handle file uploads for 'l' type fields BEFORE validation ---
-        link_fields = [f['name'] for f in event.form_fields if f.get('type') == 'l']
-        for fname in link_fields:
-            uploaded = request.FILES.get(fname)
-            if uploaded:
-                _validate_form_upload(uploaded)
-                try:
-                    link = _upload_form_file_to_drive(uploaded, event.id, fname, event.name, event.date)
-                except Exception as up_err:
-                    logger.error(f"Upload failed for field {fname}: {up_err}")
-                    return Response({"error": f"Upload failed for field {fname}"}, status=500)
-                form_data[fname] = link
+        form_data, upload_error = _apply_form_link_uploads(event, form_data, request.FILES)
+        if upload_error:
+            return upload_error
 
         # Validate only form field data (now includes generated links)
         errors = validate_field_data(event.fields, form_data, 'form')
@@ -1991,33 +2081,13 @@ def event_form_submit(request, event_id):
         total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0')) + _services_total(normalized_selected)
 
         # --- Capacity check (must happen before SumUp checkout creation) ---
-        assigned_label = ''
-        capacity_blocked = False
+        assigned_label, capacity_blocked = _assign_form_capacity_label(event, total_cost)
 
-        # Subscription is always created in Form List and is never rejected here due to Main/Waiting capacity.
-        # Capacity information is used to decide whether to create a live payment checkout.
-        if event.allow_online_payment and total_cost > 0:
-            main_list, waiting_list = _get_main_waiting_lists(event)
-
-            if _list_has_space(main_list):
-                assigned_label = "Main List"
-            elif _list_has_space(waiting_list):
-                assigned_label = "Waiting List"
-            else:
-                assigned_label = "Form List"
-                capacity_blocked = True
-
-        # --- SumUp integration (widget-only) — only create checkout when capacity is available ---
-        payment_error = None
-        if event.allow_online_payment and total_cost > 0 and not capacity_blocked:
-            try:
-                checkout_id, _ = create_sumup_checkout(sub, total_cost, currency="EUR")
-                sub.sumup_checkout_id = checkout_id
-                sub.save(update_fields=['sumup_checkout_id'])
-            except Exception as e:
-                payment_error = "online_payment_unavailable"
-                print(f"[ERROR] Failed SumUp checkout for subscription {sub.pk}: {e}")
-                logger.error(f"Failed SumUp checkout for subscription {sub.pk}: {e}")
+        # Do not create a remote checkout until ESNcard eligibility is known.
+        payment_blocked = _form_payment_blocked_by_esncard(event, profile, total_cost)
+        payment_error = None if payment_blocked else _create_form_payment_checkout(
+            event, sub, total_cost, capacity_blocked
+        )
 
         online_payment_required = bool(event.allow_online_payment and total_cost > 0 and not payment_error and not capacity_blocked)
         payment_required = online_payment_required or total_cost > 0
@@ -2037,13 +2107,19 @@ def event_form_submit(request, event_id):
             "payment_required": bool(event.allow_online_payment and total_cost > 0 and not payment_error),
             "checkout_id": sub.sumup_checkout_id,
             "payment_error": payment_error,
+            "payment_blocked": payment_blocked,
+            "payment_blocked_reason": "esncard_expired" if payment_blocked else None,
+            "payment_blocked_message": (
+                "A valid ESNcard is required for online payment. Please renew your ESNcard before paying."
+                if payment_blocked else ""
+            ),
             "capacity_blocked": capacity_blocked
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
     except Exception as e:
         print(f"[ERROR] Event form submit error: {str(e)}")
-        logging.error(str(e))
+        logger.exception("Event form submit error")
         return Response({"error": str(e)}, status=500)
 
 
@@ -2082,12 +2158,21 @@ def subscription_payment_status(_, pk):
         overall = 'none'
 
     payment_required = cost_needed or dep_needed or services_needed
+    esncard_payment_blocked = bool(
+        sub.event.allow_online_payment
+        and payment_required
+        and not _subscription_payment_already_registered(sub)
+        and sub.profile
+        and _get_esncard_status(sub.profile) != 'valid'
+    )
     payment_blocked = bool(
         sub.event.allow_online_payment
         and payment_required
         and not _subscription_payment_already_registered(sub)
         and _is_payment_blocked_by_full_lists(sub)
     )
+    if esncard_payment_blocked:
+        payment_blocked = True
 
     return Response({
         "subscription_id": sub.pk,
@@ -2098,8 +2183,13 @@ def subscription_payment_status(_, pk):
         "sumup_checkout_id": sub.sumup_checkout_id,
         "sumup_transaction_id": sub.sumup_transaction_id,
         "payment_blocked": payment_blocked,
-        "payment_blocked_reason": "sold_out" if payment_blocked else None,
-        "payment_blocked_message": PAYMENT_SOLD_OUT_MESSAGE if payment_blocked else "",
+        "payment_blocked_reason": (
+            "esncard_expired" if esncard_payment_blocked else "sold_out" if payment_blocked else None
+        ),
+        "payment_blocked_message": (
+            "A valid ESNcard is required for online payment. Please renew your ESNcard before paying."
+            if esncard_payment_blocked else PAYMENT_SOLD_OUT_MESSAGE if payment_blocked else ""
+        ),
     }, status=200)
 
 
@@ -2144,6 +2234,19 @@ def subscription_process_payment(request, pk):
         # serialize here and the capacity re-check below is race-free.
         sub = Subscription.objects.select_related('event').select_for_update().get(pk=pk)
         event = sub.event
+
+        if (
+            event.allow_online_payment
+            and has_payable_amount
+            and sub.profile
+            and not _subscription_payment_already_registered(sub)
+            and _get_esncard_status(sub.profile) != 'valid'
+        ):
+            return Response({
+                "status": "BLOCKED",
+                "error": "esncard_expired",
+                "message": "A valid ESNcard is required for online payment. Please renew your ESNcard before paying.",
+            }, status=403)
 
         should_block_payment = bool(
             event.allow_online_payment
@@ -2242,8 +2345,65 @@ def sumup_webhook(request):
             return Response({"status": "failed", "remote_status": remote_status}, status=200)
         return Response({"status": "pending", "remote_status": remote_status}, status=200)
     except Exception as e:
-        logger.error(f"Webhook exception for checkout {checkout_id}: {e}")
+        logger.exception(f"Webhook exception for checkout {checkout_id}")
         return Response({"status": "error", "detail": str(e)}, status=200)
+
+
+def _parse_json_dict_or_empty(raw_value):
+    if isinstance(raw_value, dict):
+        return raw_value
+    if isinstance(raw_value, str):
+        try:
+            parsed = json.loads(raw_value) or {}
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _coerce_dynamic_field_value(field_type, value):
+    if field_type == 'b':
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ('true', '1', 'yes', 'y', 'on'):
+                return True
+            if normalized in ('false', '0', 'no', 'n', 'off', ''):
+                return False
+        return bool(value)
+    if field_type == 'm':
+        if isinstance(value, list):
+            return value
+        return [] if value in (None, '', False) else [value]
+    return value if value is not None else ''
+
+
+def _merge_dynamic_payload(existing_data, incoming_data, field_defs):
+    merged = dict(existing_data)
+    for key, value in incoming_data.items():
+        field_def = field_defs.get(key) or {}
+        merged[key] = _coerce_dynamic_field_value(field_def.get('type'), value)
+    return merged
+
+
+def _flatten_validation_errors(*errors):
+    combined = []
+    for err in errors:
+        if not err:
+            continue
+        if isinstance(err, list):
+            combined.extend(err)
+            continue
+        if isinstance(err, dict):
+            for value in err.values():
+                if isinstance(value, list):
+                    combined.extend(value)
+                else:
+                    combined.append(str(value))
+            continue
+        combined.append(str(err))
+    return combined
 
 
 @api_view(["PATCH"])
@@ -2265,23 +2425,11 @@ def subscription_edit_formfields(request, pk):
         return Response({"error": "Subscription not found"}, status=404)
 
     payload = request.data or {}
-    # Accept JSON strings (from multipart or mis-sent payloads)
-    raw_form = payload.get("form_data", {}) or {}
-    raw_add = payload.get("additional_data", {}) or {}
+    raw_form = _parse_json_dict_or_empty(payload.get("form_data", {}) or {})
+    raw_add = _parse_json_dict_or_empty(payload.get("additional_data", {}) or {})
 
-    if isinstance(raw_form, str):
-        try:
-            raw_form = json.loads(raw_form) or {}
-        except Exception:
-            raw_form = {}
-    if isinstance(raw_add, str):
-        try:
-            raw_add = json.loads(raw_add) or {}
-        except Exception:
-            raw_add = {}
-
-    if not isinstance(raw_form, dict) and not isinstance(raw_add, dict):
-        return Response({"error": "No valid data to update"}, status=400)
+    if not raw_form and not raw_add:
+        return Response({"error": "No changes provided"}, status=400)
 
     event = sub.event
     existing_form = sub.form_data or {}
@@ -2292,32 +2440,8 @@ def subscription_edit_formfields(request, pk):
     form_fields = {f.get('name'): f for f in fields if f.get('field_type') == 'form'}
     add_fields = {f.get('name'): f for f in fields if f.get('field_type') == 'additional'}
 
-    def coerce_value(ftype, v):
-        if ftype == 'b':
-            if isinstance(v, bool):
-                return v
-            if isinstance(v, str):
-                s = v.strip().lower()
-                if s in ('true', '1', 'yes', 'y', 'on'):
-                    return True
-                if s in ('false', '0', 'no', 'n', 'off', ''):
-                    return False
-            return bool(v)
-        if ftype == 'm':
-            return v if isinstance(v, list) else ([] if v in (None, '', False) else [v])
-        # keep numbers/strings as-is; validator will enforce
-        return v if v is not None else ''
-
-    # Build merged dicts with minimal coercion on changed keys
-    merged_form = dict(existing_form)
-    for k, v in (raw_form.items() if isinstance(raw_form, dict) else []):
-        fdef = form_fields.get(k) or {}
-        merged_form[k] = coerce_value(fdef.get('type'), v)
-
-    merged_add = dict(existing_add)
-    for k, v in (raw_add.items() if isinstance(raw_add, dict) else []):
-        fdef = add_fields.get(k) or {}
-        merged_add[k] = coerce_value(fdef.get('type'), v)
+    merged_form = _merge_dynamic_payload(existing_form, raw_form, form_fields)
+    merged_add = _merge_dynamic_payload(existing_add, raw_add, add_fields)
 
     # Validate only event-declared fields (exclude backend-only flags from validation)
     validatable_form = {k: merged_form[k] for k in merged_form.keys() if k in form_fields}
@@ -2327,30 +2451,15 @@ def subscription_edit_formfields(request, pk):
     add_errors = validate_field_data(fields, validatable_add, 'additional') or {}
 
     if form_errors or add_errors:
-        combined = []
-        def push(err):
-            if not err:
-                return
-            if isinstance(err, list):
-                combined.extend(err)
-            elif isinstance(err, dict):
-                for v in err.values():
-                    if isinstance(v, list):
-                        combined.extend(v)
-                    else:
-                        combined.append(str(v))
-            else:
-                combined.append(str(err))
-        push(form_errors)
-        push(add_errors)
+        combined = _flatten_validation_errors(form_errors, add_errors)
         return Response({"error": "Validation error", "fields": combined}, status=400)
 
     # Persist only the parts that were provided (keep backend-only keys intact)
     to_update = []
-    if isinstance(raw_form, dict) and raw_form:
+    if raw_form:
         sub.form_data = merged_form
         to_update.append('form_data')
-    if isinstance(raw_add, dict) and raw_add:
+    if raw_add:
         sub.additional_data = merged_add
         to_update.append('additional_data')
 

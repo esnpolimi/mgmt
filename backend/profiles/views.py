@@ -203,7 +203,7 @@ def initiate_profile_creation(request):
                 except Exception as e:
                     Document.objects.filter(profile=profile).delete()
                     profile.delete()
-                    logger.error(f"User creation failed for profile {profile.email}: {str(e)}")
+                    logger.exception(f"User creation failed for profile {profile.email}")
                     sentry_sdk.capture_exception(e)
                     return Response({"error": f"User creation failed: {str(e)}"}, status=500)
 
@@ -327,7 +327,7 @@ def verify_email_and_enable_profile(request, uid, token):
                 fail_silently=False
             )
         except Exception as e:
-            logger.error(f"Errore invio email segretario: {str(e)}")
+            logger.exception("Errore invio email segretario")
             sentry_sdk.capture_exception(e)
             # Do not block the response for secretary email errors
 
@@ -392,10 +392,51 @@ def profile_detail(request, pk):
             if not get_action_permissions('profile_detail_patch', request.user):
                 return Response({'error': 'Non hai i permessi per modificare questo profilo.'}, status=403)
             payload = request.data.copy()
-            payload.pop('email', None)
             serializer = ProfileFullEditSerializer(profile, data=payload, partial=True)
             if serializer.is_valid():
-                serializer.save()
+                requested_email = serializer.validated_data.get('email')
+                email_changed = requested_email is not None and requested_email != profile.email
+                if email_changed and profile.email_is_verified:
+                    return Response({'email': 'Non puoi modificare una email già verificata.'}, status=400)
+                if email_changed and profile.is_esner and not requested_email.endswith('@esnpolimi.it'):
+                    return Response({'email': 'Solo email @esnpolimi.it sono ammesse per gli ESNer.'}, status=400)
+
+                user_snapshot = None
+                if email_changed:
+                    with transaction.atomic():
+                        linked_user = User.objects.filter(profile=profile).first()
+                        if linked_user:
+                            user_snapshot = {
+                                'password': linked_user.password,
+                                'is_staff': linked_user.is_staff,
+                                'date_joined': linked_user.date_joined,
+                                'last_login': linked_user.last_login,
+                                'can_manage_casse': linked_user.can_manage_casse,
+                                'can_view_casse_import': linked_user.can_view_casse_import,
+                                'can_manage_content': linked_user.can_manage_content,
+                                'groups': list(linked_user.groups.all()),
+                                'user_permissions': list(linked_user.user_permissions.all()),
+                            }
+                            linked_user.delete()
+
+                        serializer.save()
+
+                        if user_snapshot:
+                            linked_user = User.objects.create(
+                                profile=profile,
+                                password=user_snapshot['password'],
+                                is_staff=user_snapshot['is_staff'],
+                                date_joined=user_snapshot['date_joined'],
+                                last_login=user_snapshot['last_login'],
+                                can_manage_casse=user_snapshot['can_manage_casse'],
+                                can_view_casse_import=user_snapshot['can_view_casse_import'],
+                                can_manage_content=user_snapshot['can_manage_content'],
+                            )
+                            linked_user.groups.set(user_snapshot['groups'])
+                            linked_user.user_permissions.set(user_snapshot['user_permissions'])
+                else:
+                    serializer.save()
+
                 group_name = payload.get('group')
                 if group_name is not None:
                     try:
@@ -579,10 +620,15 @@ def check_erasmus_email(request):
         return Response({'error': 'email_not_active', 'message': 'This email is not active. Please verify your email or contact support.'}, status=200)
     
     # Email exists and is active - return profile data
+    latest_esncard = profile_exists.latest_esncard
+    esncard_status = 'absent'
+    if latest_esncard:
+        esncard_status = 'valid' if latest_esncard.is_valid else 'expired'
     res = {
         'id': profile_exists.id,
         'email': profile_exists.email,
-        'esncard_number': profile_exists.latest_esncard.number if profile_exists.latest_esncard else '',
+        'esncard_number': latest_esncard.number if latest_esncard else '',
+        'esncard_status': esncard_status,
     }
     return Response(res, status=200)
 

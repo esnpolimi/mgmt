@@ -77,6 +77,10 @@ Main filters:
 | /profile_events/<pk>/ | GET | authenticated |
 | /check_erasmus_email/ | POST | public |
 
+`check_erasmus_email` returns `esncard_status` as `valid`, `expired`, or `absent`, plus the latest card number when available.
+
+Profiles with unverified email cannot receive an ESNcard or perform event subscriptions.
+
 ## 4. Lifecycle Flows
 
 ### 4.1 Erasmus Registration Flow
@@ -102,6 +106,7 @@ Board can force profile verification/activation for exceptional cases.
 
 - listing: authentication required
 - patch profile: profiles.change_profile
+- email change: allowed only for profiles whose email is not verified, with `profiles.change_profile`; for ESNers the new email must remain on `@esnpolimi.it`
 - delete profile: Board only
 - delete is blocked if linked `Subscription` records exist
 
@@ -152,7 +157,8 @@ Combined profile search across:
 
 1. Misaligned profile/document/user states during activation flows.
 2. Regressions in group-promotion rules.
-3. Profile deletion with uncaught event dependencies.
+3. Email changes must preserve the linked User account data because User currently references Profile.email as its primary key.
+4. Profile deletion with uncaught event dependencies.
 
 ## 9. Testing Requirements
 
@@ -161,6 +167,7 @@ Combined profile search across:
 3. permission matrix profile/document CRUD
 4. group transition constraints
 5. object-level access profile_subscriptions
+6. authorized email changes for unverified profiles, including preservation of linked User credentials and groups
 
 Test reference: `backend/profiles/tests.py`.
 
@@ -172,3 +179,8 @@ For AI-agent analysis/verification, use these files as primary references:
 - backend/profiles/urls.py
 - backend/profiles/views.py
 - backend/profiles/serializers.py
+
+## 11. Recent Quality Fixes (2026-09-01)
+
+1. Updated key exception handlers in `backend/profiles/views.py` to use `logger.exception(...)` for traceback-preserving diagnostics.
+2. Functional behavior of profile onboarding/verification flows remains unchanged.
