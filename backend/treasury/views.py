@@ -39,6 +39,8 @@ except Exception:
 MSG_UNAUTHORIZED = 'Non autorizzato.'
 MSG_METHOD_NOT_ALLOWED = 'Metodo non consentito'
 PERM_ADD_TRANSACTION = 'treasury.add_transaction'
+XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+DOWNLOAD_EXPOSE_HEADERS = 'Content-Type, Content-Disposition'
 
 logger = logging.getLogger(__name__)
 
@@ -1086,9 +1088,10 @@ def transactions_export(request):
     filename = f"{base}_{datetime.now().strftime('%d%m%Y_%H%M%S')}.xlsx"
     response = HttpResponse(
         stream.getvalue(),
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        content_type=XLSX_CONTENT_TYPE
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
+    response['Access-Control-Expose-Headers'] = DOWNLOAD_EXPOSE_HEADERS
     return response
 
 
@@ -1100,7 +1103,16 @@ def treasury_accounts_report(request):
 
     report_date = request.data.get('date') or request.query_params.get('date')
     try:
-        result = generate_accounts_report(report_date=report_date)
+        download = request.query_params.get('download') == 'true'
+        result = generate_accounts_report(report_date=report_date, include_content=download)
+        if download:
+            response = HttpResponse(
+                result['content'],
+                content_type=XLSX_CONTENT_TYPE
+            )
+            response['Content-Disposition'] = f'attachment; filename="{result["filename"]}"'
+            response['Access-Control-Expose-Headers'] = DOWNLOAD_EXPOSE_HEADERS
+            return response
         return Response({
             'status': 'ok',
             'reportDate': result['report_date'].strftime('%Y-%m-%d'),
@@ -1128,7 +1140,16 @@ def treasury_transactions_report(request):
 
     report_date = request.data.get('date') or request.query_params.get('date')
     try:
-        result = generate_transactions_report(report_date=report_date)
+        download = request.query_params.get('download') == 'true'
+        result = generate_transactions_report(report_date=report_date, include_content=download)
+        if download:
+            response = HttpResponse(
+                result['content'],
+                content_type=XLSX_CONTENT_TYPE
+            )
+            response['Content-Disposition'] = f'attachment; filename="{result["filename"]}"'
+            response['Access-Control-Expose-Headers'] = DOWNLOAD_EXPOSE_HEADERS
+            return response
         return Response({
             'status': 'ok',
             'reportDate': result['report_date'].strftime('%Y-%m-%d'),
