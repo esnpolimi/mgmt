@@ -224,6 +224,7 @@ Unified UI Orchestration (single icon):
 
 `transactions_export` produces XLSX with accounting metadata and operational descriptions.
 The export response exposes its content type and filename headers to the frontend so cross-origin downloads can be validated and named correctly.
+Date and timestamp columns use native Excel date values with display formats, so spreadsheet sorting and filtering work as expected.
 
 Daily Drive reports:
 

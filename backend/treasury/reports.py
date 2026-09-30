@@ -175,7 +175,6 @@ def build_accounts_workbook(start_dt, end_dt, report_date):
     after_by_account = {row["account_id"]: row for row in after_totals}
 
     row_idx = 2
-    report_date_str = report_date.strftime("%d/%m/%Y")
     for account in Account.objects.all().order_by("name"):
         totals = totals_by_account.get(account.id, {})
         total = totals.get("total") or Decimal("0.00")
@@ -187,7 +186,8 @@ def build_accounts_workbook(start_dt, end_dt, report_date):
         saldo_finale = Decimal(str(account.balance or 0)) - Decimal(str(total_after))
         saldo_iniziale = saldo_finale - Decimal(str(total))
 
-        ws.cell(row=row_idx, column=1, value=report_date_str)
+        date_cell = ws.cell(row=row_idx, column=1, value=report_date)
+        date_cell.number_format = "dd/mm/yyyy"
         ws.cell(row=row_idx, column=2, value=account.id)
         ws.cell(row=row_idx, column=3, value=account.name)
         ws.cell(row=row_idx, column=4, value=account.status)
@@ -247,7 +247,8 @@ def build_transactions_workbook(start_dt, end_dt, tz):
     for tx in txs:
         local_dt = timezone.localtime(tx.created_at, tz) if tz else timezone.localtime(tx.created_at)
         ws.cell(row=row_idx, column=1, value=tx.id)
-        ws.cell(row=row_idx, column=2, value=local_dt.strftime("%d/%m/%Y %H:%M:%S"))
+        date_cell = ws.cell(row=row_idx, column=2, value=local_dt.replace(tzinfo=None))
+        date_cell.number_format = "dd/mm/yyyy hh:mm:ss"
         ws.cell(row=row_idx, column=3, value=tx.type)
         ws.cell(row=row_idx, column=4, value=Decimal(str(tx.amount)))
         ws.cell(row=row_idx, column=5, value=tx.account.name if tx.account else "")
