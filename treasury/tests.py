@@ -2,7 +2,7 @@
 
 import unittest
 from io import BytesIO
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -18,6 +18,7 @@ from rest_framework.test import APITestCase
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 from treasury.models import Account, ESNcard, Transaction, ReimbursementRequest, Settings
+from treasury.reports import build_accounts_workbook, build_transactions_workbook, get_day_bounds
 
 
 User = get_user_model()
@@ -1348,6 +1349,36 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		# Column 7 = "Commenti" and column 9 = "Eseguito da".
 		self.assertEqual(ws.cell(row=2, column=7).value, "John External")
 		self.assertEqual(ws.cell(row=2, column=9).value, "Mario Rossi")
+		self.assertIsInstance(ws.cell(row=2, column=1).value, datetime)
+		self.assertEqual(ws.cell(row=2, column=1).number_format, "dd/mm/yyyy hh:mm:ss")
+		self.assertIsInstance(ws.cell(row=2, column=2).value, datetime)
+		self.assertEqual(ws.cell(row=2, column=2).number_format, "dd/mm/yyyy")
+
+
+class TreasuryWorkbookDataTypesTests(TreasuryBaseTestCase):
+	def test_report_workbooks_store_dates_as_excel_dates(self):
+		profile = _create_profile("workbook-dates@esnpolimi.it")
+		user = _create_user(profile)
+		account = _create_account("Workbook dates", user=user)
+		Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.DEPOSIT,
+			amount=Decimal("12.50"),
+			description="Test date values",
+		)
+		report_date = timezone.localdate()
+		tz = timezone.get_current_timezone()
+		start_dt, end_dt = get_day_bounds(report_date, tz)
+
+		accounts_ws = build_accounts_workbook(start_dt, end_dt, report_date).active
+		transactions_ws = build_transactions_workbook(start_dt, end_dt, tz).active
+
+		self.assertIs(type(accounts_ws.cell(row=2, column=1).value), date)
+		self.assertEqual(accounts_ws.cell(row=2, column=1).number_format, "dd/mm/yyyy")
+		self.assertIsInstance(transactions_ws.cell(row=2, column=2).value, datetime)
+		self.assertIsNone(transactions_ws.cell(row=2, column=2).value.tzinfo)
+		self.assertEqual(transactions_ws.cell(row=2, column=2).number_format, "dd/mm/yyyy hh:mm:ss")
 
 
 class TreasuryReportEndpointsTests(TreasuryBaseTestCase):

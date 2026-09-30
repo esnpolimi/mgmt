@@ -1049,8 +1049,10 @@ def transactions_export(request):
         else:
             # Fallback to current timezone if zoneinfo unavailable
             local_dt = timezone.localtime(tx.created_at)
-        ws.cell(row=row_idx, column=1, value=local_dt.strftime('%d/%m/%Y %H:%M:%S'))
-        ws.cell(row=row_idx, column=2, value=local_dt.strftime('%d/%m/%Y'))
+        datetime_cell = ws.cell(row=row_idx, column=1, value=local_dt.replace(tzinfo=None))
+        datetime_cell.number_format = 'dd/mm/yyyy hh:mm:ss'
+        date_cell = ws.cell(row=row_idx, column=2, value=local_dt.date())
+        date_cell.number_format = 'dd/mm/yyyy'
         ws.cell(row=row_idx, column=3, value=build_attivita(tx))
         ws.cell(row=row_idx, column=4, value=build_descrizione(tx))
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
