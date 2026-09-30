@@ -1300,6 +1300,21 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		headers = [ws.cell(row=1, column=i).value for i in range(1, 10)]
 		self.assertIn("Eseguito da", headers)
 
+	def test_transactions_export_exposes_download_headers_to_frontend(self):
+		profile = _create_profile("cors@esnpolimi.it")
+		user = _create_user(profile)
+		self.authenticate(user)
+
+		response = self.client.get(
+			"/backend/transactions_export/",
+			HTTP_ORIGIN="http://localhost:3000",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		exposed_headers = response.get("Access-Control-Expose-Headers", "").lower()
+		self.assertIn("content-type", exposed_headers)
+		self.assertIn("content-disposition", exposed_headers)
+
 	def test_transactions_export_commenti_uses_external_name_for_external_subscription(self):
 		"""Commenti column should show external subscriber name, not executor name."""
 		executor_profile = _create_profile("board@esnpolimi.it", name="Mario", surname="Rossi")
@@ -1375,6 +1390,31 @@ class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
 		self.assertEqual(response.data.get("fileId"), "drive-file-123")
 		self.assertEqual(response.data.get("action"), "created")
 
+	@patch("treasury.views.generate_accounts_report")
+	def test_accounts_report_download_returns_excel(self, mock_generate_accounts_report):
+		profile = _create_profile("manager-download@esnpolimi.it")
+		user = _create_user(profile)
+		user.can_manage_casse = True
+		user.save(update_fields=["can_manage_casse"])
+		self.authenticate(user)
+		mock_generate_accounts_report.return_value = {
+			"filename": "27-07-2026.xlsx",
+			"content": b"accounts-xlsx",
+		}
+
+		response = self.client.post(
+			"/backend/reports/accounts/?download=true",
+			{"date": "2026-07-27"},
+			format="json",
+			HTTP_ORIGIN="http://localhost:3000",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("application/vnd.openxmlformats", response["Content-Type"])
+		self.assertIn("27-07-2026.xlsx", response["Content-Disposition"])
+		self.assertIn("content-type", response["Access-Control-Expose-Headers"].lower())
+		self.assertEqual(response.content, b"accounts-xlsx")
+
 	@patch("treasury.views.generate_transactions_report")
 	def test_transactions_report_drive_error_returns_502(self, mock_generate_transactions_report):
 		"""Drive upload failures should return 502 with explicit error message."""
@@ -1390,6 +1430,30 @@ class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
 
 		self.assertEqual(response.status_code, 502)
 		self.assertEqual(response.data.get("error"), "Errore Drive durante la generazione report.")
+
+	@patch("treasury.views.generate_transactions_report")
+	def test_transactions_report_download_returns_excel(self, mock_generate_transactions_report):
+		profile = _create_profile("board-download@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+		mock_generate_transactions_report.return_value = {
+			"filename": "27-07-2026.xlsx",
+			"content": b"transactions-xlsx",
+		}
+
+		response = self.client.post(
+			"/backend/reports/transactions/?download=true",
+			{"date": "2026-07-27"},
+			format="json",
+			HTTP_ORIGIN="http://localhost:3000",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("application/vnd.openxmlformats", response["Content-Type"])
+		self.assertIn("27-07-2026.xlsx", response["Content-Disposition"])
+		self.assertIn("content-disposition", response["Access-Control-Expose-Headers"].lower())
+		self.assertEqual(response.content, b"transactions-xlsx")
 
 
 class AccountModelTests(TreasuryBaseTestCase):

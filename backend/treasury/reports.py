@@ -265,7 +265,7 @@ def build_transactions_workbook(start_dt, end_dt, tz):
     return wb
 
 
-def generate_accounts_report(report_date=None, tz=None, dry_run=False):
+def generate_accounts_report(report_date=None, tz=None, dry_run=False, include_content=False):
     tz = tz or get_report_timezone()
     report_date = resolve_report_date(report_date, tz)
     start_dt, end_dt = get_day_bounds(report_date, tz)
@@ -288,10 +288,11 @@ def generate_accounts_report(report_date=None, tz=None, dry_run=False):
         "file_id": file_id,
         "action": action,
         "report_date": report_date,
+        **({"content": stream.getvalue()} if include_content else {}),
     }
 
 
-def generate_transactions_report(report_date=None, tz=None, dry_run=False):
+def generate_transactions_report(report_date=None, tz=None, dry_run=False, include_content=False):
     tz = tz or get_report_timezone()
     report_date = resolve_report_date(report_date, tz)
     start_dt, end_dt = get_day_bounds(report_date, tz)
@@ -314,6 +315,7 @@ def generate_transactions_report(report_date=None, tz=None, dry_run=False):
         "file_id": file_id,
         "action": action,
         "report_date": report_date,
+        **({"content": stream.getvalue()} if include_content else {}),
     }
 
 

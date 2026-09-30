@@ -118,6 +118,7 @@ Base path: /backend/
 
 - POST /reports/accounts/
 - POST /reports/transactions/
+- Add `?download=true` to either report endpoint to download the generated XLSX while keeping the Drive copy.
 
 ### 3.3 Account APIs
 
@@ -222,6 +223,7 @@ Unified UI Orchestration (single icon):
 - limit per dashboard
 
 `transactions_export` produces XLSX with accounting metadata and operational descriptions.
+The export response exposes its content type and filename headers to the frontend so cross-origin downloads can be validated and named correctly.
 
 Daily Drive reports:
 

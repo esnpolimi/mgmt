@@ -23,11 +23,25 @@ export default function TreasuryDashboard() {
         const label = isAccounts ? 'Casse' : 'Transazioni';
 
         setLoading(true);
-        fetchCustom('POST', `/reports/${type}/`, {
-            onSuccess: (data) => {
-                const filename = data?.filename ? ` (${data.filename})` : '';
+        fetchCustom('POST', `/reports/${type}/?download=true`, {
+            onSuccess: async (response) => {
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/vnd.openxmlformats-officedocument')) {
+                    setPopup({message: 'Tipo di file inatteso durante la generazione.', state: 'error', id: Date.now()});
+                    return;
+                }
+                const contentDisposition = response.headers.get('content-disposition') || '';
+                const filename = contentDisposition.match(/filename="([^"]+)"/i)?.[1] || `Report_${type}.xlsx`;
+                const downloadUrl = URL.createObjectURL(await response.blob());
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
                 setPopup({
-                    message: `Report ${label} generato${filename}.`,
+                    message: `Report ${label} generato e scaricato (${filename}).`,
                     state: 'success',
                     id: Date.now()
                 });
