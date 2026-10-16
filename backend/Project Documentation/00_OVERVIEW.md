@@ -3,6 +3,33 @@
 This document is the reference architectural view of the project.
 Purpose: provide a clear technical baseline for development, maintenance, onboarding, and AI automation.
 
+## 0. Development Workflow
+
+All development work starts from a GitHub issue and follows this sequence:
+
+1. Select an issue from the repository's [GitHub Issues](https://github.com/esnpolimi/mgmt/issues).
+2. Assign the issue to yourself before beginning development.
+3. Create a branch from the latest `development` branch using the format
+   `<issue-number>-<short-name>`, with a lowercase abbreviated description.
+   For example, issue `42` titled "Fix event subscription validation" uses
+   `42-fix-event-subscription`.
+4. Implement and test the change on that issue branch, then push it to GitHub.
+5. Open a pull request from the issue branch to `development`, linking the issue.
+6. Address review feedback and wait for the required checks to pass before merging.
+7. After the PR is merged into `development`, delete the remote branch and its
+   local copy when it is no longer needed.
+
+The `staging` branch is used for manual testing after automatic checks pass.
+Validated changes are promoted from `development` to `staging`, and then to
+`main` for production.
+
+The GitHub Actions backend test workflow runs on every pull request targeting
+the project's integration branches (`development`, `staging`, or `main`),
+independently of the source branch. It also runs on every push to `development`.
+The `Backend Tests (Tests)` check must be marked as required in the protection
+rules for the relevant target branches to prevent merging a pull request while
+the tests are failing.
+
 ## 1. Product Scope
 
 The system covers ESN Polimi core processes:
