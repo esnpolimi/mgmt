@@ -3,6 +3,12 @@
 This document is the reference architectural view of the project.
 Purpose: provide a clear technical baseline for development, maintenance, onboarding, and AI automation.
 
+For the recommended technology onboarding sequence, see the root
+[Newcomer learning path](../../NEWCOMER_LEARNING_PATH.md). The Docker-first local
+setup is documented in the root [README](../../README.md); use
+[Run backend and frontend without Docker](../../RUN_WITHOUT_DOCKER.md) only when
+running the services directly on the host.
+
 ## 0. Development Workflow
 
 All development work starts from a GitHub issue and follows this sequence:
