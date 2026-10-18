@@ -2588,3 +2588,97 @@ class PrintableLiberatorieTests(EventsBaseTestCase):
 		response = self.client.get(self.url)
 		self.assertEqual(response.status_code, 200)
 
+
+
+class SubscriptionPaidAtTests(EventsBaseTestCase):
+	"""Tests for the paid_at field used to sort subscriptions by payment time."""
+
+	def test_event_detail_exposes_paid_at(self):
+		"""paid_at is null when unpaid and equals the earliest payment transaction otherwise."""
+		profile = _create_profile("viewer-paid-at@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_event)
+		self.authenticate(user)
+		account = _create_account("Main", user=user)
+
+		event = _create_event(cost=10, deposit=5)
+		list_main = _create_event_list(event)
+		paid_sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+		unpaid_profile = _create_profile("unpaid-paid-at@esnpolimi.it")
+		unpaid_sub = Subscription.objects.create(profile=unpaid_profile, event=event, list=list_main)
+
+		quota_tx = Transaction.objects.create(
+			subscription=paid_sub, account=account, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Quota")
+		cauzione_tx = Transaction.objects.create(
+			subscription=paid_sub, account=account, type=Transaction.TransactionType.CAUZIONE,
+			amount=5, description="Cauzione")
+		earliest = timezone.now() - timedelta(days=2)
+		Transaction.objects.filter(pk=cauzione_tx.pk).update(created_at=earliest)
+		Transaction.objects.filter(pk=quota_tx.pk).update(created_at=earliest + timedelta(hours=1))
+
+		response = self.client.get(f"/backend/event/{event.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		subs = {s["id"]: s for s in response.data["subscriptions"]}
+		self.assertIsNone(subs[unpaid_sub.pk]["paid_at"])
+		self.assertIsNotNone(subs[paid_sub.pk]["paid_at"])
+		from django.utils.dateparse import parse_datetime
+		self.assertEqual(parse_datetime(subs[paid_sub.pk]["paid_at"]), earliest)
+
+	def test_subscription_detail_exposes_paid_at_without_annotation(self):
+		"""Subscription detail (no annotation) falls back to a query for paid_at."""
+		profile = _create_profile("viewer-paid-at-detail@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_subscription)
+		self.authenticate(user)
+		account = _create_account("Main", user=user)
+
+		event = _create_event(cost=10)
+		list_main = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+		Transaction.objects.create(
+			subscription=sub, account=account, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Quota")
+
+		response = self.client.get(f"/backend/subscription/{sub.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNotNone(response.data["paid_at"])
+
+	def test_changing_payment_account_keeps_transaction_and_payment_time(self):
+		"""Editing the payment account updates the transaction in place and rebalances accounts."""
+		profile = _create_profile("editor-paid-at@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_subscription)
+		self.authenticate(user)
+		account_a = _create_account("Cassa A", user=user)
+		account_b = _create_account("Cassa B", user=user)
+
+		event = _create_event(cost=10)
+		list_main = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+		quota_tx = Transaction.objects.create(
+			subscription=sub, account=account_a, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Quota")
+		paid_time = timezone.now() - timedelta(days=3)
+		Transaction.objects.filter(pk=quota_tx.pk).update(created_at=paid_time)
+
+		response = self.client.patch(f"/backend/subscription/{sub.pk}/", {
+			"status_quota": "paid",
+			"status_cauzione": "pending",
+			"status_services": "pending",
+			"account_id": account_b.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		txs = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION)
+		self.assertEqual(txs.count(), 1)
+		tx = txs.get()
+		self.assertEqual(tx.pk, quota_tx.pk)
+		self.assertEqual(tx.account_id, account_b.pk)
+		self.assertEqual(tx.created_at, paid_time)
+		account_a.refresh_from_db()
+		account_b.refresh_from_db()
+		self.assertEqual(account_a.balance, 0)
+		self.assertEqual(account_b.balance, 10)
