@@ -37,6 +37,8 @@ export const eventDisplayNames = {
     form: 'Stato Form',
     form_programmed_open_time: 'Orario Apertura Form',
     form_note: 'Nota Form Iscrizione',
+    enable_whatsapp_link: 'Condividi gruppo WhatsApp con gli iscritti',
+    whatsapp_group_link: 'Link gruppo WhatsApp',
 
 };
 
