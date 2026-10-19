@@ -925,7 +925,8 @@ def _send_payment_confirmation_email(subscription):
 
 def _upsert_transaction(*, subscription, tx_type, account_id, amount, description, executor):
     """
-    Create or (if account changed) recreate a transaction of given type.
+    Create a transaction of given type, or update the existing one in place
+    (if account or amount changed) so its created_at keeps the original payment time.
     Idempotent if same account & amount.
     """
     if amount is None or amount <= 0:
@@ -934,9 +935,13 @@ def _upsert_transaction(*, subscription, tx_type, account_id, amount, descriptio
     if existing:
         # If same account & amount keep it
         if (account_id and existing.account_id != account_id) or (amount and existing.amount != amount):
-            existing.delete()
-        else:
-            return existing
+            # Transaction.save() rebalances both accounts on account change, or applies the amount difference
+            if account_id:
+                existing.account_id = account_id
+            existing.amount = amount
+            existing.description = description
+            existing.save()
+        return existing
     return Transaction.objects.create(
         type=tx_type,
         account_id=account_id,
