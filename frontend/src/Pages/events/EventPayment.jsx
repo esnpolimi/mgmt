@@ -6,14 +6,31 @@ import {fetchCustom} from '../../api/api';
 const SOLD_OUT_MESSAGE = "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. " +
     "Thank you for filling out the form. Please wait for any notifications from the ESN team.";
 
+// Result-page state from a PAID process_payment response (null when the confirmation call failed)
+const paidResultState = (resp, subscriptionId, assignedList) => ({
+    subscriptionId,
+    assignedList: resp?.assigned_list || assignedList,
+    paid: true,
+    isMainList: !!resp?.is_main_list,
+    whatsappEnabled: !!resp?.whatsapp_enabled,
+    whatsappLinkUrl: resp?.whatsapp_link_url || null,
+});
+
 export default function EventPayment() {
     const {id} = useParams();
     const location = useLocation();
     const navigate = useNavigate();
-    const {subscriptionId: stateSubId, assignedList: stateAssigned, checkoutId: stateCheckout} = location.state || {};
+    const {
+        subscriptionId: stateSubId,
+        assignedList: stateAssigned,
+        checkoutId: stateCheckout,
+        accessToken: stateToken
+    } = location.state || {};
     const search = new URLSearchParams(location.search);
     const qpSubId = search.get('subscriptionId');
     const subscriptionId = stateSubId || qpSubId;
+    // Signed per-subscription token: only its holder receives the WhatsApp group link after payment
+    const accessToken = stateToken || search.get('t');
     const [assignedList] = useState(stateAssigned);
     const [checkoutId, setCheckoutId] = useState(stateCheckout || null);
     const [status, setStatus] = useState('init'); // init | widget | processing | success | failed
@@ -47,8 +64,18 @@ export default function EventPayment() {
                     onSuccess: (data) => {
                         if (canceled) return;
                         if (data.overall_status === 'paid') {
-                            navigate(`/event/${id}/formresult`, {
-                                state: {subscriptionId, assignedList, paid: true}
+                            // Re-confirm server side to get list placement and, with a valid token, the WhatsApp link
+                            fetchCustom('POST', `/subscription/${subscriptionId}/process_payment/`, {
+                                auth: false,
+                                body: {t: accessToken},
+                                onSuccess: (resp) => {
+                                    if (canceled) return;
+                                    navigate(`/event/${id}/formresult`, {state: paidResultState(resp, subscriptionId, assignedList)});
+                                },
+                                onError: () => {
+                                    if (canceled) return;
+                                    navigate(`/event/${id}/formresult`, {state: paidResultState(null, subscriptionId, assignedList)});
+                                }
                             });
                             return;
                         }
@@ -82,7 +109,7 @@ export default function EventPayment() {
         return () => {
             canceled = true;
         };
-    }, [subscriptionId, id, navigate, assignedList, stateCheckout]);
+    }, [subscriptionId, id, navigate, assignedList, stateCheckout, accessToken]);
 
     useEffect(() => {
         if (!checkoutId || !subscriptionId) return;
@@ -126,16 +153,14 @@ export default function EventPayment() {
                         setMessage('Finalizing payment...');
                         fetchCustom('POST', `/subscription/${subscriptionId}/process_payment/`, {
                             auth: false,
-                            body: {},
+                            body: {t: accessToken},
                             onSuccess: (resp) => {
                                 const st = (resp.status || '').toUpperCase();
                                 if (st === 'PAID') {
                                     setStatus('success');
                                     setMessage('Payment successful.');
                                     setTimeout(() => {
-                                        navigate(`/event/${id}/formresult`, {
-                                            state: {subscriptionId, assignedList, paid: true}
-                                        });
+                                        navigate(`/event/${id}/formresult`, {state: paidResultState(resp, subscriptionId, assignedList)});
                                     }, 600);
                                 } else if (st === 'FAILED' || st === 'CANCELED') {
                                     setStatus('failed');
@@ -175,7 +200,7 @@ export default function EventPayment() {
             setStatus('failed');
             setMessage('Failed to initialize payment form: ' + e.message);
         }
-    }, [status, checkoutId, subscriptionId, assignedList, id, navigate]);
+    }, [status, checkoutId, subscriptionId, assignedList, id, navigate, accessToken]);
 
     return (
         <Container maxWidth="sm" sx={{mt: 8}}>

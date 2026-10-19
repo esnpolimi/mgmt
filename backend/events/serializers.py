@@ -169,6 +169,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
     form_note = serializers.CharField(required=False, allow_blank=True, default='')
+    enable_whatsapp_link = serializers.BooleanField(required=False, default=False)
+    whatsapp_group_link = serializers.CharField(required=False, allow_blank=True, default='', max_length=512)
     form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
     is_refa_done = serializers.BooleanField(required=False, default=False)
     notify_list = serializers.BooleanField(required=False, default=True)
@@ -182,6 +184,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'services', 'enable_form',
             'form_capacity', 'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
+            'enable_whatsapp_link', 'whatsapp_group_link',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -721,6 +724,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
     visible_to_board_only = serializers.BooleanField(read_only=True)
     reimbursements_by_organizers_only = serializers.BooleanField(read_only=True)
     form_note = serializers.CharField(read_only=True)
+    enable_whatsapp_link = serializers.BooleanField(read_only=True)
+    whatsapp_group_link = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
@@ -731,6 +736,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'profile_fields', 'fields', 'services',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
+            'enable_whatsapp_link', 'whatsapp_group_link',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -1112,6 +1118,8 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     visible_to_board_only = serializers.BooleanField(read_only=True)
     reimbursements_by_organizers_only = serializers.BooleanField(read_only=True)
     form_note = serializers.CharField(read_only=True)
+    enable_whatsapp_link = serializers.BooleanField(read_only=True)
+    whatsapp_group_link = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
@@ -1121,6 +1129,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'profile_fields', 'fields', 'services', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
+            'enable_whatsapp_link', 'whatsapp_group_link',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',

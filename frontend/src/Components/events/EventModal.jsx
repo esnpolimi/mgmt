@@ -40,6 +40,8 @@ import SharedListsSelector from './SharedListsSelector';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 import {useAuth} from "../../Context/AuthContext";
 
+const WHATSAPP_LINK_PREFIX = 'https://chat.whatsapp.com/';
+
 export default function EventModal({open, event, isEdit, onClose}) {
     const errorsRef = React.useRef({
         name: [false, ''],
@@ -1342,6 +1344,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
             dataRef.current.allow_online_payment = val
         }
 
+        const setWhatsappField = function setWhatsappField(key, val) {
+            setLocalData({
+                ...localData,
+                [key]: val
+            })
+            dataRef.current[key] = val
+        }
+        const whatsappLink = (localData.whatsapp_group_link || '').trim();
+        const whatsappLinkInvalid = !!localData.enable_whatsapp_link && !whatsappLink.startsWith(WHATSAPP_LINK_PREFIX);
+
         // Form field helpers
         const globalIndex = function globalIndex(ix) {
             return localData.fields.map(
@@ -1604,6 +1616,44 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
                         Questa nota sarà mostrata sotto il titolo del form pubblico.
                     </Typography>
+                    <Box sx={{mt: 2}}>
+                        <FormControlLabel
+                            label={eventNames.enable_whatsapp_link}
+                            control={
+                                <Switch
+                                    checked={!!localData.enable_whatsapp_link}
+                                    onChange={e => setWhatsappField('enable_whatsapp_link', e.target.checked)}
+                                    name="enable_whatsapp_link"
+                                    color="primary"
+                                />
+                            }
+                        />
+                        {localData.enable_whatsapp_link && (
+                            <>
+                                <TextField
+                                    label={eventNames.whatsapp_group_link}
+                                    value={localData.whatsapp_group_link || ''}
+                                    onChange={e => setWhatsappField('whatsapp_group_link', e.target.value)}
+                                    fullWidth
+                                    required
+                                    sx={{mt: 1}}
+                                    placeholder={`${WHATSAPP_LINK_PREFIX}...`}
+                                    error={whatsappLinkInvalid}
+                                    helperText={whatsappLinkInvalid ? `Il link deve iniziare con ${WHATSAPP_LINK_PREFIX}` : ' '}
+                                />
+                                <Typography variant="body2" color="text.secondary">
+                                    Evento gratuito: il link è mostrato alla fine del form di iscrizione e inviato nella mail di conferma.
+                                    Evento a pagamento: il link è inviato via mail quando l&apos;iscritto ha pagato tutto (online o in ufficio)
+                                    ed è in Main List, anche se viene spostato in Main List in un secondo momento. Viene mostrato anche
+                                    alla fine del form solo in caso di pagamento online con assegnazione diretta alla Main List.
+                                    Attivando l&apos;opzione su un evento con iscritti già idonei, il link viene inviato subito anche a loro.
+                                    Modificare il link lo aggiorna per tutti quelli che l&apos;hanno già ricevuto.
+                                    Consigliato: attivare &quot;Approva nuovi partecipanti&quot; nelle impostazioni del gruppo WhatsApp,
+                                    perché il link d&apos;invito può essere inoltrato.
+                                </Typography>
+                            </>
+                        )}
+                    </Box>
                     <FieldSection
                         title={"Campi form"}
                         description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste."}
@@ -1653,6 +1703,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         services: [],
         enable_form: false,
         form_note: '',
+        enable_whatsapp_link: false,
+        whatsapp_group_link: '',
         form_programmed_open_time: dayjs(),
     })
 
@@ -1680,6 +1732,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     ? (event.lists.find(list => list.name === 'Form List')?.capacity ?? 0)
                     : 0,
                 form_note: typeof event.form_note === 'string' ? event.form_note : '',
+                enable_whatsapp_link: !!event.enable_whatsapp_link,
+                whatsapp_group_link: typeof event.whatsapp_group_link === 'string' ? event.whatsapp_group_link : '',
                 organizers: Array.isArray(event.organizers)
                     ? event.organizers.map(o => ({
                         profile: o.profile,
@@ -1761,6 +1815,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,
             form_note: typeof rest.form_note === 'string' ? rest.form_note : '',
+            enable_whatsapp_link: !!rest.enable_whatsapp_link,
+            whatsapp_group_link: (rest.whatsapp_group_link || '').trim(),
             form_programmed_open_time: rest.enable_form ? (rest.form_programmed_open_time || null) : null,
             organizers: (rest.organizers || []).map(o => ({
                 profile: o.profile,
@@ -1878,6 +1934,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
         if (!validateServices()) {
             setStatusMessage({
                 message: errorsRef.current.form || 'Errore nei servizi aggiuntivi.',
+                state: 'error'
+            });
+            scrollUp();
+            return;
+        }
+
+        if (dataRef.current.enable_whatsapp_link &&
+            !(dataRef.current.whatsapp_group_link || '').trim().startsWith(WHATSAPP_LINK_PREFIX)) {
+            setStatusMessage({
+                message: `Il link del gruppo WhatsApp deve iniziare con ${WHATSAPP_LINK_PREFIX}`,
                 state: 'error'
             });
             scrollUp();

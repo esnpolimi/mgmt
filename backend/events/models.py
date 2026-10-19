@@ -208,6 +208,9 @@ def validate_field_data(field_config, data_dict, field_type_filter=None):
     return errors
 
 
+WHATSAPP_GROUP_LINK_PREFIX = 'https://chat.whatsapp.com/'
+
+
 # Class the describes an event
 class Event(BaseEntity):
     id = models.AutoField(primary_key=True)
@@ -230,6 +233,10 @@ class Event(BaseEntity):
 
     # Optional introductory note shown on the subscription form
     form_note = models.TextField(blank=True, default='')
+
+    # WhatsApp group invite shared with subscribers once they hold a spot (paid + Main List, or free event)
+    enable_whatsapp_link = models.BooleanField(default=False)
+    whatsapp_group_link = models.URLField(max_length=512, blank=True, default='')
 
     # Programmed open time for the form (optional)
     form_programmed_open_time = models.DateTimeField(null=True, blank=True)
@@ -278,6 +285,15 @@ class Event(BaseEntity):
                 raise ValidationError({'services': 'Service names must be unique.'})
             if ids and len(set(ids)) != len(ids):
                 raise ValidationError({'services': 'Service ids must be unique.'})
+
+        if self.enable_whatsapp_link:
+            link = (self.whatsapp_group_link or '').strip()
+            if not link:
+                raise ValidationError({'whatsapp_group_link': 'A WhatsApp group link is required when sharing is enabled.'})
+            if not link.startswith(WHATSAPP_GROUP_LINK_PREFIX):
+                raise ValidationError({
+                    'whatsapp_group_link': f'The link must start with {WHATSAPP_GROUP_LINK_PREFIX}'
+                })
 
         # Validate that form_programmed_open_time is after subscription_start_date
         if (self.form_programmed_open_time and self.subscription_start_date and
