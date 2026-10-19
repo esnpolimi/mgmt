@@ -2,10 +2,10 @@ name: Backend Tests (Tests)
 
 on:
   pull_request:
-    branches: [ "staging", "main" ]
+    branches: [ "staging", "main", "development" ]
     types: [opened, synchronize, reopened]
   push:
-    branches: [ "development"]
+    branches: [ "development" ]
 
 jobs:
   backend-test:

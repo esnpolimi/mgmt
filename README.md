@@ -8,6 +8,12 @@ Copyright © 2025 Erasmus Student Network – Politecnico di Milano. This progra
 Please refer to the [LICENSE](LICENSE) file for more details.
 ---
 
+## Start here
+
+- **[Newcomer learning path](NEWCOMER_LEARNING_PATH.md)**
+  Learn the technologies, concepts, and tools used in the project in the
+  recommended order.
+
 # Git Workflow Guide
 
 ## Main Branches
@@ -17,35 +23,42 @@ Please refer to the [LICENSE](LICENSE) file for more details.
 * **`main`**: Stable, production-ready code. Only tested and approved code is merged here.
 
 ---
-## Pull Requests workflow
-1- **`Development -> Staging`**: During PR there are automatic tests that check the whole project + CodeQL Analysis tool results + CodeRabbit CodeQL Analysis tool results.
+## Development workflow
 
-2- **`Staging -> Main`**: During the PR, it's mandatory to pass the automatic tests. With the analysis tools, there are more rules to verify the PR.
+Every change must start from an existing GitHub issue and follow this order:
 
-## Branches for New Work
+1. **Select an issue**: choose the issue to work on from the repository's
+   [GitHub Issues](https://github.com/esnpolimi/mgmt/issues).
+2. **Assign the issue**: assign the issue to yourself before starting any work.
+3. **Create the branch**: start from the latest `development` branch and create a
+   branch named with the issue number followed by a short, lowercase description:
 
-1. **Create a branch**:
+   ```text
+   <issue-number>-<short-name>
+   ```
 
-   * For every new feature or fix, create a new branch.
-   * Naming conventions:
+   For example, issue `42` titled "Fix event subscription validation" becomes:
+   `42-fix-event-subscription`.
+4. **Develop and test**: implement the change on the issue branch, run the relevant
+   tests locally, and push the branch to GitHub.
+5. **Open a pull request**: when development is complete, open a PR from the issue
+   branch to `development`. Link the related issue in the PR description.
+6. **Review and merge**: address review feedback and wait for the required automatic
+   checks (tests, CodeQL, and CodeRabbit analysis) to pass. After approval, merge the
+   PR into `development`.
+7. **Delete the branch**: once the PR has been merged, delete the remote issue
+   branch and remove the local copy if it is no longer needed.
 
-     * Feature: `feature/feature-name`
-     * Bugfix: `fix/bug-name`
+The `staging` branch is used for manual testing after changes have passed the
+automatic checks. Changes are promoted from `development` to `staging`, and then
+from `staging` to `main` only after the required validation and approval.
 
-2. **Develop**:
-
-   * Implement your changes.
-   * Ask teammates for support if needed.
-   * Test everything locally before pushing.
-
-3. **Open a Pull Request (PR)**:
-
-   * Once finished, open a PR targeting the `development` branch.
-
-4. **Review**:
-
-   * Your PR will be reviewed.
-   * Once approved, it will be merged into `development`.
+The backend test workflow runs automatically on every PR targeting the project's
+integration branches (`development`, `staging`, or `main`), regardless of the
+source branch. It also runs on every push to `development`. The `Backend Tests
+(Tests)` check must be configured as a required status check in the protection
+rules for the relevant target branches, so a PR cannot be merged until the
+tests pass.
 
 ---
 
@@ -107,6 +120,14 @@ Navigate into the project folder. You will find two main subfolders:
 
 ---
 
+## Alternative: run backend and frontend without Docker
+
+Docker Compose is the standard way to run the project locally. Use the
+[manual setup guide](RUN_WITHOUT_DOCKER.md) only when Docker is not available or
+when you specifically need to run the services directly on your machine.
+
+---
+
 # Import Database for Local Testing/Development
 
 Next step is to import a local copy of a database dump (SQL file) into your local MySQL server:
@@ -115,98 +136,6 @@ Next step is to import a local copy of a database dump (SQL file) into your loca
 - Click on the `newgest` database, then Check All tables and Drop them, making sure no tables are present anymore
 - Click on the `Import` tab, then choose the SQL file and click `Import` (leave all other options as default)
 
-
-# Run Backend Locally (without Docker)
-
-1. Install Python **3.11** (the same version used in the Dockerfile) and add it to your PATH.
-
-2. Create and activate a virtual environment:
-
-   ```bash
-   python3.11 -m venv venv
-   # macOS/Linux
-   source venv/bin/activate
-   # Windows (Command Prompt)
-   venv\Scripts\activate
-   # Windows (PowerShell)
-   .\venv\Scripts\Activate.ps1
-   ```
-
-3. Install dependencies:
-
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   ```
-
-4. Set environment variables and run the server:
-
-   * **macOS/Linux**:
-
-     ```bash
-     DJANGO_ENV=dev DJANGO_SETTINGS_MODULE=backend.settings.dev python manage.py runserver
-     ```
-   * **Windows (Command Prompt)**:
-
-     ```bash
-     set DJANGO_ENV=dev && set DJANGO_SETTINGS_MODULE=backend.settings.dev && python manage.py runserver
-     ```
-   * **Windows (PowerShell)**:
-
-     ```powershell
-     $env:DJANGO_ENV="dev"; $env:DJANGO_SETTINGS_MODULE="backend.settings.dev"; python manage.py runserver
-     ```
-
----
-
-## Verify the Environment
-
-To confirm the environment is set correctly, temporarily add this snippet to `manage.py`:
-
-```python
-import os
-print("DJANGO_ENV:", os.getenv("DJANGO_ENV", "Not Set"))
-print("DJANGO_SETTINGS_MODULE:", os.getenv("DJANGO_SETTINGS_MODULE"))
-```
-
-When running `runserver`, you should see `development` or `production`.
-
----
-
-# Run Frontend Locally (without Docker)
-
-1. Install [Node.js](https://nodejs.org/en/download) version **22** (same as in the Dockerfile).
-
-2. Install dependencies:
-
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-3. Run the frontend:
-
-   * Development mode:
-
-     ```bash
-     npm run dev
-     ```
-
-     Access it at [http://localhost:3000](http://localhost:3000).
-
-   * Production build:
-
-     ```bash
-     npm run build
-     ```
-
-   * Preview production build locally:
-
-     ```bash
-     npm run preview
-     ```
-
----
 
 # Install and Update Dependencies
 
