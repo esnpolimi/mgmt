@@ -1,6 +1,7 @@
 import {useLocation, useParams, useNavigate} from 'react-router-dom';
 import {Container, Typography, Box, Button, Alert} from '@mui/material';
 import PaymentIcon from '@mui/icons-material/Payment';
+import WhatsAppGroupCard from '../../Components/events/WhatsAppGroupCard';
 
 export default function EventFormResult() {
     const {id} = useParams();
@@ -16,6 +17,10 @@ export default function EventFormResult() {
     const noPayment = !!navState.noPayment;
     const paymentRequired = !!navState.paymentRequired;
     const paymentBlockedMessage = navState.paymentBlockedMessage || 'Online payment is unavailable until you renew your ESNcard.';
+    const accessToken = navState.accessToken;
+    // Stable URL issued by the server only to eligible subscribers (free event, or paid and in the Main List)
+    const whatsappLinkUrl = navState.whatsappLinkUrl;
+    const showWhatsappPending = paid && !whatsappLinkUrl && !!navState.whatsappEnabled && !navState.isMainList;
 
     // Build concise banner
     let bannerMessage = '';
@@ -41,7 +46,7 @@ export default function EventFormResult() {
 
     const retryNavigate = () => navigate(`/event/${id}/formlogin`);
     const goToPayment = () => navigate(`/event/${id}/pay?subscriptionId=${subscriptionId}`, {
-        state: {subscriptionId, assignedList}
+        state: {subscriptionId, assignedList, accessToken}
     });
 
     // Show the Pay Now button only when payment is pending (not yet paid, no error, checkout expected)
@@ -57,6 +62,13 @@ export default function EventFormResult() {
                         severity={bannerState === 'success' ? 'success' : bannerState === 'error' ? 'error' : 'info'}
                     >
                         {bannerMessage}
+                    </Alert>
+                )}
+                {whatsappLinkUrl && <WhatsAppGroupCard url={whatsappLinkUrl}/>}
+                {showWhatsappPending && (
+                    <Alert severity="info" sx={{width: '100%'}}>
+                        You are not in the main list yet: you will receive the WhatsApp group link by email if a spot
+                        opens up for you.
                     </Alert>
                 )}
                 {paymentError && (

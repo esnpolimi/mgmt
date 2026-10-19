@@ -18,6 +18,7 @@ import EventFormLogin from './Pages/events/EventFormLogin.jsx';
 import EventForm from './Pages/events/EventForm.jsx';
 import EventFormResult from './Pages/events/EventFormResult.jsx';
 import EventPayment from './Pages/events/EventPayment.jsx';
+import EventWhatsApp from './Pages/events/EventWhatsApp.jsx';
 import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 import EmailVerification from './Pages/EmailVerification.jsx';
 import ResetPassword from "./Pages/ResetPassword.jsx";
@@ -58,6 +59,7 @@ function AppShell() {
                     <Route path='/event/:id/form' element={<EventForm/>}/>
                     <Route path='/event/:id/formresult' element={<EventFormResult/>}/>
                     <Route path='/event/:id/pay' element={<EventPayment/>}/>
+                    <Route path='/event/:id/whatsapp' element={<EventWhatsApp/>}/>
                     <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>
                     <Route path='/treasury/accounts_list' element={<ProtectedRoute requiredPermission="change_account"><AccountsList/></ProtectedRoute>}/>
                     <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>
