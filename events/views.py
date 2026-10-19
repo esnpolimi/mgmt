@@ -10,6 +10,7 @@ import requests
 import sentry_sdk
 from babel.dates import format_date
 from django.conf import settings
+from django.core import signing
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.core.mail import send_mail
 from django.core.validators import validate_email
@@ -17,6 +18,7 @@ from django.db import close_old_connections, transaction
 from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from django.utils.dateparse import parse_datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -52,6 +54,8 @@ PAYMENT_SOLD_OUT_MESSAGE = (
     "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. "
     "Thank you for filling out the form. Please wait for any notifications from the ESN team."
 )
+
+WHATSAPP_TOKEN_SALT = 'events.subscription.whatsapp'
 
 # --- Allowed file types for 'link' form fields (mirrors treasury) ---
 FORM_UPLOAD_ALLOWED_MIMETYPES = [
@@ -444,7 +448,7 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
     elif payment_required:
         if online_payment_required:
             base = settings.SCHEME_HOST
-            pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
+            pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}&t={_whatsapp_token(subscription)}"
             html_parts.append("<p>Please complete your payment to be assigned a spot in a list.</p>")
             # Hide concrete list hints if notify_list is False
             if notify_lists:
@@ -462,11 +466,16 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
             )
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
+    include_whatsapp = not ad.get('whatsapp_link_email_sent') and _whatsapp_link_eligible(subscription)
+    if include_whatsapp:
+        html_parts.append(_whatsapp_email_html(subscription))
     html_parts.append("<p>Thank you!<br/><br/><i>ESN Politecnico Milano</i></p></body></html>")
     html_content = "".join(html_parts)
 
     if _send_email(subject, html_content, recipient):
         ad['subscription_confirmation_email_sent'] = True
+        if include_whatsapp:
+            ad['whatsapp_link_email_sent'] = True
         subscription.additional_data = ad
         subscription.save(update_fields=['additional_data'])
 
@@ -509,7 +518,8 @@ def _send_online_payment_link_email(subscription):
     if ad.get('online_payment_link_email_sent'):
         return False
 
-    pay_link = f"{settings.SCHEME_HOST}/event/{event.id}/pay?subscriptionId={subscription.id}"
+    pay_link = (f"{settings.SCHEME_HOST}/event/{event.id}/pay"
+                f"?subscriptionId={subscription.id}&t={_whatsapp_token(subscription)}")
     subject = f"{event.name} - Online payment link"
 
     list_sentence = ""
@@ -534,6 +544,119 @@ def _send_online_payment_link_email(subscription):
         subscription.save(update_fields=['additional_data'])
         return True
     return False
+
+
+def _subscription_total(subscription):
+    event = subscription.event
+    return (Decimal(event.cost or 0)
+            + Decimal(event.deposit or 0)
+            + _services_total(subscription.selected_services or []))
+
+
+def _whatsapp_token(subscription):
+    """Per-subscription secret so public endpoints keyed by sequential pk cannot leak the group link."""
+    return signing.Signer(salt=WHATSAPP_TOKEN_SALT).signature(str(subscription.pk))
+
+
+def _check_whatsapp_token(subscription, token):
+    if not token or not isinstance(token, str):
+        return False
+    return constant_time_compare(token, _whatsapp_token(subscription))
+
+
+def _whatsapp_link_eligible(subscription):
+    """
+    The group link is shared only with subscribers holding a spot:
+      - free subscription (cost + deposit + selected services == 0), or
+      - fully paid (quota, deposit and services) and currently in the Main List.
+    """
+    event = subscription.event
+    if not event.enable_whatsapp_link or not (event.whatsapp_group_link or '').strip():
+        return False
+    if _subscription_total(subscription) <= 0:
+        return True
+    if not _subscription_payment_already_registered(subscription):
+        return False
+    return bool(subscription.list and subscription.list.is_main_list)
+
+
+def _whatsapp_link_for(subscription):
+    return subscription.event.whatsapp_group_link.strip() if _whatsapp_link_eligible(subscription) else None
+
+
+def _whatsapp_access_url(subscription):
+    """
+    Stable URL sent by email / encoded in QR codes. It resolves to the event's *current* link at click time,
+    so organizers can replace the group link without resending anything.
+    """
+    return (f"{settings.SCHEME_HOST}/event/{subscription.event_id}/whatsapp"
+            f"?subscriptionId={subscription.pk}&t={_whatsapp_token(subscription)}")
+
+
+def _whatsapp_email_html(subscription):
+    url = _whatsapp_access_url(subscription)
+    return (
+        "<p>Join the event WhatsApp group to stay updated with last-minute info from the organizers:</p>"
+        f"<p><a href='{url}' style='display:inline-block;padding:10px 18px;background:#25D366;color:#ffffff;"
+        "font-weight:bold;text-decoration:none;border-radius:6px;'>Join the WhatsApp group</a></p>"
+        f"<p style='font-size:12px;color:#666'>If the button does not work, open this link: "
+        f"<a href='{url}'>{url}</a></p>"
+    )
+
+
+def _mark_whatsapp_link_sent(subscription):
+    ad = subscription.additional_data or {}
+    ad['whatsapp_link_email_sent'] = True
+    subscription.additional_data = ad
+    subscription.save(update_fields=['additional_data'])
+
+
+def _maybe_send_whatsapp_link_email(subscription):
+    """Send the WhatsApp group invite once, as soon as the subscription becomes eligible."""
+    try:
+        if (subscription.additional_data or {}).get('whatsapp_link_email_sent'):
+            return False
+        if not _whatsapp_link_eligible(subscription):
+            return False
+        recipient = _subscription_recipient_email(subscription)
+        if not recipient:
+            return False
+
+        event = subscription.event
+        html_content = (
+            "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
+            f"<p>Your spot for <b>{event.name}</b> is confirmed.</p>"
+            f"{_whatsapp_email_html(subscription)}"
+            "<p>Thank you,<br/>ESN Politecnico Milano</p>"
+            "</body></html>"
+        )
+        if _send_email(f"{event.name} - WhatsApp group", html_content, recipient):
+            _mark_whatsapp_link_sent(subscription)
+            return True
+    except Exception:
+        logger.exception(f"_maybe_send_whatsapp_link_email failed for sub {subscription.pk}")
+    return False
+
+
+def _send_whatsapp_links_for_event(event_id):
+    """Used when sharing is switched on for an event that already has eligible subscribers."""
+    sent = 0
+    try:
+        subs = Subscription.objects.filter(event_id=event_id).select_related('event', 'list', 'profile')
+        for sub in subs:
+            if _maybe_send_whatsapp_link_email(sub):
+                sent += 1
+        logger.info(f"WhatsApp link backfill for event {event_id}: sent={sent}")
+    except Exception as e:
+        logger.exception(f"WhatsApp link backfill failed for event {event_id}")
+        sentry_sdk.capture_exception(e)
+    finally:
+        close_old_connections()
+    return sent
+
+
+def _whatsapp_sharing_active(event):
+    return bool(event.enable_whatsapp_link and (event.whatsapp_group_link or '').strip())
 
 
 def process_subscription_checkout(subscription_id, event_id):
@@ -776,10 +899,14 @@ def _send_payment_confirmation_email(subscription):
     else:
         list_sentence = "List of assignment to be determined, please wait for our confirmation."
 
+    include_whatsapp = not ad.get('whatsapp_link_email_sent') and _whatsapp_link_eligible(subscription)
+    whatsapp_html = _whatsapp_email_html(subscription) if include_whatsapp else ""
+
     html_content = (
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
         f"<p>We have registered your <b>{paid_label}</b>.</p>"
         f"<p>{list_sentence}</p>"
+        f"{whatsapp_html}"
         "<p>Thank you,<br/>ESN Politecnico Milano</p>"
         "</body></html>"
     )
@@ -787,6 +914,8 @@ def _send_payment_confirmation_email(subscription):
     sent = _send_email(subject, html_content, recipient)
     if sent:
         ad['payment_confirmation_email_sent'] = True
+        if include_whatsapp:
+            ad['whatsapp_link_email_sent'] = True
         subscription.additional_data = ad
         subscription.save(update_fields=['additional_data'])
         logger.debug(f"_send_payment_confirmation_email: sent to {recipient} for sub {subscription.pk}")
@@ -937,6 +1066,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
 
     if send_email_on_payment and did_pay:
         _send_payment_confirmation_email(subscription)
+        _maybe_send_whatsapp_link_email(subscription)
 
     return move_info
 
@@ -1013,6 +1143,7 @@ def event_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
 
             previously_online_payment = bool(event.allow_online_payment)
+            previously_whatsapp = _whatsapp_sharing_active(event)
 
             # Validation logic is handled in the serializer
             serializer = EventCreationSerializer(
@@ -1032,6 +1163,18 @@ def event_detail(request, pk):
                         f"Online payment backfill for event {updated_event.pk}: "
                         f"queued={stats['queued']} skipped={stats['skipped']}"
                     )
+
+                # Only on off -> on: a changed link needs no email, the stored URLs resolve to the current link
+                if not previously_whatsapp and _whatsapp_sharing_active(updated_event):
+                    if getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True):
+                        threading.Thread(
+                            target=_send_whatsapp_links_for_event,
+                            args=(updated_event.pk,),
+                            daemon=True,
+                            name='whatsapp_backfill',
+                        ).start()
+                    else:
+                        _send_whatsapp_links_for_event(updated_event.pk)
 
                 return Response(serializer.data, status=200)
             else:
@@ -1399,6 +1542,10 @@ def move_subscriptions(request):
                     auto_move_on_payment=False,
                     send_email_on_payment=False
                 )
+
+                # Waiting-list payers get the WhatsApp group once they reach the Main List
+                if target_list.is_main_list:
+                    transaction.on_commit(lambda s=subscription: _maybe_send_whatsapp_link_email(s))
 
         return Response({'message': "Iscrizioni spostate con successo"}, status=200)
     except ValidationError as e:
@@ -2113,7 +2260,9 @@ def event_form_submit(request, event_id):
                 "A valid ESNcard is required for online payment. Please renew your ESNcard before paying."
                 if payment_blocked else ""
             ),
-            "capacity_blocked": capacity_blocked
+            "capacity_blocked": capacity_blocked,
+            "access_token": _whatsapp_token(sub),
+            "whatsapp_link_url": _whatsapp_access_url(sub) if _whatsapp_link_eligible(sub) else None,
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -2193,6 +2342,35 @@ def subscription_payment_status(_, pk):
     }, status=200)
 
 
+def _paid_result_extras(sub, access_token):
+    """Extra fields for the payment result page; the WhatsApp URL only goes to the token holder."""
+    sub.refresh_from_db(fields=['list', 'additional_data'])
+    extras = {"assigned_list": sub.list.name if sub.list and sub.event.notify_list else None,
+              "is_main_list": bool(sub.list and sub.list.is_main_list)}
+    if _check_whatsapp_token(sub, access_token) and _whatsapp_link_eligible(sub):
+        extras["whatsapp_link_url"] = _whatsapp_access_url(sub)
+    extras["whatsapp_enabled"] = _whatsapp_sharing_active(sub.event)
+    return extras
+
+
+@api_view(['GET'])
+def subscription_whatsapp_link(request, pk):
+    """
+    Public endpoint behind the stable URL sent by email / QR: resolves to the event's *current* group link,
+    so organizers can replace it at any time. Requires the per-subscription signed token.
+    """
+    try:
+        sub = Subscription.objects.select_related('event', 'list').get(pk=pk)
+    except (Subscription.DoesNotExist, ValueError):
+        return Response({"error": "not_available"}, status=404)
+    if not _check_whatsapp_token(sub, request.query_params.get('t')):
+        return Response({"error": "not_available"}, status=404)
+    link = _whatsapp_link_for(sub)
+    if not link:
+        return Response({"error": "not_available", "event_name": sub.event.name}, status=404)
+    return Response({"whatsapp_group_link": link, "event_name": sub.event.name}, status=200)
+
+
 @api_view(['POST'])
 def subscription_process_payment(request, pk):
     """
@@ -2228,6 +2406,7 @@ def subscription_process_payment(request, pk):
     if isinstance(card_obj, dict):
         candidates.append(card_obj.get('token') or card_obj.get('id'))
     token = next((c for c in candidates if isinstance(c, str) and c.strip()), None)
+    access_token = payload.get('t')
 
     with transaction.atomic():
         # Re-fetch the subscription under a row-level lock so concurrent requests
@@ -2260,7 +2439,7 @@ def subscription_process_payment(request, pk):
             if status_flag == 'PAID':
                 _ensure_sumup_transactions(sub)
                 return Response(
-                    {"status": status_flag, **remote},
+                    {"status": status_flag, **remote, **_paid_result_extras(sub, access_token)},
                     status=200
                 )
 
@@ -2278,6 +2457,7 @@ def subscription_process_payment(request, pk):
 
         if status_flag == 'PAID':
             _ensure_sumup_transactions(sub)
+            remote = {**remote, **_paid_result_extras(sub, access_token)}
 
         return Response(
             {"status": status_flag, **remote},
