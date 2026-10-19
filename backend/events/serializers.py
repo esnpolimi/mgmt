@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Min, Q
 from rest_framework import serializers
 
 from events.models import Event, EventList, Subscription, EventOrganizer
@@ -835,6 +836,13 @@ class SubscriptionProfileInlineSerializer(serializers.ModelSerializer):
 
 
 # Serializers for Subscription
+PAYMENT_TRANSACTION_TYPES = [
+    Transaction.TransactionType.SUBSCRIPTION,
+    Transaction.TransactionType.CAUZIONE,
+    Transaction.TransactionType.SERVICE,
+]
+
+
 class SubscriptionSerializer(serializers.ModelSerializer):
     profile_id = serializers.PrimaryKeyRelatedField(source='profile', read_only=True)
     profile_name = serializers.SerializerMethodField()
@@ -849,6 +857,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     status_services = serializers.SerializerMethodField()
     services_total = serializers.SerializerMethodField()
     subscribed_at = serializers.DateTimeField(source='created_at', read_only=True)
+    paid_at = serializers.SerializerMethodField()
     event_name = serializers.CharField(source='event.name', read_only=True)
     event_id = serializers.IntegerField(source='event.id', read_only=True)
     event_date = serializers.DateField(source='event.date', read_only=True)
@@ -877,6 +886,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'status_quota', 'status_cauzione', 'status_services',
             'services_total',
             'subscribed_at',
+            'paid_at',
             'external_name',
             'is_external',
             'form_data',
@@ -905,6 +915,16 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         elif obj.external_name:
             return obj.external_name
         return ""
+
+    def get_paid_at(self, obj):
+        # Earliest payment transaction (quota, cauzione or services); prefer the queryset annotation
+        if hasattr(obj, 'paid_at_annotated'):
+            paid_at = obj.paid_at_annotated
+        else:
+            paid_at = (Transaction.objects
+                       .filter(subscription=obj, type__in=PAYMENT_TRANSACTION_TYPES)
+                       .aggregate(paid_at=Min('created_at'))['paid_at'])
+        return serializers.DateTimeField().to_representation(paid_at) if paid_at else None
 
     @staticmethod
     def get_account_id(obj):
@@ -1153,6 +1173,9 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         qs = (Subscription.objects
               .filter(list_id__in=list_ids)
               .select_related('event', 'list', 'profile')
+              .annotate(paid_at_annotated=Min(
+                  'transaction__created_at',
+                  filter=Q(transaction__type__in=PAYMENT_TRANSACTION_TYPES)))
               .order_by('-created_at'))
 
         serialized = SubscriptionSerializer(qs, many=True).data

@@ -8,7 +8,9 @@ import {
     Typography,
     Collapse,
     FormControlLabel,
-    Switch
+    Switch,
+    TextField,
+    MenuItem
 } from '@mui/material';
 import {
     PersonAdd as PersonAddIcon,
@@ -19,7 +21,9 @@ import {
     ExpandLess as ExpandLessIcon,
     EditNote as EditNoteIcon,
     ContentCopy as ContentCopyIcon,
-    Check as CheckIcon
+    Check as CheckIcon,
+    ArrowUpward as ArrowUpwardIcon,
+    ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
 import {MaterialReactTable, useMaterialReactTable} from 'material-react-table';
 import {MRT_Localization_IT} from "material-react-table/locales/it";
@@ -94,8 +98,8 @@ function extractFallbackRowValues(row) {
     const visibleCells = row.getVisibleCells()
         .filter(c => !['copy', 'profile_name', 'actions', 'mrt-row-select'].includes(c.column.id));
     return visibleCells.map(cell => {
-        if (cell.column.id === 'subscribed_at') {
-            const dt = row.original?.subscribed_at;
+        if (cell.column.id === 'subscribed_at' || cell.column.id === 'paid_at') {
+            const dt = row.original?.[cell.column.id];
             const s = dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : '';
             return toExcelSafe(s);
         }
@@ -106,6 +110,62 @@ function extractFallbackRowValues(row) {
         const s = String(raw).replace(/\s+/g, ' ').trim();
         return toExcelSafe(s);
     });
+}
+
+const DEFAULT_SORT = {criterion: 'subscribed_at', direction: 'desc'};
+
+const SORT_CRITERIA = [
+    {value: 'subscribed_at', label: 'Data iscrizione (form)'},
+    {value: 'paid_at', label: 'Data pagamento', requiresPayment: true},
+    {value: 'name_surname', label: 'Nome Cognome'},
+    {value: 'surname_name', label: 'Cognome Nome'},
+];
+
+function getSortNames(sub) {
+    if (sub?.profile) return {name: sub.profile.name || '', surname: sub.profile.surname || ''};
+    if (sub?.external_first_name || sub?.external_last_name) {
+        return {name: sub.external_first_name || '', surname: sub.external_last_name || ''};
+    }
+    // Manually added externals may only have external_name (often the email)
+    const fallback = sub?.external_name || '';
+    return {name: fallback, surname: fallback};
+}
+
+function getSortValue(sub, criterion) {
+    switch (criterion) {
+        case 'subscribed_at':
+        case 'paid_at': {
+            const dt = sub?.[criterion];
+            return dt ? dayjs(dt).valueOf() : null;
+        }
+        case 'name_surname': {
+            const {name, surname} = getSortNames(sub);
+            return `${name} ${surname}`.trim() || null;
+        }
+        case 'surname_name': {
+            const {name, surname} = getSortNames(sub);
+            return `${surname} ${name}`.trim() || null;
+        }
+        default:
+            return null;
+    }
+}
+
+function sortSubscriptions(subs, sort) {
+    const {criterion, direction} = sort || DEFAULT_SORT;
+    const sign = direction === 'asc' ? 1 : -1;
+    const keyed = subs.map(sub => ({sub, key: getSortValue(sub, criterion)}));
+    keyed.sort((a, b) => {
+        // Missing values (e.g. unpaid under payment date) always go last
+        if (a.key === null && b.key === null) return a.sub.id - b.sub.id;
+        if (a.key === null) return 1;
+        if (b.key === null) return -1;
+        const cmp = typeof a.key === 'string'
+            ? a.key.localeCompare(b.key, 'it', {sensitivity: 'base'})
+            : a.key - b.key;
+        return cmp !== 0 ? sign * cmp : sign * (a.sub.id - b.sub.id);
+    });
+    return keyed.map(k => k.sub);
 }
 
 const CopyHeadersButton = memo(function CopyHeadersButton() {
@@ -189,8 +249,16 @@ export default memo(function EventListAccordions({
                                                  }) {
     const [expandedAccordion, setExpandedAccordion] = useState([]);
     const [copiedSelection, setCopiedSelection] = useState(false);
+    // Per-list ordering: listId -> {criterion, direction}
+    const [sortByList, setSortByList] = useState({});
     const hasDeposit = data?.deposit > 0;
     const hasQuota = data?.cost > 0;
+    const hasPayments = hasQuota || hasDeposit || (Array.isArray(data?.services) && data.services.length > 0);
+    const sortCriteria = SORT_CRITERIA.filter(c => !c.requiresPayment || hasPayments);
+
+    const updateListSort = (listId, changes) => {
+        setSortByList(prev => ({...prev, [listId]: {...DEFAULT_SORT, ...prev[listId], ...changes}}));
+    };
 
     const toggleCollapse = (panel) => {
         setExpandedAccordion(prev =>
@@ -487,6 +555,15 @@ export default memo(function EventListAccordions({
                         return <Chip label={label} color={color}/>;
                     }
                 },
+                hasPayments && {
+                    accessorKey: 'paid_at',
+                    header: 'Pagato il',
+                    size: 50,
+                    Cell: ({row}) => {
+                        const dt = row.original?.paid_at;
+                        return dt ? dayjs(dt).format('DD/MM/YYYY HH:mm') : '';
+                    }
+                },
                 hasDeposit && {
                     accessorKey: 'status_cauzione',
                     header: 'Stato Cauzione',
@@ -631,9 +708,33 @@ export default memo(function EventListAccordions({
             columns.unshift(copyColumn);
             columns = [...columns, actionsColumn];
 
+            const listSort = {...DEFAULT_SORT, ...sortByList[list.id]};
+            const isAscending = listSort.direction === 'asc';
+
             // Add a caption and toggles for form/aspect columns
             const formAspectCaption = (
                 <Box sx={{mb: 1, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap'}}>
+                    <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                        <TextField
+                            select
+                            size="small"
+                            label="Ordina per"
+                            value={listSort.criterion}
+                            onChange={e => updateListSort(list.id, {criterion: e.target.value})}
+                            sx={{minWidth: 200}}
+                        >
+                            {sortCriteria.map(c => (
+                                <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                            ))}
+                        </TextField>
+                        <IconButton
+                            size="small"
+                            title={isAscending ? 'Crescente' : 'Decrescente'}
+                            onClick={() => updateListSort(list.id, {direction: isAscending ? 'desc' : 'asc'})}
+                        >
+                            {isAscending ? <ArrowUpwardIcon fontSize="small"/> : <ArrowDownwardIcon fontSize="small"/>}
+                        </IconButton>
+                    </Box>
                     <Box>
                         <FormControlLabel
                             control={
@@ -681,12 +782,12 @@ export default memo(function EventListAccordions({
                 listName: list.name,
                 capacity: list.capacity,
                 subscription_count: list.subscription_count,
-                subscriptions: listSubscriptions, // backend-ordered (desc by time)
+                subscriptions: sortSubscriptions(listSubscriptions, listSort),
                 columns,
                 formAspectCaption
             };
         });
-    }, [data, hasDeposit, hasQuota, isBoardMember, isOrganizer, onOpenEditAnswers, onOpenReimburseMenu, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns, showProfileColumns]);
+    }, [data, hasDeposit, hasQuota, isBoardMember, isOrganizer, onOpenEditAnswers, onOpenReimburseMenu, onOpenReimburseDeposits, showFormColumns, showAdditionalColumns, showProfileColumns, sortByList]);
 
     // Build a vCard 3.0 file for an array of subscription objects
     const buildVCard = (subs) => {
