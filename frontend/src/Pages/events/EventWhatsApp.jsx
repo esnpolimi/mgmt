@@ -21,7 +21,7 @@ export default function EventWhatsApp() {
             setStatus('unavailable');
             return;
         }
-        fetchCustom('GET', `/subscription/${subscriptionId}/whatsapp/?t=${encodeURIComponent(token)}`, {
+        void fetchCustom('GET', `/subscription/${subscriptionId}/whatsapp/?t=${encodeURIComponent(token)}`, {
             auth: false,
             onSuccess: (data) => {
                 if (!data?.whatsapp_group_link) {

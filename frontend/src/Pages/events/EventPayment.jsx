@@ -65,7 +65,7 @@ export default function EventPayment() {
                         if (canceled) return;
                         if (data.overall_status === 'paid') {
                             // Re-confirm server side to get list placement and, with a valid token, the WhatsApp link
-                            fetchCustom('POST', `/subscription/${subscriptionId}/process_payment/`, {
+                            void fetchCustom('POST', `/subscription/${subscriptionId}/process_payment/`, {
                                 auth: false,
                                 body: {t: accessToken},
                                 onSuccess: (resp) => {
