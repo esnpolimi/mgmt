@@ -263,6 +263,7 @@ export default function EventForm() {
                         state: {
                             subscriptionId: data.subscription_id,
                             assignedList: data.assigned_list,
+                            accessToken: data.access_token,
                             paymentBlocked: true,
                             paymentBlockedMessage: data.payment_blocked_message
                         }
@@ -275,6 +276,7 @@ export default function EventForm() {
                         state: {
                             subscriptionId: data.subscription_id,
                             assignedList: data.assigned_list,
+                            accessToken: data.access_token,
                             noPayment: false,
                             paymentError: true,
                             paymentErrorMessage: offlineMsg
@@ -288,6 +290,7 @@ export default function EventForm() {
                         state: {
                             subscriptionId: data.subscription_id,
                             assignedList: data.assigned_list,
+                            accessToken: data.access_token,
                             paymentRequired: true
                         }
                     });
@@ -298,6 +301,8 @@ export default function EventForm() {
                     state: {
                         subscriptionId: data.subscription_id,
                         assignedList: data.assigned_list,
+                        accessToken: data.access_token,
+                        whatsappLinkUrl: data.whatsapp_link_url,
                         noPayment: true
                     }
                 });

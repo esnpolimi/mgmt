@@ -42,6 +42,9 @@ urlpatterns = [
     # Endpoint to process subscription payment
     path('subscription/<str:pk>/process_payment/', views.subscription_process_payment),
 
+    # Public endpoint resolving the event's current WhatsApp group link (signed token required)
+    path('subscription/<str:pk>/whatsapp/', views.subscription_whatsapp_link),
+
     # Public webhook endpoint for SumUp
     path('sumup/webhook/', views.sumup_webhook),
 
