@@ -56,8 +56,11 @@ running MySQL/MariaDB instance configured with the expected connection variables
 
    ```bash
    cd frontend
-   npm install
+   npm ci
    ```
+
+   Use `npm install` only when intentionally adding or upgrading a package; commit
+   the resulting `package-lock.json` before deploying.
 
 3. Start the development server:
 
