@@ -61,6 +61,7 @@ The system covers ESN Polimi core processes:
 ### 2.2 Frontend
 
 - stack: React 19 + Vite + MUI
+- dependency installation: Node.js 22 with `npm ci` from the committed `frontend/package-lock.json`
 - routing: SPA with protected routes
 - API base URL:
   - local: http://localhost:8000/backend
