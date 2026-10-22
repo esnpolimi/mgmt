@@ -25,6 +25,7 @@ Main business attributes:
 - subscription window: `subscription_start_date`, `subscription_end_date`
 - form: `enable_form`, `form_programmed_open_time`, `form_note`, `form_capacity`
 - online payment toggle: `allow_online_payment`
+- WhatsApp group sharing: `enable_whatsapp_link`, `whatsapp_group_link` (see 5.7; unrelated to the content-module `whatsapp-register` flow)
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
 
@@ -56,6 +57,11 @@ Attributes:
 - created_by_form
 - sumup_checkout_id, sumup_transaction_id
 
+Computed serializer fields (`SubscriptionSerializer`):
+
+- `subscribed_at`: alias of `created_at`
+- `paid_at`: `created_at` of the earliest payment transaction (types `SUBSCRIPTION`, `CAUZIONE`, `SERVICE`) linked to the subscription, or `null` if nothing is paid. `EventWithSubscriptionsSerializer` precomputes it with a `paid_at_annotated` queryset annotation (`Min` over `transaction__created_at`); other callers fall back to a per-object aggregate query. The type list is `PAYMENT_TRANSACTION_TYPES` in `backend/events/serializers.py`.
+
 Constraint: `unique(profile, event)` — enforced at the database level only for rows where `profile` is non-null (standard SQL `UNIQUE` behaviour treats each `NULL` as distinct, so multiple external subscriptions with `profile=null` on the same event are not blocked by the DB). Deduplication of external subscribers (identified by `external_name`) is enforced at the application level in the subscription creation and move-subscription views.
 
 ## 3. API Contract Summary
@@ -80,16 +86,21 @@ Base path: /backend/
 - GET /event/<event_id>/formstatus/
 - POST /event/<event_id>/formsubmit/
 
+`formsubmit` success response also returns `access_token` (the per-subscription signed token, see 5.7) and `whatsapp_link_url` (stable WhatsApp access URL, or `null` when the subscription is not eligible).
+
 ### 3.4 Payment APIs
 
 - GET /subscription/<pk>/status/
 - POST /subscription/<pk>/process_payment/
 - POST /sumup/webhook/
+- GET /subscription/<pk>/whatsapp/?t=<token> (public, no auth)
 
 Behavior notes:
 
 - `status` is computed primarily from local subscription/transaction state and can expose a pre-payment block (`payment_blocked=true`, reason `sold_out`) when both Main and Waiting lists are full.
 - in sold-out conditions, `process_payment` returns `409` with `status=BLOCKED` and `error=sold_out`, except when the remote checkout is already confirmed as paid (in that case it finalizes local transactions and returns success).
+- `process_payment` accepts an optional body field `t` (the per-subscription token). A `PAID` response additionally carries `assigned_list` (only when `notify_list`), `is_main_list`, `whatsapp_enabled` and, only when `t` is valid and the subscription is eligible, `whatsapp_link_url` (built by `_paid_result_extras`).
+- `subscription/<pk>/whatsapp/` returns `{whatsapp_group_link, event_name}` with the event's *current* link when the token is valid and the subscription is eligible; any other case (unknown pk, bad/missing token, not eligible, feature off) returns `404 {"error": "not_available"}`.
 
 ### 3.5 Organizer Utilities
 
@@ -127,6 +138,8 @@ Additional rules:
 3. `selected_services` validation against event catalog
 4. subscription persistence
 5. transaction sync for fee/deposit/services
+
+Transaction sync goes through `_upsert_transaction` in `backend/events/views.py`: an existing transaction of the same type is updated in place when account or amount changes (`Transaction.save()` rebalances accounts) instead of being deleted and recreated, so its `created_at` — and therefore the subscription's `paid_at` — keeps the original payment time. Same account and amount is a no-op.
 
 ### 5.2 Public Form Flow
 
@@ -195,6 +208,51 @@ Operational note:
 - with current backend logic, "services only" is allowed only if fee is already reimbursed
 - frontend action rendering enables reimburse menu also for service-only events (no fee/deposit), based on presence of configured event services and paid service status on subscription
 
+### 5.7 WhatsApp Group Link Sharing
+
+Per-event option to share a WhatsApp group invite with subscribers that hold a spot. Event-level setting, independent of `enable_form`: configured in `EventModal` by `WhatsAppBlock` (switch + link field, rendered for every event, after the additional fields and before the form settings); `Event.clean()` requires a non-empty link starting with `https://chat.whatsapp.com/` (`WHATSAPP_GROUP_LINK_PREFIX`) when `enable_whatsapp_link` is true, and the frontend applies the same check before submit.
+
+Eligibility (`_whatsapp_link_eligible`): sharing active (flag on and link non-empty) AND either
+
+1. subscription total (`cost + deposit + selected services`) is 0, or
+2. payment fully registered (`_subscription_payment_already_registered`) AND subscription currently in the Main List.
+
+Partial office payments and waiting-list payers are not eligible.
+
+Security model:
+
+- the raw group link is never exposed by public form/event endpoints; subscribers receive a stable access URL `{SCHEME_HOST}/event/<event_id>/whatsapp?subscriptionId=<pk>&t=<token>`
+- the token is `django.core.signing.Signer(salt='events.subscription.whatsapp').signature(str(pk))`, compared with `constant_time_compare`; it exists because subscription pks are sequential
+- the same token is appended as `&t=` to online payment links in emails, so the payment page can request the WhatsApp URL after payment
+- the access URL resolves the event's current link at click time, so changing the link needs no resend
+
+Delivery (each subscriber receives it once per event; tracked by `additional_data['whatsapp_link_email_sent']`). Invariant: every eligible subscriber with a recipient email receives it; `_maybe_send_whatsapp_link_email` is idempotent and re-checks eligibility, so it is safe to call after any mutation.
+
+1. free event: shown on the form result page (`WhatsAppGroupCard`) and included in the form confirmation email
+2. online payment that lands in the Main List: shown on the result page and included in the payment confirmation email (or sent by `_maybe_send_whatsapp_link_email` after `_handle_payment_status`, including webhook-only confirmations)
+3. office subscription create/PATCH: `_handle_payment_status` always calls `_maybe_send_whatsapp_link_email` (`send_whatsapp=True`), independently of `send_payment_email` and of whether a payment was registered (covers free events and PATCHes that move a paid subscription into the Main List)
+4. `move-subscriptions`: `_handle_payment_status(send_whatsapp=False)`, then `transaction.on_commit(_maybe_send_whatsapp_link_email)` for every moved subscription, so a rolled-back batch sends nothing
+5. subscription moved to another event (`move-subscriptions` or PATCH `event`): `_reset_whatsapp_link_sent` clears the flag, so the target event's link is sent if eligible
+6. any event PATCH that leaves sharing active: `_send_whatsapp_links_for_event` backfills every eligible subscriber without the flag (background thread unless `CHECKOUT_BACKFILL_ASYNC=False`); already-notified subscribers are skipped, so a link change sends nothing
+
+Not delivered: subscriptions without a recipient email (`_subscription_recipient_email` empty, e.g. office externals); failed sends are not retried until the next mutation or event PATCH.
+
+Frontend pieces:
+
+- `frontend/src/Pages/events/EventWhatsApp.jsx` (route `/event/:id/whatsapp`): calls the resolve endpoint and redirects with `window.location.replace`
+- `frontend/src/Components/events/WhatsAppGroupCard.jsx`: button + QR code (desktop only) built with `qrcode.react`
+- `EventForm` -> `EventFormResult` -> `EventPayment` pass `accessToken` through router state; `EventPayment` also reads `t` from the query string and, after the SumUp widget reports paid, re-calls `process_payment` with `t` to get list placement and the link
+
+### 5.8 Subscriber List Ordering
+
+`EventListAccordions.jsx` sorts each list client-side with a per-list "Ordina per" selector and asc/desc toggle (state `sortByList`, keyed by list id; default `subscribed_at` desc):
+
+- `subscribed_at` (form/subscription time)
+- `paid_at` (only offered when the event has cost, deposit or services)
+- `name_surname` / `surname_name` (profile name, then `external_first_name`/`external_last_name`, then `external_name`; Italian locale compare)
+
+Missing values always sort last; ties break on subscription id. When the event has payments, a "Pagato il" column shows `paid_at` (`DD/MM/YYYY HH:mm`), which is also included in copied rows. The backend still returns subscriptions ordered by `-created_at`.
+
 ## 6. Dynamic Field Schema
 
 `Event.fields` contains two logical blocks:
@@ -230,6 +288,8 @@ Invarianti:
 2. inconsistent payment state between events and treasury
 3. incomplete handling of external subscribers in downstream flows
 4. regressions in dynamic-schema validation
+5. WhatsApp invite links can be forwarded once opened; organizers are advised to enable "approve new participants" in the WhatsApp group
+6. reintroducing delete+recreate in `_upsert_transaction` would reset `paid_at`
 
 ## 10. Testing Requirements
 
@@ -242,6 +302,8 @@ Invarianti:
 7. unified reimbursement: coherent icon/checkbox disable logic and selection validation
 8. partial reimbursement: per-item error messages and selective retry
 9. form submit vs payment separation: form list insertion must stay allowed, payment blocked only on full Main+Waiting
+10. `paid_at` exposure and preservation on payment-account change (`SubscriptionPaidAtTests`)
+11. WhatsApp link eligibility, token checks, email delivery paths, event-PATCH backfill, PATCH validation, event-level config without form, office free/no-payment-email paths, event change reset (`WhatsAppGroupLinkTests`)
 
 Test reference: `backend/events/tests.py`.
 
@@ -267,3 +329,8 @@ For AI-agent analysis/verification, use these files as primary references:
 ## 13. Database Compatibility (2026-09-14)
 
 Some local or legacy databases may still contain obsolete payment confirmation columns on `events_event`; these are not part of the current `Event` model and must be removed or aligned during database maintenance rather than handled in application code.
+
+## 14. Recent Features (2026-10)
+
+1. PR #82: subscriber list ordering and `paid_at` / "Pagato il" column (5.8); `_upsert_transaction` now updates in place (5.1).
+2. PR #88: WhatsApp group link sharing (5.7); new model fields `enable_whatsapp_link`, `whatsapp_group_link` (migration `0003_event_whatsapp_group_link`; migrations are gitignored and generated on deploy by `makemigrations`); new frontend dependency `qrcode.react`.
