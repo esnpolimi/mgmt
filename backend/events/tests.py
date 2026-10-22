@@ -2803,6 +2803,138 @@ class WhatsAppGroupLinkTests(EventsBaseTestCase):
 		self.assertEqual(changed.status_code, 200)
 		self.assertEqual(len(mail.outbox), 1)
 		self.assertEqual(self._resolve(sub, self._token(sub)).data["whatsapp_group_link"], WA_LINK_NEW)
+	def test_link_is_event_level_and_works_without_form(self):
+		creator = _create_user(_create_profile("creator_wa@esnpolimi.it"))
+		creator.user_permissions.add(self.perm_add_event, self.perm_add_subscription)
+		self.authenticate(creator)
+		created = self.client.post("/backend/event/", {
+			"name": "No Form WA Event",
+			"date": str(timezone.now().date()),
+			"subscription_start_date": (timezone.now() - timedelta(days=1)).isoformat(),
+			"subscription_end_date": (timezone.now() + timedelta(days=1)).isoformat(),
+			"cost": "10.00",
+			"enable_form": False,
+			"enable_whatsapp_link": True,
+			"whatsapp_group_link": WA_LINK,
+			"lists": [{"name": "Main List", "capacity": 10, "is_main_list": True}],
+		}, format="json")
+		self.assertEqual(created.status_code, 200)
+		event = Event.objects.get(name="No Form WA Event")
+		self.assertFalse(event.enable_form)
+		self.assertTrue(event.enable_whatsapp_link)
+		self.assertEqual(event.whatsapp_group_link, WA_LINK)
+
+		account = _create_account("Cassa WA", user=creator)
+		profile = _create_profile("office_wa@uni.it", is_esner=False)
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": event.lists.get().pk,
+			"account_id": account.pk, "status_quota": "paid",
+		}, format="json")
+		self.assertEqual(response.status_code, 200)
+		sub = Subscription.objects.get(pk=response.data["id"])
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.assertTrue(any("WhatsApp" in m.alternatives[0][0] for m in mail.outbox))
+
+
+	def _office_staff(self, email):
+		staff = _create_user(_create_profile(email))
+		staff.user_permissions.add(self.perm_add_subscription, self.perm_change_subscription, self.perm_change_event)
+		self.authenticate(staff)
+		return staff
+
+	def _wa_mails(self, recipient):
+		return [m for m in mail.outbox if recipient in m.to and "WhatsApp" in m.alternatives[0][0]]
+
+	def test_office_subscription_on_free_event_gets_link_in_any_list(self):
+		self._office_staff("office_free_wa@esnpolimi.it")
+		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		_create_event_list(event)
+		waiting = _create_event_list(event, name="Waiting List", is_main_list=False, is_waiting_list=True)
+		profile = _create_profile("free_office_wa@uni.it", is_esner=False)
+
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": waiting.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(Subscription.objects.get(pk=response.data["id"]).additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(len(self._wa_mails("free_office_wa@uni.it")), 1)
+
+	def test_office_payment_sends_link_even_with_payment_email_disabled(self):
+		staff = self._office_staff("office_nomail_wa@esnpolimi.it")
+		account = _create_account("Cassa NoMail", user=staff)
+		event = _create_event(cost=10, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		main_list = _create_event_list(event)
+		profile = _create_profile("nomail_wa@uni.it", is_esner=False)
+
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": main_list.pk,
+			"account_id": account.pk, "status_quota": "paid", "send_payment_email": False,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(mail.outbox), 1)  # WhatsApp invite only, no payment confirmation
+		self.assertEqual(mail.outbox[0].subject, f"{event.name} - WhatsApp group")
+
+	def test_paid_outside_main_list_waits_until_patched_into_main(self):
+		staff = self._office_staff("office_patch_wa@esnpolimi.it")
+		account = _create_account("Cassa Patch", user=staff)
+		event = _create_event(cost=10, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		main_list = _create_event_list(event)
+		waiting = _create_event_list(event, name="Waiting List", is_main_list=False, is_waiting_list=True)
+		profile = _create_profile("patch_wa@uni.it", is_esner=False)
+
+		created = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": waiting.pk,
+			"account_id": account.pk, "status_quota": "paid",
+		}, format="json")
+		self.assertEqual(created.status_code, 200)
+		self.assertEqual(self._wa_mails("patch_wa@uni.it"), [])
+
+		patched = self.client.patch(f"/backend/subscription/{created.data['id']}/", {
+			"list": main_list.pk, "account_id": account.pk,
+			"status_quota": "paid", "status_cauzione": "pending",
+		}, format="json")
+		self.assertEqual(patched.status_code, 200)
+		self.assertEqual(len(self._wa_mails("patch_wa@uni.it")), 1)
+
+	def test_move_to_another_event_sends_that_events_link(self):
+		self._office_staff("mover_event_wa@esnpolimi.it")
+		source = _create_event(name="WA Source", enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		_create_event_list(source)
+		target = _create_event(name="WA Target", enable_whatsapp_link=True, whatsapp_group_link=WA_LINK_NEW)
+		target_main = _create_event_list(target)
+		sub = Subscription.objects.create(
+			profile=_create_profile("mover_event_sub@uni.it", is_esner=False), event=source,
+			list=source.lists.get(), additional_data={"whatsapp_link_email_sent": True},
+		)
+
+		with self.captureOnCommitCallbacks(execute=True):
+			moved = self.client.post("/backend/move-subscriptions/", {
+				"subscriptionIds": [sub.pk], "targetListId": target_main.pk, "targetEventId": target.pk,
+			}, format="json")
+
+		self.assertEqual(moved.status_code, 200)
+		self.assertEqual(len(self._wa_mails("mover_event_sub@uni.it")), 1)
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+
+	def test_any_event_edit_backfills_while_sharing_active(self):
+		self._office_staff("editor_backfill_wa@esnpolimi.it")
+		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		sub = Subscription.objects.create(
+			profile=_create_profile("missed_wa@uni.it", is_esner=False), event=event, list=_create_event_list(event),
+		)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {"description": "updated"}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.client.patch(f"/backend/event/{event.pk}/", {"description": "again"}, format="json")
+		self.assertEqual(len(self._wa_mails("missed_wa@uni.it")), 1)
+
+
 class SubscriptionPaidAtTests(EventsBaseTestCase):
 	"""Tests for the paid_at field used to sort subscriptions by payment time."""
 
