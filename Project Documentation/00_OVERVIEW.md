@@ -47,6 +47,7 @@ The system covers ESN Polimi core processes:
 - treasury operations (accounts, transactions, export)
 - dynamic homepage content
 - public WhatsApp registration with audit trail
+- per-event WhatsApp group link sharing with eligible subscribers (events module)
 - maintenance state management
 
 ## 2. Architecture Snapshot
@@ -184,6 +185,8 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 4. Dynamic event fields must respect the expected JSON schema.
 5. External flows without profile (external subscribers) must always be handled in reimbursements.
 6. ESNcard revocation must preserve the original emission transaction and register a dedicated refund transaction.
+7. Subscription payment transactions are updated in place, never deleted and recreated, so `paid_at` keeps the original payment time.
+8. An event WhatsApp group link is only revealed through the signed per-subscription token to eligible subscribers (see 03_EVENTS_MODULE.md 5.7).
 
 ## 10. AI/Automation Notes
 
@@ -191,6 +194,7 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 2. For payments, evaluate `events` and `treasury` logic together.
 3. Do not assume `Subscription.profile` is always set.
 4. In content, only Board and `can_manage_content` enable management actions.
+5. Two distinct WhatsApp features exist: content `whatsapp-config`/`whatsapp-register` (association group registration) and events `enable_whatsapp_link` (per-event group invite). Do not conflate them.
 
 ## 11. Documentation Index
 

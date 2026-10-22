@@ -611,6 +611,13 @@ def _mark_whatsapp_link_sent(subscription):
     subscription.save(update_fields=['additional_data'])
 
 
+def _reset_whatsapp_link_sent(subscription):
+    """The sent flag refers to the current event's group: clear it when the subscription changes event."""
+    ad = subscription.additional_data or {}
+    ad.pop('whatsapp_link_email_sent', None)
+    subscription.additional_data = ad
+
+
 def _maybe_send_whatsapp_link_email(subscription):
     """Send the WhatsApp group invite once, as soon as the subscription becomes eligible."""
     try:
@@ -1004,11 +1011,14 @@ def _sync_service_transactions(*, subscription, account_id, executor, allow_dele
 
 
 def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, services_status=None,
-                           executor, allow_delete=True, auto_move_on_payment=True, send_email_on_payment=True):
+                           executor, allow_delete=True, auto_move_on_payment=True, send_email_on_payment=True,
+                           send_whatsapp=True):
     """
     Apply payment statuses for quota & deposit using unified logic.
     quota_status / deposit_status: 'paid' | other (delete if allow_delete)
     Guaranteed: subscription is a saved instance (has .pk).
+    The WhatsApp invite is sent whenever the subscription is eligible, independently of
+    send_email_on_payment and of whether a payment was registered (free events).
     Returns move_info if auto-move executed, else None.
     """
     event_obj = subscription.event
@@ -1071,6 +1081,7 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
 
     if send_email_on_payment and did_pay:
         _send_payment_confirmation_email(subscription)
+    if send_whatsapp:
         _maybe_send_whatsapp_link_email(subscription)
 
     return move_info
@@ -1148,7 +1159,6 @@ def event_detail(request, pk):
                 return Response({'error': 'Non hai i permessi per modificare questo evento.'}, status=403)
 
             previously_online_payment = bool(event.allow_online_payment)
-            previously_whatsapp = _whatsapp_sharing_active(event)
 
             # Validation logic is handled in the serializer
             serializer = EventCreationSerializer(
@@ -1169,8 +1179,10 @@ def event_detail(request, pk):
                         f"queued={stats['queued']} skipped={stats['skipped']}"
                     )
 
-                # Only on off -> on: a changed link needs no email, the stored URLs resolve to the current link
-                if not previously_whatsapp and _whatsapp_sharing_active(updated_event):
+                # Any edit can make subscribers eligible (sharing switched on, cost set to 0, ...).
+                # Already-notified subscribers are skipped, so a changed link sends nothing:
+                # the stored URLs resolve to the current link.
+                if _whatsapp_sharing_active(updated_event):
                     if getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True):
                         threading.Thread(
                             target=_send_whatsapp_links_for_event,
@@ -1371,8 +1383,12 @@ def _handle_subscription_detail_patch(request, sub, has_reimbursed):
 
     serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
     serializer.is_valid(raise_exception=True)
+    previous_event_id = sub.event_id
     with transaction.atomic():
         updated_sub = serializer.save()
+        if updated_sub.event_id != previous_event_id:
+            _reset_whatsapp_link_sent(updated_sub)
+            updated_sub.save(update_fields=['additional_data'])
         account_id = (
             mutable_data.get('account_id')
             or mutable_data.get('account')
@@ -1517,9 +1533,11 @@ def move_subscriptions(request):
                     raise ValidationError(
                         f"{subscription.external_name} è già registrato all'evento {target_event.name}")
 
+                if subscription.event_id != target_event.id:
+                    _reset_whatsapp_link_sent(subscription)
                 subscription.list = target_list
                 subscription.event = target_event
-                subscription.save(update_fields=['list', 'event'])
+                subscription.save(update_fields=['list', 'event', 'additional_data'])
 
                 # Re-sync payment transactions to reflect the new event economics
                 quota_tx = Transaction.objects.filter(
@@ -1545,12 +1563,12 @@ def move_subscriptions(request):
                     executor=request.user,
                     allow_delete=False,
                     auto_move_on_payment=False,
-                    send_email_on_payment=False
+                    send_email_on_payment=False,
+                    send_whatsapp=False,
                 )
 
-                # Waiting-list payers get the WhatsApp group once they reach the Main List
-                if target_list.is_main_list:
-                    transaction.on_commit(lambda s=subscription: _maybe_send_whatsapp_link_email(s))
+                # Sent after commit, so a failure later in the batch (rollback) sends nothing
+                transaction.on_commit(lambda s=subscription: _maybe_send_whatsapp_link_email(s))
 
         return Response({'message': "Iscrizioni spostate con successo"}, status=200)
     except ValidationError as e:
