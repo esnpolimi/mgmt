@@ -59,6 +59,12 @@ The system covers ESN Polimi core processes:
 - per-event WhatsApp group link sharing with eligible subscribers (events module)
 - maintenance state management
 
+Security maintenance:
+
+- container dependency installation uses binary-only Python wheels and disables npm lifecycle scripts
+- backend containers run as a non-root `app` user
+- the maintenance SSE endpoint accepts only `GET` requests
+
 ## 2. Architecture Snapshot
 
 ### 2.1 Backend

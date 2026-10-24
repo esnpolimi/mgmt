@@ -108,6 +108,7 @@ def _sse_event_generator():
     yield ": reconnect\n\n"
 
 
+@require_http_methods(["GET"])
 def maintenance_stream(request):
     """
     SSE endpoint. Clients hold this connection open to receive push alerts.

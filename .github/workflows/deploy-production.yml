@@ -106,7 +106,7 @@ jobs:
     - name: Build Frontend
       run: |
         cd frontend
-        npm ci
+        npm ci --ignore-scripts
         npm run build
         cd ..
     
