@@ -1304,6 +1304,63 @@ export default function EventModal({open, event, isEdit, onClose}) {
     }
 
     /* Form block */
+    /* WhatsApp group link block (event-level, independent of the form) */
+    const WhatsAppBlock = function WhatsAppBlock({dataRef}) {
+
+        const [localData, setLocalData] = useState(dataRef.current)
+
+        const setWhatsappField = function setWhatsappField(key, val) {
+            setLocalData({
+                ...localData,
+                [key]: val
+            })
+            dataRef.current[key] = val
+        }
+        const whatsappLink = (localData.whatsapp_group_link || '').trim();
+        const whatsappLinkInvalid = !!localData.enable_whatsapp_link && !whatsappLink.startsWith(WHATSAPP_LINK_PREFIX);
+
+        return (
+            <Grid size={{xs: 12}} sx={{mt: 3}}>
+                <FormControlLabel
+                    label={eventNames.enable_whatsapp_link}
+                    control={
+                        <Switch
+                            checked={!!localData.enable_whatsapp_link}
+                            onChange={e => setWhatsappField('enable_whatsapp_link', e.target.checked)}
+                            name="enable_whatsapp_link"
+                            color="primary"
+                        />
+                    }
+                />
+                {localData.enable_whatsapp_link && (
+                    <>
+                        <TextField
+                            label={eventNames.whatsapp_group_link}
+                            value={localData.whatsapp_group_link || ''}
+                            onChange={e => setWhatsappField('whatsapp_group_link', e.target.value)}
+                            fullWidth
+                            required
+                            sx={{mt: 1}}
+                            placeholder={`${WHATSAPP_LINK_PREFIX}...`}
+                            error={whatsappLinkInvalid}
+                            helperText={whatsappLinkInvalid ? `Il link deve iniziare con ${WHATSAPP_LINK_PREFIX}` : ' '}
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                            Il link è inviato via mail, una sola volta, a chi ha diritto a un posto: evento gratuito (qualsiasi lista),
+                            oppure pagamento completo (online o in ufficio) e iscrizione in Main List, anche se spostato in Main List
+                            in un secondo momento. Vale anche per le iscrizioni fatte in ufficio, indipendentemente dall&apos;invio della
+                            mail di pagamento. Con il form attivo, il link è mostrato anche alla fine del form agli iscritti già idonei.
+                            Salvando l&apos;evento con l&apos;opzione attiva, il link viene inviato a tutti gli idonei che non l&apos;hanno ancora ricevuto.
+                            Modificare il link lo aggiorna per tutti quelli che l&apos;hanno già ricevuto.
+                            Consigliato: attivare &quot;Approva nuovi partecipanti&quot; nelle impostazioni del gruppo WhatsApp,
+                            perché il link d&apos;invito può essere inoltrato.
+                        </Typography>
+                    </>
+                )}
+            </Grid>
+        )
+    }
+
     const FormBlock = function FormBlock({dataRef, errorsRef, hasSubscriptions, isEdit}) {
 
         const [localData, setLocalData] = useState(dataRef.current)
@@ -1343,16 +1400,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
             //Update ref
             dataRef.current.allow_online_payment = val
         }
-
-        const setWhatsappField = function setWhatsappField(key, val) {
-            setLocalData({
-                ...localData,
-                [key]: val
-            })
-            dataRef.current[key] = val
-        }
-        const whatsappLink = (localData.whatsapp_group_link || '').trim();
-        const whatsappLinkInvalid = !!localData.enable_whatsapp_link && !whatsappLink.startsWith(WHATSAPP_LINK_PREFIX);
 
         // Form field helpers
         const globalIndex = function globalIndex(ix) {
@@ -1616,44 +1663,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     <Typography variant="body2" color="text.secondary" sx={{mt: 1}}>
                         Questa nota sarà mostrata sotto il titolo del form pubblico.
                     </Typography>
-                    <Box sx={{mt: 2}}>
-                        <FormControlLabel
-                            label={eventNames.enable_whatsapp_link}
-                            control={
-                                <Switch
-                                    checked={!!localData.enable_whatsapp_link}
-                                    onChange={e => setWhatsappField('enable_whatsapp_link', e.target.checked)}
-                                    name="enable_whatsapp_link"
-                                    color="primary"
-                                />
-                            }
-                        />
-                        {localData.enable_whatsapp_link && (
-                            <>
-                                <TextField
-                                    label={eventNames.whatsapp_group_link}
-                                    value={localData.whatsapp_group_link || ''}
-                                    onChange={e => setWhatsappField('whatsapp_group_link', e.target.value)}
-                                    fullWidth
-                                    required
-                                    sx={{mt: 1}}
-                                    placeholder={`${WHATSAPP_LINK_PREFIX}...`}
-                                    error={whatsappLinkInvalid}
-                                    helperText={whatsappLinkInvalid ? `Il link deve iniziare con ${WHATSAPP_LINK_PREFIX}` : ' '}
-                                />
-                                <Typography variant="body2" color="text.secondary">
-                                    Evento gratuito: il link è mostrato alla fine del form di iscrizione e inviato nella mail di conferma.
-                                    Evento a pagamento: il link è inviato via mail quando l&apos;iscritto ha pagato tutto (online o in ufficio)
-                                    ed è in Main List, anche se viene spostato in Main List in un secondo momento. Viene mostrato anche
-                                    alla fine del form solo in caso di pagamento online con assegnazione diretta alla Main List.
-                                    Attivando l&apos;opzione su un evento con iscritti già idonei, il link viene inviato subito anche a loro.
-                                    Modificare il link lo aggiorna per tutti quelli che l&apos;hanno già ricevuto.
-                                    Consigliato: attivare &quot;Approva nuovi partecipanti&quot; nelle impostazioni del gruppo WhatsApp,
-                                    perché il link d&apos;invito può essere inoltrato.
-                                </Typography>
-                            </>
-                        )}
-                    </Box>
                     <FieldSection
                         title={"Campi form"}
                         description={"Campi richiesti nel form. Le risposte sono visualizzate nelle liste."}
@@ -2036,6 +2045,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
+                        <WhatsAppBlock dataRef={dataRef}/>
                         <FormBlock
                             key={subscriptionWindowVersion} // force remount so minDate updates when subscription start date changes
                             dataRef={dataRef}
