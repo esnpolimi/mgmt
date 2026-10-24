@@ -310,3 +310,8 @@ If `CPANEL_PYTHON_APP_ROOT` is not configured, the workflow defaults to:
 - Applied step-1 complexity refactor on events flows: extraction helpers in backend form-fields patch endpoint and frontend list accordion copy/render logic.
 - Applied step-2 complexity refactor: `event_form_submit` decomposed into 5 focused helpers (submitter resolution, duplicate check, link uploads, capacity assignment, SumUp checkout), full backend test suite (373 tests) verified green.
 - Applied step-3 complexity refactor: `subscription_detail` decomposed into focused helpers for reimbursement checks, PATCH payload normalization, auto-move response mapping, and DELETE transaction cleanup; events tests and full backend suite remain green.
+# Operational jobs
+
+Monthly log archiving is provided by the `archive_logs_to_drive` Django
+management command. See [08_LOG_ARCHIVE.md](./08_LOG_ARCHIVE.md) for the Drive
+folder structure and production crontab configuration.
