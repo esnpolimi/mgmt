@@ -1,6 +1,6 @@
 # Test Coverage Report - ESN Polimi Management
 
-Last update date: 2026-07-27  
+Last update date: 2026-10-22  
 Scope: Django backend (users, profiles, events, treasury, content)
 
 ## 1. Quality Scope
@@ -18,12 +18,13 @@ Methodology note:
 |---|---:|
 | backend/users/tests.py | 40 |
 | backend/users/test_integration.py | 14 |
-| backend/profiles/tests.py | 72 |
-| backend/events/tests.py | 117 |
-| backend/treasury/tests.py | 86 |
-| backend/content/tests.py | 43 |
+| backend/profiles/tests.py | 74 |
+| backend/events/tests.py | 139 |
+| backend/treasury/tests.py | 91 |
+| backend/content/tests.py | 45 |
+| backend/utils/tests.py | 2 |
 | backend/test_integration_e2e.py | 6 |
-| Total | 378 |
+| Total | 411 |
 
 ## 3. Functional Coverage Matrix
 
@@ -53,6 +54,8 @@ Methodology note:
 - sold-out handling: form submission stays allowed in Form List, payment blocked only when Main+Waiting are full
 - shared lists and move subscriptions
 - waivers and organizer utilities
+- `paid_at` exposure and preservation when the payment account changes
+- event WhatsApp group link: eligibility, signed token, email delivery paths, event-PATCH backfill, link validation, link configured without form, office free and no-payment-email delivery, event change reset
 
 ### 3.4 Treasury
 

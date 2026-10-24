@@ -69,12 +69,15 @@ Sequence:
 4. otherwise `process_payment` or webhook confirms `paid` status
 5. create local transactions (fee/deposit/services)
 6. payment-status alignment on subscription
+7. if event WhatsApp sharing is active and the subscription is in the Main List, the `PAID` response (with valid `t`) carries `whatsapp_link_url` and the link email is sent exactly once
 
 Test oracles:
 
 - idempotency on duplicate webhooks
 - no double accounting
 - form submit remains accepted even when payment is blocked by full Main+Waiting capacity
+- `paid_at` unchanged after the payment account is changed
+- WhatsApp link never returned without a valid token or to non-eligible subscriptions
 
 ### 2.4 Scenario D - Reimbursements (fee/deposit/services)
 
@@ -172,6 +175,7 @@ Minimum checklist for each release:
 8. transaction export
 9. CRUD content home
 10. whatsapp register end-to-end
+11. event WhatsApp group link: free-event form result, paid Main List result, move-to-Main email, office subscription (free or paid) email
 
 ## 5. Cross-Module Risk Register
 
