@@ -42,6 +42,19 @@ import {useAuth} from "../../Context/AuthContext";
 
 const WHATSAPP_LINK_PREFIX = 'https://chat.whatsapp.com/';
 
+const InfoLabel = ({label, description}) => (
+    <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+        <span>{label}</span>
+        <Tooltip
+            title={<Typography variant="body2" sx={{maxWidth: 420, whiteSpace: 'normal'}}>{description}</Typography>}
+            arrow
+            placement="top"
+        >
+            <InfoIcon fontSize="small" color="action" aria-label={`Informazioni su ${label}`}/>
+        </Tooltip>
+    </Box>
+);
+
 export default function EventModal({open, event, isEdit, onClose}) {
     const errorsRef = React.useRef({
         name: [false, ''],
@@ -257,7 +270,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Grid>
                     <Grid size={{xs: 12, md: 3}}>
                         <FormControlLabel
-                            label="Consenti iscrizione esterni"
+                            label={<InfoLabel label="Consenti iscrizione esterni" description="Permette di iscrivere anche persone che non hanno ancora un profilo nel gestionale."/>}
                             control={
                                 <Switch
                                     checked={!!localData.is_allow_external}
@@ -270,7 +283,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Grid>
                     <Grid size={{xs: 12, md: 3}}>
                         <FormControlLabel
-                            label="Notifica Lista assegnata nelle conferme via email"
+                            label={<InfoLabel label="Notifica Lista assegnata nelle conferme via email" description="Comunica nella email di conferma in quale lista è stata inserita la persona. Se disattivata, la lista non viene indicata."/>}
                             control={
                                 <Switch
                                     checked={!!localData.notify_list}
@@ -285,7 +298,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {(isBoardMember || isOrganizer || !isEdit) && (
                         <Grid size={{xs: 12, md: 3}}>
                             <FormControlLabel
-                                label="Rimborsi limitati agli Organizzatori"
+                                label={<InfoLabel label="Rimborsi limitati agli Organizzatori" description="Permette di effettuare i rimborsi solo agli organizzatori dell'evento e ai membri del Board."/>}
                                 control={
                                     <Switch
                                         checked={!!localData.reimbursements_by_organizers_only}
@@ -301,7 +314,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {isBoardMember && (
                         <Grid size={{xs: 12, md: 3}}>
                             <FormControlLabel
-                                label="Visibile solo ai Board Members"
+                                label={<InfoLabel label="Visibile solo ai Board Members" description="Fa vedere l'evento solo alle persone del Board. Gli altri utenti non lo vedranno."/>}
                                 control={
                                     <Switch
                                         checked={!!localData.visible_to_board_only}
@@ -708,12 +721,20 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
         return (
             <Box my={2}>
-                <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
-                    Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell&apos;organizzazione.<br/>
-                    I dati sono presi dal profilo Erasmus! Richiedi dati aggiornati tra i campi del Form di Iscrizione.<br/>
-                    {/* NEW: clarify combined formatting */}
-                    Numero Telefono e Numero WhatsApp includono automaticamente il prefisso (es: +39 3396793228).
+                <Typography variant="h6" gutterBottom sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                    Dati Anagrafici
+                    <Tooltip
+                        title={<Typography variant="body2" sx={{maxWidth: 420, whiteSpace: 'normal'}}>
+                            Questi dati possono essere mostrati nelle liste per aiutare gli ESNers a organizzare
+                            l&apos;evento. Vengono presi dal profilo Erasmus e potrebbero non essere aggiornati:
+                            per chiedere dati nuovi, aggiungi le domande nel Form di Iscrizione. Il prefisso viene
+                            aggiunto automaticamente ai numeri di telefono e WhatsApp (es: +39 3396793228).
+                        </Typography>}
+                        arrow
+                        placement="top"
+                    >
+                        <InfoIcon fontSize="small" color="action" aria-label="Informazioni sui dati anagrafici"/>
+                    </Tooltip>
                 </Typography>
                 <Select
                     multiple
@@ -1322,7 +1343,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
         return (
             <Grid size={{xs: 12}} sx={{mt: 3}}>
                 <FormControlLabel
-                    label={eventNames.enable_whatsapp_link}
+                    label={
+                        <InfoLabel
+                            label={eventNames.enable_whatsapp_link}
+                            description={'Invia il link del gruppo WhatsApp alle persone che possono partecipare: per gli eventi gratuiti basta essere iscritti; per quelli a pagamento servono il pagamento completo e la lista principale. Se cambi il link, chi lo ha già ricevuto userà il nuovo gruppo. Ti consigliamo di approvare manualmente i nuovi partecipanti, perché il link può essere inoltrato.'}
+                        />
+                    }
                     control={
                         <Switch
                             checked={!!localData.enable_whatsapp_link}
@@ -1345,16 +1371,6 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             error={whatsappLinkInvalid}
                             helperText={whatsappLinkInvalid ? `Il link deve iniziare con ${WHATSAPP_LINK_PREFIX}` : ' '}
                         />
-                        <Typography variant="body2" color="text.secondary">
-                            Il link è inviato via mail, una sola volta, a chi ha diritto a un posto: evento gratuito (qualsiasi lista),
-                            oppure pagamento completo (online o in ufficio) e iscrizione in Main List, anche se spostato in Main List
-                            in un secondo momento. Vale anche per le iscrizioni fatte in ufficio, indipendentemente dall&apos;invio della
-                            mail di pagamento. Con il form attivo, il link è mostrato anche alla fine del form agli iscritti già idonei.
-                            Salvando l&apos;evento con l&apos;opzione attiva, il link viene inviato a tutti gli idonei che non l&apos;hanno ancora ricevuto.
-                            Modificare il link lo aggiorna per tutti quelli che l&apos;hanno già ricevuto.
-                            Consigliato: attivare &quot;Approva nuovi partecipanti&quot; nelle impostazioni del gruppo WhatsApp,
-                            perché il link d&apos;invito può essere inoltrato.
-                        </Typography>
                     </>
                 )}
             </Grid>
@@ -1546,6 +1562,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             <>
                 <Grid size={{xs: 12, md: 4}} sx={{mt: 3}}>
                     <FormControlLabel
+                        label={<InfoLabel label="Abilita Form Iscrizione" description="Crea una pagina pubblica per raccogliere le iscrizioni online. Le nuove iscrizioni vengono messe prima in una lista provvisoria e, dopo il pagamento, passano nella lista principale o nella lista d'attesa."/>}
                         control={
                             <Switch
                                 checked={!!localData.enable_form}
@@ -1569,15 +1586,15 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 disabled={isEdit && hasSubscriptions}
                             />
                         }
-                        label="Abilita Form Iscrizione"
                     />
                 </Grid>
 
                 {localData.enable_form && (
                     <Alert severity="info" sx={{mt: 1}}>
-                        Abilitando il form viene creata automaticamente la lista &#34;Form List&#34;.
-                        Le iscrizioni online finiscono lì e saranno spostate automaticamente in Main/Waiting List al pagamento online,
-                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì.
+                        Attivando il form viene creata automaticamente una lista provvisoria per le iscrizioni online.
+                        Dopo il pagamento, le persone vengono spostate nella lista principale o nella lista d&apos;attesa.
+                        Per i pagamenti effettuati in ufficio, lo spostamento può essere fatto manualmente.
+                        Il nome della lista non può essere cambiato, ma la sua capienza sì.
                     </Alert>
                 )}
 
@@ -1633,7 +1650,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Grid>
                             <Grid size={{xs: 12, md: 4}} sx={{ml: 2}}>
                                 <FormControlLabel
-                                    label="Consenti pagamenti online"
+                                    label={<InfoLabel label="Consenti pagamenti online" description="Permette alle persone iscritte tramite il form di pagare online con SumUp. Attivandolo, viene preparato automaticamente il pagamento per le nuove iscrizioni idonee."/>}
                                     control={
                                         <Switch
                                             checked={!!localData.allow_online_payment}
