@@ -20,7 +20,7 @@
 """
 import re
 import os
-import random
+import secrets
 
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
@@ -120,7 +120,7 @@ class Command(BaseCommand):
             # Read all rows into a list
             rows = list(csv_reader)
             # Shuffle rows for random import order
-            random.shuffle(rows)
+            secrets.SystemRandom().shuffle(rows)
 
             # Process each row
             for row in rows:
