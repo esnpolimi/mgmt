@@ -40,6 +40,7 @@ Base path: /backend/
 
 Behavior:
 
+- accepts only `GET` requests
 - requires JWT access token in query parameter `token`
 - returns HTTP `403` when token is missing or invalid
 - sends a maintenance event when `notification_id` changes
