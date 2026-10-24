@@ -2178,6 +2178,7 @@ def _form_payment_blocked_by_esncard(event, profile, total_cost):
         event.allow_online_payment
         and total_cost > 0
         and profile
+        and not event.is_allow_external
         and _get_esncard_status(profile) != 'valid'
     )
 
@@ -2349,6 +2350,7 @@ def subscription_payment_status(_, pk):
         and payment_required
         and not _subscription_payment_already_registered(sub)
         and sub.profile
+        and not sub.event.is_allow_external
         and _get_esncard_status(sub.profile) != 'valid'
     )
     payment_blocked = bool(
@@ -2455,6 +2457,7 @@ def subscription_process_payment(request, pk):
             event.allow_online_payment
             and has_payable_amount
             and sub.profile
+            and not event.is_allow_external
             and not _subscription_payment_already_registered(sub)
             and _get_esncard_status(sub.profile) != 'valid'
         ):

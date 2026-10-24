@@ -10,7 +10,8 @@ import {
     FormControlLabel,
     Switch,
     TextField,
-    MenuItem
+    MenuItem,
+    Tooltip
 } from '@mui/material';
 import {
     PersonAdd as PersonAddIcon,
@@ -441,7 +442,11 @@ export default memo(function EventListAccordions({
             // Additional fields (keep magenta / purple)
             let additionalFieldColumns = showAdditionalColumns ? additionalFields.map((field, idx) => ({
                 accessorKey: `additional_field_${idx}`,
-                header: field.name,
+                header: field.name === 'payment_failed' ? (
+                    <Tooltip title="Indica che l'ultimo tentativo di pagamento online è fallito.">
+                        <span>Pagamento fallito</span>
+                    </Tooltip>
+                ) : field.name,
                 size: 50,
                 Cell: ({row}) => {
                     const sub = row.original;

@@ -1022,6 +1022,33 @@ class EventFormTests(EventsBaseTestCase):
 		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("events.views.create_sumup_checkout", return_value=("chk_external_expired_card", {}))
+	def test_event_form_submit_allows_expired_esncard_for_external_event(self, mock_create_checkout):
+		event = _create_event(
+			enable_form=True,
+			is_allow_external=True,
+			allow_online_payment=True,
+			cost=10,
+		)
+		_create_event_list(event, name="Form List", is_main_list=False)
+		_create_event_list(event, name="Main List", is_main_list=True, capacity=0)
+		profile = _create_profile("expired-external-event@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=profile, number="FORM-EXPIRED-EXTERNAL-001")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": profile.email,
+			"form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["success"])
+		self.assertFalse(response.data["payment_blocked"])
+		self.assertEqual(response.data["checkout_id"], "chk_external_expired_card")
+		mock_create_checkout.assert_called_once()
+		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_requires_verified_email(self):
 		event = _create_event(enable_form=True)
 		_create_event_list(event, name="Form List", is_main_list=False)
