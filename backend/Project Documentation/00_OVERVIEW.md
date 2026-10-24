@@ -172,7 +172,24 @@ Primary sensitive variables:
 - SUMUP_WEBHOOK_SECRET
 - SUMUP_PAY_TO_EMAIL
 - SUMUP_MERCHANT_CODE
+- SUMUP_SANDBOX_CLIENT_ID
+- SUMUP_SANDBOX_CLIENT_SECRET
+- SUMUP_SANDBOX_API_KEY
+- SUMUP_SANDBOX_WEBHOOK_SECRET
+- SUMUP_SANDBOX_PAY_TO_EMAIL
+- SUMUP_SANDBOX_MERCHANT_CODE
+- SUMUP_API_BASE_URL (optional; defaults to `https://api.sumup.com`)
 - SENTRY_DSN
+
+SumUp is environment-isolated by `DJANGO_ENV`: development and test settings use
+the sandbox credential prefix (`SUMUP_SANDBOX_*`), while production uses the live
+prefix (`SUMUP_*`). The API host is shared by SumUp; the merchant account and
+credentials select the environment. All backend token, checkout, and status
+requests use `SUMUP_API_BASE_URL`, so development cannot accidentally fall back
+to a live merchant configuration. Configure the SumUp webhook against the
+environment-specific checkout account. Sandbox payments do not move real funds;
+use SumUp's documented sandbox test cards, including the failure case where an
+amount of `11` is intentionally declined.
 
 In development, `backend/settings/dev.py` uses `utils.email_backend.DevelopmentEmailBackend`.
 Set `DEV_EMAIL_RECIPIENT` in `.env.development` to the developer's address. Every email keeps
