@@ -60,6 +60,7 @@ Attributes:
 - selected_services
 - created_by_form
 - sumup_checkout_id, sumup_transaction_id
+- `additional_data['payment_failed']`: technical flag shown in the subscriber table as "Pagamento fallito"; it indicates that the latest online payment attempt failed and is cleared when a new checkout is created.
 
 Computed serializer fields (`SubscriptionSerializer`):
 
@@ -166,7 +167,9 @@ Transaction sync goes through `_upsert_transaction` in `backend/events/views.py`
 
 ### 5.4 ESNcard Gate for Online Payment
 
-Users can submit the event form with an expired or absent ESNcard. When online payment starts, payment status and payment confirmation verify the latest ESNcard. Invalid cards block payment and show an explanatory renewal message.
+For events that are not open to external participants, users can submit the event form with an expired or absent ESNcard. When online payment starts, payment status and payment confirmation verify the latest ESNcard. Invalid cards block payment and show an explanatory renewal message.
+
+For events open to external participants, the ESNcard gate is disabled: registered profiles with expired or absent cards can submit the form and complete online payment like any other participant.
 
 Public form submission checks ESNcard eligibility before creating a SumUp checkout, so blocked users never receive a remote checkout link.
 
