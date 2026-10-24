@@ -824,7 +824,9 @@ export default memo(function EventListAccordions({
                     num = phNumber;
                 }
                 if (!num) return '';
-                let full = `${prefix || ''}${num}`;
+                let full = prefix && !num.replace(/\s+/g, '').startsWith(prefix.replace(/\s+/g, ''))
+                    ? `${prefix}${num}`
+                    : num;
                 full = full.replace(/\s+/g, '');
                 if (full && !full.startsWith('+') && /^\d+$/.test(full)) {
                     full = '+' + full;
