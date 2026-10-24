@@ -29,6 +29,15 @@ The `staging` branch is used for manual testing after automatic checks pass.
 Validated changes are promoted from `development` to `staging`, and then to
 `main` for production.
 
+### 0.1 AI-assisted development
+
+The repository enables Ponytail for all GitHub Copilot Chat users through
+[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md).
+The same rules are available as the local
+[Ponytail skill](../../.github/skills/ponytail/SKILL.md), so supported
+skill-capable agents can load the shared workflow from the repository.
+Changes to these files apply to future sessions after the repository is pulled.
+
 The GitHub Actions backend test workflow runs on every pull request targeting
 the project's integration branches (`development`, `staging`, or `main`),
 independently of the source branch. It also runs on every push to `development`.
