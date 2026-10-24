@@ -5,6 +5,8 @@ import {fetchCustom} from '../../api/api';
 
 const SOLD_OUT_MESSAGE = "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. " +
     "Thank you for filling out the form. Please wait for any notifications from the ESN team.";
+const IS_DEVELOPMENT = import.meta.env.DEV;
+const SUMUP_TEST_CARDS_URL = 'https://developer.sumup.com/online-payments/testing';
 
 // Result-page state from a PAID process_payment response (null when the confirmation call failed)
 const paidResultState = (resp, subscriptionId, assignedList) => ({
@@ -204,7 +206,18 @@ export default function EventPayment() {
 
     return (
         <Container maxWidth="sm" sx={{mt: 8}}>
-            <Typography variant="h4" align="center" gutterBottom>Event Payment</Typography>
+            <Typography variant="h4" align="center" gutterBottom>
+                {IS_DEVELOPMENT ? 'Ambiente di testing - Sandbox' : 'Event Payment'}
+            </Typography>
+            {IS_DEVELOPMENT && (
+                <Alert severity="info" sx={{mt: 2}}>
+                    Ambiente di testing - Sandbox. Usa le carte di test indicate nella{' '}
+                    <a href={SUMUP_TEST_CARDS_URL} target="_blank" rel="noreferrer">
+                        documentazione SumUp
+                    </a>
+                    .
+                </Alert>
+            )}
             {status === 'init' && (
                 <Box sx={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2}}>
                     <CircularProgress />

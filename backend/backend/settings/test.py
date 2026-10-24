@@ -130,9 +130,12 @@ GOOGLE_DRIVE_FOLDER_ID = 'dummy'
 GOOGLE_SERVICE_ACCOUNT_FILE = BASE_DIR / 'dummy.json'
 SUMUP_CLIENT_ID = 'dummy'
 SUMUP_CLIENT_SECRET = 'dummy'
+SUMUP_API_KEY = 'dummy'
 SUMUP_WEBHOOK_SECRET = 'dummy'
 SUMUP_PAY_TO_EMAIL = 'dummy@test.com'
 SUMUP_MERCHANT_CODE = 'dummy'
+SUMUP_ENVIRONMENT = 'sandbox'
+SUMUP_API_BASE_URL = 'https://api.sumup.com'
 
 SCHEME_HOST = 'http://localhost:3000'
 SESSION_COOKIE_SECURE = False

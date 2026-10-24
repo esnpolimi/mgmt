@@ -12,6 +12,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from events.models import Event, EventList, Subscription, EventOrganizer
+from events import views as event_views
 from profiles.models import Profile
 from treasury.models import Account, ESNcard, Transaction
 
@@ -1153,6 +1154,14 @@ class PaymentStatusTests(EventsBaseTestCase):
 class SumUpWebhookTests(EventsBaseTestCase):
 	"""Tests for SumUp webhook endpoint (mocked)."""
 
+	@override_settings(SUMUP_API_KEY="sandbox-api-key")
+	@patch("events.views.requests.post")
+	def test_sumup_api_key_skips_oauth_token_request(self, mock_post):
+		event_views._SUMUP_TOKEN_CACHE.update({"token": None, "expires_at": 0})
+
+		self.assertEqual(event_views.get_sumup_access_token(), "sandbox-api-key")
+		mock_post.assert_not_called()
+
 	@patch("events.views.requests.get")
 	@patch("events.views.get_sumup_access_token")
 	def test_sumup_webhook_marks_paid(self, mock_token, mock_get):
@@ -1176,6 +1185,10 @@ class SumUpWebhookTests(EventsBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["status"], "paid")
+		self.assertEqual(
+			mock_get.call_args.args[0],
+			"https://api.sumup.com/v0.1/checkouts/chk_1",
+		)
 
 
 class EventsListEdgeCaseTests(EventsBaseTestCase):

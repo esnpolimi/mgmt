@@ -211,6 +211,23 @@ Unified UI Orchestration (single icon):
 4. on partial success, each item keeps its own state and can be retried
 5. per-item error reason is propagated to client for guided retry
 
+### 5.5 SumUp Online Payments
+
+Online event payments use SumUp Checkout and are selected by environment:
+
+- development/test use the sandbox merchant and `SUMUP_SANDBOX_*` credentials
+- production uses the live merchant and `SUMUP_*` credentials
+- when `SUMUP_*_API_KEY` is configured, backend requests authenticate directly
+  with that key; OAuth client credentials are used only as a fallback
+- checkout creation, token acquisition, status polling, and webhook confirmation
+  all use `SUMUP_API_BASE_URL` (default `https://api.sumup.com`)
+- sandbox credentials must belong to a separate SumUp sandbox merchant account;
+  sandbox transactions do not move real funds
+- use SumUp's sandbox test cards to exercise successful, failed, and 3-D Secure
+  scenarios
+- the frontend labels development payments as `Ambiente di testing - Sandbox`
+  and links to SumUp's test-card documentation
+
 ## 6. Query, Filters and Export
 
 `transactions` list supports:
