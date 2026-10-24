@@ -29,6 +29,7 @@ Main business attributes:
 - Event editor shows a concise explanation of WhatsApp sharing in an information tooltip next to the sharing toggle.
 - Event editor shows explanations for event options and profile data next to their labels through information tooltips.
 - Generated release forms keep the personal-data section bilingual, while the waiver and privacy text are written in English.
+- vCard contact exports avoid duplicating phone and WhatsApp prefixes already included in profile data.
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
 
