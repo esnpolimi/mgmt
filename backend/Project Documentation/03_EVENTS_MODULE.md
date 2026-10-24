@@ -28,6 +28,7 @@ Main business attributes:
 - WhatsApp group sharing: `enable_whatsapp_link`, `whatsapp_group_link` (see 5.7; unrelated to the content-module `whatsapp-register` flow)
 - Event editor shows a concise explanation of WhatsApp sharing in an information tooltip next to the sharing toggle.
 - Event editor shows explanations for event options and profile data next to their labels through information tooltips.
+- Generated release forms keep the personal-data section bilingual, while the waiver and privacy text are written in English.
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
 

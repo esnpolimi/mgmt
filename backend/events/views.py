@@ -1576,10 +1576,10 @@ def move_subscriptions(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_liberatorie_pdf(request):
-    def italian_date(dt):
+    def english_date(dt):
         if not dt:
             return "N/A"
-        return format_date(dt, format='d MMMM yyyy', locale='it')
+        return format_date(dt, format='d MMMM yyyy', locale='en')
 
     def display_na(value):
         return value if value not in [None, '', [], {}] else 'N/A'
@@ -1690,20 +1690,21 @@ def generate_liberatorie_pdf(request):
 
             # --- Waiver Text ---
             waiver_text_1 = f"""
-            La presente dichiarazione liberatoria dovrà essere letta e firmata, in calce alla stessa, in nome e per conto proprio, oltre che in nome e per conto
-            delle persone sotto elencate, nonchè dal legale responsabile qualora l'iscritto non sia maggiorenne (nato dopo il <b>{italian_date(age_limit_date)}</b>). La firma apposta
-            in fondo alla presente dichiarazione comporta la piena e consapevole lettura e comprensione del contenuto e la conferma della volontà di attenersi
-            alla stessa: sono a conoscenza dei rischi connessi riguardo alla mia partecipazione a questo pacchetto viaggio e alle relative attività collaterali.
-            Con la sottoscrizione della presente dichiaro di voler liberare ed esonerare, come in effetti libero ed esonero, qualsiasi persona dell'organizzazione
-            Erasmus Student Network Politecnico Milano, gli organizzatori dell'evento <b>"{event.name}" ({italian_date(event.date)})</b>, collettivamente
-            denominati organizzatori dell'evento, da tutte le azioni, cause qualsiasi procedimento giudiziario e arbitrale tra questi compresi ma non limitati a
-            quelli relativi al rischio di infortuni durante la disputa delle attività e al rischio di smarrimento di effetti personali per furto o per qualsiasi altra
-            ragione. Prima dell'iscrizione a questo pacchetto viaggio sarà mia cura e onere verificare le norme e le disposizioni che mi consentono di
-            partecipare al viaggio. Inoltre, con la sottoscrizione della presente, concedo agli organizzatori dell'evento la mia completa autorizzazione a tale
-            viaggio con foto, servizi filmati, TV, radio, videoregistrazioni e altri strumenti di comunicazione noti o sconosciuti, indipendentemente da chi li
-            abbia effettuati e a utilizzare gli stessi nel modo che verrà ritenuto più opportuno, con assoluta discrezione, per ogni forma di pubblicità,
-            promozione, annuncio, progetti di scambio o a scopo commerciale senza pretendere alcun rimborso di qualsiasi natura e senza richiedere alcuna
-            forma di ricompensa.
+            This release form must be read and signed at the bottom by the participant, on their own behalf and on behalf
+            of the persons listed below, and by the legal representative if the participant is underage (born after
+            <b>{english_date(age_limit_date)}</b>). By signing this release form, I confirm that I have fully and knowingly
+            read and understood its contents and agree to comply with it. I acknowledge the risks connected with my
+            participation in this travel package and its related activities.
+            By signing this release form, I agree to release and hold harmless every person belonging to Erasmus Student
+            Network Politecnico Milano and the organizers of the event <b>"{event.name}" ({english_date(event.date)})</b>,
+            collectively referred to as the event organizers, from any action, claim, legal or arbitration proceeding,
+            including but not limited to those relating to the risk of injury during the activities and the risk of loss
+            of personal belongings due to theft or any other reason. Before registering for this travel package, I will
+            personally verify the rules and provisions that allow me to take part in the trip. By signing this release
+            form, I also grant the event organizers my full authorization to use photographs, filmed material, television,
+            radio, video recordings and any other known or unknown means of communication relating to the trip, regardless
+            of who produced them, and to use them at their discretion for any form of advertising, promotion, announcement,
+            exchange project or commercial purpose, without requesting any reimbursement or compensation.
             """
             story.append(Paragraph(waiver_text_1, styles['Justify']))
             story.append(Spacer(1, 1 * cm))
@@ -1711,15 +1712,18 @@ def generate_liberatorie_pdf(request):
             story.append(Spacer(1, 1 * cm))
 
             privacy_text = """
-            <b>INFORMAZIONI AI SENSI DELLA LEGGE 675/96</b><br/>
-            ESN Politecnico Milano desidera informarla che la legge 675/96 prevede la tutela delle persone rispetto al trattamento dei dati
-            personali. In base alla legge, il trattamento che intendiamo effettuare utilizzando i suoi dati è possibile soltanto con il suo consenso scritto e:il trattamento verrà effettuato con sistemi
-            prevalentemente informatici;ai sensi della legge sulla privacy, il trattamento sarà svolto in base ai principi di correttezza, trasparenza e liceità, per consentire la tutela della riservatezza dei
-            suoi dati e del relativi diritti. Il rilascio dei suoi dati non è obbligatorio se non per le finalità legate alle prenotazioni in corso e in ogni caso avrà la possibilità di esercitare i diritti
-            riconosciuti dall'Art. 13 della legge in oggetto che prevedono in qualsiasi momento la verifica dell'esistenza dei suoi dati presso gli archivi cartacei ed informatici, dei criteri e degli scopi
-            del trattamento dei dati, richiedendo la verifica, cancellazione, aggiornamento ed opposizione al loro utilizzo. Il titolare del trattamento dei suoi dati è ESN Politecnico Milano, Via Bonardi
-            3, 20133, Milano. Acquisite le suddette informazioni, rese ai sensi dell'Art 10 della legge 675/96, acconsento al trattamento dei miei dati personali da parte di ESN Politecnico Milano.<br/><br/>
-            Accettazione: SI NO<br/><br/>
+            <b>PRIVACY INFORMATION PURSUANT TO LAW 675/96</b><br/>
+            ESN Politecnico Milano informs you that Law 675/96 protects individuals with regard to the processing of
+            personal data. Under this law, the processing of your data may only be carried out with your written consent.
+            The processing will be carried out mainly by computer systems and, in accordance with privacy legislation,
+            will follow the principles of fairness, transparency and lawfulness in order to protect the confidentiality
+            of your data and your related rights. Providing your data is not mandatory except for purposes connected with
+            current bookings. In any case, you may exercise the rights recognized by Article 13 of the above-mentioned law,
+            including the right at any time to verify the existence of your data in paper and electronic archives, the
+            criteria and purposes of its processing, and to request its verification, deletion, update or objection to its use.
+            The data controller is ESN Politecnico Milano, Via Bonardi 3, 20133, Milan. Having received the information
+            required under Article 10 of Law 675/96, I consent to the processing of my personal data by ESN Politecnico Milano.<br/><br/>
+            Consent: YES NO<br/><br/>
             Firma/Signature______________________
             """
             story.append(Paragraph(privacy_text, styles['Justify']))
