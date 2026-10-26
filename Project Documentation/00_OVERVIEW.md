@@ -63,8 +63,10 @@ Security maintenance:
 
 - frontend dependency installation disables npm lifecycle scripts
 - frontend containers install and run as the unprivileged `node` user
+- frontend container builds copy only the application files required at runtime
+- generated frontend bundles are excluded from SonarQube source analysis
 - backend containers run as a non-root `app` user
-- Python dependencies are installed from binary distributions where available
+- external Bootstrap stylesheets use Subresource Integrity
 - the maintenance SSE endpoint accepts only `GET` requests
 
 Reliability maintenance:
