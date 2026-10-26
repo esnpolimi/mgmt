@@ -62,8 +62,16 @@ The system covers ESN Polimi core processes:
 Security maintenance:
 
 - frontend dependency installation disables npm lifecycle scripts
+- frontend containers install and run as the unprivileged `node` user
 - backend containers run as a non-root `app` user
+- Python dependencies are installed from binary distributions where available
 - the maintenance SSE endpoint accepts only `GET` requests
+
+Reliability maintenance:
+
+- URL path normalization ignores malformed percent-encoded paths instead of
+  interrupting navigation
+- web-vitals loading failures are handled without creating an unhandled promise
 
 ## 2. Architecture Snapshot
 
