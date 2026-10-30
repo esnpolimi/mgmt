@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ContentSection, ContentLink, WhatsAppConfig
+from .models import ContentSection, ContentLink, WhatsAppConfig, WishlistSubmission
 
 
 class ContentLinkInline(admin.TabularInline):
@@ -47,3 +47,11 @@ class WhatsAppConfigAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.updated_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(WishlistSubmission)
+class WishlistSubmissionAdmin(admin.ModelAdmin):
+    list_display = ('email', 'first_name', 'last_name', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('email', 'first_name', 'last_name', 'message')
+    readonly_fields = ('profile', 'created_at', 'updated_at')

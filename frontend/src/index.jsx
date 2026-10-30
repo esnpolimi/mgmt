@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react";
-// console.log(location.hostname);
-if (location.hostname !== "localhost") {
+const isLocalHost = ["localhost", "127.0.0.1"].includes(location.hostname);
+
+if (!isLocalHost) {
     window.API_HOST = "https://mgmt.esnpolimi.it/backend";
     Sentry.init({
         dsn: "https://f7ee9b97bae2c35e767d8e156eb7b116@o4509581352828928.ingest.de.sentry.io/4509581461487696",
@@ -8,7 +9,7 @@ if (location.hostname !== "localhost") {
         environment: 'production'
     });
 }
-else window.API_HOST = "http://localhost:8000/backend";
+else window.API_HOST = `${location.protocol}//${location.hostname}:8000/backend`;
 // console.log("API_HOST set to " + window.API_HOST);
 
 

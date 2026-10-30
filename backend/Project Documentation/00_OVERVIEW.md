@@ -56,6 +56,8 @@ The system covers ESN Polimi core processes:
 - treasury operations (accounts, transactions, export)
 - dynamic homepage content
 - public WhatsApp registration with audit trail
+- public wishlist collection with Board-only review and status tracking
+- wishlist form sharing link and English public form interface
 - per-event WhatsApp group link sharing with eligible subscribers (events module)
 - maintenance state management
 

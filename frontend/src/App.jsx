@@ -28,6 +28,8 @@ import Profile from "./Pages/profiles/Profile.jsx";
 import UrlSanitizer from "./UrlSanitizer";
 import ContentManager from "./Pages/ContentManager.jsx";
 import WhatsAppForm from "./Pages/WhatsAppForm.jsx";
+import Wishlist from "./Pages/Wishlist.jsx";
+import WishlistSubmissions from "./Pages/WishlistSubmissions.jsx";
 
 /**
  * Inner shell rendered inside AuthProvider so that useMaintenanceNotification
@@ -53,6 +55,8 @@ function AppShell() {
                     <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                     <Route path='/esner_form' element={<ESNerForm/>}/>
                     <Route path='/whatsapp' element={<WhatsAppForm/>}/>
+                    <Route path='/wishlist' element={<Wishlist/>}/>
+                    <Route path='/wishlist-submissions' element={<ProtectedRoute requiredGroup="Board"><WishlistSubmissions/></ProtectedRoute>}/>
                     <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
                     <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
                     <Route path='/event/:id/formlogin' element={<EventFormLogin/>}/>
