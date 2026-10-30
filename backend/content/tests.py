@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from rest_framework.test import APITestCase
 
-from content.models import ContentSection, ContentLink, WhatsAppConfig
+from content.models import ContentSection, ContentLink, WhatsAppConfig, WishlistSubmission
 from profiles.models import Profile
 
 
@@ -49,6 +49,7 @@ class ContentBaseTestCase(APITestCase):
 		# Delete in correct order due to foreign key constraint
 		ContentLink.objects.all().delete()
 		ContentSection.objects.all().delete()
+		WishlistSubmission.objects.all().delete()
 		# Also clean up profiles and users to avoid conflicts
 		User.objects.all().delete()
 		Profile.objects.all().delete()
@@ -421,6 +422,62 @@ class ContentModelTests(ContentBaseTestCase):
 		self.assertEqual(link.order, 0)
 
 
+class WishlistTests(ContentBaseTestCase):
+    def test_public_lookup_returns_existing_profile(self):
+        profile = _create_profile('erasmus@example.com', is_esner=False)
+        response = self.client.get('/backend/content/wishlist-lookup/', {'email': profile.email})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['exists'])
+        self.assertEqual(set(response.data), {'exists'})
+
+    def test_public_lookup_returns_existing_esner_profile(self):
+        profile = _create_profile('esner@example.com', is_esner=True)
+        response = self.client.get('/backend/content/wishlist-lookup/', {'email': profile.email})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['exists'])
+        self.assertEqual(set(response.data), {'exists'})
+
+    def test_public_submission_requires_message(self):
+        response = self.client.post('/backend/content/wishlist/', {'email': 'new@example.com'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('message', response.data)
+
+    def test_public_submission_links_existing_erasmus_profile(self):
+        profile = _create_profile('erasmus@example.com', is_esner=False)
+        response = self.client.post('/backend/content/wishlist/', {
+            'email': profile.email,
+            'message': 'Idea viaggio',
+        })
+        self.assertEqual(response.status_code, 201)
+        submission = WishlistSubmission.objects.get()
+        self.assertEqual(submission.profile, profile)
+        self.assertEqual(submission.first_name, profile.name)
+
+    def test_public_submission_always_starts_as_new(self):
+        response = self.client.post('/backend/content/wishlist/', {
+            'email': 'new@example.com',
+            'message': 'Idea viaggio',
+            'status': 'DONE',
+        })
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(WishlistSubmission.objects.get().status, WishlistSubmission.Status.NEW)
+
+    def test_wishlist_list_is_board_only_and_status_can_change(self):
+        profile = _create_profile('board@example.com')
+        user = _create_user(profile)
+        user.groups.add(self.group_board)
+        WishlistSubmission.objects.create(email='new@example.com', message='Idea')
+        self.authenticate(user)
+        response = self.client.get('/backend/content/wishlist-submissions/')
+        self.assertEqual(response.status_code, 200)
+        submission_id = response.data[0]['id']
+        response = self.client.patch('/backend/content/wishlist-submissions/', {
+            'id': submission_id, 'status': 'DONE',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'DONE')
+
+
 class ContentSectionDetailEdgeCaseTests(ContentBaseTestCase):
 	"""Edge case tests for section detail operations."""
 
@@ -767,4 +824,3 @@ class WhatsAppEndpointsTests(ContentBaseTestCase):
 		self.assertIn("has not been configured", response.data["detail"])
 		mock_send_mail.assert_not_called()
 		mock_append_log.assert_called_once_with(self.registration_payload, "Errore: link WhatsApp non configurato")
-

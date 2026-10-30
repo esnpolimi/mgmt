@@ -12,6 +12,7 @@ import {
     ExpandLess,
     ExpandMore,
     Edit as EditIcon,
+    FavoriteBorder as WishlistIcon,
 } from "@mui/icons-material";
 // import HomeRepairServiceIcon from '@mui/icons-material/HomeRepairService';
 import LogoutButton from './LogoutButton';
@@ -37,6 +38,7 @@ export default function Sidebar() {
         {text: "Tesoreria", icon: <AccountBalanceIcon/>, path: "/treasury", requiredPermission: "change_account"},
         {text: "Eventi", icon: <EventIcon/>, path: "/events"},
         {text: "Gestione Contenuti", icon: <EditIcon/>, path: "/content-manager", requiredPermission: "manage_content"},
+        {text: "Wishlist", icon: <WishlistIcon/>, path: "/wishlist-submissions", requiredGroup: "Board"},
         {
             text: "Profili",
             icon: <PersonIcon/>,

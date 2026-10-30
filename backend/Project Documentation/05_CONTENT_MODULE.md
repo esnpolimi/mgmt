@@ -10,6 +10,7 @@ Responsibilities:
 - authorization enforcement for content managers
 - centralized WhatsApp link configuration
 - public registration with validation, email delivery, and CSV audit on Drive
+- public wishlist submissions and a Board-only review table with status tracking
 
 ## 2. Domain Model
 
@@ -69,6 +70,26 @@ Behavior note:
 
 - GET|PATCH /whatsapp-config/
 - POST /whatsapp-register/
+
+### 3.4 Wishlist APIs
+
+- GET /wishlist-lookup/?email=<email>: public profile existence lookup
+- POST /wishlist/: public wishlist submission
+- GET|PATCH /wishlist-submissions/: Board-only list and status updates
+
+Wishlist submissions store email, optional new-contact details, free text, matched Erasmus or ESNer profile,
+and status (`NEW`, `IN_PROGRESS`, `DONE`).
+
+The public wishlist form is available in English at `/wishlist`; Board members can copy its URL
+from the top of the Board submissions page for sharing.
+Lookup and submission errors are displayed directly on the public form.
+The public form includes bottom spacing after the submit action for comfortable page completion.
+The Board submissions page provides bottom spacing, explains status editing through a tooltip next to
+the Wishlist title,
+and truncates long ideas with a dialog for viewing the complete text.
+The frontend API host resolves both `localhost` and `127.0.0.1` to the local backend.
+The public lookup validates email addresses through Django REST Framework serializers and matches
+all profiles, including both Erasmus and ESNer accounts.
 
 ## 4. Permission Model
 
