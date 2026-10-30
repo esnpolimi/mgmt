@@ -8,14 +8,16 @@ import sentry_sdk
 from django.conf import settings
 from django.core.mail import send_mail
 from googleapiclient.http import MediaIoBaseUpload
-from rest_framework import viewsets, permissions
+from rest_framework import serializers, viewsets, permissions
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status as drf_status
-from .models import ContentSection, ContentLink, WhatsAppConfig
+from .models import ContentSection, ContentLink, WhatsAppConfig, WishlistSubmission
+from profiles.models import Profile
 from .serializers import (
     ContentSectionSerializer, ContentLinkSerializer,
     WhatsAppConfigSerializer, WhatsAppRegistrationSerializer,
+    WishlistSubmissionSerializer,
 )
 from utils.google_drive import get_drive_service
 
@@ -285,3 +287,61 @@ def whatsapp_register(request):
     if log_error:
         logger.warning(f"WhatsApp registration log append failed for {email}")
     return Response({'message': 'Email sent successfully.'}, status=drf_status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def wishlist_submit(request):
+    serializer = WishlistSubmissionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=drf_status.HTTP_400_BAD_REQUEST)
+
+    email = serializer.validated_data['email'].lower()
+    profile = Profile.objects.filter(email__iexact=email).first()
+    data = serializer.validated_data.copy()
+    data['email'] = email
+    data['profile'] = profile
+    # The public endpoint must not let callers bypass the Board workflow.
+    data['status'] = WishlistSubmission.Status.NEW
+    if profile:
+        data['first_name'] = profile.name
+        data['last_name'] = profile.surname
+        data['phone'] = data.get('phone') or ' '.join(
+            value for value in [profile.phone_prefix, profile.phone_number] if value
+        )
+        data['country'] = data.get('country') or profile.country or ''
+    WishlistSubmission.objects.create(**data)
+    return Response({'message': 'Richiesta inviata correttamente.'}, status=drf_status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def wishlist_lookup(request):
+    email = request.query_params.get('email', '').strip().lower()
+    if not email:
+        return Response({'email': 'Email obbligatoria.'}, status=drf_status.HTTP_400_BAD_REQUEST)
+    try:
+        serializers.EmailField().run_validation(email)
+    except serializers.ValidationError:
+        return Response({'email': 'Inserisci un indirizzo email valido.'}, status=drf_status.HTTP_400_BAD_REQUEST)
+    profile = Profile.objects.filter(email__iexact=email).first()
+    return Response({'exists': profile is not None})
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def wishlist_submissions(request):
+    if not _can_manage_content(request.user):
+        return Response({'detail': 'Permission denied.'}, status=drf_status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        return Response(WishlistSubmissionSerializer(WishlistSubmission.objects.all(), many=True).data)
+
+    submission = WishlistSubmission.objects.filter(pk=request.data.get('id')).first()
+    if not submission:
+        return Response({'detail': 'Wishlist request not found.'}, status=drf_status.HTTP_404_NOT_FOUND)
+    serializer = WishlistSubmissionSerializer(submission, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=drf_status.HTTP_400_BAD_REQUEST)

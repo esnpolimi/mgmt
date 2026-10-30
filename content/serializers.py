@@ -1,7 +1,7 @@
 import re
 
 from rest_framework import serializers
-from .models import ContentSection, ContentLink, WhatsAppConfig
+from .models import ContentSection, ContentLink, WhatsAppConfig, WishlistSubmission
 
 
 class ContentLinkSerializer(serializers.ModelSerializer):
@@ -67,3 +67,22 @@ class WhatsAppRegistrationSerializer(serializers.Serializer):
             )
         attrs['email'] = value
         return attrs
+
+
+class WishlistSubmissionSerializer(serializers.ModelSerializer):
+    profile = serializers.PrimaryKeyRelatedField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = WishlistSubmission
+        fields = [
+            'id', 'profile', 'email', 'first_name', 'last_name', 'phone', 'country',
+            'message', 'status', 'status_display', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'profile', 'status_display', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'first_name': {'required': False, 'allow_blank': True},
+            'last_name': {'required': False, 'allow_blank': True},
+            'phone': {'required': False, 'allow_blank': True},
+            'country': {'required': False, 'allow_blank': True},
+        }
