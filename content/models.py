@@ -107,3 +107,30 @@ class WhatsAppConfig(models.Model):
         """Returns the singleton instance, creating it if it doesn't exist."""
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class WishlistSubmission(models.Model):
+    class Status(models.TextChoices):
+        NEW = 'NEW', 'Nuova'
+        IN_PROGRESS = 'IN_PROGRESS', 'In lavorazione'
+        DONE = 'DONE', 'Completata'
+
+    profile = models.ForeignKey(
+        'profiles.Profile', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='wishlist_submissions'
+    )
+    email = models.EmailField(max_length=200)
+    first_name = models.CharField(max_length=128, blank=True)
+    last_name = models.CharField(max_length=128, blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    message = models.TextField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.email} - {self.created_at:%Y-%m-%d}'
