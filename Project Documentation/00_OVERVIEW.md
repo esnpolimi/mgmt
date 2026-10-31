@@ -199,6 +199,13 @@ Primary sensitive variables:
 - SUMUP_API_BASE_URL (optional; defaults to `https://api.sumup.com`)
 - SENTRY_DSN
 
+The private deployment bundle can be recreated from the project root with
+`.\create-mgmt-secret.ps1`. It copies only the two environment files, the
+Google service-account key, and the private `base.py`, `dev.py`, and `prod.py`
+settings into the matching `backend/` paths. Generated Python cache files are
+intentionally excluded, and the generated `mgmt-secret/` folder is ignored by
+Git.
+
 SumUp is environment-isolated by `DJANGO_ENV`: development and test settings use
 the sandbox credential prefix (`SUMUP_SANDBOX_*`), while production uses the live
 prefix (`SUMUP_*`). The API host is shared by SumUp; the merchant account and
