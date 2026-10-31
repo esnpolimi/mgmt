@@ -8,6 +8,8 @@ __pycache__/
 !/backend/backend/settings/__init__.py
 !/backend/backend/settings/test.py
 /backend/tesoreria-gest-74c64d7836b9.json
+/create-mgmt-secret.ps1
+/mgmt-secret
 *.env*
 *.env.*
 .vscode
