@@ -40,3 +40,17 @@ CRON_TZ=Europe/Rome
 
 The command copies logs without deleting them. Each execution creates a
 timestamped Drive file, so reruns preserve every archive attempt.
+
+##### Secret bundle export
+
+From the project root, create the private folder needed by local deployments:
+
+```powershell
+.\create-mgmt-secret.ps1
+```
+
+The script creates `mgmt-secret/` with the environment files, Google service
+account key, and private Django settings while preserving their backend paths.
+It excludes generated files such as `__pycache__`. Use
+`.\create-mgmt-secret.ps1 -Force` only when replacing an existing output folder.
+Do not commit or publish the generated folder.
