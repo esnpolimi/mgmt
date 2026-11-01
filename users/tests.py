@@ -593,3 +593,27 @@ class UserManagerTests(UsersBaseTestCase):
 
 		self.assertEqual(len(password), 20)
 
+
+
+class SecurityRegressionTests(UsersBaseTestCase):
+	"""Regression tests for the security audit fixes."""
+
+	def test_refresh_with_forged_email_creates_nothing(self):
+		"""An invalid refresh cookie must not create Profile/User rows."""
+		self.client.cookies["refresh_token"] = "not-a-jwt"
+		response = self.client.post("/backend/api/token/refresh/", {"email": "ghost@esnpolimi.it"})
+
+		self.assertEqual(response.status_code, 401)
+		self.assertFalse(Profile.objects.filter(email="ghost@esnpolimi.it").exists())
+
+	def test_user_patch_cannot_grant_superuser(self):
+		"""PATCH /users/<pk>/ must ignore privilege fields."""
+		actor = _create_user(_create_profile("actor@esnpolimi.it"))
+		actor.user_permissions.add(self.perm_change_user)
+		self.authenticate(actor)
+
+		self.client.patch(f"/backend/users/{actor.pk}/", {"is_superuser": True, "is_staff": True}, format="json")
+
+		actor.refresh_from_db()
+		self.assertFalse(actor.is_superuser)
+		self.assertFalse(actor.is_staff)

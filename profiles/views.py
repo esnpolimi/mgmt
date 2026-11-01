@@ -12,7 +12,8 @@ from django.utils.encoding import force_bytes
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.utils.http import urlsafe_base64_encode
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from utils.throttles import AuthAttemptThrottle
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -68,6 +69,8 @@ def profile_list(request, is_esner):
         desc = ordering_param.startswith('-')
         base = ordering_param.lstrip('-')
         normalized = base.replace('.', '__')
+        if normalized.split('__')[0] == 'user':  # would leak password/privilege ordering
+            normalized = 'created_at'
 
         if base == 'fullPhoneNumber':
             order_expressions = [
@@ -154,6 +157,7 @@ def profile_list(request, is_esner):
     serializer = ProfileListViewSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
 @api_view(['POST'])
+@throttle_classes([AuthAttemptThrottle])
 def initiate_profile_creation(request):
     data = request.data
 
@@ -461,11 +465,11 @@ def profile_detail(request, pk):
                                 allowed = True
                             else:
                                 error_msg = "Solo membri Board possono promuovere Aspiranti ad Attivi/Board."
-                        elif current_group == "Attivi" and group_name == "Board":
+                        elif "Board" in (current_group, group_name):
                             if requester_group == "Board":
                                 allowed = True
                             else:
-                                error_msg = "Solo membri Board possono promuovere Attivi a Board."
+                                error_msg = "Solo membri Board possono assegnare o rimuovere il ruolo Board."
                         else:
                             allowed = True  # Other transitions allowed
 
@@ -599,6 +603,7 @@ def profile_subscriptions(request, pk):
     except Profile.DoesNotExist:
         return Response({'error': 'Profilo non trovato.'}, status=404)
 @api_view(['POST'])
+@throttle_classes([AuthAttemptThrottle])
 def check_erasmus_email(request):
     """
     Public endpoint to check if an email belongs to an Erasmus profile.

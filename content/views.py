@@ -7,9 +7,11 @@ from datetime import datetime
 import sentry_sdk
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils.html import escape
 from googleapiclient.http import MediaIoBaseUpload
 from rest_framework import serializers, viewsets, permissions
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
+from utils.throttles import AuthAttemptThrottle
 from rest_framework.response import Response
 from rest_framework import status as drf_status
 from .models import ContentSection, ContentLink, WhatsAppConfig, WishlistSubmission
@@ -73,6 +75,9 @@ def _append_to_whatsapp_log(data, outcome):
                 data['course_of_study'],
                 outcome,
             ]
+            # neutralize spreadsheet formulas coming from public form fields
+            new_row = ["'" + c if isinstance(c, str) and c[:1] in ('=', '+', '-', '@', '\t', '\r') else c
+                       for c in new_row]
 
             if files:
                 # Download existing CSV, append the new row, re-upload
@@ -208,7 +213,7 @@ def _send_whatsapp_email(first_name, email, whatsapp_link):
     subject = 'ESN Politecnico Milano \u2013 WhatsApp Group Link'
     html_content = f"""
     <html><body>
-    <p>Hi {first_name},</p>
+    <p>Hi {escape(first_name)},</p>
     <p>here is the link to gain access to the WhatsApp group:
     <a href="{whatsapp_link}">ESN Politecnico Milano - WhatsApp</a>.</p>
     <p>We kindly ask you not to share the link, as the access to the group should be limited
@@ -240,6 +245,7 @@ def _send_whatsapp_email(first_name, email, whatsapp_link):
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAttemptThrottle])
 def whatsapp_register(request):
     """
     POST /backend/content/whatsapp-register/
@@ -291,6 +297,7 @@ def whatsapp_register(request):
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAttemptThrottle])
 def wishlist_submit(request):
     serializer = WishlistSubmissionSerializer(data=request.data)
     if not serializer.is_valid():
@@ -316,6 +323,7 @@ def wishlist_submit(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAttemptThrottle])
 def wishlist_lookup(request):
     email = request.query_params.get('email', '').strip().lower()
     if not email:
