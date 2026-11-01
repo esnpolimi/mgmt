@@ -31,6 +31,7 @@ from googleapiclient.errors import HttpError
 from django.conf import settings
 from django.utils import timezone
 from utils.permissions import profile_email_verified, user_is_board
+from utils.spreadsheet import safe_text
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -353,6 +354,8 @@ def transaction_add(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def transactions_list(request):
+    if not user_is_board(request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
     transactions = Transaction.objects.all().order_by('-created_at')
     transactions = apply_transaction_filters(transactions, request)
     # Support limit param for dashboard
@@ -381,6 +384,8 @@ def transaction_detail(request, pk):
         transaction_obj = Transaction.objects.get(pk=pk)
 
         if request.method == 'GET':
+            if not user_is_board(request.user):
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             serializer = TransactionViewSerializer(transaction_obj)
             return Response(serializer.data, status=200)
 
@@ -486,6 +491,8 @@ def account_detail(request, pk):
         account = Account.objects.get(pk=pk)
 
         if request.method == 'GET':
+            if not account.is_visible_to_user(request.user):
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             serializer = AccountDetailedViewSerializer(account, context={'request': request})
             return Response(serializer.data, status=200)
 
@@ -562,6 +569,8 @@ def reimbursement_request_detail(request, pk):
         return Response({'error': 'Richiesta di rimborso non trovata.'}, status=404)
 
     if request.method == 'GET':
+        if not (user_is_board(request.user) or instance.user_id == request.user.pk):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
         serializer = ReimbursementRequestViewSerializer(instance)
         return Response(serializer.data, status=200)
 
@@ -613,6 +622,8 @@ def reimbursement_requests_list(request):
         if not user_is_board(request.user) and req_profile_id != profile_id_int:
             return Response({'error': MSG_UNAUTHORIZED}, status=403)
         requests = requests.filter(user__profile__id=profile_id_int)
+    if not user_is_board(request.user):
+        requests = requests.filter(user=request.user)
     search = request.GET.get('search', '').strip()
     if search:
         requests = requests.filter(
@@ -876,6 +887,17 @@ def reimburse_quota(request):
         sub_name = "Esterno"
 
     with transaction.atomic():
+        # lock + re-check inside the transaction, so parallel requests cannot refund twice
+        Subscription.objects.select_for_update().get(pk=sub.pk)
+        account_locked = Account.objects.select_for_update().get(pk=account.pk)
+        if not quota_already_reimbursed and Transaction.objects.filter(
+                subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
+            return Response({'error': 'Quota già rimborsata.'}, status=400)
+        if include_services and Transaction.objects.filter(
+                subscription=sub, type=Transaction.TransactionType.RIMBORSO_SERVICE).exists():
+            return Response({'error': 'Servizi già rimborsati.'}, status=400)
+        if account_locked.balance < total_refund:
+            return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
         quota_tx = None
         if not quota_already_reimbursed:
             quota_tx = Transaction.objects.create(
@@ -908,6 +930,8 @@ def transactions_export(request):
     Export filtered transactions with columns:
     Registrazione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale) | Eseguito da
     """
+    if not user_is_board(request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
     # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
     def compute_amount(tx_obj):
@@ -1054,13 +1078,13 @@ def transactions_export(request):
         date_cell = ws.cell(row=row_idx, column=2, value=local_dt.date())
         date_cell.number_format = 'dd/mm/yyyy'
         ws.cell(row=row_idx, column=3, value=build_attivita(tx))
-        ws.cell(row=row_idx, column=4, value=build_descrizione(tx))
+        ws.cell(row=row_idx, column=4, value=safe_text(build_descrizione(tx)))
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
         amt_cell.number_format = '#,##0.00 €'
-        ws.cell(row=row_idx, column=6, value=tx.account.name if tx.account else '')
-        ws.cell(row=row_idx, column=7, value=build_commenti(tx))
-        ws.cell(row=row_idx, column=8, value=tx.description)
-        ws.cell(row=row_idx, column=9, value=build_eseguito_da(tx))
+        ws.cell(row=row_idx, column=6, value=safe_text(tx.account.name if tx.account else ''))
+        ws.cell(row=row_idx, column=7, value=safe_text(build_commenti(tx)))
+        ws.cell(row=row_idx, column=8, value=safe_text(tx.description))
+        ws.cell(row=row_idx, column=9, value=safe_text(build_eseguito_da(tx)))
         row_idx += 1
 
     # Auto width

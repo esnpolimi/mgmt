@@ -24,7 +24,8 @@ export default function EventWhatsApp() {
         void fetchCustom('GET', `/subscription/${subscriptionId}/whatsapp/?t=${encodeURIComponent(token)}`, {
             auth: false,
             onSuccess: (data) => {
-                if (!data?.whatsapp_group_link) {
+                // only http(s): a javascript: URL here would run in the app origin
+                if (!/^https?:\/\//i.test(data?.whatsapp_group_link || '')) {
                     setStatus('unavailable');
                     return;
                 }
