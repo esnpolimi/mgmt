@@ -1,13 +1,16 @@
-import logging
+﻿import logging
 
 from django.conf import settings
 from django.contrib.auth.models import Group
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
@@ -23,6 +26,7 @@ from users.serializers import CustomTokenObtainPairSerializer
 from users.serializers import FinancePermissionSerializer
 from users.serializers import UserSerializer, LoginSerializer, UserReactSerializer, GroupListSerializer
 from utils.permissions import user_is_board
+from utils.throttles import AuthAttemptThrottle
 
 logger = logging.getLogger(__name__)
 SCHEME_HOST = settings.SCHEME_HOST
@@ -81,6 +85,7 @@ def login_for_oauth(request):  # Login for DokuWiki OIDC
 
 
 @api_view(['POST'])
+@throttle_classes([AuthAttemptThrottle])
 def log_in(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
@@ -145,19 +150,18 @@ def refresh_token_view(request):
     if not refresh_token:
         return Response({'detail': 'Token di refresh non trovato'}, status=400)
 
-    profile, _ = Profile.objects.get_or_create(email=request.data.get('email'))
-    user, _ = User.objects.get_or_create(profile=profile)
+    try:
+        refresh = RefreshToken(str(refresh_token))
+    except TokenError as e:
+        return Response({'detail': str(e)}, status=401)
 
-    if user is not None:
-        try:
-            refresh = RefreshToken(str(refresh_token))
-            refresh['user'] = UserReactSerializer(user).data
-            access_token = str(refresh.access_token)
-            return Response({'access': access_token}, status=200)
-        except TokenError as e:
-            return Response({'detail': str(e)}, status=401)
-    else:
+    # the identity comes from the verified token, never from the request body
+    user = User.objects.filter(profile=refresh['user_id']).first()
+    if user is None:
         return Response({'detail': 'Profilo utente invalido'}, status=403)
+
+    refresh['user'] = UserReactSerializer(user).data
+    return Response({'access': str(refresh.access_token)}, status=200)
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def user_list(request):
@@ -203,6 +207,7 @@ def user_detail(request, pk):
     except User.DoesNotExist:
         return Response({'error': 'Utente non trovato.'}, status=404)
 @api_view(['POST'])
+@throttle_classes([AuthAttemptThrottle])
 def forgot_password(request):
     email = request.data.get('email')
     if not email:
@@ -246,6 +251,7 @@ def forgot_password(request):
         "message": "Se l'indirizzo email è associato a un account, riceverai un'email con le istruzioni per reimpostare la password."
     })
 @api_view(['POST'])
+@throttle_classes([AuthAttemptThrottle])
 def reset_password(request, uid, token):
     try:
         uid = force_str(urlsafe_base64_decode(uid))
@@ -260,8 +266,15 @@ def reset_password(request, uid, token):
         return Response({"error": "La password e la conferma della password sono obbligatorie."}, status=400)
     if password != confirm_password:
         return Response({"error": "Le password non corrispondono."}, status=400)
+    try:
+        validate_password(password, user)
+    except DjangoValidationError as e:
+        return Response({"error": " ".join(e.messages)}, status=400)
     user.set_password(password)
     user.save()
+    # a reset must also end sessions opened with the old password
+    for outstanding in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=outstanding)
     return Response({"message": "La tua password è stata reimpostata con successo. Ora puoi accedere con la nuova password."})
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

@@ -5,7 +5,7 @@ if (!isLocalHost) {
     window.API_HOST = "https://mgmt.esnpolimi.it/backend";
     Sentry.init({
         dsn: "https://f7ee9b97bae2c35e767d8e156eb7b116@o4509581352828928.ingest.de.sentry.io/4509581461487696",
-        sendDefaultPii: true,
+        sendDefaultPii: false,
         environment: 'production'
     });
 }

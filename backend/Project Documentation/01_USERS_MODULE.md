@@ -83,6 +83,7 @@ Base path: /backend/
 
 1. Forgot-password never confirms whether an email exists.
 2. Reset requires valid uid/token and matching password input.
+3. Login and password-recovery attempts are throttled.
 
 ## 5. Authorization and Effective Permissions
 

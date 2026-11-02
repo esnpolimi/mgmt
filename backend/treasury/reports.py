@@ -12,6 +12,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
 from treasury.models import Account, Transaction
+from utils.spreadsheet import safe_text
 from utils.google_drive import get_drive_service, find_or_create_folder
 
 try:
@@ -251,13 +252,13 @@ def build_transactions_workbook(start_dt, end_dt, tz):
         date_cell.number_format = "dd/mm/yyyy hh:mm:ss"
         ws.cell(row=row_idx, column=3, value=tx.type)
         ws.cell(row=row_idx, column=4, value=Decimal(str(tx.amount)))
-        ws.cell(row=row_idx, column=5, value=tx.account.name if tx.account else "")
-        ws.cell(row=row_idx, column=6, value=tx.description)
-        ws.cell(row=row_idx, column=7, value=_executor_display(tx))
+        ws.cell(row=row_idx, column=5, value=safe_text(tx.account.name if tx.account else ""))
+        ws.cell(row=row_idx, column=6, value=safe_text(tx.description))
+        ws.cell(row=row_idx, column=7, value=safe_text(_executor_display(tx)))
         ws.cell(row=row_idx, column=8, value=tx.subscription_id or "")
         ws.cell(row=row_idx, column=9, value=tx.esncard_id or "")
         ws.cell(row=row_idx, column=10, value=tx.event_reference_manual_id or "")
-        ws.cell(row=row_idx, column=11, value=tx.receipt_link or "")
+        ws.cell(row=row_idx, column=11, value=safe_text(tx.receipt_link or ""))
 
         ws.cell(row=row_idx, column=4).number_format = "#,##0.00"
         row_idx += 1

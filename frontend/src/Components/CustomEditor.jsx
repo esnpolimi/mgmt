@@ -41,7 +41,8 @@ export default function QuillEditor({value, onChange, readOnly = false}) {
             });
 
             if (value) {
-                quillInstance.current.root.innerHTML = value;
+                // goes through Quill's clipboard conversion, which drops scripts and event handlers
+                quillInstance.current.clipboard.dangerouslyPasteHTML(value);
             }
         }
     }, [value, onChange, readOnly]);

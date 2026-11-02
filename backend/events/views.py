@@ -35,6 +35,7 @@ import os
 from googleapiclient.http import MediaIoBaseUpload
 from utils.google_drive import get_drive_service, find_or_create_folder
 import json
+from xml.sax.saxutils import escape as xml_escape
 
 from events.models import Event, Subscription, EventOrganizer
 from events.models import EventList, validate_field_data
@@ -1582,7 +1583,8 @@ def generate_liberatorie_pdf(request):
         return format_date(dt, format='d MMMM yyyy', locale='en')
 
     def display_na(value):
-        return value if value not in [None, '', [], {}] else 'N/A'
+        # reportlab Paragraph parses markup: escape user-supplied values
+        return xml_escape(str(value)) if value not in [None, '', [], {}] else 'N/A'
 
     event_id = request.data.get('event_id')
     subscription_ids = request.data.get('subscription_ids', [])

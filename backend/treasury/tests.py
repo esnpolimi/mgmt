@@ -553,6 +553,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Transactions list should support filters."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
@@ -704,6 +705,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Invalid limit param should return 400."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		response = self.client.get("/backend/transactions/?limit=notanumber")
@@ -714,6 +716,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Limit param should cap returned results."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
@@ -1289,6 +1292,7 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		"""Export should return an Excel file response."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		response = self.client.get("/backend/transactions_export/")
@@ -1304,6 +1308,7 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 	def test_transactions_export_exposes_download_headers_to_frontend(self):
 		profile = _create_profile("cors@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		response = self.client.get(
@@ -1320,6 +1325,7 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		"""Commenti column should show external subscriber name, not executor name."""
 		executor_profile = _create_profile("board@esnpolimi.it", name="Mario", surname="Rossi")
 		executor_user = _create_user(executor_profile)
+		executor_user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(executor_user)
 
 		event = _create_event(name="Trip")
@@ -2259,3 +2265,20 @@ class AccountVisibilityEdgeCaseTests(TreasuryBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		names = [a["name"] for a in response.data]
 		self.assertIn("Board and Attivi", names)
+
+
+class BoardOnlyTreasuryTests(TreasuryBaseTestCase):
+	"""Regression tests for the security audit: treasury data is Board-only."""
+
+	def test_non_board_cannot_list_or_export_transactions(self):
+		user = _create_user(_create_profile("member@esnpolimi.it"))
+		self.authenticate(user)
+
+		self.assertEqual(self.client.get("/backend/transactions/").status_code, 403)
+		self.assertEqual(self.client.get("/backend/transactions_export/").status_code, 403)
+
+	def test_export_neutralizes_spreadsheet_formulas(self):
+		from utils.spreadsheet import safe_text
+
+		self.assertEqual(safe_text('=HYPERLINK("http://evil")'), '\'=HYPERLINK("http://evil")')
+		self.assertEqual(safe_text("Mario"), "Mario")
