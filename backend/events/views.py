@@ -937,6 +937,8 @@ def _upsert_transaction(*, subscription, tx_type, account_id, amount, descriptio
     (if account or amount changed) so its created_at keeps the original payment time.
     Idempotent if same account & amount.
     """
+    if account_id:
+        account_id = int(account_id)
     if amount is None or amount <= 0:
         return None
     existing = Transaction.objects.filter(subscription=subscription, type=tx_type).first()
@@ -1698,7 +1700,7 @@ def generate_liberatorie_pdf(request):
             read and understood its contents and agree to comply with it. I acknowledge the risks connected with my
             participation in this travel package and its related activities.
             By signing this release form, I agree to release and hold harmless every person belonging to Erasmus Student
-            Network Politecnico Milano and the organizers of the event <b>"{event.name}" ({english_date(event.date)})</b>,
+            Network Politecnico Milano and the organizers of the event <b>"{xml_escape(event.name)}" ({english_date(event.date)})</b>,
             collectively referred to as the event organizers, from any action, claim, legal or arbitration proceeding,
             including but not limited to those relating to the risk of injury during the activities and the risk of loss
             of personal belongings due to theft or any other reason. Before registering for this travel package, I will

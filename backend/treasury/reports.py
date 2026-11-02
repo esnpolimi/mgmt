@@ -190,7 +190,7 @@ def build_accounts_workbook(start_dt, end_dt, report_date):
         date_cell = ws.cell(row=row_idx, column=1, value=report_date)
         date_cell.number_format = "dd/mm/yyyy"
         ws.cell(row=row_idx, column=2, value=account.id)
-        ws.cell(row=row_idx, column=3, value=account.name)
+        ws.cell(row=row_idx, column=3, value=safe_text(account.name))
         ws.cell(row=row_idx, column=4, value=account.status)
         ws.cell(row=row_idx, column=5, value=saldo_iniziale)
         ws.cell(row=row_idx, column=6, value=saldo_finale)

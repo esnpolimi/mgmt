@@ -2529,6 +2529,29 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 		self.assertEqual(response["Content-Type"], "application/pdf")
 
 	@patch("events.views.SimpleDocTemplate")
+	def test_escapes_event_name_in_waiver_markup(self, mock_doc):
+		"""Event names are escaped before being interpolated into ReportLab markup."""
+		story = []
+		mock_doc.return_value.build = lambda flowables: story.extend(flowables)
+		self.authenticate(self.board_user)
+		self.event.name = "Trip <i>&"
+		self.event.save(update_fields=["name"])
+		sub = Subscription.objects.create(
+			profile=_create_profile("subscriber_escape@test.com"),
+			event=self.event,
+			list=self.event_list,
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		self.assertEqual(response.status_code, 200)
+		waiver = next(
+			flowable.text for flowable in story
+			if hasattr(flowable, "text") and "event organizers" in flowable.text
+		)
+		self.assertIn('"Trip &lt;i&gt;&amp;"', waiver)
+
+	@patch("events.views.SimpleDocTemplate")
 	def test_generates_pdf_for_external_subscription_no_crash(self, mock_doc):
 		"""PDF generation must not raise AttributeError when profile is None (external subscription)."""
 		mock_doc.return_value.build = lambda story: None
@@ -2984,6 +3007,31 @@ class WhatsAppGroupLinkTests(EventsBaseTestCase):
 
 class SubscriptionPaidAtTests(EventsBaseTestCase):
 	"""Tests for the paid_at field used to sort subscriptions by payment time."""
+
+	def test_upsert_treats_numeric_string_account_id_as_unchanged(self):
+		user = _create_user(_create_profile("account-id-normalization@esnpolimi.it"))
+		account = _create_account("Main", user=user)
+		event = _create_event(cost=10)
+		sub = Subscription.objects.create(
+			profile=_create_profile("account-id-normalization-sub@esnpolimi.it"),
+			event=event,
+			list=_create_event_list(event),
+		)
+		transaction = Transaction.objects.create(
+			subscription=sub, account=account, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Original")
+
+		result = event_views._upsert_transaction(
+			subscription=sub,
+			tx_type=Transaction.TransactionType.SUBSCRIPTION,
+			account_id=str(account.pk),
+			amount=10,
+			description="Updated",
+			executor=user,
+		)
+
+		self.assertEqual(result.pk, transaction.pk)
+		self.assertEqual(result.description, "Original")
 
 	def test_event_detail_exposes_paid_at(self):
 		"""paid_at is null when unpaid and equals the earliest payment transaction otherwise."""

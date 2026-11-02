@@ -28,6 +28,7 @@ services:
       - type: bind
         source: ./backend
         target: /app
+      - maintenance_state:/var/lib/app
     ports:
       - "8000:8000"
     depends_on:
@@ -38,6 +39,7 @@ services:
       DB_PASS: password
       DB_HOST: db
       DB_PORT: 3306
+      MAINTENANCE_NOTIFICATION_FILE: /var/lib/app/maintenance_notification.json
 
   frontend:
     build: ./frontend
@@ -50,3 +52,4 @@ services:
 
 volumes:
   mariadb_data:
+  maintenance_state:
