@@ -30,7 +30,10 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         exclude = ['password']
         # privilege fields are changed only through dedicated Board-gated endpoints
-        read_only_fields = ['is_superuser', 'is_staff', 'groups', 'user_permissions']
+        read_only_fields = [
+            'is_superuser', 'is_staff', 'groups', 'user_permissions',
+            'can_manage_content', 'can_manage_casse', 'can_view_casse_import',
+        ]
 
 
 class LoginSerializer(serializers.Serializer):

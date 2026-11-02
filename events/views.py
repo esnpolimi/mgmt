@@ -1779,6 +1779,11 @@ def printable_liberatorie(request, event_id):
 _SUMUP_TOKEN_CACHE = {"token": None, "expires_at": 0}
 
 
+def get_sumup_api_base_url():
+    base_url = (getattr(settings, "SUMUP_API_BASE_URL", "") or "").strip().rstrip("/")
+    return base_url or "https://api.sumup.com"
+
+
 # NOTE (SumUp / Cloudflare debug):
 # You may see in the browser devtools a POST like:
 # https://api.sumup.com/cdn-cgi/challenge-platform/...  (status: (canceled) / NS_BINDING_ABORTED)
@@ -1800,7 +1805,7 @@ def get_sumup_access_token():
         return _SUMUP_TOKEN_CACHE["token"]
 
     r = requests.post(
-        f"{settings.SUMUP_API_BASE_URL}/token",
+        f"{get_sumup_api_base_url()}/token",
         data={
             "grant_type": "client_credentials",
             "client_id": settings.SUMUP_CLIENT_ID,
@@ -1859,7 +1864,7 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
     payload.update(_sumup_destination_fields())
     headers = _sumup_headers()
     r = requests.post(
-        f"{settings.SUMUP_API_BASE_URL}/v0.1/checkouts",
+        f"{get_sumup_api_base_url()}/v0.1/checkouts",
         json=payload,
         headers=headers,
         timeout=15,
@@ -1920,7 +1925,7 @@ def _process_sumup_checkout(subscription, card_token):
 
         def fetch():
             r = requests.get(
-                f"{settings.SUMUP_API_BASE_URL}/v0.1/checkouts/{checkout_id}",
+                f"{get_sumup_api_base_url()}/v0.1/checkouts/{checkout_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=12
             )
@@ -1962,7 +1967,7 @@ def _process_sumup_checkout(subscription, card_token):
         if card_token:
             put_payload = {"payment_type": "card", "card": {"token": card_token}}
             r_put = requests.put(
-                f"{settings.SUMUP_API_BASE_URL}/v0.1/checkouts/{checkout_id}",
+                f"{get_sumup_api_base_url()}/v0.1/checkouts/{checkout_id}",
                 json=put_payload,
                 headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
                 timeout=25
@@ -2537,7 +2542,7 @@ def sumup_webhook(request):
     try:
         access_token = get_sumup_access_token()
         r = requests.get(
-            f"{settings.SUMUP_API_BASE_URL}/v0.1/checkouts/{checkout_id}",
+            f"{get_sumup_api_base_url()}/v0.1/checkouts/{checkout_id}",
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=12
         )

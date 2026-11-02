@@ -3,6 +3,7 @@
 import unittest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core.cache import cache
 from django.core import mail
 from django.test import override_settings
 from django.utils.encoding import force_bytes
@@ -141,6 +142,18 @@ class LoginLogoutTests(UsersBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertIn("access", response.data)
 
+	@override_settings(AUTH_THROTTLE_RATE="1/min")
+	def test_token_obtain_pair_is_throttled(self):
+		"""Token pair requests should use the shared auth-attempt limit."""
+		cache.clear()
+		self.addCleanup(cache.clear)
+
+		first_response = self.client.post("/backend/api/token/", {})
+		second_response = self.client.post("/backend/api/token/", {})
+
+		self.assertEqual(first_response.status_code, 400)
+		self.assertEqual(second_response.status_code, 429)
+
 
 class UserListTests(UsersBaseTestCase):
 	"""Tests for /users/ list and create endpoints."""
@@ -193,10 +206,14 @@ class UserListTests(UsersBaseTestCase):
 			"profile": target_profile.pk,
 			"can_manage_casse": True,
 			"can_view_casse_import": False,
+			"can_manage_content": True,
 		})
 
 		self.assertEqual(response.status_code, 201)
-		self.assertTrue(User.objects.filter(profile=target_profile.email).exists())
+		created_user = User.objects.get(profile=target_profile.email)
+		self.assertFalse(created_user.can_manage_casse)
+		self.assertFalse(created_user.can_view_casse_import)
+		self.assertFalse(created_user.can_manage_content)
 
 
 class UserDetailTests(UsersBaseTestCase):
@@ -235,8 +252,8 @@ class UserDetailTests(UsersBaseTestCase):
 
 		self.assertEqual(response.status_code, 401)
 
-	def test_user_update_with_permission(self):
-		"""PATCH with change permission should update fields."""
+	def test_user_update_cannot_change_custom_permission_flags(self):
+		"""Custom permission flags can only be changed through their dedicated endpoint."""
 		profile = _create_profile("user@esnpolimi.it", verified=True, is_esner=True)
 		user = _create_user(profile)
 		user.user_permissions.add(self.perm_change_user)
@@ -244,11 +261,15 @@ class UserDetailTests(UsersBaseTestCase):
 		self.authenticate(user)
 		response = self.client.patch(f"/backend/users/{profile.email}/", {
 			"can_manage_casse": True,
+			"can_view_casse_import": True,
+			"can_manage_content": True,
 		})
 
 		self.assertEqual(response.status_code, 200)
 		user.refresh_from_db()
-		self.assertTrue(user.can_manage_casse)
+		self.assertFalse(user.can_manage_casse)
+		self.assertFalse(user.can_view_casse_import)
+		self.assertFalse(user.can_manage_content)
 
 	def test_user_delete_requires_board(self):
 		"""DELETE should be allowed only for Board members."""
@@ -354,6 +375,58 @@ class PasswordResetTests(UsersBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		user.refresh_from_db()
 		self.assertTrue(user.check_password("NewPass123!"))
+
+	def test_reset_password_rejects_existing_tokens(self):
+		"""Reset must revoke old tokens while allowing login with the new password."""
+		profile = _create_profile("user@esnpolimi.it", verified=True, is_esner=True)
+		user = _create_user(profile)
+		login_response = self.client.post("/backend/login/", {
+			"email": profile.email,
+			"password": "SecurePass123!",
+		})
+		self.assertEqual(login_response.status_code, 200)
+		pair_response = self.client.post("/backend/api/token/", {
+			"profile": profile.email,
+			"password": "SecurePass123!",
+		})
+		self.assertEqual(pair_response.status_code, 200)
+		refresh_response = self.client.post("/backend/api/token/refresh/", {})
+		self.assertEqual(refresh_response.status_code, 200)
+		access_tokens = [
+			login_response.data["access"],
+			pair_response.data["access"],
+			refresh_response.data["access"],
+		]
+		for access in access_tokens:
+			self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+			self.assertEqual(self.client.get("/backend/groups/").status_code, 200)
+		self.client.credentials()
+
+		user.refresh_from_db()
+		uid = urlsafe_base64_encode(force_bytes(user.pk))
+		reset_token = default_token_generator.make_token(user)
+		response = self.client.post(f"/backend/api/reset-password/{uid}/{reset_token}/", {
+			"password": "NewPass123!",
+			"confirm_password": "NewPass123!",
+		})
+		self.assertEqual(response.status_code, 200)
+		for access in access_tokens:
+			self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+			self.assertEqual(self.client.get("/backend/groups/").status_code, 401)
+		self.client.credentials()
+		self.assertEqual(
+			self.client.post("/backend/api/token/refresh/", {}).status_code, 401,
+		)
+
+		login_response = self.client.post("/backend/login/", {
+			"email": profile.email,
+			"password": "NewPass123!",
+		})
+		self.assertEqual(login_response.status_code, 200)
+		self.client.credentials(
+			HTTP_AUTHORIZATION=f"Bearer {login_response.data['access']}",
+		)
+		self.assertEqual(self.client.get("/backend/groups/").status_code, 200)
 
 
 class GroupListTests(UsersBaseTestCase):
@@ -476,13 +549,18 @@ class FinancePermissionTests(UsersBaseTestCase):
 		self.authenticate(board_user)
 		response = self.client.patch(
 			"/backend/users/finance-permissions/?email=aspirante@esnpolimi.it",
-			{"can_manage_casse": True, "can_view_casse_import": True},
+			{
+				"can_manage_casse": True,
+				"can_view_casse_import": True,
+				"can_manage_content": True,
+			},
 		)
 
 		self.assertEqual(response.status_code, 200)
 		target_user.refresh_from_db()
 		self.assertTrue(target_user.can_manage_casse)
 		self.assertTrue(target_user.can_view_casse_import)
+		self.assertTrue(target_user.can_manage_content)
 
 
 class UserInfoTests(UsersBaseTestCase):

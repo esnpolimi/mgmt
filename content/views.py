@@ -22,6 +22,7 @@ from .serializers import (
     WishlistSubmissionSerializer,
 )
 from utils.google_drive import get_drive_service
+from utils.permissions import user_is_board
 
 logger = logging.getLogger(__name__)
 
@@ -304,7 +305,7 @@ def wishlist_submit(request):
         return Response(serializer.errors, status=drf_status.HTTP_400_BAD_REQUEST)
 
     email = serializer.validated_data['email'].lower()
-    profile = Profile.objects.filter(email__iexact=email).first()
+    profile = Profile.objects.filter(email__iexact=email, email_is_verified=True).first()
     data = serializer.validated_data.copy()
     data['email'] = email
     data['profile'] = profile
@@ -339,7 +340,7 @@ def wishlist_lookup(request):
 @api_view(['GET', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def wishlist_submissions(request):
-    if not _can_manage_content(request.user):
+    if not user_is_board(request.user):
         return Response({'detail': 'Permission denied.'}, status=drf_status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':

@@ -36,6 +36,7 @@ MSG_METHOD_NOT_ALLOWED = 'Metodo non consentito.'
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [AuthAttemptThrottle]
 
 
 def get_action_permissions(action, user):
@@ -270,9 +271,10 @@ def reset_password(request, uid, token):
         validate_password(password, user)
     except DjangoValidationError as e:
         return Response({"error": " ".join(e.messages)}, status=400)
+    # CHECK_REVOKE_TOKEN rejects access tokens whose password claim no longer matches.
     user.set_password(password)
     user.save()
-    # a reset must also end sessions opened with the old password
+    # Refresh tokens must also be blocked from minting new access tokens.
     for outstanding in OutstandingToken.objects.filter(user=user):
         BlacklistedToken.objects.get_or_create(token=outstanding)
     return Response({"message": "La tua password è stata reimpostata con successo. Ora puoi accedere con la nuova password."})

@@ -21,6 +21,7 @@ Responsibilities:
 Main business attributes:
 
 - identifiers: `name`, `date`, `description`
+- Event-description HTML is converted to a Quill Delta and loaded silently, without triggering a user edit.
 - pricing: `cost`, `deposit`
 - subscription window: `subscription_start_date`, `subscription_end_date`
 - form: `enable_form`, `form_programmed_open_time`, `form_note`, `form_capacity`

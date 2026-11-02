@@ -110,6 +110,8 @@ class WhatsAppConfig(models.Model):
 
 
 class WishlistSubmission(models.Model):
+    id = models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
+
     class Status(models.TextChoices):
         NEW = 'NEW', 'Nuova'
         IN_PROGRESS = 'IN_PROGRESS', 'In lavorazione'

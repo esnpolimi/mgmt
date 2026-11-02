@@ -114,6 +114,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
+    'CHECK_REVOKE_TOKEN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': 'test-jwt-signing-key',
     'USER_ID_FIELD': 'profile',

@@ -41,7 +41,7 @@ Changes to these files apply to future sessions after the repository is pulled.
 The GitHub Actions backend test workflow runs on every pull request targeting
 the project's integration branches (`development`, `staging`, or `main`),
 independently of the source branch. It also runs on every push to `development`.
-The `Backend Tests (Tests)` check must be marked as required in the protection
+The `backend-test` status check must be marked as required in the protection
 rules for the relevant target branches to prevent merging a pull request while
 the tests are failing.
 
@@ -69,7 +69,7 @@ Security maintenance:
 - treasury reads and exports are restricted to Board users
 - spreadsheet exports neutralize formula-like cell values
 - frontend dependency installation disables npm lifecycle scripts
-- frontend containers install and run as the unprivileged `node` user
+- frontend containers grant the unprivileged `node` user ownership of `/app` before installing dependencies
 - frontend container builds copy only the application files required at runtime
 - generated frontend bundles are excluded from SonarQube source analysis
 - backend containers run as a non-root `app` user
