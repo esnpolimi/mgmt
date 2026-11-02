@@ -1,9 +1,41 @@
+from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.core import mail
-from django.test import SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from utils.email_backend import DevelopmentEmailBackend
+from utils.log_archive import archive_logs_to_drive
+from utils.throttles import AuthAttemptThrottle
+
+
+class AuthAttemptThrottleTests(SimpleTestCase):
+    def test_client_ip_uses_forwarded_address_behind_one_trusted_proxy(self):
+        request = RequestFactory().get(
+            '/',
+            REMOTE_ADDR='203.0.113.1',
+            HTTP_X_FORWARDED_FOR='198.51.100.7',
+        )
+
+        self.assertEqual(AuthAttemptThrottle().get_ident(request), '198.51.100.7')
+
+    @override_settings(AUTH_THROTTLE_RATE='1/min')
+    def test_authenticated_requests_share_the_client_ip_limit(self):
+        factory = RequestFactory()
+        anonymous_request = factory.post('/', REMOTE_ADDR='192.0.2.1')
+        authenticated_request = factory.post('/', REMOTE_ADDR='192.0.2.1')
+        authenticated_request.user = SimpleNamespace(is_authenticated=True)
+        throttle = AuthAttemptThrottle()
+        cache_key = throttle.get_cache_key(anonymous_request, None)
+        cache.delete(cache_key)
+        self.addCleanup(cache.delete, cache_key)
+
+        self.assertTrue(throttle.allow_request(anonymous_request, None))
+        self.assertFalse(throttle.allow_request(authenticated_request, None))
 
 
 class DevelopmentEmailBackendTests(SimpleTestCase):
@@ -45,3 +77,52 @@ class DevelopmentEmailBackendTests(SimpleTestCase):
             "DEV_EMAIL_RECIPIENT must be configured before sending development emails.",
         ):
             DevelopmentEmailBackend().send_messages([message])
+
+
+class LogArchiveTests(SimpleTestCase):
+    @patch("utils.log_archive.MediaFileUpload")
+    @patch("utils.log_archive.find_or_create_folder", side_effect=["logs", "2026", "10"])
+    def test_uploads_logs_to_year_and_month_folder(
+        self, find_or_create_folder, media_file_upload
+    ):
+        with TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "archive-test.log"
+            log_path.write_text("entry", encoding="utf-8")
+            chunks = iter(
+                [
+                    (None, None),
+                    (None, {"id": "1", "name": "archive-test"}),
+                ]
+            )
+            with self.settings(BASE_DIR=Path(temp_dir)):
+                service = type(
+                    "Service",
+                    (),
+                    {
+                        "files": lambda self: type(
+                            "Files",
+                            (),
+                            {
+                                "create": lambda self, **kwargs: type(
+                                    "Request",
+                                    (),
+                                    {
+                                        "next_chunk": lambda self: next(chunks)
+                                    },
+                                )()
+                            },
+                        )()
+                    },
+                )()
+                uploaded = archive_logs_to_drive(
+                    service, archive_date=datetime(2026, 10, 24)
+                )
+
+        self.assertEqual(uploaded, [{"id": "1", "name": "archive-test"}])
+        self.assertEqual(find_or_create_folder.call_count, 3)
+        media_file_upload.assert_called_once_with(
+            str(log_path),
+            mimetype="text/plain",
+            chunksize=1024 * 1024,
+            resumable=True,
+        )

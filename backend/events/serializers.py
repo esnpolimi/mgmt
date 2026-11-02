@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Min, Q
 from rest_framework import serializers
 
 from events.models import Event, EventList, Subscription, EventOrganizer
@@ -169,6 +170,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     description = serializers.CharField(required=False, allow_blank=True)
     allow_online_payment = serializers.BooleanField(required=False, default=False)
     form_note = serializers.CharField(required=False, allow_blank=True, default='')
+    enable_whatsapp_link = serializers.BooleanField(required=False, default=False)
+    whatsapp_group_link = serializers.CharField(required=False, allow_blank=True, default='', max_length=512)
     form_programmed_open_time = serializers.DateTimeField(required=False, allow_null=True)
     is_refa_done = serializers.BooleanField(required=False, default=False)
     notify_list = serializers.BooleanField(required=False, default=True)
@@ -182,6 +185,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
             'profile_fields', 'fields', 'services', 'enable_form',
             'form_capacity', 'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
+            'enable_whatsapp_link', 'whatsapp_group_link',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -721,6 +725,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
     visible_to_board_only = serializers.BooleanField(read_only=True)
     reimbursements_by_organizers_only = serializers.BooleanField(read_only=True)
     form_note = serializers.CharField(read_only=True)
+    enable_whatsapp_link = serializers.BooleanField(read_only=True)
+    whatsapp_group_link = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
@@ -731,6 +737,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'profile_fields', 'fields', 'services',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
+            'enable_whatsapp_link', 'whatsapp_group_link',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -829,6 +836,13 @@ class SubscriptionProfileInlineSerializer(serializers.ModelSerializer):
 
 
 # Serializers for Subscription
+PAYMENT_TRANSACTION_TYPES = [
+    Transaction.TransactionType.SUBSCRIPTION,
+    Transaction.TransactionType.CAUZIONE,
+    Transaction.TransactionType.SERVICE,
+]
+
+
 class SubscriptionSerializer(serializers.ModelSerializer):
     profile_id = serializers.PrimaryKeyRelatedField(source='profile', read_only=True)
     profile_name = serializers.SerializerMethodField()
@@ -843,6 +857,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     status_services = serializers.SerializerMethodField()
     services_total = serializers.SerializerMethodField()
     subscribed_at = serializers.DateTimeField(source='created_at', read_only=True)
+    paid_at = serializers.SerializerMethodField()
     event_name = serializers.CharField(source='event.name', read_only=True)
     event_id = serializers.IntegerField(source='event.id', read_only=True)
     event_date = serializers.DateField(source='event.date', read_only=True)
@@ -871,6 +886,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             'status_quota', 'status_cauzione', 'status_services',
             'services_total',
             'subscribed_at',
+            'paid_at',
             'external_name',
             'is_external',
             'form_data',
@@ -899,6 +915,16 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         elif obj.external_name:
             return obj.external_name
         return ""
+
+    def get_paid_at(self, obj):
+        # Earliest payment transaction (quota, cauzione or services); prefer the queryset annotation
+        if hasattr(obj, 'paid_at_annotated'):
+            paid_at = obj.paid_at_annotated
+        else:
+            paid_at = (Transaction.objects
+                       .filter(subscription=obj, type__in=PAYMENT_TRANSACTION_TYPES)
+                       .aggregate(paid_at=Min('created_at'))['paid_at'])
+        return serializers.DateTimeField().to_representation(paid_at) if paid_at else None
 
     @staticmethod
     def get_account_id(obj):
@@ -1112,6 +1138,8 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
     visible_to_board_only = serializers.BooleanField(read_only=True)
     reimbursements_by_organizers_only = serializers.BooleanField(read_only=True)
     form_note = serializers.CharField(read_only=True)
+    enable_whatsapp_link = serializers.BooleanField(read_only=True)
+    whatsapp_group_link = serializers.CharField(read_only=True)
 
     class Meta:
         model = Event
@@ -1121,6 +1149,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'profile_fields', 'fields', 'services', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
+            'enable_whatsapp_link', 'whatsapp_group_link',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
@@ -1144,6 +1173,9 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         qs = (Subscription.objects
               .filter(list_id__in=list_ids)
               .select_related('event', 'list', 'profile')
+              .annotate(paid_at_annotated=Min(
+                  'transaction__created_at',
+                  filter=Q(transaction__type__in=PAYMENT_TRANSACTION_TYPES)))
               .order_by('-created_at'))
 
         serialized = SubscriptionSerializer(qs, many=True).data

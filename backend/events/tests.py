@@ -6,11 +6,13 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core import mail
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from events.models import Event, EventList, Subscription, EventOrganizer
+from events import views as event_views
 from profiles.models import Profile
 from treasury.models import Account, ESNcard, Transaction
 
@@ -1020,6 +1022,33 @@ class EventFormTests(EventsBaseTestCase):
 		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
 
 	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+	@patch("events.views.create_sumup_checkout", return_value=("chk_external_expired_card", {}))
+	def test_event_form_submit_allows_expired_esncard_for_external_event(self, mock_create_checkout):
+		event = _create_event(
+			enable_form=True,
+			is_allow_external=True,
+			allow_online_payment=True,
+			cost=10,
+		)
+		_create_event_list(event, name="Form List", is_main_list=False)
+		_create_event_list(event, name="Main List", is_main_list=True, capacity=0)
+		profile = _create_profile("expired-external-event@uni.it", is_esner=False)
+		card = ESNcard.objects.create(profile=profile, number="FORM-EXPIRED-EXTERNAL-001")
+		ESNcard.objects.filter(pk=card.pk).update(created_at=timezone.now() - timedelta(days=800))
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": profile.email,
+			"form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["success"])
+		self.assertFalse(response.data["payment_blocked"])
+		self.assertEqual(response.data["checkout_id"], "chk_external_expired_card")
+		mock_create_checkout.assert_called_once()
+		self.assertTrue(Subscription.objects.filter(profile=profile, event=event).exists())
+
+	@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 	def test_event_form_submit_requires_verified_email(self):
 		event = _create_event(enable_form=True)
 		_create_event_list(event, name="Form List", is_main_list=False)
@@ -1152,6 +1181,21 @@ class PaymentStatusTests(EventsBaseTestCase):
 class SumUpWebhookTests(EventsBaseTestCase):
 	"""Tests for SumUp webhook endpoint (mocked)."""
 
+	def test_sumup_api_base_url_uses_default_when_setting_is_empty(self):
+		with override_settings(SUMUP_API_BASE_URL="https://custom.sumup.test"):
+			self.assertEqual(event_views.get_sumup_api_base_url(), "https://custom.sumup.test")
+
+		with override_settings(SUMUP_API_BASE_URL=""):
+			self.assertEqual(event_views.get_sumup_api_base_url(), "https://api.sumup.com")
+
+	@override_settings(SUMUP_API_KEY="sandbox-api-key")
+	@patch("events.views.requests.post")
+	def test_sumup_api_key_skips_oauth_token_request(self, mock_post):
+		event_views._SUMUP_TOKEN_CACHE.update({"token": None, "expires_at": 0})
+
+		self.assertEqual(event_views.get_sumup_access_token(), "sandbox-api-key")
+		mock_post.assert_not_called()
+
 	@patch("events.views.requests.get")
 	@patch("events.views.get_sumup_access_token")
 	def test_sumup_webhook_marks_paid(self, mock_token, mock_get):
@@ -1175,6 +1219,10 @@ class SumUpWebhookTests(EventsBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["status"], "paid")
+		self.assertEqual(
+			mock_get.call_args.args[0],
+			"https://api.sumup.com/v0.1/checkouts/chk_1",
+		)
 
 
 class EventsListEdgeCaseTests(EventsBaseTestCase):
@@ -2481,6 +2529,29 @@ class GenerateLiberatoriePdfTests(EventsBaseTestCase):
 		self.assertEqual(response["Content-Type"], "application/pdf")
 
 	@patch("events.views.SimpleDocTemplate")
+	def test_escapes_event_name_in_waiver_markup(self, mock_doc):
+		"""Event names are escaped before being interpolated into ReportLab markup."""
+		story = []
+		mock_doc.return_value.build = lambda flowables: story.extend(flowables)
+		self.authenticate(self.board_user)
+		self.event.name = "Trip <i>&"
+		self.event.save(update_fields=["name"])
+		sub = Subscription.objects.create(
+			profile=_create_profile("subscriber_escape@test.com"),
+			event=self.event,
+			list=self.event_list,
+		)
+
+		response = self._post(self.event.pk, [sub.pk])
+
+		self.assertEqual(response.status_code, 200)
+		waiver = next(
+			flowable.text for flowable in story
+			if hasattr(flowable, "text") and "event organizers" in flowable.text
+		)
+		self.assertIn('"Trip &lt;i&gt;&amp;"', waiver)
+
+	@patch("events.views.SimpleDocTemplate")
 	def test_generates_pdf_for_external_subscription_no_crash(self, mock_doc):
 		"""PDF generation must not raise AttributeError when profile is None (external subscription)."""
 		mock_doc.return_value.build = lambda story: None
@@ -2588,3 +2659,466 @@ class PrintableLiberatorieTests(EventsBaseTestCase):
 		response = self.client.get(self.url)
 		self.assertEqual(response.status_code, 200)
 
+
+
+WA_LINK = "https://chat.whatsapp.com/AbCdEf123"
+WA_LINK_NEW = "https://chat.whatsapp.com/NewGroup456"
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend", CHECKOUT_BACKFILL_ASYNC=False)
+class WhatsAppGroupLinkTests(EventsBaseTestCase):
+	"""WhatsApp group link is shared only with subscribers holding a spot (free, or paid + Main List)."""
+
+	def _token(self, sub):
+		from events.views import _whatsapp_token
+		return _whatsapp_token(sub)
+
+	def _resolve(self, sub, token):
+		return self.client.get(f"/backend/subscription/{sub.pk}/whatsapp/", {"t": token})
+
+	def _mock_sumup_paid(self, mock_token, mock_get):
+		mock_token.return_value = "token"
+		mock_get.return_value.status_code = 200
+		mock_get.return_value.json.return_value = {
+			"status": "PAID",
+			"transactions": [{"status": "SUCCESSFUL", "id": "tx_wa"}],
+		}
+
+	def _paid_event_setup(self, *, main_capacity=10):
+		board = _create_profile("treasurer@esnpolimi.it")
+		_create_account("SumUp", user=_create_user(board))
+		event = _create_event(
+			enable_form=True, allow_online_payment=True, cost=10,
+			enable_whatsapp_link=True, whatsapp_group_link=WA_LINK,
+		)
+		form_list = _create_event_list(event, name="Form List", is_main_list=False)
+		main_list = _create_event_list(event, name="Main List", capacity=main_capacity, is_main_list=True)
+		waiting_list = _create_event_list(event, name="Waiting List", capacity=10, is_main_list=False, is_waiting_list=True)
+		payer = _create_profile("payer_wa@uni.it", is_esner=False)
+		ESNcard.objects.create(profile=payer, number="WA-VALID-001")
+		sub = Subscription.objects.create(
+			profile=payer, event=event, list=form_list, created_by_form=True, sumup_checkout_id="chk_wa",
+		)
+		return event, sub, main_list, waiting_list
+
+	def test_free_event_submit_returns_link_and_emails_it(self):
+		event = _create_event(enable_form=True, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		_create_event_list(event, name="Form List", is_main_list=False)
+		_create_profile("free_wa@uni.it", is_esner=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": "free_wa@uni.it", "form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		url = response.data["whatsapp_link_url"]
+		self.assertIn(f"/event/{event.pk}/whatsapp?subscriptionId=", url)
+		self.assertNotIn(WA_LINK, url)  # stable access URL, never the raw invite
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertIn(url, mail.outbox[0].alternatives[0][0])
+		sub = Subscription.objects.get(pk=response.data["subscription_id"])
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+
+	def test_feature_off_behaves_as_before(self):
+		event = _create_event(enable_form=True, whatsapp_group_link=WA_LINK)  # switch off, link kept
+		_create_event_list(event, name="Form List", is_main_list=False)
+		_create_profile("off_wa@uni.it", is_esner=False)
+
+		response = self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": "off_wa@uni.it", "form_data": {},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.data["whatsapp_link_url"])
+		self.assertNotIn("WhatsApp", mail.outbox[0].alternatives[0][0])
+		sub = Subscription.objects.get(pk=response.data["subscription_id"])
+		self.assertEqual(self._resolve(sub, self._token(sub)).status_code, 404)
+
+	def test_public_form_view_never_exposes_link(self):
+		event = _create_event(enable_form=True, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		response = self.client.get(f"/backend/event/{event.pk}/form/")
+		self.assertEqual(response.status_code, 200)
+		self.assertNotIn(WA_LINK, str(response.data))
+
+	@patch("events.views.requests.get")
+	@patch("events.views.get_sumup_access_token")
+	def test_paid_in_main_list_gets_link_only_with_valid_token(self, mock_token, mock_get):
+		self._mock_sumup_paid(mock_token, mock_get)
+		event, sub, main_list, _ = self._paid_event_setup()
+
+		bad = self.client.post(f"/backend/subscription/{sub.pk}/process_payment/", {"t": "forged"}, format="json")
+		self.assertEqual(bad.data["status"], "PAID")
+		self.assertNotIn("whatsapp_link_url", bad.data)
+
+		good = self.client.post(
+			f"/backend/subscription/{sub.pk}/process_payment/", {"t": self._token(sub)}, format="json"
+		)
+		self.assertEqual(good.data["status"], "PAID")
+		self.assertTrue(good.data["is_main_list"])
+		self.assertIn(f"subscriptionId={sub.pk}", good.data["whatsapp_link_url"])
+
+		sub.refresh_from_db()
+		self.assertEqual(sub.list, main_list)
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		wa_mails = [m for m in mail.outbox if "WhatsApp" in m.alternatives[0][0]]
+		self.assertEqual(len(wa_mails), 1)  # carried by the payment confirmation email, not duplicated
+
+	@patch("events.views.requests.get")
+	@patch("events.views.get_sumup_access_token")
+	def test_webhook_only_payment_sends_link_email(self, mock_token, mock_get):
+		self._mock_sumup_paid(mock_token, mock_get)
+		_, sub, _, _ = self._paid_event_setup()
+
+		self.client.post("/backend/sumup/webhook/", {"checkout_id": "chk_wa"}, format="json")
+
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+
+	@patch("events.views.requests.get")
+	@patch("events.views.get_sumup_access_token")
+	def test_waiting_list_payer_gets_link_when_moved_to_main(self, mock_token, mock_get):
+		self._mock_sumup_paid(mock_token, mock_get)
+		event, sub, main_list, waiting_list = self._paid_event_setup(main_capacity=1)
+		Subscription.objects.create(profile=_create_profile("first_wa@uni.it"), event=event, list=main_list)
+
+		response = self.client.post(
+			f"/backend/subscription/{sub.pk}/process_payment/", {"t": self._token(sub)}, format="json"
+		)
+		self.assertEqual(response.data["status"], "PAID")
+		self.assertNotIn("whatsapp_link_url", response.data)
+		self.assertFalse(response.data["is_main_list"])
+		sub.refresh_from_db()
+		self.assertEqual(sub.list, waiting_list)
+		self.assertFalse(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(self._resolve(sub, self._token(sub)).status_code, 404)
+
+		main_list.capacity = 2
+		main_list.save()
+		staff = _create_user(_create_profile("mover_wa@esnpolimi.it"))
+		staff.user_permissions.add(self.perm_change_subscription)
+		self.authenticate(staff)
+		with self.captureOnCommitCallbacks(execute=True):
+			moved = self.client.post("/backend/move-subscriptions/", {
+				"subscriptionIds": [sub.pk], "targetListId": main_list.pk, "targetEventId": event.pk,
+			}, format="json")
+		self.assertEqual(moved.status_code, 200)
+
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(self._resolve(sub, self._token(sub)).data["whatsapp_group_link"], WA_LINK)
+
+	def test_partial_office_payment_is_not_eligible(self):
+		from events.views import _handle_payment_status, _whatsapp_link_eligible
+		staff = _create_user(_create_profile("cashier_wa@esnpolimi.it"))
+		account = _create_account("Cassa", user=staff)
+		event = _create_event(cost=10, deposit=20, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		main_list = _create_event_list(event)
+		sub = Subscription.objects.create(profile=_create_profile("partial_wa@uni.it"), event=event, list=main_list)
+
+		_handle_payment_status(subscription=sub, account_id=account.pk, quota_status='paid',
+							   deposit_status='pending', executor=staff)
+		self.assertFalse(_whatsapp_link_eligible(sub))
+		self.assertFalse(sub.additional_data.get("whatsapp_link_email_sent"))
+
+		_handle_payment_status(subscription=sub, account_id=account.pk, quota_status='paid',
+							   deposit_status='paid', executor=staff)
+		sub.refresh_from_db()
+		self.assertTrue(_whatsapp_link_eligible(sub))
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+
+	def test_resolve_endpoint_follows_edits_and_rejects_bad_tokens(self):
+		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		sub = Subscription.objects.create(
+			profile=_create_profile("resolve_wa@uni.it"), event=event, list=_create_event_list(event)
+		)
+		token = self._token(sub)
+
+		self.assertEqual(self._resolve(sub, token).data["whatsapp_group_link"], WA_LINK)
+		self.assertEqual(self._resolve(sub, "forged").status_code, 404)
+		self.assertEqual(self._resolve(sub, "").status_code, 404)
+
+		event.whatsapp_group_link = WA_LINK_NEW
+		event.save()
+		self.assertEqual(self._resolve(sub, token).data["whatsapp_group_link"], WA_LINK_NEW)
+
+		event.enable_whatsapp_link = False
+		event.save()
+		self.assertEqual(self._resolve(sub, token).status_code, 404)
+
+	def test_patch_validation_and_off_to_on_backfill(self):
+		editor = _create_user(_create_profile("editor_wa@esnpolimi.it"))
+		editor.user_permissions.add(self.perm_change_event)
+		self.authenticate(editor)
+		event = _create_event()
+		main_list = _create_event_list(event)
+		sub = Subscription.objects.create(profile=_create_profile("early_wa@uni.it"), event=event, list=main_list)
+
+		missing = self.client.patch(f"/backend/event/{event.pk}/", {"enable_whatsapp_link": True}, format="json")
+		self.assertEqual(missing.status_code, 400)
+		wrong = self.client.patch(f"/backend/event/{event.pk}/", {
+			"enable_whatsapp_link": True, "whatsapp_group_link": "https://example.com/group",
+		}, format="json")
+		self.assertEqual(wrong.status_code, 400)
+
+		ok = self.client.patch(f"/backend/event/{event.pk}/", {
+			"enable_whatsapp_link": True, "whatsapp_group_link": WA_LINK,
+		}, format="json")
+		self.assertEqual(ok.status_code, 200)
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(len(mail.outbox), 1)
+
+		# Changing an active link sends nothing: the stored access URLs resolve to the new link
+		changed = self.client.patch(f"/backend/event/{event.pk}/", {"whatsapp_group_link": WA_LINK_NEW}, format="json")
+		self.assertEqual(changed.status_code, 200)
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(self._resolve(sub, self._token(sub)).data["whatsapp_group_link"], WA_LINK_NEW)
+	def test_link_is_event_level_and_works_without_form(self):
+		creator = _create_user(_create_profile("creator_wa@esnpolimi.it"))
+		creator.user_permissions.add(self.perm_add_event, self.perm_add_subscription)
+		self.authenticate(creator)
+		created = self.client.post("/backend/event/", {
+			"name": "No Form WA Event",
+			"date": str(timezone.now().date()),
+			"subscription_start_date": (timezone.now() - timedelta(days=1)).isoformat(),
+			"subscription_end_date": (timezone.now() + timedelta(days=1)).isoformat(),
+			"cost": "10.00",
+			"enable_form": False,
+			"enable_whatsapp_link": True,
+			"whatsapp_group_link": WA_LINK,
+			"lists": [{"name": "Main List", "capacity": 10, "is_main_list": True}],
+		}, format="json")
+		self.assertEqual(created.status_code, 200)
+		event = Event.objects.get(name="No Form WA Event")
+		self.assertFalse(event.enable_form)
+		self.assertTrue(event.enable_whatsapp_link)
+		self.assertEqual(event.whatsapp_group_link, WA_LINK)
+
+		account = _create_account("Cassa WA", user=creator)
+		profile = _create_profile("office_wa@uni.it", is_esner=False)
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": event.lists.get().pk,
+			"account_id": account.pk, "status_quota": "paid",
+		}, format="json")
+		self.assertEqual(response.status_code, 200)
+		sub = Subscription.objects.get(pk=response.data["id"])
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.assertTrue(any("WhatsApp" in m.alternatives[0][0] for m in mail.outbox))
+
+
+	def _office_staff(self, email):
+		staff = _create_user(_create_profile(email))
+		staff.user_permissions.add(self.perm_add_subscription, self.perm_change_subscription, self.perm_change_event)
+		self.authenticate(staff)
+		return staff
+
+	def _wa_mails(self, recipient):
+		return [m for m in mail.outbox if recipient in m.to and "WhatsApp" in m.alternatives[0][0]]
+
+	def test_office_subscription_on_free_event_gets_link_in_any_list(self):
+		self._office_staff("office_free_wa@esnpolimi.it")
+		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		_create_event_list(event)
+		waiting = _create_event_list(event, name="Waiting List", is_main_list=False, is_waiting_list=True)
+		profile = _create_profile("free_office_wa@uni.it", is_esner=False)
+
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": waiting.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(Subscription.objects.get(pk=response.data["id"]).additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(len(self._wa_mails("free_office_wa@uni.it")), 1)
+
+	def test_office_payment_sends_link_even_with_payment_email_disabled(self):
+		staff = self._office_staff("office_nomail_wa@esnpolimi.it")
+		account = _create_account("Cassa NoMail", user=staff)
+		event = _create_event(cost=10, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		main_list = _create_event_list(event)
+		profile = _create_profile("nomail_wa@uni.it", is_esner=False)
+
+		response = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": main_list.pk,
+			"account_id": account.pk, "status_quota": "paid", "send_payment_email": False,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(mail.outbox), 1)  # WhatsApp invite only, no payment confirmation
+		self.assertEqual(mail.outbox[0].subject, f"{event.name} - WhatsApp group")
+
+	def test_paid_outside_main_list_waits_until_patched_into_main(self):
+		staff = self._office_staff("office_patch_wa@esnpolimi.it")
+		account = _create_account("Cassa Patch", user=staff)
+		event = _create_event(cost=10, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		main_list = _create_event_list(event)
+		waiting = _create_event_list(event, name="Waiting List", is_main_list=False, is_waiting_list=True)
+		profile = _create_profile("patch_wa@uni.it", is_esner=False)
+
+		created = self.client.post("/backend/subscription/", {
+			"profile": profile.pk, "event": event.pk, "list": waiting.pk,
+			"account_id": account.pk, "status_quota": "paid",
+		}, format="json")
+		self.assertEqual(created.status_code, 200)
+		self.assertEqual(self._wa_mails("patch_wa@uni.it"), [])
+
+		patched = self.client.patch(f"/backend/subscription/{created.data['id']}/", {
+			"list": main_list.pk, "account_id": account.pk,
+			"status_quota": "paid", "status_cauzione": "pending",
+		}, format="json")
+		self.assertEqual(patched.status_code, 200)
+		self.assertEqual(len(self._wa_mails("patch_wa@uni.it")), 1)
+
+	def test_move_to_another_event_sends_that_events_link(self):
+		self._office_staff("mover_event_wa@esnpolimi.it")
+		source = _create_event(name="WA Source", enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		_create_event_list(source)
+		target = _create_event(name="WA Target", enable_whatsapp_link=True, whatsapp_group_link=WA_LINK_NEW)
+		target_main = _create_event_list(target)
+		sub = Subscription.objects.create(
+			profile=_create_profile("mover_event_sub@uni.it", is_esner=False), event=source,
+			list=source.lists.get(), additional_data={"whatsapp_link_email_sent": True},
+		)
+
+		with self.captureOnCommitCallbacks(execute=True):
+			moved = self.client.post("/backend/move-subscriptions/", {
+				"subscriptionIds": [sub.pk], "targetListId": target_main.pk, "targetEventId": target.pk,
+			}, format="json")
+
+		self.assertEqual(moved.status_code, 200)
+		self.assertEqual(len(self._wa_mails("mover_event_sub@uni.it")), 1)
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+
+	def test_any_event_edit_backfills_while_sharing_active(self):
+		self._office_staff("editor_backfill_wa@esnpolimi.it")
+		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		sub = Subscription.objects.create(
+			profile=_create_profile("missed_wa@uni.it", is_esner=False), event=event, list=_create_event_list(event),
+		)
+
+		response = self.client.patch(f"/backend/event/{event.pk}/", {"description": "updated"}, format="json")
+
+		self.assertEqual(response.status_code, 200)
+		sub.refresh_from_db()
+		self.assertTrue(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.client.patch(f"/backend/event/{event.pk}/", {"description": "again"}, format="json")
+		self.assertEqual(len(self._wa_mails("missed_wa@uni.it")), 1)
+
+
+class SubscriptionPaidAtTests(EventsBaseTestCase):
+	"""Tests for the paid_at field used to sort subscriptions by payment time."""
+
+	def test_upsert_treats_numeric_string_account_id_as_unchanged(self):
+		user = _create_user(_create_profile("account-id-normalization@esnpolimi.it"))
+		account = _create_account("Main", user=user)
+		event = _create_event(cost=10)
+		sub = Subscription.objects.create(
+			profile=_create_profile("account-id-normalization-sub@esnpolimi.it"),
+			event=event,
+			list=_create_event_list(event),
+		)
+		transaction = Transaction.objects.create(
+			subscription=sub, account=account, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Original")
+
+		result = event_views._upsert_transaction(
+			subscription=sub,
+			tx_type=Transaction.TransactionType.SUBSCRIPTION,
+			account_id=str(account.pk),
+			amount=10,
+			description="Updated",
+			executor=user,
+		)
+
+		self.assertEqual(result.pk, transaction.pk)
+		self.assertEqual(result.description, "Original")
+
+	def test_event_detail_exposes_paid_at(self):
+		"""paid_at is null when unpaid and equals the earliest payment transaction otherwise."""
+		profile = _create_profile("viewer-paid-at@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_event)
+		self.authenticate(user)
+		account = _create_account("Main", user=user)
+
+		event = _create_event(cost=10, deposit=5)
+		list_main = _create_event_list(event)
+		paid_sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+		unpaid_profile = _create_profile("unpaid-paid-at@esnpolimi.it")
+		unpaid_sub = Subscription.objects.create(profile=unpaid_profile, event=event, list=list_main)
+
+		quota_tx = Transaction.objects.create(
+			subscription=paid_sub, account=account, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Quota")
+		cauzione_tx = Transaction.objects.create(
+			subscription=paid_sub, account=account, type=Transaction.TransactionType.CAUZIONE,
+			amount=5, description="Cauzione")
+		earliest = timezone.now() - timedelta(days=2)
+		Transaction.objects.filter(pk=cauzione_tx.pk).update(created_at=earliest)
+		Transaction.objects.filter(pk=quota_tx.pk).update(created_at=earliest + timedelta(hours=1))
+
+		response = self.client.get(f"/backend/event/{event.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		subs = {s["id"]: s for s in response.data["subscriptions"]}
+		self.assertIsNone(subs[unpaid_sub.pk]["paid_at"])
+		self.assertIsNotNone(subs[paid_sub.pk]["paid_at"])
+		from django.utils.dateparse import parse_datetime
+		self.assertEqual(parse_datetime(subs[paid_sub.pk]["paid_at"]), earliest)
+
+	def test_subscription_detail_exposes_paid_at_without_annotation(self):
+		"""Subscription detail (no annotation) falls back to a query for paid_at."""
+		profile = _create_profile("viewer-paid-at-detail@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_view_subscription)
+		self.authenticate(user)
+		account = _create_account("Main", user=user)
+
+		event = _create_event(cost=10)
+		list_main = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+		Transaction.objects.create(
+			subscription=sub, account=account, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Quota")
+
+		response = self.client.get(f"/backend/subscription/{sub.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNotNone(response.data["paid_at"])
+
+	def test_changing_payment_account_keeps_transaction_and_payment_time(self):
+		"""Editing the payment account updates the transaction in place and rebalances accounts."""
+		profile = _create_profile("editor-paid-at@esnpolimi.it")
+		user = _create_user(profile)
+		user.user_permissions.add(self.perm_change_subscription)
+		self.authenticate(user)
+		account_a = _create_account("Cassa A", user=user)
+		account_b = _create_account("Cassa B", user=user)
+
+		event = _create_event(cost=10)
+		list_main = _create_event_list(event)
+		sub = Subscription.objects.create(profile=profile, event=event, list=list_main)
+		quota_tx = Transaction.objects.create(
+			subscription=sub, account=account_a, type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=10, description="Quota")
+		paid_time = timezone.now() - timedelta(days=3)
+		Transaction.objects.filter(pk=quota_tx.pk).update(created_at=paid_time)
+
+		response = self.client.patch(f"/backend/subscription/{sub.pk}/", {
+			"status_quota": "paid",
+			"status_cauzione": "pending",
+			"status_services": "pending",
+			"account_id": account_b.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		txs = Transaction.objects.filter(subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION)
+		self.assertEqual(txs.count(), 1)
+		tx = txs.get()
+		self.assertEqual(tx.pk, quota_tx.pk)
+		self.assertEqual(tx.account_id, account_b.pk)
+		self.assertEqual(tx.created_at, paid_time)
+		account_a.refresh_from_db()
+		account_b.refresh_from_db()
+		self.assertEqual(account_a.balance, 0)
+		self.assertEqual(account_b.balance, 10)

@@ -6,6 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = 'django-insecure-test-key-for-ci-only'
+AUTH_THROTTLE_RATE = '100000/min'  # effectively off, tests share one cache and one IP
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
@@ -43,6 +44,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -93,6 +95,7 @@ AUTH_USER_MODEL = "users.User"
 
 # REST Framework
 REST_FRAMEWORK = {
+    'NUM_PROXIES': 1,
     'EXCEPTION_HANDLER': 'utils.exceptions.api_exception_handler',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -112,6 +115,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
+    'CHECK_REVOKE_TOKEN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': 'test-jwt-signing-key',
     'USER_ID_FIELD': 'profile',
@@ -130,9 +134,12 @@ GOOGLE_DRIVE_FOLDER_ID = 'dummy'
 GOOGLE_SERVICE_ACCOUNT_FILE = BASE_DIR / 'dummy.json'
 SUMUP_CLIENT_ID = 'dummy'
 SUMUP_CLIENT_SECRET = 'dummy'
+SUMUP_API_KEY = 'dummy'
 SUMUP_WEBHOOK_SECRET = 'dummy'
 SUMUP_PAY_TO_EMAIL = 'dummy@test.com'
 SUMUP_MERCHANT_CODE = 'dummy'
+SUMUP_ENVIRONMENT = 'sandbox'
+SUMUP_API_BASE_URL = 'https://api.sumup.com'
 
 SCHEME_HOST = 'http://localhost:3000'
 SESSION_COOKIE_SECURE = False

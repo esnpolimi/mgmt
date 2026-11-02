@@ -18,6 +18,7 @@ import EventFormLogin from './Pages/events/EventFormLogin.jsx';
 import EventForm from './Pages/events/EventForm.jsx';
 import EventFormResult from './Pages/events/EventFormResult.jsx';
 import EventPayment from './Pages/events/EventPayment.jsx';
+import EventWhatsApp from './Pages/events/EventWhatsApp.jsx';
 import ProtectedRoute from "./Components/ProtectedRoute.jsx";
 import EmailVerification from './Pages/EmailVerification.jsx';
 import ResetPassword from "./Pages/ResetPassword.jsx";
@@ -27,6 +28,8 @@ import Profile from "./Pages/profiles/Profile.jsx";
 import UrlSanitizer from "./UrlSanitizer";
 import ContentManager from "./Pages/ContentManager.jsx";
 import WhatsAppForm from "./Pages/WhatsAppForm.jsx";
+import Wishlist from "./Pages/Wishlist.jsx";
+import WishlistSubmissions from "./Pages/WishlistSubmissions.jsx";
 
 /**
  * Inner shell rendered inside AuthProvider so that useMaintenanceNotification
@@ -52,12 +55,15 @@ function AppShell() {
                     <Route path='/erasmus_form' element={<ErasmusForm/>}/>
                     <Route path='/esner_form' element={<ESNerForm/>}/>
                     <Route path='/whatsapp' element={<WhatsAppForm/>}/>
+                    <Route path='/wishlist' element={<Wishlist/>}/>
+                    <Route path='/wishlist-submissions' element={<ProtectedRoute requiredGroup="Board"><WishlistSubmissions/></ProtectedRoute>}/>
                     <Route path='/events' element={<ProtectedRoute><EventsList/></ProtectedRoute>}/>
                     <Route path='/event/:id' element={<ProtectedRoute><Event/></ProtectedRoute>}/>
                     <Route path='/event/:id/formlogin' element={<EventFormLogin/>}/>
                     <Route path='/event/:id/form' element={<EventForm/>}/>
                     <Route path='/event/:id/formresult' element={<EventFormResult/>}/>
                     <Route path='/event/:id/pay' element={<EventPayment/>}/>
+                    <Route path='/event/:id/whatsapp' element={<EventWhatsApp/>}/>
                     <Route path='/treasury' element={<ProtectedRoute requiredPermission="change_account"><TreasuryDashboard/></ProtectedRoute>}/>
                     <Route path='/treasury/accounts_list' element={<ProtectedRoute requiredPermission="change_account"><AccountsList/></ProtectedRoute>}/>
                     <Route path='/treasury/transactions_list' element={<ProtectedRoute requiredPermission="change_account"><TransactionsList/></ProtectedRoute>}/>

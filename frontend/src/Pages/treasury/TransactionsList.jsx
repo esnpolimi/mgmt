@@ -289,7 +289,7 @@ export default function TransactionsList() {
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
-                URL.revokeObjectURL(dlUrl);
+                window.setTimeout(() => URL.revokeObjectURL(dlUrl), 1000);
                 setPopup({message: 'Esportazione completata.', state: 'success', id: Date.now()});
             },
             onError: (err) => defaultErrorHandler(err, setPopup),

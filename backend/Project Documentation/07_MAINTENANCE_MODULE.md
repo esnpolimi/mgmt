@@ -17,7 +17,14 @@ The module does not use dedicated Django models.
 
 Application state is persisted in:
 
-- backend/maintenance_notification.json
+- `MAINTENANCE_NOTIFICATION_FILE` when configured; otherwise
+  `backend/maintenance_notification.json`
+- Docker Compose stores the configured file in the `maintenance_state` volume at
+  `/var/lib/app/maintenance_notification.json`
+
+When the configured file is absent, the backend reads the legacy
+`backend/maintenance_notification.json` file so an existing notification remains
+visible while the named volume is first created.
 
 Payload schema:
 
@@ -40,6 +47,7 @@ Base path: /backend/
 
 Behavior:
 
+- accepts only `GET` requests
 - requires JWT access token in query parameter `token`
 - returns HTTP `403` when token is missing or invalid
 - sends a maintenance event when `notification_id` changes
@@ -81,14 +89,14 @@ Main rules:
 1. staff opens maintenance admin page
 2. submits `action=send`
 3. backend generates `notification_id` and `triggered_at`
-4. state is written to `maintenance_notification.json`
+4. state is written to the configured notification file
 5. SSE clients detect change and receive maintenance event
 
 ### 5.2 Clear Maintenance Notification
 
 1. staff submits `action=clear`
 2. backend resets payload with `notification_id = null`
-3. state is updated in `maintenance_notification.json`
+3. state is updated in the configured notification file
 4. polling/SSE clients no longer receive active state
 
 ### 5.3 Client Consumption Flow
@@ -100,7 +108,8 @@ Main rules:
 
 ## 6. Operational Constraints
 
-1. File-based persistence depends on shared local filesystem access.
+1. File-based persistence depends on shared local filesystem access; Docker
+   Compose stores state outside the bind-mounted application directory.
 2. SSE on WSGI relies on controlled long-lived connections with timeout/recycle.
 3. Stream authentication via query param is required due to EventSource header limits.
 4. Heartbeats are required to prevent infrastructure idle timeouts.

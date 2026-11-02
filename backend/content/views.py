@@ -2,22 +2,28 @@ import csv
 import io
 import logging
 import threading
+from collections.abc import Mapping
 from datetime import datetime
 
 import sentry_sdk
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils.html import escape
 from googleapiclient.http import MediaIoBaseUpload
-from rest_framework import viewsets, permissions
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework import serializers, viewsets, permissions
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
+from utils.throttles import AuthAttemptThrottle
 from rest_framework.response import Response
 from rest_framework import status as drf_status
-from .models import ContentSection, ContentLink, WhatsAppConfig
+from .models import ContentSection, ContentLink, WhatsAppConfig, WishlistSubmission
+from profiles.models import Profile
 from .serializers import (
     ContentSectionSerializer, ContentLinkSerializer,
     WhatsAppConfigSerializer, WhatsAppRegistrationSerializer,
+    WishlistSubmissionSerializer,
 )
 from utils.google_drive import get_drive_service
+from utils.permissions import user_is_board
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +77,9 @@ def _append_to_whatsapp_log(data, outcome):
                 data['course_of_study'],
                 outcome,
             ]
+            # neutralize spreadsheet formulas coming from public form fields
+            new_row = ["'" + c if isinstance(c, str) and c[:1] in ('=', '+', '-', '@', '\t', '\r') else c
+                       for c in new_row]
 
             if files:
                 # Download existing CSV, append the new row, re-upload
@@ -206,7 +215,7 @@ def _send_whatsapp_email(first_name, email, whatsapp_link):
     subject = 'ESN Politecnico Milano \u2013 WhatsApp Group Link'
     html_content = f"""
     <html><body>
-    <p>Hi {first_name},</p>
+    <p>Hi {escape(first_name)},</p>
     <p>here is the link to gain access to the WhatsApp group:
     <a href="{whatsapp_link}">ESN Politecnico Milano - WhatsApp</a>.</p>
     <p>We kindly ask you not to share the link, as the access to the group should be limited
@@ -238,6 +247,7 @@ def _send_whatsapp_email(first_name, email, whatsapp_link):
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAttemptThrottle])
 def whatsapp_register(request):
     """
     POST /backend/content/whatsapp-register/
@@ -285,3 +295,72 @@ def whatsapp_register(request):
     if log_error:
         logger.warning(f"WhatsApp registration log append failed for {email}")
     return Response({'message': 'Email sent successfully.'}, status=drf_status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAttemptThrottle])
+def wishlist_submit(request):
+    serializer = WishlistSubmissionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=drf_status.HTTP_400_BAD_REQUEST)
+
+    email = serializer.validated_data['email'].lower()
+    profile = Profile.objects.filter(email__iexact=email, email_is_verified=True).first()
+    data = serializer.validated_data.copy()
+    data['email'] = email
+    data['profile'] = profile
+    # The public endpoint must not let callers bypass the Board workflow.
+    data['status'] = WishlistSubmission.Status.NEW
+    if profile:
+        data['first_name'] = profile.name
+        data['last_name'] = profile.surname
+        data['phone'] = data.get('phone') or ' '.join(
+            value for value in [profile.phone_prefix, profile.phone_number] if value
+        )
+        data['country'] = data.get('country') or profile.country or ''
+    WishlistSubmission.objects.create(**data)
+    return Response({'message': 'Richiesta inviata correttamente.'}, status=drf_status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([AuthAttemptThrottle])
+def wishlist_lookup(request):
+    email = request.query_params.get('email', '').strip().lower()
+    if not email:
+        return Response({'email': 'Email obbligatoria.'}, status=drf_status.HTTP_400_BAD_REQUEST)
+    try:
+        serializers.EmailField().run_validation(email)
+    except serializers.ValidationError:
+        return Response({'email': 'Inserisci un indirizzo email valido.'}, status=drf_status.HTTP_400_BAD_REQUEST)
+    profile = Profile.objects.filter(email__iexact=email).first()
+    return Response({
+        'exists': profile is not None,
+        'verified': bool(profile and profile.email_is_verified),
+    })
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def wishlist_submissions(request):
+    if not user_is_board(request.user):
+        return Response({'detail': 'Permission denied.'}, status=drf_status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        return Response(WishlistSubmissionSerializer(WishlistSubmission.objects.all(), many=True).data)
+
+    if not isinstance(request.data, Mapping) or set(request.data) != {'id', 'status'}:
+        return Response(
+            {'detail': 'Only id and status may be provided.'},
+            status=drf_status.HTTP_400_BAD_REQUEST,
+        )
+
+    submission = WishlistSubmission.objects.filter(pk=request.data.get('id')).first()
+    if not submission:
+        return Response({'detail': 'Wishlist request not found.'}, status=drf_status.HTTP_404_NOT_FOUND)
+    serializer = WishlistSubmissionSerializer(submission, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=drf_status.HTTP_400_BAD_REQUEST)

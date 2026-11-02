@@ -49,15 +49,8 @@ export default function Login() {
             typeof success === "string" &&
             (success.trim().startsWith("<!DOCTYPE html") || success.trim().startsWith("<html"))
         ) {
-            // Open the HTML error in a new tab
-            const newWindow = window.open();
-            if (newWindow) {
-                newWindow.document.open();
-                newWindow.document.write(success);
-                newWindow.document.close();
-            } else {
-                setStatusMessage({message: "Impossibile aprire la pagina di errore in una nuova scheda.", state: 'error'});
-            }
+            // never render server-provided HTML (it would run with this origin's access to the tokens)
+            setStatusMessage({message: "Errore del server. Riprova più tardi.", state: 'error'});
         } else {
             setStatusMessage({message: success, state: 'error'});
         }

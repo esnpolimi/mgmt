@@ -40,6 +40,21 @@ import SharedListsSelector from './SharedListsSelector';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 import {useAuth} from "../../Context/AuthContext";
 
+const WHATSAPP_LINK_PREFIX = 'https://chat.whatsapp.com/';
+
+const InfoLabel = ({label, description}) => (
+    <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+        <span>{label}</span>
+        <Tooltip
+            title={<Typography variant="body2" sx={{maxWidth: 420, whiteSpace: 'normal'}}>{description}</Typography>}
+            arrow
+            placement="top"
+        >
+            <InfoIcon fontSize="small" color="action" aria-label={`Informazioni su ${label}`}/>
+        </Tooltip>
+    </Box>
+);
+
 export default function EventModal({open, event, isEdit, onClose}) {
     const errorsRef = React.useRef({
         name: [false, ''],
@@ -255,7 +270,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Grid>
                     <Grid size={{xs: 12, md: 3}}>
                         <FormControlLabel
-                            label="Consenti iscrizione esterni"
+                            label={<InfoLabel label="Consenti iscrizione esterni" description="Permette di iscrivere anche persone che non hanno ancora un profilo nel gestionale."/>}
                             control={
                                 <Switch
                                     checked={!!localData.is_allow_external}
@@ -268,7 +283,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     </Grid>
                     <Grid size={{xs: 12, md: 3}}>
                         <FormControlLabel
-                            label="Notifica Lista assegnata nelle conferme via email"
+                            label={<InfoLabel label="Notifica Lista assegnata nelle conferme via email" description="Comunica nella email di conferma in quale lista è stata inserita la persona. Se disattivata, la lista non viene indicata."/>}
                             control={
                                 <Switch
                                     checked={!!localData.notify_list}
@@ -283,7 +298,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {(isBoardMember || isOrganizer || !isEdit) && (
                         <Grid size={{xs: 12, md: 3}}>
                             <FormControlLabel
-                                label="Rimborsi limitati agli Organizzatori"
+                                label={<InfoLabel label="Rimborsi limitati agli Organizzatori" description="Permette di effettuare i rimborsi solo agli organizzatori dell'evento e ai membri del Board."/>}
                                 control={
                                     <Switch
                                         checked={!!localData.reimbursements_by_organizers_only}
@@ -299,7 +314,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     {isBoardMember && (
                         <Grid size={{xs: 12, md: 3}}>
                             <FormControlLabel
-                                label="Visibile solo ai Board Members"
+                                label={<InfoLabel label="Visibile solo ai Board Members" description="Fa vedere l'evento solo alle persone del Board. Gli altri utenti non lo vedranno."/>}
                                 control={
                                     <Switch
                                         checked={!!localData.visible_to_board_only}
@@ -706,12 +721,20 @@ export default function EventModal({open, event, isEdit, onClose}) {
 
         return (
             <Box my={2}>
-                <Typography variant="h6" gutterBottom>Dati Anagrafici</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{mb: 1}}>
-                    Dati visualizzati nelle liste come colonne, visibili solo a ESNers per aiutare nell&apos;organizzazione.<br/>
-                    I dati sono presi dal profilo Erasmus! Richiedi dati aggiornati tra i campi del Form di Iscrizione.<br/>
-                    {/* NEW: clarify combined formatting */}
-                    Numero Telefono e Numero WhatsApp includono automaticamente il prefisso (es: +39 3396793228).
+                <Typography variant="h6" gutterBottom sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                    Dati Anagrafici
+                    <Tooltip
+                        title={<Typography variant="body2" sx={{maxWidth: 420, whiteSpace: 'normal'}}>
+                            Questi dati possono essere mostrati nelle liste per aiutare gli ESNers a organizzare
+                            l&apos;evento. Vengono presi dal profilo Erasmus e potrebbero non essere aggiornati:
+                            per chiedere dati nuovi, aggiungi le domande nel Form di Iscrizione. Il prefisso viene
+                            aggiunto automaticamente ai numeri di telefono e WhatsApp (es: +39 3396793228).
+                        </Typography>}
+                        arrow
+                        placement="top"
+                    >
+                        <InfoIcon fontSize="small" color="action" aria-label="Informazioni sui dati anagrafici"/>
+                    </Tooltip>
                 </Typography>
                 <Select
                     multiple
@@ -1302,6 +1325,58 @@ export default function EventModal({open, event, isEdit, onClose}) {
     }
 
     /* Form block */
+    /* WhatsApp group link block (event-level, independent of the form) */
+    const WhatsAppBlock = function WhatsAppBlock({dataRef}) {
+
+        const [localData, setLocalData] = useState(dataRef.current)
+
+        const setWhatsappField = function setWhatsappField(key, val) {
+            setLocalData({
+                ...localData,
+                [key]: val
+            })
+            dataRef.current[key] = val
+        }
+        const whatsappLink = (localData.whatsapp_group_link || '').trim();
+        const whatsappLinkInvalid = !!localData.enable_whatsapp_link && !whatsappLink.startsWith(WHATSAPP_LINK_PREFIX);
+
+        return (
+            <Grid size={{xs: 12}} sx={{mt: 3}}>
+                <FormControlLabel
+                    label={
+                        <InfoLabel
+                            label={eventNames.enable_whatsapp_link}
+                            description={'Invia il link del gruppo WhatsApp alle persone che possono partecipare: per gli eventi gratuiti basta essere iscritti; per quelli a pagamento servono il pagamento completo e la lista principale. Se cambi il link, chi lo ha già ricevuto userà il nuovo gruppo. Ti consigliamo di approvare manualmente i nuovi partecipanti, perché il link può essere inoltrato.'}
+                        />
+                    }
+                    control={
+                        <Switch
+                            checked={!!localData.enable_whatsapp_link}
+                            onChange={e => setWhatsappField('enable_whatsapp_link', e.target.checked)}
+                            name="enable_whatsapp_link"
+                            color="primary"
+                        />
+                    }
+                />
+                {localData.enable_whatsapp_link && (
+                    <>
+                        <TextField
+                            label={eventNames.whatsapp_group_link}
+                            value={localData.whatsapp_group_link || ''}
+                            onChange={e => setWhatsappField('whatsapp_group_link', e.target.value)}
+                            fullWidth
+                            required
+                            sx={{mt: 1}}
+                            placeholder={`${WHATSAPP_LINK_PREFIX}...`}
+                            error={whatsappLinkInvalid}
+                            helperText={whatsappLinkInvalid ? `Il link deve iniziare con ${WHATSAPP_LINK_PREFIX}` : ' '}
+                        />
+                    </>
+                )}
+            </Grid>
+        )
+    }
+
     const FormBlock = function FormBlock({dataRef, errorsRef, hasSubscriptions, isEdit}) {
 
         const [localData, setLocalData] = useState(dataRef.current)
@@ -1487,6 +1562,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
             <>
                 <Grid size={{xs: 12, md: 4}} sx={{mt: 3}}>
                     <FormControlLabel
+                        label={<InfoLabel label="Abilita Form Iscrizione" description="Crea una pagina pubblica per raccogliere le iscrizioni online. Le nuove iscrizioni vengono messe prima in una lista provvisoria e, dopo il pagamento, passano nella lista principale o nella lista d'attesa."/>}
                         control={
                             <Switch
                                 checked={!!localData.enable_form}
@@ -1510,15 +1586,15 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 disabled={isEdit && hasSubscriptions}
                             />
                         }
-                        label="Abilita Form Iscrizione"
                     />
                 </Grid>
 
                 {localData.enable_form && (
                     <Alert severity="info" sx={{mt: 1}}>
-                        Abilitando il form viene creata automaticamente la lista &#34;Form List&#34;.
-                        Le iscrizioni online finiscono lì e saranno spostate automaticamente in Main/Waiting List al pagamento online,
-                        oppure manualmente quando pagano in ufficio. Il nome della lista non sarà modificabile, ma la capacità sì.
+                        Attivando il form viene creata automaticamente una lista provvisoria per le iscrizioni online.
+                        Dopo il pagamento, le persone vengono spostate nella lista principale o nella lista d&apos;attesa.
+                        Per i pagamenti effettuati in ufficio, lo spostamento può essere fatto manualmente.
+                        Il nome della lista non può essere cambiato, ma la sua capienza sì.
                     </Alert>
                 )}
 
@@ -1574,7 +1650,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             </Grid>
                             <Grid size={{xs: 12, md: 4}} sx={{ml: 2}}>
                                 <FormControlLabel
-                                    label="Consenti pagamenti online"
+                                    label={<InfoLabel label="Consenti pagamenti online" description="Permette alle persone iscritte tramite il form di pagare online con SumUp. Attivandolo, viene preparato automaticamente il pagamento per le nuove iscrizioni idonee."/>}
                                     control={
                                         <Switch
                                             checked={!!localData.allow_online_payment}
@@ -1653,6 +1729,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         services: [],
         enable_form: false,
         form_note: '',
+        enable_whatsapp_link: false,
+        whatsapp_group_link: '',
         form_programmed_open_time: dayjs(),
     })
 
@@ -1680,6 +1758,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
                     ? (event.lists.find(list => list.name === 'Form List')?.capacity ?? 0)
                     : 0,
                 form_note: typeof event.form_note === 'string' ? event.form_note : '',
+                enable_whatsapp_link: !!event.enable_whatsapp_link,
+                whatsapp_group_link: typeof event.whatsapp_group_link === 'string' ? event.whatsapp_group_link : '',
                 organizers: Array.isArray(event.organizers)
                     ? event.organizers.map(o => ({
                         profile: o.profile,
@@ -1761,6 +1841,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
             allow_online_payment: !!rest.allow_online_payment,
             enable_form: !!rest.enable_form,
             form_note: typeof rest.form_note === 'string' ? rest.form_note : '',
+            enable_whatsapp_link: !!rest.enable_whatsapp_link,
+            whatsapp_group_link: (rest.whatsapp_group_link || '').trim(),
             form_programmed_open_time: rest.enable_form ? (rest.form_programmed_open_time || null) : null,
             organizers: (rest.organizers || []).map(o => ({
                 profile: o.profile,
@@ -1884,6 +1966,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
             return;
         }
 
+        if (dataRef.current.enable_whatsapp_link &&
+            !(dataRef.current.whatsapp_group_link || '').trim().startsWith(WHATSAPP_LINK_PREFIX)) {
+            setStatusMessage({
+                message: `Il link del gruppo WhatsApp deve iniziare con ${WHATSAPP_LINK_PREFIX}`,
+                state: 'error'
+            });
+            scrollUp();
+            return;
+        }
+
         // Prevent submit if form is enabled but no form_programmed_open_time is set
         if (dataRef.current.enable_form && !dataRef.current.form_programmed_open_time) {
             setStatusMessage({
@@ -1970,6 +2062,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
+                        <WhatsAppBlock dataRef={dataRef}/>
                         <FormBlock
                             key={subscriptionWindowVersion} // force remount so minDate updates when subscription start date changes
                             dataRef={dataRef}

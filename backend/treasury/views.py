@@ -31,6 +31,7 @@ from googleapiclient.errors import HttpError
 from django.conf import settings
 from django.utils import timezone
 from utils.permissions import profile_email_verified, user_is_board
+from utils.spreadsheet import safe_text
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -39,6 +40,8 @@ except Exception:
 MSG_UNAUTHORIZED = 'Non autorizzato.'
 MSG_METHOD_NOT_ALLOWED = 'Metodo non consentito'
 PERM_ADD_TRANSACTION = 'treasury.add_transaction'
+XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+DOWNLOAD_EXPOSE_HEADERS = 'Content-Type, Content-Disposition'
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,12 @@ def get_action_permissions(action, user):
         return user.has_perm('treasury.change_transaction') or getattr(user, 'can_manage_casse', False)
     if action == 'transaction_detail_delete':
         return user.has_perm('treasury.delete_transaction') or getattr(user, 'can_manage_casse', False)
+    if action == 'transaction_read':
+        return (
+            user_is_board(user)
+            or get_action_permissions('transaction_detail_patch', user)
+            or get_action_permissions('transaction_detail_delete', user)
+        )
     if action == 'esncard_detail_patch':
         return user.has_perm('treasury.change_esncard')
     if action == 'esncard_detail_delete':
@@ -351,6 +360,8 @@ def transaction_add(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def transactions_list(request):
+    if not get_action_permissions('transaction_read', request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
     transactions = Transaction.objects.all().order_by('-created_at')
     transactions = apply_transaction_filters(transactions, request)
     # Support limit param for dashboard
@@ -379,6 +390,8 @@ def transaction_detail(request, pk):
         transaction_obj = Transaction.objects.get(pk=pk)
 
         if request.method == 'GET':
+            if not get_action_permissions('transaction_read', request.user):
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             serializer = TransactionViewSerializer(transaction_obj)
             return Response(serializer.data, status=200)
 
@@ -484,6 +497,8 @@ def account_detail(request, pk):
         account = Account.objects.get(pk=pk)
 
         if request.method == 'GET':
+            if not account.is_visible_to_user(request.user):
+                return Response({'error': MSG_UNAUTHORIZED}, status=403)
             serializer = AccountDetailedViewSerializer(account, context={'request': request})
             return Response(serializer.data, status=200)
 
@@ -560,6 +575,8 @@ def reimbursement_request_detail(request, pk):
         return Response({'error': 'Richiesta di rimborso non trovata.'}, status=404)
 
     if request.method == 'GET':
+        if not (user_is_board(request.user) or instance.user_id == request.user.pk):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
         serializer = ReimbursementRequestViewSerializer(instance)
         return Response(serializer.data, status=200)
 
@@ -611,6 +628,8 @@ def reimbursement_requests_list(request):
         if not user_is_board(request.user) and req_profile_id != profile_id_int:
             return Response({'error': MSG_UNAUTHORIZED}, status=403)
         requests = requests.filter(user__profile__id=profile_id_int)
+    if not user_is_board(request.user):
+        requests = requests.filter(user=request.user)
     search = request.GET.get('search', '').strip()
     if search:
         requests = requests.filter(
@@ -862,8 +881,6 @@ def reimburse_quota(request):
 
     quota_amount = Decimal(str(sub_event.cost)) if not quota_already_reimbursed else Decimal('0')
     total_refund = quota_amount + services_total
-    if account.balance < total_refund:
-        return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
     # Fix: handle external subscriptions for description
     if sub.profile:
@@ -874,13 +891,24 @@ def reimburse_quota(request):
         sub_name = "Esterno"
 
     with transaction.atomic():
+        # lock + re-check inside the transaction, so parallel requests cannot refund twice
+        Subscription.objects.select_for_update().get(pk=sub.pk)
+        account_locked = Account.objects.select_for_update().get(pk=account.pk)
+        if not quota_already_reimbursed and Transaction.objects.filter(
+                subscription=sub, type=Transaction.TransactionType.RIMBORSO_QUOTA).exists():
+            return Response({'error': 'Quota già rimborsata.'}, status=400)
+        if include_services and Transaction.objects.filter(
+                subscription=sub, type=Transaction.TransactionType.RIMBORSO_SERVICE).exists():
+            return Response({'error': 'Servizi già rimborsati.'}, status=400)
+        if account_locked.balance < total_refund:
+            return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
         quota_tx = None
         if not quota_already_reimbursed:
             quota_tx = Transaction.objects.create(
                 type=Transaction.TransactionType.RIMBORSO_QUOTA,
                 subscription=sub,
                 executor=request.user,
-                account=account,
+                account=account_locked,
                 amount=-sub_event.cost,
                 description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
             )
@@ -890,7 +918,7 @@ def reimburse_quota(request):
                 type=Transaction.TransactionType.RIMBORSO_SERVICE,
                 subscription=sub,
                 executor=request.user,
-                account=account,
+                account=account_locked,
                 amount=-services_total,
                 description=f"Rimborso servizi {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
             )
@@ -906,6 +934,8 @@ def transactions_export(request):
     Export filtered transactions with columns:
     Registrazione | Esecuzione | Attività | Descrizione | Importo | Cassa | Commenti | Descrizione (gestionale) | Eseguito da
     """
+    if not user_is_board(request.user):
+        return Response({'error': MSG_UNAUTHORIZED}, status=403)
 
     # Helper to compute (possibly adjusted) amount, with narrowed exception handling.
     def compute_amount(tx_obj):
@@ -1047,16 +1077,18 @@ def transactions_export(request):
         else:
             # Fallback to current timezone if zoneinfo unavailable
             local_dt = timezone.localtime(tx.created_at)
-        ws.cell(row=row_idx, column=1, value=local_dt.strftime('%d/%m/%Y %H:%M:%S'))
-        ws.cell(row=row_idx, column=2, value=local_dt.strftime('%d/%m/%Y'))
-        ws.cell(row=row_idx, column=3, value=build_attivita(tx))
-        ws.cell(row=row_idx, column=4, value=build_descrizione(tx))
+        datetime_cell = ws.cell(row=row_idx, column=1, value=local_dt.replace(tzinfo=None))
+        datetime_cell.number_format = 'dd/mm/yyyy hh:mm:ss'
+        date_cell = ws.cell(row=row_idx, column=2, value=local_dt.date())
+        date_cell.number_format = 'dd/mm/yyyy'
+        ws.cell(row=row_idx, column=3, value=safe_text(build_attivita(tx)))
+        ws.cell(row=row_idx, column=4, value=safe_text(build_descrizione(tx)))
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
         amt_cell.number_format = '#,##0.00 €'
-        ws.cell(row=row_idx, column=6, value=tx.account.name if tx.account else '')
-        ws.cell(row=row_idx, column=7, value=build_commenti(tx))
-        ws.cell(row=row_idx, column=8, value=tx.description)
-        ws.cell(row=row_idx, column=9, value=build_eseguito_da(tx))
+        ws.cell(row=row_idx, column=6, value=safe_text(tx.account.name if tx.account else ''))
+        ws.cell(row=row_idx, column=7, value=safe_text(build_commenti(tx)))
+        ws.cell(row=row_idx, column=8, value=safe_text(tx.description))
+        ws.cell(row=row_idx, column=9, value=safe_text(build_eseguito_da(tx)))
         row_idx += 1
 
     # Auto width
@@ -1086,9 +1118,10 @@ def transactions_export(request):
     filename = f"{base}_{datetime.now().strftime('%d%m%Y_%H%M%S')}.xlsx"
     response = HttpResponse(
         stream.getvalue(),
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        content_type=XLSX_CONTENT_TYPE
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
+    response['Access-Control-Expose-Headers'] = DOWNLOAD_EXPOSE_HEADERS
     return response
 
 
@@ -1100,7 +1133,18 @@ def treasury_accounts_report(request):
 
     report_date = request.data.get('date') or request.query_params.get('date')
     try:
-        result = generate_accounts_report(report_date=report_date)
+        download = request.query_params.get('download') == 'true'
+        if download and not user_is_board(request.user):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+        result = generate_accounts_report(report_date=report_date, include_content=download)
+        if download:
+            response = HttpResponse(
+                result['content'],
+                content_type=XLSX_CONTENT_TYPE
+            )
+            response['Content-Disposition'] = f'attachment; filename="{result["filename"]}"'
+            response['Access-Control-Expose-Headers'] = DOWNLOAD_EXPOSE_HEADERS
+            return response
         return Response({
             'status': 'ok',
             'reportDate': result['report_date'].strftime('%Y-%m-%d'),
@@ -1128,7 +1172,18 @@ def treasury_transactions_report(request):
 
     report_date = request.data.get('date') or request.query_params.get('date')
     try:
-        result = generate_transactions_report(report_date=report_date)
+        download = request.query_params.get('download') == 'true'
+        if download and not user_is_board(request.user):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
+        result = generate_transactions_report(report_date=report_date, include_content=download)
+        if download:
+            response = HttpResponse(
+                result['content'],
+                content_type=XLSX_CONTENT_TYPE
+            )
+            response['Content-Disposition'] = f'attachment; filename="{result["filename"]}"'
+            response['Access-Control-Expose-Headers'] = DOWNLOAD_EXPOSE_HEADERS
+            return response
         return Response({
             'status': 'ok',
             'reportDate': result['report_date'].strftime('%Y-%m-%d'),

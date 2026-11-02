@@ -27,12 +27,28 @@ If one of the required SSH secrets is missing, the cPanel deploy step is skipped
 
 ```bash
 cd frontend
+npm ci
 npm run build
 cd ..
 git add -f frontend/build
 # Commit and push to development, then:
 git subtree push --prefix frontend/build origin deploy-frontend
 ```
+
+The frontend lockfile must stay synchronized with `package.json`. On a server
+that builds the frontend, run the commands from the `frontend` directory and
+replace any stale dependency tree:
+
+```bash
+cd ~/mgmt.esnpolimi.it/frontend
+rm -rf node_modules
+npm ci
+npm run build
+```
+
+If the server only serves the generated `frontend/build` files, rebuild locally
+or through GitHub Actions and deploy the updated `deploy-frontend` branch; the
+server does not need to resolve Vite imports at runtime.
 
 ## Backend Deployment
 
