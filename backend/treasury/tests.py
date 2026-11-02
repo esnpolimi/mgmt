@@ -2,7 +2,7 @@
 
 import unittest
 from io import BytesIO
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -18,6 +18,7 @@ from rest_framework.test import APITestCase
 from events.models import Event, EventList, Subscription, EventOrganizer
 from profiles.models import Profile
 from treasury.models import Account, ESNcard, Transaction, ReimbursementRequest, Settings
+from treasury.reports import build_accounts_workbook, build_transactions_workbook, get_day_bounds
 
 
 User = get_user_model()
@@ -552,6 +553,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Transactions list should support filters."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
@@ -703,6 +705,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Invalid limit param should return 400."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		response = self.client.get("/backend/transactions/?limit=notanumber")
@@ -713,6 +716,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Limit param should cap returned results."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
@@ -1288,6 +1292,7 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		"""Export should return an Excel file response."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(user)
 
 		response = self.client.get("/backend/transactions_export/")
@@ -1300,10 +1305,27 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		headers = [ws.cell(row=1, column=i).value for i in range(1, 10)]
 		self.assertIn("Eseguito da", headers)
 
+	def test_transactions_export_exposes_download_headers_to_frontend(self):
+		profile = _create_profile("cors@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)  # transactions are Board-only
+		self.authenticate(user)
+
+		response = self.client.get(
+			"/backend/transactions_export/",
+			HTTP_ORIGIN="http://localhost:3000",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		exposed_headers = response.get("Access-Control-Expose-Headers", "").lower()
+		self.assertIn("content-type", exposed_headers)
+		self.assertIn("content-disposition", exposed_headers)
+
 	def test_transactions_export_commenti_uses_external_name_for_external_subscription(self):
 		"""Commenti column should show external subscriber name, not executor name."""
 		executor_profile = _create_profile("board@esnpolimi.it", name="Mario", surname="Rossi")
 		executor_user = _create_user(executor_profile)
+		executor_user.groups.add(self.group_board)  # transactions are Board-only
 		self.authenticate(executor_user)
 
 		event = _create_event(name="Trip")
@@ -1333,6 +1355,36 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		# Column 7 = "Commenti" and column 9 = "Eseguito da".
 		self.assertEqual(ws.cell(row=2, column=7).value, "John External")
 		self.assertEqual(ws.cell(row=2, column=9).value, "Mario Rossi")
+		self.assertIsInstance(ws.cell(row=2, column=1).value, datetime)
+		self.assertEqual(ws.cell(row=2, column=1).number_format, "dd/mm/yyyy hh:mm:ss")
+		self.assertIsInstance(ws.cell(row=2, column=2).value, datetime)
+		self.assertEqual(ws.cell(row=2, column=2).number_format, "dd/mm/yyyy")
+
+
+class TreasuryWorkbookDataTypesTests(TreasuryBaseTestCase):
+	def test_report_workbooks_store_dates_as_excel_dates(self):
+		profile = _create_profile("workbook-dates@esnpolimi.it")
+		user = _create_user(profile)
+		account = _create_account("Workbook dates", user=user)
+		Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.DEPOSIT,
+			amount=Decimal("12.50"),
+			description="Test date values",
+		)
+		report_date = timezone.localdate()
+		tz = timezone.get_current_timezone()
+		start_dt, end_dt = get_day_bounds(report_date, tz)
+
+		accounts_ws = build_accounts_workbook(start_dt, end_dt, report_date).active
+		transactions_ws = build_transactions_workbook(start_dt, end_dt, tz).active
+
+		self.assertIs(type(accounts_ws.cell(row=2, column=1).value), date)
+		self.assertEqual(accounts_ws.cell(row=2, column=1).number_format, "dd/mm/yyyy")
+		self.assertIsInstance(transactions_ws.cell(row=2, column=2).value, datetime)
+		self.assertIsNone(transactions_ws.cell(row=2, column=2).value.tzinfo)
+		self.assertEqual(transactions_ws.cell(row=2, column=2).number_format, "dd/mm/yyyy hh:mm:ss")
 
 
 class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
@@ -1375,6 +1427,60 @@ class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
 		self.assertEqual(response.data.get("fileId"), "drive-file-123")
 		self.assertEqual(response.data.get("action"), "created")
 
+	@patch("treasury.views.generate_accounts_report")
+	def test_accounts_report_download_returns_excel(self, mock_generate_accounts_report):
+		profile = _create_profile("manager-download@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		user.can_manage_casse = True
+		user.save(update_fields=["can_manage_casse"])
+		self.authenticate(user)
+		mock_generate_accounts_report.return_value = {
+			"filename": "27-07-2026.xlsx",
+			"content": b"accounts-xlsx",
+		}
+
+		response = self.client.post(
+			"/backend/reports/accounts/?download=true",
+			{"date": "2026-07-27"},
+			format="json",
+			HTTP_ORIGIN="http://localhost:3000",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("application/vnd.openxmlformats", response["Content-Type"])
+		self.assertIn("27-07-2026.xlsx", response["Content-Disposition"])
+		self.assertIn("content-type", response["Access-Control-Expose-Headers"].lower())
+		self.assertEqual(response.content, b"accounts-xlsx")
+
+	def test_non_board_managers_can_generate_reports_but_not_download(self):
+		profile = _create_profile("manager-report@esnpolimi.it")
+		user = _create_user(profile)
+		user.can_manage_casse = True
+		user.save(update_fields=["can_manage_casse"])
+		self.authenticate(user)
+
+		report_result = {
+			"report_date": timezone.datetime(2026, 7, 27).date(),
+			"filename": "27-07-2026.xlsx",
+			"file_id": "drive-file-123",
+			"action": "created",
+		}
+		with patch("treasury.views.generate_accounts_report", return_value=report_result) as accounts_report, \
+				patch("treasury.views.generate_transactions_report", return_value=report_result) as transactions_report:
+			for path, report in [
+				("/backend/reports/accounts/", accounts_report),
+				("/backend/reports/transactions/", transactions_report),
+			]:
+				response = self.client.post(path, {"date": "2026-07-27"}, format="json")
+				self.assertEqual(response.status_code, 200)
+
+				report.reset_mock()
+				response = self.client.post(f"{path}?download=true", {"date": "2026-07-27"}, format="json")
+				self.assertEqual(response.status_code, 403)
+				self.assertEqual(response.data.get("error"), "Non autorizzato.")
+				report.assert_not_called()
+
 	@patch("treasury.views.generate_transactions_report")
 	def test_transactions_report_drive_error_returns_502(self, mock_generate_transactions_report):
 		"""Drive upload failures should return 502 with explicit error message."""
@@ -1390,6 +1496,30 @@ class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
 
 		self.assertEqual(response.status_code, 502)
 		self.assertEqual(response.data.get("error"), "Errore Drive durante la generazione report.")
+
+	@patch("treasury.views.generate_transactions_report")
+	def test_transactions_report_download_returns_excel(self, mock_generate_transactions_report):
+		profile = _create_profile("board-download@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+		mock_generate_transactions_report.return_value = {
+			"filename": "27-07-2026.xlsx",
+			"content": b"transactions-xlsx",
+		}
+
+		response = self.client.post(
+			"/backend/reports/transactions/?download=true",
+			{"date": "2026-07-27"},
+			format="json",
+			HTTP_ORIGIN="http://localhost:3000",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("application/vnd.openxmlformats", response["Content-Type"])
+		self.assertIn("27-07-2026.xlsx", response["Content-Disposition"])
+		self.assertIn("content-disposition", response["Access-Control-Expose-Headers"].lower())
+		self.assertEqual(response.content, b"transactions-xlsx")
 
 
 class AccountModelTests(TreasuryBaseTestCase):
@@ -1590,6 +1720,55 @@ class ReimbursementEdgeCaseTests(TreasuryBaseTestCase):
 
 class QuotaReimbursementTests(TreasuryBaseTestCase):
 	"""Tests for quota reimbursement specific scenarios."""
+
+	def test_reimburse_quota_and_services_use_locked_account_balance(self):
+		board_profile = _create_profile("board-locked-balance@esnpolimi.it")
+		board_user = _create_user(board_profile)
+		board_user.groups.add(self.group_board)
+		self.authenticate(board_user)
+
+		event = _create_event(cost=10)
+		list_main = _create_event_list(event)
+		account = _create_account("Main", user=board_user)
+		sub_profile = _create_profile("sub-locked-balance@uni.it", is_esner=False)
+		sub = Subscription.objects.create(
+			profile=sub_profile,
+			event=event,
+			list=list_main,
+			selected_services=[{"name": "Bus", "price_at_purchase": "5", "quantity": 1}],
+		)
+		for transaction_type, amount in (
+			(Transaction.TransactionType.SUBSCRIPTION, 10),
+			(Transaction.TransactionType.SERVICE, 5),
+		):
+			Transaction.objects.create(
+				subscription=sub,
+				account=account,
+				executor=board_user,
+				type=transaction_type,
+				amount=amount,
+				description="Payment",
+			)
+		Account.objects.filter(pk=account.pk).update(balance=Decimal("10.00"))
+
+		original_get = Account.objects.get
+
+		def get_stale_account(*args, **kwargs):
+			stale_account = original_get(*args, **kwargs)
+			Account.objects.filter(pk=stale_account.pk).update(balance=Decimal("50.00"))
+			return stale_account
+
+		with patch.object(Account.objects, "get", side_effect=get_stale_account):
+			response = self.client.post("/backend/reimburse_quota/", {
+				"event": event.pk,
+				"subscription_id": sub.pk,
+				"account": account.pk,
+				"include_services": True,
+			}, format="json")
+
+		self.assertEqual(response.status_code, 201)
+		account.refresh_from_db()
+		self.assertEqual(account.balance, Decimal("35.00"))
 
 	def test_reimburse_quota_creates_reimbursement_transaction(self):
 		"""Reimburse quota should create correct transaction."""
@@ -2164,3 +2343,20 @@ class AccountVisibilityEdgeCaseTests(TreasuryBaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		names = [a["name"] for a in response.data]
 		self.assertIn("Board and Attivi", names)
+
+
+class BoardOnlyTreasuryTests(TreasuryBaseTestCase):
+	"""Regression tests for the security audit: treasury data is Board-only."""
+
+	def test_non_board_cannot_list_or_export_transactions(self):
+		user = _create_user(_create_profile("member@esnpolimi.it"))
+		self.authenticate(user)
+
+		self.assertEqual(self.client.get("/backend/transactions/").status_code, 403)
+		self.assertEqual(self.client.get("/backend/transactions_export/").status_code, 403)
+
+	def test_export_neutralizes_spreadsheet_formulas(self):
+		from utils.spreadsheet import safe_text
+
+		self.assertEqual(safe_text('=HYPERLINK("http://evil")'), '\'=HYPERLINK("http://evil")')
+		self.assertEqual(safe_text("Mario"), "Mario")

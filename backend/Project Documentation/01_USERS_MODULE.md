@@ -44,7 +44,7 @@ Base path: /backend/
 |---|---|---|---|
 | /login/ | POST | no | only `@esnpolimi.it` domain is accepted |
 | /logout/ | POST | no | blacklists refresh token if present, clears cookies |
-| /api/token/ | POST | no | token pair creation |
+| /api/token/ | POST | no | token pair creation; subject to the auth-attempt limit |
 | /api/token/refresh/ | POST | no | refresh da cookie |
 | /api/token/verify/ | POST | no | token verification |
 | /api/forgot-password/ | POST | no | neutral response to prevent user enumeration |
@@ -83,6 +83,12 @@ Base path: /backend/
 
 1. Forgot-password never confirms whether an email exists.
 2. Reset requires valid uid/token and matching password input.
+3. Login and password-recovery attempts are throttled per client IP, including
+   requests with a valid JWT.
+4. Successful reset invalidates existing access tokens through SimpleJWT's
+   `CHECK_REVOKE_TOKEN` password-hash claim check in `JWTAuthentication`, and
+   blacklists outstanding refresh tokens. Both login/token-pair issuance and
+   refreshed access tokens carry the password claim.
 
 ## 5. Authorization and Effective Permissions
 
@@ -97,6 +103,7 @@ Effective permissions are derived from:
 2. `can_manage_casse` and related flags can be assigned only to Aspiranti.
 3. `can_manage_content` can be assigned only to ESNer profiles.
 4. `GET` returns both raw and effective permissions.
+5. Custom permission flags are read-only through `/users/` create/update and can be changed only through this endpoint.
 
 ## 6. Security Notes
 
@@ -116,6 +123,9 @@ Effective permissions are derived from:
 1. Browser differences for secure cookies in local environments.
 2. Regressions in effective permissions exposed to frontend.
 3. Mismatch between profile state and active user state.
+4. Enabling `CHECK_REVOKE_TOKEN` rejects previously issued access tokens without
+   the password claim; existing sessions must log in again. Signature-only
+   `/api/token/verify/` does not replace authentication against a protected endpoint.
 
 ## 9. Testing Requirements
 
@@ -126,6 +136,8 @@ Minimum required tests:
 3. permission matrix CRUD users
 4. Board-only `finance-permissions` + group constraints
 5. reset-password invalid token and mismatch cases
+6. access token works before reset, returns `401` afterward, old refresh is rejected,
+   and login with the new password produces a working access token
 
 Test references:
 

@@ -41,7 +41,8 @@ export default function QuillEditor({value, onChange, readOnly = false}) {
             });
 
             if (value) {
-                quillInstance.current.root.innerHTML = value;
+                const delta = quillInstance.current.clipboard.convert({html: value, text: ''});
+                quillInstance.current.setContents(delta, 'silent');
             }
         }
     }, [value, onChange, readOnly]);

@@ -3,6 +3,48 @@
 This document is the reference architectural view of the project.
 Purpose: provide a clear technical baseline for development, maintenance, onboarding, and AI automation.
 
+For the recommended technology onboarding sequence, see the root
+[Newcomer learning path](../../NEWCOMER_LEARNING_PATH.md). The Docker-first local
+setup is documented in the root [README](../../README.md); use
+[Run backend and frontend without Docker](../../RUN_WITHOUT_DOCKER.md) only when
+running the services directly on the host.
+
+## 0. Development Workflow
+
+All development work starts from a GitHub issue and follows this sequence:
+
+1. Select an issue from the repository's [GitHub Issues](https://github.com/esnpolimi/mgmt/issues).
+2. Assign the issue to yourself before beginning development.
+3. Create a branch from the latest `development` branch using the format
+   `<issue-number>-<short-name>`, with a lowercase abbreviated description.
+   For example, issue `42` titled "Fix event subscription validation" uses
+   `42-fix-event-subscription`.
+4. Implement and test the change on that issue branch, then push it to GitHub.
+5. Open a pull request from the issue branch to `development`, linking the issue.
+6. Address review feedback and wait for the required checks to pass before merging.
+7. After the PR is merged into `development`, delete the remote branch and its
+   local copy when it is no longer needed.
+
+The `staging` branch is used for manual testing after automatic checks pass.
+Validated changes are promoted from `development` to `staging`, and then to
+`main` for production.
+
+### 0.1 AI-assisted development
+
+The repository enables Ponytail for all GitHub Copilot Chat users through
+[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md).
+The same rules are available as the local
+[Ponytail skill](../../.github/skills/ponytail/SKILL.md), so supported
+skill-capable agents can load the shared workflow from the repository.
+Changes to these files apply to future sessions after the repository is pulled.
+
+The GitHub Actions backend test workflow runs on every pull request targeting
+the project's integration branches (`development`, `staging`, or `main`),
+independently of the source branch. It also runs on every push to `development`.
+The `backend-test` status check must be marked as required in the protection
+rules for the relevant target branches to prevent merging a pull request while
+the tests are failing.
+
 ## 1. Product Scope
 
 The system covers ESN Polimi core processes:
@@ -14,7 +56,31 @@ The system covers ESN Polimi core processes:
 - treasury operations (accounts, transactions, export)
 - dynamic homepage content
 - public WhatsApp registration with audit trail
+- public wishlist collection with Board-only review and status tracking
+- wishlist form sharing link and English public form interface
+- per-event WhatsApp group link sharing with eligible subscribers (events module)
 - maintenance state management
+
+Security maintenance:
+
+- authentication and password-recovery endpoints are throttled
+- server-provided HTML is never rendered by the frontend
+- external WhatsApp links accept only HTTP(S) URLs
+- treasury reads and exports are restricted to Board users
+- spreadsheet exports neutralize formula-like cell values
+- frontend dependency installation disables npm lifecycle scripts
+- frontend containers grant the unprivileged `node` user ownership of `/app` before installing dependencies
+- frontend container builds copy only the application files required at runtime
+- generated frontend bundles are excluded from SonarQube source analysis
+- backend containers run as a non-root `app` user
+- external Bootstrap stylesheets use Subresource Integrity
+- the maintenance SSE endpoint accepts only `GET` requests
+
+Reliability maintenance:
+
+- URL path normalization ignores malformed percent-encoded paths instead of
+  interrupting navigation
+- web-vitals loading failures are handled without creating an unhandled promise
 
 ## 2. Architecture Snapshot
 
@@ -28,6 +94,7 @@ The system covers ESN Polimi core processes:
 ### 2.2 Frontend
 
 - stack: React 19 + Vite + MUI
+- dependency installation: Node.js 22 with `npm ci` from the committed `frontend/package-lock.json`
 - routing: SPA with protected routes
 - API base URL:
   - local: http://localhost:8000/backend
@@ -128,7 +195,31 @@ Primary sensitive variables:
 - SUMUP_WEBHOOK_SECRET
 - SUMUP_PAY_TO_EMAIL
 - SUMUP_MERCHANT_CODE
+- SUMUP_SANDBOX_CLIENT_ID
+- SUMUP_SANDBOX_CLIENT_SECRET
+- SUMUP_SANDBOX_API_KEY
+- SUMUP_SANDBOX_WEBHOOK_SECRET
+- SUMUP_SANDBOX_PAY_TO_EMAIL
+- SUMUP_SANDBOX_MERCHANT_CODE
+- SUMUP_API_BASE_URL (optional; defaults to `https://api.sumup.com`)
 - SENTRY_DSN
+
+The private deployment bundle can be recreated from the project root with
+`.\create-mgmt-secret.ps1`. It copies only the two environment files, the
+Google service-account key, and the private `base.py`, `dev.py`, and `prod.py`
+settings into the matching `backend/` paths. Generated Python cache files are
+intentionally excluded, and the generated `mgmt-secret/` folder is ignored by
+Git.
+
+SumUp is environment-isolated by `DJANGO_ENV`: development and test settings use
+the sandbox credential prefix (`SUMUP_SANDBOX_*`), while production uses the live
+prefix (`SUMUP_*`). The API host is shared by SumUp; the merchant account and
+credentials select the environment. All backend token, checkout, and status
+requests use `SUMUP_API_BASE_URL`, so development cannot accidentally fall back
+to a live merchant configuration. Configure the SumUp webhook against the
+environment-specific checkout account. Sandbox payments do not move real funds;
+use SumUp's documented sandbox test cards, including the failure case where an
+amount of `11` is intentionally declined.
 
 In development, `backend/settings/dev.py` uses `utils.email_backend.DevelopmentEmailBackend`.
 Set `DEV_EMAIL_RECIPIENT` in `.env.development` to the developer's address. Every email keeps
@@ -150,6 +241,8 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 4. Dynamic event fields must respect the expected JSON schema.
 5. External flows without profile (external subscribers) must always be handled in reimbursements.
 6. ESNcard revocation must preserve the original emission transaction and register a dedicated refund transaction.
+7. Subscription payment transactions are updated in place, never deleted and recreated, so `paid_at` keeps the original payment time.
+8. An event WhatsApp group link is only revealed through the signed per-subscription token to eligible subscribers (see 03_EVENTS_MODULE.md 5.7).
 
 ## 10. AI/Automation Notes
 
@@ -157,6 +250,7 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 2. For payments, evaluate `events` and `treasury` logic together.
 3. Do not assume `Subscription.profile` is always set.
 4. In content, only Board and `can_manage_content` enable management actions.
+5. Two distinct WhatsApp features exist: content `whatsapp-config`/`whatsapp-register` (association group registration) and events `enable_whatsapp_link` (per-event group invite). Do not conflate them.
 
 ## 11. Documentation Index
 
@@ -263,3 +357,8 @@ If `CPANEL_PYTHON_APP_ROOT` is not configured, the workflow defaults to:
 - Applied step-1 complexity refactor on events flows: extraction helpers in backend form-fields patch endpoint and frontend list accordion copy/render logic.
 - Applied step-2 complexity refactor: `event_form_submit` decomposed into 5 focused helpers (submitter resolution, duplicate check, link uploads, capacity assignment, SumUp checkout), full backend test suite (373 tests) verified green.
 - Applied step-3 complexity refactor: `subscription_detail` decomposed into focused helpers for reimbursement checks, PATCH payload normalization, auto-move response mapping, and DELETE transaction cleanup; events tests and full backend suite remain green.
+# Operational jobs
+
+Monthly log archiving is provided by the `archive_logs_to_drive` Django
+management command. See [08_LOG_ARCHIVE.md](./08_LOG_ARCHIVE.md) for the Drive
+folder structure and production crontab configuration.

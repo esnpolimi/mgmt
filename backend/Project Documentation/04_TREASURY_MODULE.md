@@ -84,6 +84,8 @@ Accounting invariants:
 2. Closed accounts do not accept new mutating operations.
 3. For constrained types, negative balance is blocked.
 4. Model validation errors on treasury writes are returned to the client as 400 responses.
+5. Transaction listing, detail reads, and exports are restricted to Board users.
+6. Spreadsheet exports neutralize formula-like values before writing cells.
 
 ### 2.5 ReimbursementRequest
 
@@ -118,6 +120,8 @@ Base path: /backend/
 
 - POST /reports/accounts/
 - POST /reports/transactions/
+- Add `?download=true` to either report endpoint to download the generated XLSX while keeping the Drive copy.
+- XLSX downloads require Board membership; non-download report generation remains available to users with treasury report permissions.
 
 ### 3.3 Account APIs
 
@@ -200,7 +204,7 @@ Fee/services:
 1. original-payment verification
 2. duplicate-refund block
 3. optional reimbursement for related services
-4. available account-balance check
+4. locked-account balance validation and updates for each refund transaction
 
 Unified UI Orchestration (single icon):
 
@@ -209,6 +213,23 @@ Unified UI Orchestration (single icon):
 3. flow is not cross-endpoint atomic: partial success is possible
 4. on partial success, each item keeps its own state and can be retried
 5. per-item error reason is propagated to client for guided retry
+
+### 5.5 SumUp Online Payments
+
+Online event payments use SumUp Checkout and are selected by environment:
+
+- development/test use the sandbox merchant and `SUMUP_SANDBOX_*` credentials
+- production uses the live merchant and `SUMUP_*` credentials
+- when `SUMUP_*_API_KEY` is configured, backend requests authenticate directly
+  with that key; OAuth client credentials are used only as a fallback
+- checkout creation, token acquisition, status polling, and webhook confirmation
+  use `SUMUP_API_BASE_URL` when non-empty, otherwise `https://api.sumup.com`
+- sandbox credentials must belong to a separate SumUp sandbox merchant account;
+  sandbox transactions do not move real funds
+- use SumUp's sandbox test cards to exercise successful, failed, and 3-D Secure
+  scenarios
+- the frontend labels development payments as `Ambiente di testing - Sandbox`
+  and links to SumUp's test-card documentation
 
 ## 6. Query, Filters and Export
 
@@ -222,6 +243,8 @@ Unified UI Orchestration (single icon):
 - limit per dashboard
 
 `transactions_export` produces XLSX with accounting metadata and operational descriptions.
+The export response exposes its content type and filename headers to the frontend so cross-origin downloads can be validated and named correctly.
+Date and timestamp columns use native Excel date values with display formats, so spreadsheet sorting and filtering work as expected.
 
 Daily Drive reports:
 
@@ -255,7 +278,7 @@ Note: `rimborso_esncard` is exported with a dedicated description.
 6. export with combined filters and non-trivial datasets
 7. ESNcard revocation with `rimborso_esncard` creation and balance consistency
 8. ESNcard revocation blocks on edge cases (multiple emissions, anomalous references, insufficient balance, closed account)
-9. report endpoints (`/reports/accounts/`, `/reports/transactions/`) with permission checks and success/error response shapes, including Drive-upload failures
+9. report endpoints (`/reports/accounts/`, `/reports/transactions/`) with permission checks, Board-only XLSX downloads, and success/error response shapes, including Drive-upload failures
 
 Test reference: `backend/treasury/tests.py`.
 

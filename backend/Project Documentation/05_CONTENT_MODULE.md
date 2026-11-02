@@ -10,6 +10,7 @@ Responsibilities:
 - authorization enforcement for content managers
 - centralized WhatsApp link configuration
 - public registration with validation, email delivery, and CSV audit on Drive
+- public wishlist submissions and a Board-only review table with status tracking
 
 ## 2. Domain Model
 
@@ -42,6 +43,15 @@ Singleton configuration (`pk=1`):
 - updated_at
 - updated_by
 
+### 2.4 WishlistSubmission
+
+- AutoField primary key
+- profile (nullable FK; set null if the profile is deleted)
+- email, first_name, last_name, phone, country, message
+- status: `NEW` | `IN_PROGRESS` | `DONE` (default: `NEW`)
+- created_at, updated_at
+- ordering: newest submissions first
+
 ## 3. API Contract Summary
 
 Base path: /backend/content/
@@ -70,6 +80,29 @@ Behavior note:
 - GET|PATCH /whatsapp-config/
 - POST /whatsapp-register/
 
+### 3.4 Wishlist APIs
+
+- GET /wishlist-lookup/?email=<email>: public profile existence lookup
+- POST /wishlist/: public wishlist submission
+- GET|PATCH /wishlist-submissions/: Board-only list and status updates
+
+Wishlist submissions store email, optional new-contact details, free text, matched Erasmus or ESNer profile,
+and status (`NEW`, `IN_PROGRESS`, `DONE`).
+Anonymous submissions are linked to a matching profile and inherit its details only when that profile's
+email is verified; otherwise, the profile remains unset and only submitted details are stored.
+
+The public wishlist form is available in English at `/wishlist`; Board members can copy its URL
+from the top of the Board submissions page for sharing.
+Lookup and submission errors are displayed directly on the public form.
+The public form includes bottom spacing after the submit action for comfortable page completion.
+The Board submissions page provides bottom spacing, explains status editing through a tooltip next to
+the Wishlist title,
+and truncates long ideas with a dialog for viewing the complete text.
+Its initial-load Effect invokes the request without returning its Promise; no cleanup is needed.
+The frontend API host resolves both `localhost` and `127.0.0.1` to the local backend.
+The public lookup validates email addresses through Django REST Framework serializers and matches
+all profiles, including both Erasmus and ESNer accounts.
+
 ## 4. Permission Model
 
 Central guard: `_can_manage_content(user)`
@@ -86,6 +119,7 @@ Endpoint policy:
 3. `whatsapp-config` GET: authenticated.
 4. whatsapp-config PATCH: content manager.
 5. `whatsapp-register` POST: public (`AllowAny`).
+6. `wishlist-submissions` GET/PATCH: Board membership required; `can_manage_content` alone is not sufficient.
 
 ## 5. Core Business Flows
 

@@ -6,7 +6,13 @@ function UrlSanitizer() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const cleanPath = decodeURIComponent(location.pathname)
+        let decodedPath;
+        try {
+            decodedPath = decodeURIComponent(location.pathname);
+        } catch {
+            return;
+        }
+        const cleanPath = decodedPath
             .replace(/\u00A0/g, "")
             .replace(/\s+$/, "")
             .trim();

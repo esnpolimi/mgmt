@@ -10,6 +10,7 @@ import requests
 import sentry_sdk
 from babel.dates import format_date
 from django.conf import settings
+from django.core import signing
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.core.mail import send_mail
 from django.core.validators import validate_email
@@ -17,6 +18,7 @@ from django.db import close_old_connections, transaction
 from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from django.utils.dateparse import parse_datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -33,6 +35,7 @@ import os
 from googleapiclient.http import MediaIoBaseUpload
 from utils.google_drive import get_drive_service, find_or_create_folder
 import json
+from xml.sax.saxutils import escape as xml_escape
 
 from events.models import Event, Subscription, EventOrganizer
 from events.models import EventList, validate_field_data
@@ -52,6 +55,8 @@ PAYMENT_SOLD_OUT_MESSAGE = (
     "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. "
     "Thank you for filling out the form. Please wait for any notifications from the ESN team."
 )
+
+WHATSAPP_TOKEN_SALT = 'events.subscription.whatsapp'
 
 # --- Allowed file types for 'link' form fields (mirrors treasury) ---
 FORM_UPLOAD_ALLOWED_MIMETYPES = [
@@ -444,7 +449,7 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
     elif payment_required:
         if online_payment_required:
             base = settings.SCHEME_HOST
-            pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}"
+            pay_link = f"{base}/event/{event.id}/pay?subscriptionId={subscription.id}&t={_whatsapp_token(subscription)}"
             html_parts.append("<p>Please complete your payment to be assigned a spot in a list.</p>")
             # Hide concrete list hints if notify_list is False
             if notify_lists:
@@ -462,11 +467,16 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
             )
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
+    include_whatsapp = not ad.get('whatsapp_link_email_sent') and _whatsapp_link_eligible(subscription)
+    if include_whatsapp:
+        html_parts.append(_whatsapp_email_html(subscription))
     html_parts.append("<p>Thank you!<br/><br/><i>ESN Politecnico Milano</i></p></body></html>")
     html_content = "".join(html_parts)
 
     if _send_email(subject, html_content, recipient):
         ad['subscription_confirmation_email_sent'] = True
+        if include_whatsapp:
+            ad['whatsapp_link_email_sent'] = True
         subscription.additional_data = ad
         subscription.save(update_fields=['additional_data'])
 
@@ -509,7 +519,8 @@ def _send_online_payment_link_email(subscription):
     if ad.get('online_payment_link_email_sent'):
         return False
 
-    pay_link = f"{settings.SCHEME_HOST}/event/{event.id}/pay?subscriptionId={subscription.id}"
+    pay_link = (f"{settings.SCHEME_HOST}/event/{event.id}/pay"
+                f"?subscriptionId={subscription.id}&t={_whatsapp_token(subscription)}")
     subject = f"{event.name} - Online payment link"
 
     list_sentence = ""
@@ -534,6 +545,126 @@ def _send_online_payment_link_email(subscription):
         subscription.save(update_fields=['additional_data'])
         return True
     return False
+
+
+def _subscription_total(subscription):
+    event = subscription.event
+    return (Decimal(event.cost or 0)
+            + Decimal(event.deposit or 0)
+            + _services_total(subscription.selected_services or []))
+
+
+def _whatsapp_token(subscription):
+    """Per-subscription secret so public endpoints keyed by sequential pk cannot leak the group link."""
+    return signing.Signer(salt=WHATSAPP_TOKEN_SALT).signature(str(subscription.pk))
+
+
+def _check_whatsapp_token(subscription, token):
+    if not token or not isinstance(token, str):
+        return False
+    return constant_time_compare(token, _whatsapp_token(subscription))
+
+
+def _whatsapp_link_eligible(subscription):
+    """
+    The group link is shared only with subscribers holding a spot:
+      - free subscription (cost + deposit + selected services == 0), or
+      - fully paid (quota, deposit and services) and currently in the Main List.
+    """
+    event = subscription.event
+    if not event.enable_whatsapp_link or not (event.whatsapp_group_link or '').strip():
+        return False
+    if _subscription_total(subscription) <= 0:
+        return True
+    if not _subscription_payment_already_registered(subscription):
+        return False
+    return bool(subscription.list and subscription.list.is_main_list)
+
+
+def _whatsapp_link_for(subscription):
+    return subscription.event.whatsapp_group_link.strip() if _whatsapp_link_eligible(subscription) else None
+
+
+def _whatsapp_access_url(subscription):
+    """
+    Stable URL sent by email / encoded in QR codes. It resolves to the event's *current* link at click time,
+    so organizers can replace the group link without resending anything.
+    """
+    return (f"{settings.SCHEME_HOST}/event/{subscription.event_id}/whatsapp"
+            f"?subscriptionId={subscription.pk}&t={_whatsapp_token(subscription)}")
+
+
+def _whatsapp_email_html(subscription):
+    url = _whatsapp_access_url(subscription)
+    return (
+        "<p>Join the event WhatsApp group to stay updated with last-minute info from the organizers:</p>"
+        f"<p><a href='{url}' style='display:inline-block;padding:10px 18px;background:#25D366;color:#ffffff;"
+        "font-weight:bold;text-decoration:none;border-radius:6px;'>Join the WhatsApp group</a></p>"
+        f"<p style='font-size:12px;color:#666'>If the button does not work, open this link: "
+        f"<a href='{url}'>{url}</a></p>"
+    )
+
+
+def _mark_whatsapp_link_sent(subscription):
+    ad = subscription.additional_data or {}
+    ad['whatsapp_link_email_sent'] = True
+    subscription.additional_data = ad
+    subscription.save(update_fields=['additional_data'])
+
+
+def _reset_whatsapp_link_sent(subscription):
+    """The sent flag refers to the current event's group: clear it when the subscription changes event."""
+    ad = subscription.additional_data or {}
+    ad.pop('whatsapp_link_email_sent', None)
+    subscription.additional_data = ad
+
+
+def _maybe_send_whatsapp_link_email(subscription):
+    """Send the WhatsApp group invite once, as soon as the subscription becomes eligible."""
+    try:
+        if (subscription.additional_data or {}).get('whatsapp_link_email_sent'):
+            return False
+        if not _whatsapp_link_eligible(subscription):
+            return False
+        recipient = _subscription_recipient_email(subscription)
+        if not recipient:
+            return False
+
+        event = subscription.event
+        html_content = (
+            "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
+            f"<p>Your spot for <b>{event.name}</b> is confirmed.</p>"
+            f"{_whatsapp_email_html(subscription)}"
+            "<p>Thank you,<br/>ESN Politecnico Milano</p>"
+            "</body></html>"
+        )
+        if _send_email(f"{event.name} - WhatsApp group", html_content, recipient):
+            _mark_whatsapp_link_sent(subscription)
+            return True
+    except Exception:
+        logger.exception(f"_maybe_send_whatsapp_link_email failed for sub {subscription.pk}")
+    return False
+
+
+def _send_whatsapp_links_for_event(event_id):
+    """Used when sharing is switched on for an event that already has eligible subscribers."""
+    sent = 0
+    try:
+        subs = Subscription.objects.filter(event_id=event_id).select_related('event', 'list', 'profile')
+        for sub in subs:
+            if _maybe_send_whatsapp_link_email(sub):
+                sent += 1
+        logger.info(f"WhatsApp link backfill for event {event_id}: sent={sent}")
+    except Exception as e:
+        logger.exception(f"WhatsApp link backfill failed for event {event_id}")
+        sentry_sdk.capture_exception(e)
+    finally:
+        close_old_connections()
+    return sent
+
+
+def _whatsapp_sharing_active(event):
+    return bool(event.enable_whatsapp_link and (event.whatsapp_group_link or '').strip())
 
 
 def process_subscription_checkout(subscription_id, event_id):
@@ -776,10 +907,14 @@ def _send_payment_confirmation_email(subscription):
     else:
         list_sentence = "List of assignment to be determined, please wait for our confirmation."
 
+    include_whatsapp = not ad.get('whatsapp_link_email_sent') and _whatsapp_link_eligible(subscription)
+    whatsapp_html = _whatsapp_email_html(subscription) if include_whatsapp else ""
+
     html_content = (
         "<html><body style='font-family:Arial,Helvetica,sans-serif;'>"
         f"<p>We have registered your <b>{paid_label}</b>.</p>"
         f"<p>{list_sentence}</p>"
+        f"{whatsapp_html}"
         "<p>Thank you,<br/>ESN Politecnico Milano</p>"
         "</body></html>"
     )
@@ -787,6 +922,8 @@ def _send_payment_confirmation_email(subscription):
     sent = _send_email(subject, html_content, recipient)
     if sent:
         ad['payment_confirmation_email_sent'] = True
+        if include_whatsapp:
+            ad['whatsapp_link_email_sent'] = True
         subscription.additional_data = ad
         subscription.save(update_fields=['additional_data'])
         logger.debug(f"_send_payment_confirmation_email: sent to {recipient} for sub {subscription.pk}")
@@ -796,7 +933,8 @@ def _send_payment_confirmation_email(subscription):
 
 def _upsert_transaction(*, subscription, tx_type, account_id, amount, description, executor):
     """
-    Create or (if account changed) recreate a transaction of given type.
+    Create a transaction of given type, or update the existing one in place
+    (if account or amount changed) so its created_at keeps the original payment time.
     Idempotent if same account & amount.
     """
     if amount is None or amount <= 0:
@@ -805,9 +943,13 @@ def _upsert_transaction(*, subscription, tx_type, account_id, amount, descriptio
     if existing:
         # If same account & amount keep it
         if (account_id and existing.account_id != account_id) or (amount and existing.amount != amount):
-            existing.delete()
-        else:
-            return existing
+            # Transaction.save() rebalances both accounts on account change, or applies the amount difference
+            if account_id:
+                existing.account_id = account_id
+            existing.amount = amount
+            existing.description = description
+            existing.save()
+        return existing
     return Transaction.objects.create(
         type=tx_type,
         account_id=account_id,
@@ -870,11 +1012,14 @@ def _sync_service_transactions(*, subscription, account_id, executor, allow_dele
 
 
 def _handle_payment_status(*, subscription, account_id, quota_status, deposit_status, services_status=None,
-                           executor, allow_delete=True, auto_move_on_payment=True, send_email_on_payment=True):
+                           executor, allow_delete=True, auto_move_on_payment=True, send_email_on_payment=True,
+                           send_whatsapp=True):
     """
     Apply payment statuses for quota & deposit using unified logic.
     quota_status / deposit_status: 'paid' | other (delete if allow_delete)
     Guaranteed: subscription is a saved instance (has .pk).
+    The WhatsApp invite is sent whenever the subscription is eligible, independently of
+    send_email_on_payment and of whether a payment was registered (free events).
     Returns move_info if auto-move executed, else None.
     """
     event_obj = subscription.event
@@ -937,6 +1082,8 @@ def _handle_payment_status(*, subscription, account_id, quota_status, deposit_st
 
     if send_email_on_payment and did_pay:
         _send_payment_confirmation_email(subscription)
+    if send_whatsapp:
+        _maybe_send_whatsapp_link_email(subscription)
 
     return move_info
 
@@ -1032,6 +1179,20 @@ def event_detail(request, pk):
                         f"Online payment backfill for event {updated_event.pk}: "
                         f"queued={stats['queued']} skipped={stats['skipped']}"
                     )
+
+                # Any edit can make subscribers eligible (sharing switched on, cost set to 0, ...).
+                # Already-notified subscribers are skipped, so a changed link sends nothing:
+                # the stored URLs resolve to the current link.
+                if _whatsapp_sharing_active(updated_event):
+                    if getattr(settings, 'CHECKOUT_BACKFILL_ASYNC', True):
+                        threading.Thread(
+                            target=_send_whatsapp_links_for_event,
+                            args=(updated_event.pk,),
+                            daemon=True,
+                            name='whatsapp_backfill',
+                        ).start()
+                    else:
+                        _send_whatsapp_links_for_event(updated_event.pk)
 
                 return Response(serializer.data, status=200)
             else:
@@ -1223,8 +1384,12 @@ def _handle_subscription_detail_patch(request, sub, has_reimbursed):
 
     serializer = SubscriptionUpdateSerializer(instance=sub, data=mutable_data, partial=True)
     serializer.is_valid(raise_exception=True)
+    previous_event_id = sub.event_id
     with transaction.atomic():
         updated_sub = serializer.save()
+        if updated_sub.event_id != previous_event_id:
+            _reset_whatsapp_link_sent(updated_sub)
+            updated_sub.save(update_fields=['additional_data'])
         account_id = (
             mutable_data.get('account_id')
             or mutable_data.get('account')
@@ -1369,9 +1534,11 @@ def move_subscriptions(request):
                     raise ValidationError(
                         f"{subscription.external_name} è già registrato all'evento {target_event.name}")
 
+                if subscription.event_id != target_event.id:
+                    _reset_whatsapp_link_sent(subscription)
                 subscription.list = target_list
                 subscription.event = target_event
-                subscription.save(update_fields=['list', 'event'])
+                subscription.save(update_fields=['list', 'event', 'additional_data'])
 
                 # Re-sync payment transactions to reflect the new event economics
                 quota_tx = Transaction.objects.filter(
@@ -1397,8 +1564,12 @@ def move_subscriptions(request):
                     executor=request.user,
                     allow_delete=False,
                     auto_move_on_payment=False,
-                    send_email_on_payment=False
+                    send_email_on_payment=False,
+                    send_whatsapp=False,
                 )
+
+                # Sent after commit, so a failure later in the batch (rollback) sends nothing
+                transaction.on_commit(lambda s=subscription: _maybe_send_whatsapp_link_email(s))
 
         return Response({'message': "Iscrizioni spostate con successo"}, status=200)
     except ValidationError as e:
@@ -1406,13 +1577,14 @@ def move_subscriptions(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_liberatorie_pdf(request):
-    def italian_date(dt):
+    def english_date(dt):
         if not dt:
             return "N/A"
-        return format_date(dt, format='d MMMM yyyy', locale='it')
+        return format_date(dt, format='d MMMM yyyy', locale='en')
 
     def display_na(value):
-        return value if value not in [None, '', [], {}] else 'N/A'
+        # reportlab Paragraph parses markup: escape user-supplied values
+        return xml_escape(str(value)) if value not in [None, '', [], {}] else 'N/A'
 
     event_id = request.data.get('event_id')
     subscription_ids = request.data.get('subscription_ids', [])
@@ -1520,20 +1692,21 @@ def generate_liberatorie_pdf(request):
 
             # --- Waiver Text ---
             waiver_text_1 = f"""
-            La presente dichiarazione liberatoria dovrà essere letta e firmata, in calce alla stessa, in nome e per conto proprio, oltre che in nome e per conto
-            delle persone sotto elencate, nonchè dal legale responsabile qualora l'iscritto non sia maggiorenne (nato dopo il <b>{italian_date(age_limit_date)}</b>). La firma apposta
-            in fondo alla presente dichiarazione comporta la piena e consapevole lettura e comprensione del contenuto e la conferma della volontà di attenersi
-            alla stessa: sono a conoscenza dei rischi connessi riguardo alla mia partecipazione a questo pacchetto viaggio e alle relative attività collaterali.
-            Con la sottoscrizione della presente dichiaro di voler liberare ed esonerare, come in effetti libero ed esonero, qualsiasi persona dell'organizzazione
-            Erasmus Student Network Politecnico Milano, gli organizzatori dell'evento <b>"{event.name}" ({italian_date(event.date)})</b>, collettivamente
-            denominati organizzatori dell'evento, da tutte le azioni, cause qualsiasi procedimento giudiziario e arbitrale tra questi compresi ma non limitati a
-            quelli relativi al rischio di infortuni durante la disputa delle attività e al rischio di smarrimento di effetti personali per furto o per qualsiasi altra
-            ragione. Prima dell'iscrizione a questo pacchetto viaggio sarà mia cura e onere verificare le norme e le disposizioni che mi consentono di
-            partecipare al viaggio. Inoltre, con la sottoscrizione della presente, concedo agli organizzatori dell'evento la mia completa autorizzazione a tale
-            viaggio con foto, servizi filmati, TV, radio, videoregistrazioni e altri strumenti di comunicazione noti o sconosciuti, indipendentemente da chi li
-            abbia effettuati e a utilizzare gli stessi nel modo che verrà ritenuto più opportuno, con assoluta discrezione, per ogni forma di pubblicità,
-            promozione, annuncio, progetti di scambio o a scopo commerciale senza pretendere alcun rimborso di qualsiasi natura e senza richiedere alcuna
-            forma di ricompensa.
+            This release form must be read and signed at the bottom by the participant, on their own behalf and on behalf
+            of the persons listed below, and by the legal representative if the participant is underage (born after
+            <b>{english_date(age_limit_date)}</b>). By signing this release form, I confirm that I have fully and knowingly
+            read and understood its contents and agree to comply with it. I acknowledge the risks connected with my
+            participation in this travel package and its related activities.
+            By signing this release form, I agree to release and hold harmless every person belonging to Erasmus Student
+            Network Politecnico Milano and the organizers of the event <b>"{event.name}" ({english_date(event.date)})</b>,
+            collectively referred to as the event organizers, from any action, claim, legal or arbitration proceeding,
+            including but not limited to those relating to the risk of injury during the activities and the risk of loss
+            of personal belongings due to theft or any other reason. Before registering for this travel package, I will
+            personally verify the rules and provisions that allow me to take part in the trip. By signing this release
+            form, I also grant the event organizers my full authorization to use photographs, filmed material, television,
+            radio, video recordings and any other known or unknown means of communication relating to the trip, regardless
+            of who produced them, and to use them at their discretion for any form of advertising, promotion, announcement,
+            exchange project or commercial purpose, without requesting any reimbursement or compensation.
             """
             story.append(Paragraph(waiver_text_1, styles['Justify']))
             story.append(Spacer(1, 1 * cm))
@@ -1541,15 +1714,18 @@ def generate_liberatorie_pdf(request):
             story.append(Spacer(1, 1 * cm))
 
             privacy_text = """
-            <b>INFORMAZIONI AI SENSI DELLA LEGGE 675/96</b><br/>
-            ESN Politecnico Milano desidera informarla che la legge 675/96 prevede la tutela delle persone rispetto al trattamento dei dati
-            personali. In base alla legge, il trattamento che intendiamo effettuare utilizzando i suoi dati è possibile soltanto con il suo consenso scritto e:il trattamento verrà effettuato con sistemi
-            prevalentemente informatici;ai sensi della legge sulla privacy, il trattamento sarà svolto in base ai principi di correttezza, trasparenza e liceità, per consentire la tutela della riservatezza dei
-            suoi dati e del relativi diritti. Il rilascio dei suoi dati non è obbligatorio se non per le finalità legate alle prenotazioni in corso e in ogni caso avrà la possibilità di esercitare i diritti
-            riconosciuti dall'Art. 13 della legge in oggetto che prevedono in qualsiasi momento la verifica dell'esistenza dei suoi dati presso gli archivi cartacei ed informatici, dei criteri e degli scopi
-            del trattamento dei dati, richiedendo la verifica, cancellazione, aggiornamento ed opposizione al loro utilizzo. Il titolare del trattamento dei suoi dati è ESN Politecnico Milano, Via Bonardi
-            3, 20133, Milano. Acquisite le suddette informazioni, rese ai sensi dell'Art 10 della legge 675/96, acconsento al trattamento dei miei dati personali da parte di ESN Politecnico Milano.<br/><br/>
-            Accettazione: SI NO<br/><br/>
+            <b>PRIVACY INFORMATION PURSUANT TO LAW 675/96</b><br/>
+            ESN Politecnico Milano informs you that Law 675/96 protects individuals with regard to the processing of
+            personal data. Under this law, the processing of your data may only be carried out with your written consent.
+            The processing will be carried out mainly by computer systems and, in accordance with privacy legislation,
+            will follow the principles of fairness, transparency and lawfulness in order to protect the confidentiality
+            of your data and your related rights. Providing your data is not mandatory except for purposes connected with
+            current bookings. In any case, you may exercise the rights recognized by Article 13 of the above-mentioned law,
+            including the right at any time to verify the existence of your data in paper and electronic archives, the
+            criteria and purposes of its processing, and to request its verification, deletion, update or objection to its use.
+            The data controller is ESN Politecnico Milano, Via Bonardi 3, 20133, Milan. Having received the information
+            required under Article 10 of Law 675/96, I consent to the processing of my personal data by ESN Politecnico Milano.<br/><br/>
+            Consent: YES NO<br/><br/>
             Firma/Signature______________________
             """
             story.append(Paragraph(privacy_text, styles['Justify']))
@@ -1603,6 +1779,11 @@ def printable_liberatorie(request, event_id):
 _SUMUP_TOKEN_CACHE = {"token": None, "expires_at": 0}
 
 
+def get_sumup_api_base_url():
+    base_url = (getattr(settings, "SUMUP_API_BASE_URL", "") or "").strip().rstrip("/")
+    return base_url or "https://api.sumup.com"
+
+
 # NOTE (SumUp / Cloudflare debug):
 # You may see in the browser devtools a POST like:
 # https://api.sumup.com/cdn-cgi/challenge-platform/...  (status: (canceled) / NS_BINDING_ABORTED)
@@ -1612,14 +1793,19 @@ _SUMUP_TOKEN_CACHE = {"token": None, "expires_at": 0}
 # Safe to ignore; it does not affect payment confirmation logic (_process_sumup_checkout / webhook).
 def get_sumup_access_token():
     """
-    Cached SumUp access token (simple in-memory cache).
+    Return a configured API key or cache an OAuth access token.
+    API keys avoid OAuth scope configuration for environments that support them.
     """
+    api_key = getattr(settings, "SUMUP_API_KEY", "")
+    if api_key:
+        return api_key
+
     now = time.time()
     if _SUMUP_TOKEN_CACHE["token"] and _SUMUP_TOKEN_CACHE["expires_at"] > now + 30:
         return _SUMUP_TOKEN_CACHE["token"]
 
     r = requests.post(
-        "https://api.sumup.com/token",
+        f"{get_sumup_api_base_url()}/token",
         data={
             "grant_type": "client_credentials",
             "client_id": settings.SUMUP_CLIENT_ID,
@@ -1677,7 +1863,12 @@ def create_sumup_checkout(subscription, total_amount, currency="EUR"):
     }
     payload.update(_sumup_destination_fields())
     headers = _sumup_headers()
-    r = requests.post("https://api.sumup.com/v0.1/checkouts", json=payload, headers=headers, timeout=15)
+    r = requests.post(
+        f"{get_sumup_api_base_url()}/v0.1/checkouts",
+        json=payload,
+        headers=headers,
+        timeout=15,
+    )
     if r.status_code >= 300:
         raise RuntimeError(f"SumUp error {r.status_code}: {r.text}")
     data = r.json()
@@ -1734,7 +1925,7 @@ def _process_sumup_checkout(subscription, card_token):
 
         def fetch():
             r = requests.get(
-                f"https://api.sumup.com/v0.1/checkouts/{checkout_id}",
+                f"{get_sumup_api_base_url()}/v0.1/checkouts/{checkout_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=12
             )
@@ -1776,7 +1967,7 @@ def _process_sumup_checkout(subscription, card_token):
         if card_token:
             put_payload = {"payment_type": "card", "card": {"token": card_token}}
             r_put = requests.put(
-                f"https://api.sumup.com/v0.1/checkouts/{checkout_id}",
+                f"{get_sumup_api_base_url()}/v0.1/checkouts/{checkout_id}",
                 json=put_payload,
                 headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
                 timeout=25
@@ -1994,6 +2185,7 @@ def _form_payment_blocked_by_esncard(event, profile, total_cost):
         event.allow_online_payment
         and total_cost > 0
         and profile
+        and not event.is_allow_external
         and _get_esncard_status(profile) != 'valid'
     )
 
@@ -2113,7 +2305,9 @@ def event_form_submit(request, event_id):
                 "A valid ESNcard is required for online payment. Please renew your ESNcard before paying."
                 if payment_blocked else ""
             ),
-            "capacity_blocked": capacity_blocked
+            "capacity_blocked": capacity_blocked,
+            "access_token": _whatsapp_token(sub),
+            "whatsapp_link_url": _whatsapp_access_url(sub) if _whatsapp_link_eligible(sub) else None,
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -2163,6 +2357,7 @@ def subscription_payment_status(_, pk):
         and payment_required
         and not _subscription_payment_already_registered(sub)
         and sub.profile
+        and not sub.event.is_allow_external
         and _get_esncard_status(sub.profile) != 'valid'
     )
     payment_blocked = bool(
@@ -2191,6 +2386,35 @@ def subscription_payment_status(_, pk):
             if esncard_payment_blocked else PAYMENT_SOLD_OUT_MESSAGE if payment_blocked else ""
         ),
     }, status=200)
+
+
+def _paid_result_extras(sub, access_token):
+    """Extra fields for the payment result page; the WhatsApp URL only goes to the token holder."""
+    sub.refresh_from_db(fields=['list', 'additional_data'])
+    extras = {"assigned_list": sub.list.name if sub.list and sub.event.notify_list else None,
+              "is_main_list": bool(sub.list and sub.list.is_main_list)}
+    if _check_whatsapp_token(sub, access_token) and _whatsapp_link_eligible(sub):
+        extras["whatsapp_link_url"] = _whatsapp_access_url(sub)
+    extras["whatsapp_enabled"] = _whatsapp_sharing_active(sub.event)
+    return extras
+
+
+@api_view(['GET'])
+def subscription_whatsapp_link(request, pk):
+    """
+    Public endpoint behind the stable URL sent by email / QR: resolves to the event's *current* group link,
+    so organizers can replace it at any time. Requires the per-subscription signed token.
+    """
+    try:
+        sub = Subscription.objects.select_related('event', 'list').get(pk=pk)
+    except (Subscription.DoesNotExist, ValueError):
+        return Response({"error": "not_available"}, status=404)
+    if not _check_whatsapp_token(sub, request.query_params.get('t')):
+        return Response({"error": "not_available"}, status=404)
+    link = _whatsapp_link_for(sub)
+    if not link:
+        return Response({"error": "not_available", "event_name": sub.event.name}, status=404)
+    return Response({"whatsapp_group_link": link, "event_name": sub.event.name}, status=200)
 
 
 @api_view(['POST'])
@@ -2228,6 +2452,7 @@ def subscription_process_payment(request, pk):
     if isinstance(card_obj, dict):
         candidates.append(card_obj.get('token') or card_obj.get('id'))
     token = next((c for c in candidates if isinstance(c, str) and c.strip()), None)
+    access_token = payload.get('t')
 
     with transaction.atomic():
         # Re-fetch the subscription under a row-level lock so concurrent requests
@@ -2239,6 +2464,7 @@ def subscription_process_payment(request, pk):
             event.allow_online_payment
             and has_payable_amount
             and sub.profile
+            and not event.is_allow_external
             and not _subscription_payment_already_registered(sub)
             and _get_esncard_status(sub.profile) != 'valid'
         ):
@@ -2260,7 +2486,7 @@ def subscription_process_payment(request, pk):
             if status_flag == 'PAID':
                 _ensure_sumup_transactions(sub)
                 return Response(
-                    {"status": status_flag, **remote},
+                    {"status": status_flag, **remote, **_paid_result_extras(sub, access_token)},
                     status=200
                 )
 
@@ -2278,6 +2504,7 @@ def subscription_process_payment(request, pk):
 
         if status_flag == 'PAID':
             _ensure_sumup_transactions(sub)
+            remote = {**remote, **_paid_result_extras(sub, access_token)}
 
         return Response(
             {"status": status_flag, **remote},
@@ -2315,7 +2542,7 @@ def sumup_webhook(request):
     try:
         access_token = get_sumup_access_token()
         r = requests.get(
-            f"https://api.sumup.com/v0.1/checkouts/{checkout_id}",
+            f"{get_sumup_api_base_url()}/v0.1/checkouts/{checkout_id}",
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=12
         )
