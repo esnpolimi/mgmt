@@ -14,11 +14,13 @@ from rest_framework.permissions import IsAuthenticated
 
 logger = logging.getLogger(__name__)
 
-# Path to the JSON file that stores the current notification state.
-# It lives next to manage.py in the backend root.
-NOTIFICATION_FILE = os.path.join(
+LEGACY_NOTIFICATION_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'maintenance_notification.json'
+)
+NOTIFICATION_FILE = os.environ.get(
+    'MAINTENANCE_NOTIFICATION_FILE',
+    LEGACY_NOTIFICATION_FILE,
 )
 
 DEFAULT_MESSAGE = "The system will undergo maintenance in 10 minutes. Please save your work and log out to avoid any data loss. \n Contact informatica@esnpolimi.it for more information."
@@ -30,11 +32,15 @@ DEFAULT_MESSAGE = "The system will undergo maintenance in 10 minutes. Please sav
 
 def _read_notification():
     """Return the current notification dict from the JSON file."""
-    try:
-        with open(NOTIFICATION_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"notification_id": None, "message": DEFAULT_MESSAGE, "triggered_at": None}
+    for path in (NOTIFICATION_FILE, LEGACY_NOTIFICATION_FILE):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            continue
+        except json.JSONDecodeError:
+            break
+    return {"notification_id": None, "message": DEFAULT_MESSAGE, "triggered_at": None}
 
 
 def _write_notification(message=DEFAULT_MESSAGE):

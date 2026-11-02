@@ -82,18 +82,26 @@ Behavior note:
 
 ### 3.4 Wishlist APIs
 
-- GET /wishlist-lookup/?email=<email>: public profile existence lookup
+- GET /wishlist-lookup/?email=<email>: public profile lookup returning `exists` and `verified`
 - POST /wishlist/: public wishlist submission
 - GET|PATCH /wishlist-submissions/: Board-only list and status updates
+  - PATCH accepts only `id` and `status`; other fields are rejected.
 
 Wishlist submissions store email, optional new-contact details, free text, matched Erasmus or ESNer profile,
 and status (`NEW`, `IN_PROGRESS`, `DONE`).
 Anonymous submissions are linked to a matching profile and inherit its details only when that profile's
 email is verified; otherwise, the profile remains unset and only submitted details are stored.
 
+The lookup reports whether any profile matches the email (`exists`) and whether that profile's email
+is verified (`verified`). The public form requests contact details unless the matched profile is verified,
+because only verified profiles supply inherited contact details.
+
 The public wishlist form is available in English at `/wishlist`; Board members can copy its URL
 from the top of the Board submissions page for sharing.
 Lookup and submission errors are displayed directly on the public form.
+While a wishlist POST is in flight, the public form blocks repeated submissions and disables
+the submit button with a `Submitting...` label. The request's `onFinally` callback clears
+the pending guard and button state, allowing retries after errors; success still shows the thank-you view.
 The public form includes bottom spacing after the submit action for comfortable page completion.
 The Board submissions page provides bottom spacing, explains status editing through a tooltip next to
 the Wishlist title,
@@ -191,6 +199,8 @@ Target CSV: `cronologia richieste gruppo whatsapp.csv`.
 5. verify `active_sections` returns only active content
 
 Test reference: `backend/content/tests.py`.
+Frontend submit-guard regression: `node --test frontend/src/Pages/Wishlist.test.cjs`
+(run from the repository root); covers repeated calls, pending feedback, error retry, and success.
 
 ## 10. Canonical Source Files
 

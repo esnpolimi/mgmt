@@ -31,11 +31,19 @@ def archive_logs_to_drive(service, archive_date=None):
             "name": f"{path.stem}-{timestamp}{path.suffix}",
             "parents": [month_folder_id],
         }
-        uploaded_file = service.files().create(
+        request = service.files().create(
             body=metadata,
-            media_body=MediaFileUpload(str(path), mimetype="text/plain"),
+            media_body=MediaFileUpload(
+                str(path),
+                mimetype="text/plain",
+                chunksize=1024 * 1024,
+                resumable=True,
+            ),
             fields="id,name",
             supportsAllDrives=True,
-        ).execute()
+        )
+        uploaded_file = None
+        while uploaded_file is None:
+            _, uploaded_file = request.next_chunk()
         uploaded.append(uploaded_file)
     return uploaded

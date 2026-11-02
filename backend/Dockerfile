@@ -4,7 +4,7 @@ RUN apk add --no-cache gcc musl-dev mariadb-dev # Install build dependencies
 WORKDIR /app
 COPY ./requirements.txt .
 RUN pip install --no-cache-dir -r ./requirements.txt
-RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+RUN addgroup -S app && adduser -S app -G app && mkdir -p /var/lib/app && chown -R app:app /app /var/lib/app
 USER app
 ENTRYPOINT [ "python" ]
 CMD ["manage.py","runserver","0.0.0.0:8000"]

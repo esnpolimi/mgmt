@@ -35,15 +35,21 @@ on the last day of every month:
 
 ```cron
 CRON_TZ=Europe/Rome
-30 23 * * * cd /path/to/backend && /path/to/venv/bin/python manage.py archive_logs_to_drive >> /var/log/esn-log-archive.log 2>&1
+30 23 * * * [ "$(date -d tomorrow +\%d)" = 01 ] && cd /path/to/backend && DJANGO_ENV=prod DJANGO_SETTINGS_MODULE=backend.settings.prod /path/to/venv/bin/python manage.py archive_logs_to_drive >> "$HOME/esn-log-archive.log" 2>&1
 ```
+
+This Linux/cPanel example requires GNU `date`; keep `\%` escaped for cron.
+Ensure the cron user can create or append to `$HOME/esn-log-archive.log`.
+Both Django environment variables explicitly select production settings.
 
 The command copies logs without deleting them. Each execution creates a
 timestamped Drive file, so reruns preserve every archive attempt.
 
 ##### Secret bundle export
 
-From the project root, create the private folder needed by local deployments:
+The exporter is tracked at the repository root and is available in a normal
+clone. From the project root, create the private folder needed by local
+deployments:
 
 ```powershell
 .\create-mgmt-secret.ps1

@@ -63,7 +63,8 @@ The system covers ESN Polimi core processes:
 
 Security maintenance:
 
-- authentication and password-recovery endpoints are throttled
+- authentication and password-recovery endpoints are throttled using
+  the client address forwarded through one trusted proxy (`NUM_PROXIES = 1`)
 - server-provided HTML is never rendered by the frontend
 - external WhatsApp links accept only HTTP(S) URLs
 - treasury reads and exports are restricted to Board users
@@ -205,9 +206,10 @@ Primary sensitive variables:
 - SENTRY_DSN
 
 The private deployment bundle can be recreated from the project root with
-`.\create-mgmt-secret.ps1`. It copies only the two environment files, the
-Google service-account key, and the private `base.py`, `dev.py`, and `prod.py`
-settings into the matching `backend/` paths. Generated Python cache files are
+`.\create-mgmt-secret.ps1`, which is tracked at the repository root and included
+in a normal clone. It copies only the two environment files, the Google
+service-account key, and the private `base.py`, `dev.py`, and `prod.py` settings
+into the matching `backend/` paths. Generated Python cache files are
 intentionally excluded, and the generated `mgmt-secret/` folder is ignored by
 Git.
 
@@ -231,7 +233,8 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 - backend file logging in production
 - audit middleware for DB/action context
 - Sentry with configurable tracing
-- maintenance notification persisted in `maintenance_notification.json`
+- maintenance notification persisted in `maintenance_notification.json` by
+  default; Docker Compose uses the `maintenance_state` volume
 
 ## 9. Technical Constraints and Invariants
 

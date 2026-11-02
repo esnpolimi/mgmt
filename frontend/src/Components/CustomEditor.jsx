@@ -43,6 +43,7 @@ export default function QuillEditor({value, onChange, readOnly = false}) {
             if (value) {
                 const delta = quillInstance.current.clipboard.convert({html: value, text: ''});
                 quillInstance.current.setContents(delta, 'silent');
+                quillInstance.current.history.clear();
             }
         }
     }, [value, onChange, readOnly]);

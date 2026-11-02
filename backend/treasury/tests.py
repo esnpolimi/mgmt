@@ -553,7 +553,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Transactions list should support filters."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
-		user.groups.add(self.group_board)  # transactions are Board-only
+		user.groups.add(self.group_board)  # Board users can list transactions
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
@@ -576,6 +576,41 @@ class TransactionTests(TreasuryBaseTestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(all(t["type"] == Transaction.TransactionType.DEPOSIT for t in response.data["results"]))
+
+	def test_transaction_managers_can_list_and_read_details(self):
+		account_owner = _create_user(_create_profile("transaction-owner@esnpolimi.it"))
+		account = _create_account("Main", user=account_owner)
+		tx = Transaction.objects.create(
+			account=account,
+			executor=account_owner,
+			type=Transaction.TransactionType.DEPOSIT,
+			amount=10,
+			description="Deposit",
+		)
+
+		managers = [
+			("casse-manager@esnpolimi.it", None, True),
+			("change-manager@esnpolimi.it", self.perm_change_transaction, False),
+			("delete-manager@esnpolimi.it", self.perm_delete_transaction, False),
+		]
+		for email, permission, can_manage_casse in managers:
+			with self.subTest(email=email):
+				user = _create_user(_create_profile(email))
+				if permission:
+					user.user_permissions.add(permission)
+				if can_manage_casse:
+					user.can_manage_casse = True
+					user.save(update_fields=["can_manage_casse"])
+				self.authenticate(user)
+
+				list_response = self.client.get("/backend/transactions/")
+				detail_response = self.client.get(f"/backend/transaction/{tx.pk}/")
+				export_response = self.client.get("/backend/transactions_export/")
+
+				self.assertEqual(list_response.status_code, 200)
+				self.assertIn(tx.pk, [item["id"] for item in list_response.data["results"]])
+				self.assertEqual(detail_response.status_code, 200)
+				self.assertEqual(export_response.status_code, 403)
 
 	def test_transaction_detail_patch_requires_permission(self):
 		"""Updating transaction should require permissions."""
@@ -705,7 +740,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Invalid limit param should return 400."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
-		user.groups.add(self.group_board)  # transactions are Board-only
+		user.groups.add(self.group_board)  # Board users can list transactions
 		self.authenticate(user)
 
 		response = self.client.get("/backend/transactions/?limit=notanumber")
@@ -716,7 +751,7 @@ class TransactionTests(TreasuryBaseTestCase):
 		"""Limit param should cap returned results."""
 		profile = _create_profile("user@esnpolimi.it")
 		user = _create_user(profile)
-		user.groups.add(self.group_board)  # transactions are Board-only
+		user.groups.add(self.group_board)  # Board users can list transactions
 		self.authenticate(user)
 
 		account = _create_account("Main", user=user)
@@ -1360,6 +1395,38 @@ class TransactionsExportTests(TreasuryBaseTestCase):
 		self.assertIsInstance(ws.cell(row=2, column=2).value, datetime)
 		self.assertEqual(ws.cell(row=2, column=2).number_format, "dd/mm/yyyy")
 
+	def test_transactions_export_neutralizes_event_and_account_formulas(self):
+		formula = '=HYPERLINK("https://example.com")'
+		profile = _create_profile("formula-export@esnpolimi.it")
+		user = _create_user(profile)
+		user.groups.add(self.group_board)
+		self.authenticate(user)
+
+		event = _create_event(name=formula)
+		event_list = _create_event_list(event)
+		account = _create_account(formula, user=user)
+		subscription = Subscription.objects.create(
+			profile=None,
+			external_name="External subscriber",
+			event=event,
+			list=event_list,
+		)
+		Transaction.objects.create(
+			subscription=subscription,
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.SUBSCRIPTION,
+			amount=Decimal("10.00"),
+			description="Formula export test",
+		)
+
+		response = self.client.get("/backend/transactions_export/")
+
+		self.assertEqual(response.status_code, 200)
+		ws = load_workbook(filename=BytesIO(response.content)).active
+		self.assertEqual(ws.cell(row=2, column=3).value, "'" + formula)
+		self.assertEqual(ws.cell(row=2, column=6).value, "'" + formula)
+
 
 class TreasuryWorkbookDataTypesTests(TreasuryBaseTestCase):
 	def test_report_workbooks_store_dates_as_excel_dates(self):
@@ -1385,6 +1452,19 @@ class TreasuryWorkbookDataTypesTests(TreasuryBaseTestCase):
 		self.assertIsInstance(transactions_ws.cell(row=2, column=2).value, datetime)
 		self.assertIsNone(transactions_ws.cell(row=2, column=2).value.tzinfo)
 		self.assertEqual(transactions_ws.cell(row=2, column=2).number_format, "dd/mm/yyyy hh:mm:ss")
+
+	def test_accounts_workbook_neutralizes_formula_account_names(self):
+		formula = '=HYPERLINK("https://example.com")'
+		profile = _create_profile("formula-account-report@esnpolimi.it")
+		user = _create_user(profile)
+		_create_account(formula, user=user)
+		report_date = timezone.localdate()
+		tz = timezone.get_current_timezone()
+		start_dt, end_dt = get_day_bounds(report_date, tz)
+
+		ws = build_accounts_workbook(start_dt, end_dt, report_date).active
+
+		self.assertEqual(ws.cell(row=2, column=3).value, "'" + formula)
 
 
 class TreasuryReportEndpointsTests(TreasuryBaseTestCase):
@@ -2346,13 +2426,22 @@ class AccountVisibilityEdgeCaseTests(TreasuryBaseTestCase):
 
 
 class BoardOnlyTreasuryTests(TreasuryBaseTestCase):
-	"""Regression tests for the security audit: treasury data is Board-only."""
+	"""Regression coverage for Board-only exports and transaction manager access."""
 
-	def test_non_board_cannot_list_or_export_transactions(self):
+	def test_non_manager_cannot_read_or_export_transactions(self):
 		user = _create_user(_create_profile("member@esnpolimi.it"))
 		self.authenticate(user)
+		account = _create_account("Main", user=user)
+		tx = Transaction.objects.create(
+			account=account,
+			executor=user,
+			type=Transaction.TransactionType.DEPOSIT,
+			amount=10,
+			description="Deposit",
+		)
 
 		self.assertEqual(self.client.get("/backend/transactions/").status_code, 403)
+		self.assertEqual(self.client.get(f"/backend/transaction/{tx.pk}/").status_code, 403)
 		self.assertEqual(self.client.get("/backend/transactions_export/").status_code, 403)
 
 	def test_export_neutralizes_spreadsheet_formulas(self):

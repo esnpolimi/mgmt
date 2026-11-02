@@ -95,6 +95,7 @@ AUTH_USER_MODEL = "users.User"
 
 # REST Framework
 REST_FRAMEWORK = {
+    'NUM_PROXIES': 1,
     'EXCEPTION_HANDLER': 'utils.exceptions.api_exception_handler',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',

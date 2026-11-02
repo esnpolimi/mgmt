@@ -1,15 +1,17 @@
-import {useState} from 'react';
+import {useRef, useState} from 'react';
 import {Box, Button, Paper, TextField, Typography} from '@mui/material';
 import {fetchCustom} from '../api/api';
 import logo from '../assets/esnpolimi-logo.png';
 
 export default function Wishlist() {
     const [email, setEmail] = useState('');
-    const [known, setKnown] = useState(null);
+    const [profileVerified, setProfileVerified] = useState(null);
     const [form, setForm] = useState({first_name: '', last_name: '', phone: '', country: '', message: ''});
     const [error, setError] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const submittingRef = useRef(false);
 
     const lookup = (event) => {
         event.preventDefault();
@@ -18,7 +20,7 @@ export default function Wishlist() {
         fetchCustom('GET', `/content/wishlist-lookup/?email=${encodeURIComponent(email)}`, {
             auth: false,
             onSuccess: (data) => {
-                setKnown(data.exists);
+                setProfileVerified(data.verified);
             },
             onError: () => setError('Unable to verify the email.'),
             onFinally: () => setIsLoading(false),
@@ -27,11 +29,18 @@ export default function Wishlist() {
 
     const submit = (event) => {
         event.preventDefault();
+        if (submittingRef.current) return;
+        submittingRef.current = true;
+        setIsSubmitting(true);
         fetchCustom('POST', '/content/wishlist/', {
             auth: false,
             body: {email, ...form},
             onSuccess: () => setSubmitted(true),
             onError: () => setError('Unable to submit the request.'),
+            onFinally: () => {
+                submittingRef.current = false;
+                setIsSubmitting(false);
+            },
         });
     };
 
@@ -53,22 +62,22 @@ export default function Wishlist() {
         <img src={logo} alt="ESN Polimi" style={{height: '15vh', display: 'block', margin: '0 auto 20px'}} />
         <Typography variant="h4" align="center" gutterBottom>ESN Wishlist</Typography>
         <Typography align="center" sx={{mb: 3}}>Share your idea for a trip or a new activity.</Typography>
-        {known === null && <Box component="form" onSubmit={lookup} sx={{display: 'grid', gap: 2}}>
+        {profileVerified === null && <Box component="form" onSubmit={lookup} sx={{display: 'grid', gap: 2}}>
             <TextField fullWidth required type="email" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <Button type="submit" variant="contained" disabled={isLoading}>{isLoading ? 'Checking...' : 'Continue'}</Button>
             {error && <Typography color="error">{error}</Typography>}
         </Box>}
-        {known !== null && <Box component="form" onSubmit={submit} sx={{display: 'grid', gap: 2, mt: 3}}>
-            {!known && <>
+        {profileVerified !== null && <Box component="form" onSubmit={submit} sx={{display: 'grid', gap: 2, mt: 3}}>
+            {!profileVerified && <>
                 <TextField required label="First name" value={form.first_name} onChange={(e) => setForm({...form, first_name: e.target.value})} />
                 <TextField required label="Last name" value={form.last_name} onChange={(e) => setForm({...form, last_name: e.target.value})} />
                 <TextField label="Phone" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} />
                 <TextField label="Country" value={form.country} onChange={(e) => setForm({...form, country: e.target.value})} />
             </>}
-            {known && <Typography color="text.secondary">Your email was found in the system.</Typography>}
+            {profileVerified && <Typography color="text.secondary">Your email was found in the system.</Typography>}
             <TextField required multiline minRows={5} label="Your idea" value={form.message} onChange={(e) => setForm({...form, message: e.target.value})} />
             {error && <Typography color="error">{error}</Typography>}
-            <Button type="submit" variant="contained">Submit idea</Button>
+            <Button type="submit" variant="contained" disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit idea'}</Button>
         </Box>}
     </Box>;
 }

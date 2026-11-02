@@ -427,15 +427,24 @@ class WishlistTests(ContentBaseTestCase):
         profile = _create_profile('erasmus@example.com', is_esner=False)
         response = self.client.get('/backend/content/wishlist-lookup/', {'email': profile.email})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data['exists'])
-        self.assertEqual(set(response.data), {'exists'})
+        self.assertEqual(response.data, {'exists': True, 'verified': True})
 
     def test_public_lookup_returns_existing_esner_profile(self):
         profile = _create_profile('esner@example.com', is_esner=True)
         response = self.client.get('/backend/content/wishlist-lookup/', {'email': profile.email})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data['exists'])
-        self.assertEqual(set(response.data), {'exists'})
+        self.assertEqual(response.data, {'exists': True, 'verified': True})
+
+    def test_public_lookup_distinguishes_unverified_profile(self):
+        profile = _create_profile('unverified@example.com', verified=False)
+        response = self.client.get('/backend/content/wishlist-lookup/', {'email': profile.email})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {'exists': True, 'verified': False})
+
+    def test_public_lookup_reports_unmatched_email_as_unverified(self):
+        response = self.client.get('/backend/content/wishlist-lookup/', {'email': 'new@example.com'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {'exists': False, 'verified': False})
 
     def test_public_submission_requires_message(self):
         response = self.client.post('/backend/content/wishlist/', {'email': 'new@example.com'})
@@ -490,6 +499,58 @@ class WishlistTests(ContentBaseTestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], 'DONE')
+
+    def test_wishlist_status_update_rejects_submission_field_changes(self):
+        profile = _create_profile('board@example.com')
+        user = _create_user(profile)
+        user.groups.add(self.group_board)
+        submission = WishlistSubmission.objects.create(
+            email='new@example.com',
+            first_name='Mario',
+            last_name='Rossi',
+            phone='123456',
+            country='Italy',
+            message='Original idea',
+        )
+        self.authenticate(user)
+
+        response = self.client.patch('/backend/content/wishlist-submissions/', {
+            'id': submission.id,
+            'status': 'DONE',
+            'email': 'changed@example.com',
+            'first_name': 'Changed',
+            'last_name': 'Changed',
+            'phone': '999999',
+            'country': 'Changed',
+            'message': 'Changed idea',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        submission.refresh_from_db()
+        self.assertEqual(submission.status, WishlistSubmission.Status.NEW)
+        self.assertEqual(submission.email, 'new@example.com')
+        self.assertEqual(submission.first_name, 'Mario')
+        self.assertEqual(submission.last_name, 'Rossi')
+        self.assertEqual(submission.phone, '123456')
+        self.assertEqual(submission.country, 'Italy')
+        self.assertEqual(submission.message, 'Original idea')
+
+    def test_wishlist_status_update_rejects_non_object_payload(self):
+        profile = _create_profile('board@example.com')
+        user = _create_user(profile)
+        user.groups.add(self.group_board)
+        submission = WishlistSubmission.objects.create(email='new@example.com', message='Idea')
+        self.authenticate(user)
+
+        response = self.client.patch(
+            '/backend/content/wishlist-submissions/',
+            [{'id': submission.id, 'status': 'DONE'}],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        submission.refresh_from_db()
+        self.assertEqual(submission.status, WishlistSubmission.Status.NEW)
 
     def test_wishlist_list_denies_non_board_content_manager(self):
         profile = _create_profile('content.manager@example.com')
