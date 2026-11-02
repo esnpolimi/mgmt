@@ -155,6 +155,7 @@ class ProfileFullEditSerializer(ZeroPlaceholderMixin, serializers.ModelSerialize
         extra_kwargs = {
             'person_code': {'required': False, 'allow_blank': True},
             'matricola_number': {'required': False, 'allow_blank': True},
+            'email_is_verified': {'read_only': True},
         }
 
     def _validate_and_normalize_matricola(self, attrs):

@@ -84,6 +84,8 @@ Accounting invariants:
 2. Closed accounts do not accept new mutating operations.
 3. For constrained types, negative balance is blocked.
 4. Model validation errors on treasury writes are returned to the client as 400 responses.
+5. Transaction listing, detail reads, and exports are restricted to Board users.
+6. Spreadsheet exports neutralize formula-like values before writing cells.
 
 ### 2.5 ReimbursementRequest
 

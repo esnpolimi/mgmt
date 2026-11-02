@@ -63,6 +63,11 @@ The system covers ESN Polimi core processes:
 
 Security maintenance:
 
+- authentication and password-recovery endpoints are throttled
+- server-provided HTML is never rendered by the frontend
+- external WhatsApp links accept only HTTP(S) URLs
+- treasury reads and exports are restricted to Board users
+- spreadsheet exports neutralize formula-like cell values
 - frontend dependency installation disables npm lifecycle scripts
 - frontend containers install and run as the unprivileged `node` user
 - frontend container builds copy only the application files required at runtime
