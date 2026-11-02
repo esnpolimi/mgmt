@@ -55,10 +55,9 @@ from `staging` to `main` only after the required validation and approval.
 
 The backend test workflow runs automatically on every PR targeting the project's
 integration branches (`development`, `staging`, or `main`), regardless of the
-source branch. It also runs on every push to `development`. The `Backend Tests
-(Tests)` check must be configured as a required status check in the protection
-rules for the relevant target branches, so a PR cannot be merged until the
-tests pass.
+source branch. It also runs on every push to `development`. The `backend-test`
+status check must be configured as a required check in the protection rules for
+the relevant target branches, so a PR cannot be merged until the tests pass.
 
 ---
 

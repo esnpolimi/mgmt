@@ -1,6 +1,7 @@
 FROM node:22.14-alpine
 WORKDIR /app
 COPY --chown=node:node ./package*.json /app/
+RUN chown -R node:node /app
 USER node
 RUN npm ci --ignore-scripts
 COPY --chown=node:node ./src ./src

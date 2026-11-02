@@ -453,6 +453,20 @@ class WishlistTests(ContentBaseTestCase):
         self.assertEqual(submission.profile, profile)
         self.assertEqual(submission.first_name, profile.name)
 
+    def test_public_submission_does_not_link_unverified_profile(self):
+        profile = _create_profile('unverified@example.com', verified=False)
+        response = self.client.post('/backend/content/wishlist/', {
+            'email': profile.email,
+            'message': 'Idea viaggio',
+        })
+        self.assertEqual(response.status_code, 201)
+        submission = WishlistSubmission.objects.get()
+        self.assertIsNone(submission.profile)
+        self.assertEqual(submission.first_name, '')
+        self.assertEqual(submission.last_name, '')
+        self.assertEqual(submission.phone, '')
+        self.assertEqual(submission.country, '')
+
     def test_public_submission_always_starts_as_new(self):
         response = self.client.post('/backend/content/wishlist/', {
             'email': 'new@example.com',
@@ -476,6 +490,17 @@ class WishlistTests(ContentBaseTestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], 'DONE')
+
+    def test_wishlist_list_denies_non_board_content_manager(self):
+        profile = _create_profile('content.manager@example.com')
+        user = _create_user(profile)
+        user.can_manage_content = True
+        user.save(update_fields=['can_manage_content'])
+        self.authenticate(user)
+
+        response = self.client.get('/backend/content/wishlist-submissions/')
+
+        self.assertEqual(response.status_code, 403)
 
 
 class ContentSectionDetailEdgeCaseTests(ContentBaseTestCase):

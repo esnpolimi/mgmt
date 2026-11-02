@@ -1181,6 +1181,13 @@ class PaymentStatusTests(EventsBaseTestCase):
 class SumUpWebhookTests(EventsBaseTestCase):
 	"""Tests for SumUp webhook endpoint (mocked)."""
 
+	def test_sumup_api_base_url_uses_default_when_setting_is_empty(self):
+		with override_settings(SUMUP_API_BASE_URL="https://custom.sumup.test"):
+			self.assertEqual(event_views.get_sumup_api_base_url(), "https://custom.sumup.test")
+
+		with override_settings(SUMUP_API_BASE_URL=""):
+			self.assertEqual(event_views.get_sumup_api_base_url(), "https://api.sumup.com")
+
 	@override_settings(SUMUP_API_KEY="sandbox-api-key")
 	@patch("events.views.requests.post")
 	def test_sumup_api_key_skips_oauth_token_request(self, mock_post):

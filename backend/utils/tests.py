@@ -1,13 +1,32 @@
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.core import mail
-from django.test import SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from utils.email_backend import DevelopmentEmailBackend
 from utils.log_archive import archive_logs_to_drive
+from utils.throttles import AuthAttemptThrottle
+
+
+class AuthAttemptThrottleTests(SimpleTestCase):
+    @override_settings(AUTH_THROTTLE_RATE='1/min')
+    def test_authenticated_requests_share_the_client_ip_limit(self):
+        factory = RequestFactory()
+        anonymous_request = factory.post('/', REMOTE_ADDR='192.0.2.1')
+        authenticated_request = factory.post('/', REMOTE_ADDR='192.0.2.1')
+        authenticated_request.user = SimpleNamespace(is_authenticated=True)
+        throttle = AuthAttemptThrottle()
+        cache_key = throttle.get_cache_key(anonymous_request, None)
+        cache.delete(cache_key)
+        self.addCleanup(cache.delete, cache_key)
+
+        self.assertTrue(throttle.allow_request(anonymous_request, None))
+        self.assertFalse(throttle.allow_request(authenticated_request, None))
 
 
 class DevelopmentEmailBackendTests(SimpleTestCase):

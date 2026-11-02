@@ -28,6 +28,11 @@ machine.
 
 4. Configure the development environment and start Django:
 
+   Before running these commands, obtain and install the private settings
+   bundle; `backend.settings.dev` is provided by that bundle, not this
+   repository. See the [private file instructions](README.md#retrieve-the-project)
+   and [secret bundle export instructions](backend/README_Scripts.md#secret-bundle-export).
+
    **macOS/Linux**
 
    ```bash

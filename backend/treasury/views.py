@@ -875,8 +875,6 @@ def reimburse_quota(request):
 
     quota_amount = Decimal(str(sub_event.cost)) if not quota_already_reimbursed else Decimal('0')
     total_refund = quota_amount + services_total
-    if account.balance < total_refund:
-        return Response({'error': 'Saldo cassa insufficiente.'}, status=400)
 
     # Fix: handle external subscriptions for description
     if sub.profile:
@@ -904,7 +902,7 @@ def reimburse_quota(request):
                 type=Transaction.TransactionType.RIMBORSO_QUOTA,
                 subscription=sub,
                 executor=request.user,
-                account=account,
+                account=account_locked,
                 amount=-sub_event.cost,
                 description=f"Rimborso quota {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
             )
@@ -914,7 +912,7 @@ def reimburse_quota(request):
                 type=Transaction.TransactionType.RIMBORSO_SERVICE,
                 subscription=sub,
                 executor=request.user,
-                account=account,
+                account=account_locked,
                 amount=-services_total,
                 description=f"Rimborso servizi {sub_name} - {sub_event.name}" + (f" - {notes}" if notes else "")
             )
@@ -1130,6 +1128,8 @@ def treasury_accounts_report(request):
     report_date = request.data.get('date') or request.query_params.get('date')
     try:
         download = request.query_params.get('download') == 'true'
+        if download and not user_is_board(request.user):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
         result = generate_accounts_report(report_date=report_date, include_content=download)
         if download:
             response = HttpResponse(
@@ -1167,6 +1167,8 @@ def treasury_transactions_report(request):
     report_date = request.data.get('date') or request.query_params.get('date')
     try:
         download = request.query_params.get('download') == 'true'
+        if download and not user_is_board(request.user):
+            return Response({'error': MSG_UNAUTHORIZED}, status=403)
         result = generate_transactions_report(report_date=report_date, include_content=download)
         if download:
             response = HttpResponse(

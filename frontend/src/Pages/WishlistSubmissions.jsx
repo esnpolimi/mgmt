@@ -26,7 +26,9 @@ export default function WishlistSubmissions() {
         onError: () => setError('Impossibile caricare le richieste.'),
     });
 
-    useEffect(load, []);
+    useEffect(() => {
+        load();
+    }, []);
 
     const updateStatus = (item, status) => fetchCustom('PATCH', '/content/wishlist-submissions/', {
         body: {id: item.id, status},
