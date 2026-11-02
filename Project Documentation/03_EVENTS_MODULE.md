@@ -21,7 +21,7 @@ Responsibilities:
 Main business attributes:
 
 - identifiers: `name`, `date`, `description`
-- Event-description HTML is converted to a Quill Delta and loaded silently, without triggering a user edit.
+- Event-description HTML is converted to a Quill Delta and loaded silently, without triggering a user edit. Quill's undo history is then cleared so undo cannot remove the loaded description; subsequent user edits remain undoable.
 - pricing: `cost`, `deposit`
 - subscription window: `subscription_start_date`, `subscription_end_date`
 - form: `enable_form`, `form_programmed_open_time`, `form_note`, `form_capacity`
@@ -29,7 +29,7 @@ Main business attributes:
 - WhatsApp group sharing: `enable_whatsapp_link`, `whatsapp_group_link` (see 5.7; unrelated to the content-module `whatsapp-register` flow)
 - Event editor shows a concise explanation of WhatsApp sharing in an information tooltip next to the sharing toggle.
 - Event editor shows explanations for event options and profile data next to their labels through information tooltips.
-- Generated release forms keep the personal-data section bilingual, while the waiver and privacy text are written in English.
+- Generated release forms keep the personal-data section bilingual, while the waiver and privacy text are written in English; event names are escaped before insertion into ReportLab markup.
 - vCard contact exports avoid duplicating phone and WhatsApp prefixes already included in profile data.
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
@@ -145,7 +145,7 @@ Additional rules:
 4. subscription persistence
 5. transaction sync for fee/deposit/services
 
-Transaction sync goes through `_upsert_transaction` in `backend/events/views.py`: an existing transaction of the same type is updated in place when account or amount changes (`Transaction.save()` rebalances accounts) instead of being deleted and recreated, so its `created_at` — and therefore the subscription's `paid_at` — keeps the original payment time. Same account and amount is a no-op.
+Transaction sync goes through `_upsert_transaction` in `backend/events/views.py`: truthy account IDs are normalized to integers before comparison, so numeric strings match stored IDs; falsey/missing IDs retain the existing handling. An existing transaction of the same type is updated in place when account or amount changes (`Transaction.save()` rebalances accounts) instead of being deleted and recreated, so its `created_at` — and therefore the subscription's `paid_at` — keeps the original payment time. Same account and amount is a no-op.
 
 ### 5.2 Public Form Flow
 

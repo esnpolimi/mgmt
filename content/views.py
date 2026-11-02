@@ -2,6 +2,7 @@ import csv
 import io
 import logging
 import threading
+from collections.abc import Mapping
 from datetime import datetime
 
 import sentry_sdk
@@ -334,7 +335,10 @@ def wishlist_lookup(request):
     except serializers.ValidationError:
         return Response({'email': 'Inserisci un indirizzo email valido.'}, status=drf_status.HTTP_400_BAD_REQUEST)
     profile = Profile.objects.filter(email__iexact=email).first()
-    return Response({'exists': profile is not None})
+    return Response({
+        'exists': profile is not None,
+        'verified': bool(profile and profile.email_is_verified),
+    })
 
 
 @api_view(['GET', 'PATCH'])
@@ -345,6 +349,12 @@ def wishlist_submissions(request):
 
     if request.method == 'GET':
         return Response(WishlistSubmissionSerializer(WishlistSubmission.objects.all(), many=True).data)
+
+    if not isinstance(request.data, Mapping) or set(request.data) != {'id', 'status'}:
+        return Response(
+            {'detail': 'Only id and status may be provided.'},
+            status=drf_status.HTTP_400_BAD_REQUEST,
+        )
 
     submission = WishlistSubmission.objects.filter(pk=request.data.get('id')).first()
     if not submission:

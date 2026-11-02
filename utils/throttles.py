@@ -3,11 +3,7 @@ from rest_framework.throttling import SimpleRateThrottle
 
 
 class AuthAttemptThrottle(SimpleRateThrottle):
-    """Per-IP limit for public endpoints that guess passwords or send emails.
-
-    shortcut: keyed on the client IP (X-Forwarded-For when present), so a spoofed header can evade it;
-    set REST_FRAMEWORK NUM_PROXIES and move to django-axes if that matters.
-    """
+    """Per-IP limit for public endpoints that guess passwords or send emails."""
     scope = 'auth_attempt'
 
     def get_cache_key(self, request, view):

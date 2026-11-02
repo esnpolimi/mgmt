@@ -85,6 +85,9 @@ Base path: /backend/
 2. Reset requires valid uid/token and matching password input.
 3. Login and password-recovery attempts are throttled per client IP, including
    requests with a valid JWT.
+   `REST_FRAMEWORK.NUM_PROXIES` is set to `1` for the Cloudflare proxy. The
+   cPanel origin must only accept application traffic through that trusted
+   proxy; update the value if the trusted proxy chain changes.
 4. Successful reset invalidates existing access tokens through SimpleJWT's
    `CHECK_REVOKE_TOKEN` password-hash claim check in `JWTAuthentication`, and
    blacklists outstanding refresh tokens. Both login/token-pair issuance and

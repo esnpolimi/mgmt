@@ -14,6 +14,15 @@ from utils.throttles import AuthAttemptThrottle
 
 
 class AuthAttemptThrottleTests(SimpleTestCase):
+    def test_client_ip_uses_forwarded_address_behind_one_trusted_proxy(self):
+        request = RequestFactory().get(
+            '/',
+            REMOTE_ADDR='203.0.113.1',
+            HTTP_X_FORWARDED_FOR='198.51.100.7',
+        )
+
+        self.assertEqual(AuthAttemptThrottle().get_ident(request), '198.51.100.7')
+
     @override_settings(AUTH_THROTTLE_RATE='1/min')
     def test_authenticated_requests_share_the_client_ip_limit(self):
         factory = RequestFactory()
@@ -79,6 +88,12 @@ class LogArchiveTests(SimpleTestCase):
         with TemporaryDirectory() as temp_dir:
             log_path = Path(temp_dir) / "archive-test.log"
             log_path.write_text("entry", encoding="utf-8")
+            chunks = iter(
+                [
+                    (None, None),
+                    (None, {"id": "1", "name": "archive-test"}),
+                ]
+            )
             with self.settings(BASE_DIR=Path(temp_dir)):
                 service = type(
                     "Service",
@@ -92,10 +107,7 @@ class LogArchiveTests(SimpleTestCase):
                                     "Request",
                                     (),
                                     {
-                                        "execute": lambda self: {
-                                            "id": "1",
-                                            "name": "archive-test",
-                                        }
+                                        "next_chunk": lambda self: next(chunks)
                                     },
                                 )()
                             },
@@ -108,4 +120,9 @@ class LogArchiveTests(SimpleTestCase):
 
         self.assertEqual(uploaded, [{"id": "1", "name": "archive-test"}])
         self.assertEqual(find_or_create_folder.call_count, 3)
-        media_file_upload.assert_called_once()
+        media_file_upload.assert_called_once_with(
+            str(log_path),
+            mimetype="text/plain",
+            chunksize=1024 * 1024,
+            resumable=True,
+        )

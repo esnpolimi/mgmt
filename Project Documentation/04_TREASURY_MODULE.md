@@ -84,7 +84,7 @@ Accounting invariants:
 2. Closed accounts do not accept new mutating operations.
 3. For constrained types, negative balance is blocked.
 4. Model validation errors on treasury writes are returned to the client as 400 responses.
-5. Transaction listing, detail reads, and exports are restricted to Board users.
+5. Transaction listing and detail reads are available to Board users and users authorized to patch or delete transactions; exports remain Board-only.
 6. Spreadsheet exports neutralize formula-like values before writing cells.
 
 ### 2.5 ReimbursementRequest
@@ -146,10 +146,11 @@ Main rules:
 2. Full account patch: `change_account`.
 3. Account status update: also allowed for treasury managers (group/flag).
 4. Transaction creation: `add_transaction`.
-5. Transaction patch/delete: specific permissions or `can_manage_casse`.
-6. ESNcard revocation (`DELETE esncard/<pk>`): Board only.
-7. Reimbursement request patch: Board.
-8. Reimbursement request delete: Board or dedicated permission.
+5. Transaction listing/detail reads: Board, `change_transaction`, `delete_transaction`, or `can_manage_casse`.
+6. Transaction patch/delete: specific permissions or `can_manage_casse`.
+7. ESNcard revocation (`DELETE esncard/<pk>`): Board only.
+8. Reimbursement request patch: Board.
+9. Reimbursement request delete: Board or dedicated permission.
 
 Account visibility:
 
@@ -245,6 +246,9 @@ Online event payments use SumUp Checkout and are selected by environment:
 `transactions_export` produces XLSX with accounting metadata and operational descriptions.
 The export response exposes its content type and filename headers to the frontend so cross-origin downloads can be validated and named correctly.
 Date and timestamp columns use native Excel date values with display formats, so spreadsheet sorting and filtering work as expected.
+
+Spreadsheet exports neutralize formula-like text before writing it to cells,
+including event-derived activity values and account names.
 
 Daily Drive reports:
 

@@ -62,6 +62,12 @@ def get_action_permissions(action, user):
         return user.has_perm('treasury.change_transaction') or getattr(user, 'can_manage_casse', False)
     if action == 'transaction_detail_delete':
         return user.has_perm('treasury.delete_transaction') or getattr(user, 'can_manage_casse', False)
+    if action == 'transaction_read':
+        return (
+            user_is_board(user)
+            or get_action_permissions('transaction_detail_patch', user)
+            or get_action_permissions('transaction_detail_delete', user)
+        )
     if action == 'esncard_detail_patch':
         return user.has_perm('treasury.change_esncard')
     if action == 'esncard_detail_delete':
@@ -354,7 +360,7 @@ def transaction_add(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def transactions_list(request):
-    if not user_is_board(request.user):
+    if not get_action_permissions('transaction_read', request.user):
         return Response({'error': MSG_UNAUTHORIZED}, status=403)
     transactions = Transaction.objects.all().order_by('-created_at')
     transactions = apply_transaction_filters(transactions, request)
@@ -384,7 +390,7 @@ def transaction_detail(request, pk):
         transaction_obj = Transaction.objects.get(pk=pk)
 
         if request.method == 'GET':
-            if not user_is_board(request.user):
+            if not get_action_permissions('transaction_read', request.user):
                 return Response({'error': MSG_UNAUTHORIZED}, status=403)
             serializer = TransactionViewSerializer(transaction_obj)
             return Response(serializer.data, status=200)
@@ -1075,7 +1081,7 @@ def transactions_export(request):
         datetime_cell.number_format = 'dd/mm/yyyy hh:mm:ss'
         date_cell = ws.cell(row=row_idx, column=2, value=local_dt.date())
         date_cell.number_format = 'dd/mm/yyyy'
-        ws.cell(row=row_idx, column=3, value=build_attivita(tx))
+        ws.cell(row=row_idx, column=3, value=safe_text(build_attivita(tx)))
         ws.cell(row=row_idx, column=4, value=safe_text(build_descrizione(tx)))
         amt_cell = ws.cell(row=row_idx, column=5, value=amount_val)
         amt_cell.number_format = '#,##0.00 €'
