@@ -6,7 +6,14 @@ if (!isLocalHost) {
     Sentry.init({
         dsn: "https://f7ee9b97bae2c35e767d8e156eb7b116@o4509581352828928.ingest.de.sentry.io/4509581461487696",
         sendDefaultPii: false,
-        environment: 'production'
+        environment: 'production',
+        beforeSend(event) {
+            // Instagram/Google in-app browsers inject a native bridge script that throws on its own: not our code.
+            const frames = event.exception?.values?.flatMap(v => v.stacktrace?.frames || []) || [];
+            const isBridgeNoise = frames.some(f => /^(dispatchToBridge|sendPostMessage|sendDataToNative|logLoginFormFocused)$/.test(f.function || '')
+                || (f.filename || '').includes('iabjs://'));
+            return isBridgeNoise ? null : event;
+        },
     });
 }
 else window.API_HOST = `${location.protocol}//${location.hostname}:8000/backend`;
