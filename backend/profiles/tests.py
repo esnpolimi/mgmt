@@ -1412,7 +1412,7 @@ class ResendVerificationEmailTests(ProfilesBaseTestCase):
 			response = self.client.post(self._url(target.pk))
 
 		self.assertEqual(response.status_code, 500)
-		self.assertIn("SMTP down", response.data["error"])
+		self.assertEqual(response.data["error"], "Errore nell'invio dell'email.")
 		target.refresh_from_db()
 		self.assertFalse(target.email_is_verified)
 

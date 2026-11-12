@@ -105,7 +105,7 @@ Board can force profile verification/activation for exceptional cases.
 
 - view: `resend_verification_email` in `backend/profiles/views.py`; email built and sent by `_send_verification_email(profile)`, shared with `initiate_profile_creation`.
 - auth: `IsAuthenticated` only (Aspiranti included, no Board check); per-IP `AuthAttemptThrottle` (`AUTH_THROTTLE_RATE`, default `10/min`).
-- responses: 200 `{message}`; 400 `{'error': 'Email già verificata.'}` if `email_is_verified`; 404 unknown pk; 500 `{error}` on `send_mail` failure (logged + Sentry).
+- responses: 200 `{message}`; 400 `{'error': 'Email già verificata.'}` if `email_is_verified`; 404 unknown pk; 500 `{'error': "Errore nell'invio dell'email."}` on `send_mail` failure (logged + Sentry, no raw SMTP detail in response).
 - email: sent to current `profile.email` (so a corrected unverified email gets the link); IT text if `is_esner`, EN otherwise; link `{SCHEME_HOST}/verify-email/<uid>/<token>`.
 - no state change: fresh `email_verification_token` (hash = pk + timestamp + `email_is_verified`); earlier links stay valid until `PASSWORD_RESET_TIMEOUT` expiry.
 - frontend: `frontend/src/Pages/profiles/Profile.jsx`, button "Reinvia Email di Verifica" next to "Iscrivi ad Evento", shown when `canResendVerification` (`!profile.email_is_verified`), handler `handleResendVerification`.
