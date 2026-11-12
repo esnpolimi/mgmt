@@ -52,6 +52,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import EmailIcon from '@mui/icons-material/Email';
 
 const profileFieldRules = {
     ESNer: {hideFields: ['course', 'matricola_expiration', 'whatsapp_prefix', 'whatsapp_number']},
@@ -194,6 +195,7 @@ export default function Profile() {
         isBoardMember &&
         !!profile &&
         (!profile.enabled || !profile.email_is_verified);
+    const canResendVerification = !!profile && !profile.email_is_verified;
     const canEditEmail =
         !!profile &&
         !profile.email_is_verified &&
@@ -537,6 +539,22 @@ export default function Profile() {
                     id: Date.now()
                 });
                 refreshProfileData();
+            },
+            onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
+            onFinally: () => setSaving(false)
+        });
+    };
+
+    const handleResendVerification = () => {
+        if (!profile?.id) return;
+        setSaving(true);
+        fetchCustom("POST", `/profile/${profile.id}/resend-verification-email/`, {
+            onSuccess: (res) => {
+                setPopup({
+                    message: res?.message || "Email di verifica reinviata.",
+                    state: "success",
+                    id: Date.now()
+                });
             },
             onError: (responseOrError) => defaultErrorHandler(responseOrError, setPopup),
             onFinally: () => setSaving(false)
@@ -1385,6 +1403,21 @@ export default function Profile() {
                                     <Button variant="contained" color="primary" onClick={handleIscriviAdEvento}>
                                         Iscrivi ad Evento
                                     </Button>
+                                    {canResendVerification && (
+                                        <Tooltip
+                                            title={`Reinvia il link di verifica a ${profile.email}`}
+                                            arrow>
+                                            <Button
+                                                variant="outlined"
+                                                color="primary"
+                                                startIcon={<EmailIcon/>}
+                                                onClick={handleResendVerification}
+                                                disabled={saving}
+                                            >
+                                                Reinvia Email di Verifica
+                                            </Button>
+                                        </Tooltip>
+                                    )}
                                     {canManualVerify && (
                                         <Tooltip
                                             title="Attiva manualmente il profilo e marca l'email come verificata"

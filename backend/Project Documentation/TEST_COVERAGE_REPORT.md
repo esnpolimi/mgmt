@@ -1,6 +1,6 @@
 # Test Coverage Report - ESN Polimi Management
 
-Last update date: 2026-10-22  
+Last update date: 2026-11-12  
 Scope: Django backend (users, profiles, events, treasury, content)
 
 ## 1. Quality Scope
@@ -16,15 +16,16 @@ Methodology note:
 
 | Test File | Number of `test_` Functions |
 |---|---:|
-| backend/users/tests.py | 40 |
+| backend/users/tests.py | 44 |
 | backend/users/test_integration.py | 14 |
-| backend/profiles/tests.py | 74 |
-| backend/events/tests.py | 139 |
-| backend/treasury/tests.py | 91 |
-| backend/content/tests.py | 45 |
-| backend/utils/tests.py | 2 |
+| backend/profiles/tests.py | 81 |
+| backend/events/tests.py | 144 |
+| backend/treasury/tests.py | 98 |
+| backend/content/tests.py | 57 |
+| backend/maintenance/tests.py | 1 |
+| backend/utils/tests.py | 5 |
 | backend/test_integration_e2e.py | 6 |
-| Total | 411 |
+| Total | 450 |
 
 ## 3. Functional Coverage Matrix
 
@@ -39,6 +40,7 @@ Methodology note:
 
 - Erasmus/ESNer onboarding
 - automatic email verification and Board manual verification
+- resend verification email (`ResendVerificationEmailTests`): any authenticated user, EN/IT text by `is_esner`, valid token, 400 already verified, 404, 500 on SMTP failure, 401 anonymous
 - profile and document CRUD
 - search and filters
 - support endpoints for events/subscriptions

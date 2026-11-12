@@ -156,6 +156,60 @@ def profile_list(request, is_esner):
         return Response({'error': 'Invalid page.'}, status=400)
     serializer = ProfileListViewSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
+def _send_verification_email(profile):
+    """
+    Send the email-verification link for `profile` to `profile.email`.
+    Italian text for ESNers, English for Erasmus. Returns the user-facing success message.
+    Raises on send failure (send_mail with fail_silently=False).
+    """
+    uid = urlsafe_base64_encode(force_bytes(profile.pk))
+    token = email_verification_token.make_token(profile)
+    verification_link = f"{SCHEME_HOST}/verify-email/{uid}/{token}"
+
+    if profile.is_esner:
+        subject = "Verifica email per ESN Polimi"
+        html_content = f"""
+            <html>
+            <body>
+                <h2>Benvenuto/a in ESN Polimi!</h2>
+                <p>Per favore, clicca sul seguente link per verificare la tua email:</p>
+                <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verifica indirizzo email</a></p>
+                <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
+                <p>{verification_link}</p>
+                <p>Questo link scadrà tra 7 giorni.</p>
+            </body>
+            </html>
+            """
+        success_message = "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
+    else:
+        subject = "Email verification for ESN Polimi"
+        html_content = f"""
+            <html>
+            <body>
+                <h2>Welcome to ESN Polimi!</h2>
+                <p>Please click the following link to verify your email:</p>
+                <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verify Email Address</a></p>
+                <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+                <p>{verification_link}</p>
+                <p>This link will expire in 7 days.</p>
+            </body>
+            </html>
+            """
+        success_message = "Verification email sent. Check your inbox to complete registration."
+
+    # Plain HTML email (empty text fallback)
+    send_mail(
+        subject=subject,
+        message='',
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[profile.email],
+        html_message=html_content,
+        fail_silently=False
+    )
+    logger.info(f"Email sent to {profile.email}")
+    return success_message
+
+
 @api_view(['POST'])
 @throttle_classes([AuthAttemptThrottle])
 def initiate_profile_creation(request):
@@ -211,63 +265,12 @@ def initiate_profile_creation(request):
                     sentry_sdk.capture_exception(e)
                     return Response({"error": f"User creation failed: {str(e)}"}, status=500)
 
-        # Generate verification token and send verification email
-        uid = urlsafe_base64_encode(force_bytes(profile.pk))
-        token = email_verification_token.make_token(profile)
-        verification_link = f"{SCHEME_HOST}/verify-email/{uid}/{token}"
-
-        # Language selection
-        if is_esner:
-            subject = "Verifica email per ESN Polimi"
-            from_email = settings.DEFAULT_FROM_EMAIL
-            to_email = [profile.email]
-            html_content = f"""
-            <html>
-            <body>
-                <h2>Benvenuto/a in ESN Polimi!</h2>
-                <p>Per favore, clicca sul seguente link per verificare la tua email:</p>
-                <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verifica indirizzo email</a></p>
-                <p>Se il pulsante non funziona, copia e incolla questo URL nel tuo browser:</p>
-                <p>{verification_link}</p>
-                <p>Questo link scadrà tra 7 giorni.</p>
-            </body>
-            </html>
-            """
-            success_message = "Email di verifica inviata. Controlla la tua casella di posta per completare la registrazione."
-            error_message = "Errore nell'invio dell'email: "
-        else:
-            subject = "Email verification for ESN Polimi"
-            from_email = settings.DEFAULT_FROM_EMAIL
-            to_email = [profile.email]
-            html_content = f"""
-            <html>
-            <body>
-                <h2>Welcome to ESN Polimi!</h2>
-                <p>Please click the following link to verify your email:</p>
-                <p><a href="{verification_link}" style="background-color:#1a73e8; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Verify Email Address</a></p>
-                <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-                <p>{verification_link}</p>
-                <p>This link will expire in 7 days.</p>
-            </body>
-            </html>
-            """
-            success_message = "Verification email sent. Check your inbox to complete registration."
-            error_message = "Error sending email: "
-
         try:
-            # Plain HTML email (empty text fallback)
-            send_mail(
-                subject=subject,
-                message='',
-                from_email=from_email,
-                recipient_list=to_email,
-                html_message=html_content,
-                fail_silently=False
-            )
-            logger.info(f"Email sent to {profile.email}")
+            success_message = _send_verification_email(profile)
         except Exception as e:
             logger.info(f"Email error: {str(e)}")
             sentry_sdk.capture_exception(e)
+            error_message = "Errore nell'invio dell'email: " if is_esner else "Error sending email: "
             return Response({"error": f"{error_message}{str(e)}"}, status=500)
 
         return Response({"message": success_message}, status=201)
@@ -379,6 +382,33 @@ def manual_verify_profile_email(request, pk):
 
     profile_type_label = 'ESNer' if profile.is_esner else 'Erasmus'
     return Response({'message': f'Profilo {profile_type_label} attivato e email verificata manualmente.'}, status=200)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([AuthAttemptThrottle])
+def resend_verification_email(request, pk):
+    """
+    Resend the verification email to an unverified profile (Erasmus or ESNer).
+    Any authenticated user may call it. No state change: a fresh token is generated,
+    earlier links stay valid until expiry.
+    """
+    try:
+        profile = Profile.objects.get(pk=pk)
+    except Profile.DoesNotExist:
+        return Response({'error': 'Il profilo non esiste.'}, status=404)
+
+    if profile.email_is_verified:
+        return Response({'error': 'Email già verificata.'}, status=400)
+
+    try:
+        _send_verification_email(profile)
+    except Exception as e:
+        logger.exception(f"resend_verification_email: send failed for profile {profile.pk}")
+        sentry_sdk.capture_exception(e)
+        return Response({'error': "Errore nell'invio dell'email."}, status=500)
+
+    return Response({'message': f'Email di verifica reinviata a {profile.email}.'}, status=200)
 # Endpoint to view in detail, edit, delete a profile
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
