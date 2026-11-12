@@ -1,6 +1,8 @@
 """Tests for profiles module endpoints and behaviors."""
 
+import re
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
@@ -1333,3 +1335,90 @@ class ManualErasmusVerificationTests(ProfilesBaseTestCase):
 		response = self.client.post(f"/backend/profile/{target_profile.pk}/manual-verify-email/")
 
 		self.assertEqual(response.status_code, 200)
+
+
+class ResendVerificationEmailTests(ProfilesBaseTestCase):
+	"""Tests for POST /profile/<pk>/resend-verification-email/ (any authenticated user)."""
+
+	def setUp(self):
+		requester_profile = _create_profile("aspirante-resend@esnpolimi.it", is_esner=True)
+		self.requester = _create_user(requester_profile)
+		self.requester.groups.add(self.group_aspiranti)
+
+	def _url(self, pk):
+		return f"/backend/profile/{pk}/resend-verification-email/"
+
+	def test_resend_requires_authentication(self):
+		"""Anonymous callers are rejected and no email is sent."""
+		target = _create_profile("erasmus-anon@uni.it", verified=False, enabled=False)
+		response = self.client.post(self._url(target.pk))
+		self.assertEqual(response.status_code, 401)
+		self.assertEqual(len(mail.outbox), 0)
+
+	def test_resend_by_aspirante_sends_english_email_with_valid_token(self):
+		"""Aspiranti (no Board) can resend; Erasmus get the English email with a working link."""
+		self.authenticate(self.requester)
+		target = _create_profile("erasmus-resend@uni.it", verified=False, enabled=False)
+
+		response = self.client.post(self._url(target.pk))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(mail.outbox), 1)
+		sent = mail.outbox[0]
+		self.assertEqual(sent.subject, "Email verification for ESN Polimi")
+		self.assertIn("erasmus-resend@uni.it", sent.to)
+		html = sent.alternatives[0][0]
+		match = re.search(r"/verify-email/([^/\s\"]+)/([^/\s\"<]+)", html)
+		self.assertIsNotNone(match)
+		self.assertTrue(email_verification_token.check_token(target, match.group(2)))
+
+		target.refresh_from_db()
+		self.assertFalse(target.email_is_verified)
+		self.assertFalse(target.enabled)
+
+	def test_resend_esner_sends_italian_email(self):
+		"""Unverified ESNer profiles receive the Italian email."""
+		self.authenticate(self.requester)
+		target = _create_profile("esner-resend@esnpolimi.it", is_esner=True, verified=False, enabled=False)
+
+		response = self.client.post(self._url(target.pk))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(mail.outbox), 1)
+		self.assertEqual(mail.outbox[0].subject, "Verifica email per ESN Polimi")
+
+	def test_resend_already_verified_returns_400(self):
+		"""Verified profiles get 400 and no email."""
+		self.authenticate(self.requester)
+		target = _create_profile("erasmus-verified@uni.it", verified=True)
+
+		response = self.client.post(self._url(target.pk))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(len(mail.outbox), 0)
+
+	def test_resend_missing_profile_returns_404(self):
+		"""Unknown profile id returns 404."""
+		self.authenticate(self.requester)
+		response = self.client.post(self._url(999999))
+		self.assertEqual(response.status_code, 404)
+
+	def test_resend_send_failure_returns_500(self):
+		"""SMTP failure returns 500 and leaves the profile unverified."""
+		self.authenticate(self.requester)
+		target = _create_profile("erasmus-fail@uni.it", verified=False, enabled=False)
+
+		with patch("profiles.views.send_mail", side_effect=Exception("SMTP down")):
+			response = self.client.post(self._url(target.pk))
+
+		self.assertEqual(response.status_code, 500)
+		self.assertIn("SMTP down", response.data["error"])
+		target.refresh_from_db()
+		self.assertFalse(target.email_is_verified)
+
+	def test_resend_get_not_allowed(self):
+		"""Only POST is accepted."""
+		self.authenticate(self.requester)
+		target = _create_profile("erasmus-get@uni.it", verified=False, enabled=False)
+		response = self.client.get(self._url(target.pk))
+		self.assertEqual(response.status_code, 405)

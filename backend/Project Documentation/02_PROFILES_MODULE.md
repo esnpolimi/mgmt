@@ -7,7 +7,7 @@ The profiles module manages demographic and document lifecycle for Erasmus and E
 Responsibilities:
 
 - initial profile registration
-- automatic and manual email verification
+- automatic and manual email verification, verification email resend
 - identity document management
 - administrative search and listing
 - profile data exposure for events/treasury modules
@@ -63,6 +63,7 @@ Main filters:
 | /profile/initiate-creation/ | POST | public |
 | /api/profile/verify-email/\<uid>/\<token>/ | GET | public |
 | /profile/<pk>/manual-verify-email/ | POST | Board |
+| /profile/<pk>/resend-verification-email/ | POST | authenticated (any group), `AuthAttemptThrottle` |
 
 > **Note:** The verify-email endpoint uses the `api/` sub-path within the `backend/` prefix, so its full absolute URL is `/backend/api/profile/verify-email/<uid>/<token>/`. All other endpoints in this module resolve directly under `/backend/` (e.g., `/backend/profile/initiate-creation/`).
 
@@ -99,6 +100,15 @@ Profiles with unverified email cannot receive an ESNcard or perform event subscr
 ### 4.3 Manual Verification
 
 Board can force profile verification/activation for exceptional cases.
+
+### 4.4 Verification Email Resend
+
+- view: `resend_verification_email` in `backend/profiles/views.py`; email built and sent by `_send_verification_email(profile)`, shared with `initiate_profile_creation`.
+- auth: `IsAuthenticated` only (Aspiranti included, no Board check); per-IP `AuthAttemptThrottle` (`AUTH_THROTTLE_RATE`, default `10/min`).
+- responses: 200 `{message}`; 400 `{'error': 'Email già verificata.'}` if `email_is_verified`; 404 unknown pk; 500 `{error}` on `send_mail` failure (logged + Sentry).
+- email: sent to current `profile.email` (so a corrected unverified email gets the link); IT text if `is_esner`, EN otherwise; link `{SCHEME_HOST}/verify-email/<uid>/<token>`.
+- no state change: fresh `email_verification_token` (hash = pk + timestamp + `email_is_verified`); earlier links stay valid until `PASSWORD_RESET_TIMEOUT` expiry.
+- frontend: `frontend/src/Pages/profiles/Profile.jsx`, button "Reinvia Email di Verifica" next to "Iscrivi ad Evento", shown when `canResendVerification` (`!profile.email_is_verified`), handler `handleResendVerification`.
 
 ## 5. Authorization Rules
 
@@ -168,6 +178,7 @@ Combined profile search across:
 4. group transition constraints
 5. object-level access profile_subscriptions
 6. authorized email changes for unverified profiles, including preservation of linked User credentials and groups
+7. verification resend (`ResendVerificationEmailTests`): non-Board access, language by `is_esner`, token validity, verified/missing/SMTP-failure/anonymous errors
 
 Test reference: `backend/profiles/tests.py`.
 
@@ -184,3 +195,7 @@ For AI-agent analysis/verification, use these files as primary references:
 
 1. Updated key exception handlers in `backend/profiles/views.py` to use `logger.exception(...)` for traceback-preserving diagnostics.
 2. Functional behavior of profile onboarding/verification flows remains unchanged.
+
+## 12. Recent Features (2026-11)
+
+1. Issue #101: `POST /profile/<pk>/resend-verification-email/` and profile-page resend button (section 4.4). Verification email code extracted into `_send_verification_email`.
