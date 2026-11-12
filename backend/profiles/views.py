@@ -406,7 +406,7 @@ def resend_verification_email(request, pk):
     except Exception as e:
         logger.exception(f"resend_verification_email: send failed for profile {profile.pk}")
         sentry_sdk.capture_exception(e)
-        return Response({'error': f"Errore nell'invio dell'email: {str(e)}"}, status=500)
+        return Response({'error': "Errore nell'invio dell'email."}, status=500)
 
     return Response({'message': f'Email di verifica reinviata a {profile.email}.'}, status=200)
 # Endpoint to view in detail, edit, delete a profile
