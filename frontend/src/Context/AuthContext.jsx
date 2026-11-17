@@ -12,6 +12,11 @@ export const AuthProvider = ({children}) => {
     const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
     const [loading, setLoading] = useState(true);
 
+    useEffect(() => { // tag every frontend Sentry event with the user, searchable by email
+        const email = user?.profile?.email;
+        Sentry.setUser(email ? {id: email, email} : null);
+    }, [user]);
+
     const parseUserFromToken = (token) => {
         try {
             const {user} = jwtDecode(token);

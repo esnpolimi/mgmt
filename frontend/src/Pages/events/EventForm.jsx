@@ -51,6 +51,10 @@ export default function EventForm() {
     const linkFields = formFields.filter(f => f.type === 'l');
     const formNote = eventData.form_note || "";
     const eventServices = Array.isArray(eventData.services) ? eventData.services : [];
+    // Coordination events: subscriber picks their ESN section (routes them to that section's Main List)
+    const isCoordination = !!eventData.is_coordination;
+    const eventSections = Array.isArray(eventData.sections) ? eventData.sections : [];
+    const [section, setSection] = useState("");
 
     // Redirect if missing essentials
     useEffect(() => {
@@ -171,6 +175,7 @@ export default function EventForm() {
     const handleSubmit = (e) => {
         e.preventDefault();
         let missing = [];
+        if (isCoordination && !section) missing.push('ESN Section');
         requiredFormFields.forEach(f => {
             if (!isFormFieldFilled(f)) missing.push(f);
         });
@@ -210,6 +215,7 @@ export default function EventForm() {
             fd.append('form_data', JSON.stringify(nonLinkData));
             fd.append('form_notes', formNotes);
             fd.append('selected_services', JSON.stringify(selectedPayload));
+            if (isCoordination) fd.append('section', section);
             
             // Add external user fields if external
             if (isExternal) {
@@ -238,6 +244,7 @@ export default function EventForm() {
                 form_notes: formNotes,
                 selected_services: selectedPayload
             };
+            if (isCoordination) bodyPayload.section = section;
             
             // Add external user fields if external
             if (isExternal) {
@@ -578,6 +585,30 @@ export default function EventForm() {
                         </Paper>
                     )}
                     
+                    {isCoordination && (
+                        <Paper elevation={3} sx={{p: 2, mb: 3}}>
+                            <Typography variant="h6" gutterBottom>
+                                ESN Section
+                            </Typography>
+                            <FormControl fullWidth required margin="normal">
+                                <InputLabel id="esn-section-label">Your ESN section</InputLabel>
+                                <Select
+                                    labelId="esn-section-label"
+                                    label="Your ESN section"
+                                    value={section}
+                                    onChange={(e) => setSection(e.target.value)}
+                                >
+                                    {eventSections.map(s => (
+                                        <MenuItem key={s.code} value={s.code}>{s.label}</MenuItem>
+                                    ))}
+                                </Select>
+                                <FormHelperText>
+                                    After payment you are placed in your section&apos;s list, or in the Waiting List if it is full.
+                                </FormHelperText>
+                            </FormControl>
+                        </Paper>
+                    )}
+
                     {/* Only form fields section now */}
                     {formFields.length > 0 && (
                         <Paper elevation={3} sx={{p: 2, mb: 3}}>

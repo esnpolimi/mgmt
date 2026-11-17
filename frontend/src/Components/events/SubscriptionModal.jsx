@@ -24,6 +24,7 @@ import ConfirmDialog from "../ConfirmDialog";
 import ProfileSearch from "../ProfileSearch";
 import Popup from "../Popup";
 import EditAnswersModal from "./EditAnswersModal";
+import {COORDINATION_SECTIONS} from "../../utils/coordinationSections";
 
 export default function SubscriptionModal({
                                               open,
@@ -62,7 +63,8 @@ export default function SubscriptionModal({
         status_services: subscription?.status_services || 'pending',
         selected_services: subscription?.selected_services || [],
         send_payment_email: true,
-        auto_move_after_payment: true
+        auto_move_after_payment: true,
+        section: subscription?.section || ''
     });
 
     const [profileHasEsncard, setProfileHasEsncard] = useState(null);
@@ -80,6 +82,7 @@ export default function SubscriptionModal({
         list_id: [false, ''],
         list_name: [false, ''],
         notes: [false, ''],
+        section: [false, ''],
     };
 
 // State and reset helper
@@ -142,8 +145,17 @@ export default function SubscriptionModal({
         }));
     };
 
+    // Coordination events: section lists imply the section; Waiting/Form/custom lists need it explicitly
+    const targetList = (event?.lists || []).find(l => l.id === data.list_id);
+    const needsSection = !!event?.is_coordination && !targetList?.section;
+    const sectionOptions = COORDINATION_SECTIONS.filter(s =>
+        (event?.lists || []).some(l => l.is_main_list && l.section === s.code));
+
     const fieldsToValidate = useMemo(() => {
         let arr = [];
+        if (needsSection) {
+            arr.push({field: 'section', value: data.section, message: "Selezionare la sezione"});
+        }
         if (!data.profile_id && !data.external_name) {
             if (event.is_allow_external) {
                 arr.push({field: 'external_name', value: data.external_name, message: "Inserire un nominativo esterno"});
@@ -163,7 +175,7 @@ export default function SubscriptionModal({
             arr.push({field: 'account_id', value: data.account_id, message: "Selezionare una Cassa"});
         }
         return arr;
-    }, [data, event]);
+    }, [data, event, needsSection]);
 
     const [submitLoading, setSubmitLoading] = useState(false);
 
@@ -376,6 +388,7 @@ export default function SubscriptionModal({
                 selected_services: data.selected_services || [],
                 external_name: data.external_name || undefined,
                 email: (!data.profile_id && data.external_email) ? data.external_email : undefined,
+                section: needsSection ? (data.section || null) : undefined,
                 // Apply only when a payment is being newly registered
                 ...(paymentBeingRegistered ? {
                     send_payment_email: !!data.send_payment_email,
@@ -390,6 +403,8 @@ export default function SubscriptionModal({
                         baseMsg += ` Spostata nella lista: ${resp.auto_move_list}.`;
                     } else if (resp.auto_move_status === 'stayed' && resp.auto_move_reason === 'no_capacity') {
                         baseMsg += ' Nessuna disponibilità nelle liste principali: rimane in Form List.';
+                    } else if (resp.auto_move_status === 'stayed' && resp.auto_move_reason === 'no_section') {
+                        baseMsg += ' Sezione non indicata: rimane nella lista attuale.';
                     }
                 }
 
@@ -490,6 +505,23 @@ export default function SubscriptionModal({
                         <Typography variant="subtitle1" gutterBottom>
                             <b>Lista:</b> {data.list_name}
                         </Typography>
+                        {needsSection && (
+                            <FormControl fullWidth required sx={{mb: 2}} error={errors.section[0]}>
+                                <InputLabel id="subscription-section-label">Sezione</InputLabel>
+                                <Select
+                                    labelId="subscription-section-label"
+                                    label="Sezione"
+                                    value={data.section || ''}
+                                    onChange={(e) => setData(d => ({...d, section: e.target.value}))}
+                                    disabled={isReimbursed || isBlockedByNoEsncard}
+                                >
+                                    {sectionOptions.map(s => (
+                                        <MenuItem key={s.code} value={s.code}>{s.label}</MenuItem>
+                                    ))}
+                                </Select>
+                                {errors.section[0] && <FormHelperText>{errors.section[1]}</FormHelperText>}
+                            </FormControl>
+                        )}
                         <Grid container spacing={2} direction="column">
                             {event.is_allow_external ? (
                                 <>

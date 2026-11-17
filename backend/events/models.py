@@ -211,6 +211,16 @@ def validate_field_data(field_config, data_dict, field_type_filter=None):
 WHATSAPP_GROUP_LINK_PREFIX = 'https://chat.whatsapp.com/'
 
 
+class Section(models.TextChoices):
+    """ESN Milano Unità sections; each one gets its own Main List in a coordination event."""
+    IULM = 'iulm', 'Iulm'
+    STATALE = 'statale', 'Statale'
+    UNICATT = 'unicatt', 'Unicatt'
+    POLIMI = 'polimi', 'Polimi'
+    BOCCONI = 'bocconi', 'Bocconi'
+    BICOCCA = 'bicocca', 'Bicocca'
+
+
 # Class the describes an event
 class Event(BaseEntity):
     id = models.AutoField(primary_key=True)
@@ -224,6 +234,10 @@ class Event(BaseEntity):
 
     is_a_bando = models.BooleanField(default=False)
     is_allow_external = models.BooleanField(default=False)
+
+    # Evento di coordinamento: one Main List per participating Section, routing by Subscription.section.
+    # Set at creation only.
+    is_coordination = models.BooleanField(default=False)
 
     # Indicates whether a form is required for the event
     enable_form = models.BooleanField(default=False)
@@ -412,16 +426,23 @@ class EventList(BaseEntity):
     is_main_list = models.BooleanField(default=False)
     is_waiting_list = models.BooleanField(default=False)
 
+    # Coordination events only: the section this Main List belongs to (null for every other list)
+    section = models.CharField(max_length=16, choices=Section.choices, null=True, blank=True)
+
     class Meta:
         ordering = ['display_order', 'id']
 
     def clean(self):
         super().clean()
-        # Validation: only one main list and one waiting list per event
+        # Validation: only one main list (one per section in coordination events) and one waiting list per event
         # Note: with Many-to-Many, we need to check this for each event
         if self.pk:  # Only validate if the list already exists
             for event in self.events.all():
-                if self.is_main_list:
+                if self.is_main_list and event.is_coordination:
+                    qs = EventList.objects.filter(events=event, is_main_list=True, section=self.section).exclude(pk=self.pk)
+                    if qs.exists():
+                        raise ValidationError(f"Only one Main List per section is allowed (conflict with {event.name}).")
+                elif self.is_main_list:
                     qs = EventList.objects.filter(events=event, is_main_list=True).exclude(pk=self.pk)
                     if qs.exists():
                         raise ValidationError(f"Only one Main List is allowed per event (conflict with {event.name}).")
@@ -487,6 +508,9 @@ class Subscription(BaseEntity):
     external_has_esncard = models.BooleanField(default=False)
     external_esncard_number = models.CharField(max_length=64, blank=True, null=True)
     external_whatsapp_number = models.CharField(max_length=32, blank=True, null=True)
+
+    # Coordination events only: section chosen by the subscriber; routes auto-move to that section's Main List
+    section = models.CharField(max_length=16, choices=Section.choices, null=True, blank=True)
 
     class Meta:
         constraints = [

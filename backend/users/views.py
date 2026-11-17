@@ -140,7 +140,9 @@ def log_out(request):
         try:
             token = RefreshToken(refresh_token)
             token.blacklist()
-        except Exception as e:
+        except TokenError:
+            logger.info("Logout with an already blacklisted/expired refresh token")  # benign: double logout, multiple tabs
+        except Exception:
             logger.exception("Error blacklisting token")
     response = Response({'detail': 'Log out avvenuto con successo'}, status=200)
     response.delete_cookie('refresh_token')

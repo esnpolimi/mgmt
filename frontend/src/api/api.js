@@ -16,13 +16,16 @@ export const defaultErrorHandler = (responseOrError, setPopup) => {
     const popupData = {message: '', state: 'error'};
 
     if (responseOrError?.json) {
-        responseOrError.json().then(json => {
-            errorMessage = extractErrorMessage(json, responseOrError.status);
-            popupData.message = `Error: ${errorMessage}`;
-            if (typeof setPopup === 'function') {
-                setPopup({...popupData, id: Date.now()});
-            }
-        });
+        responseOrError.json()
+            // non-JSON body (e.g. a Cloudflare 525 HTML page) must not become an unhandled SyntaxError
+            .catch(() => `Server error (${responseOrError.status}). Riprova tra qualche minuto.`)
+            .then(json => {
+                errorMessage = extractErrorMessage(json, responseOrError.status);
+                popupData.message = `Error: ${errorMessage}`;
+                if (typeof setPopup === 'function') {
+                    setPopup({...popupData, id: Date.now()});
+                }
+            });
     } else {
         errorMessage = responseOrError?.message || responseOrError?.toString();
         popupData.message = `Error: ${errorMessage}`;

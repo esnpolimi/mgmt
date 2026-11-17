@@ -39,8 +39,28 @@ import ProfileSearch from '../ProfileSearch';
 import SharedListsSelector from './SharedListsSelector';
 import {eventDisplayNames as eventNames, profileDisplayNames} from '../../utils/displayAttributes';
 import {useAuth} from "../../Context/AuthContext";
+import {COORDINATION_SECTIONS} from '../../utils/coordinationSections';
 
 const WHATSAPP_LINK_PREFIX = 'https://chat.whatsapp.com/';
+
+const sectionListName = (label) => `Main List - ${label}`;
+const defaultStandardLists = () => [{id: '', name: 'Main List', capacity: '', is_main_list: true}];
+const defaultCoordinationLists = () => [
+    ...COORDINATION_SECTIONS.map(s => ({
+        id: '', name: sectionListName(s.label), capacity: '', is_main_list: true, is_waiting_list: false, section: s.code
+    })),
+    {id: '', name: 'Waiting List', capacity: '', is_main_list: false, is_waiting_list: true, section: null},
+];
+// display_order for coordination lists: sections in canonical order, then Waiting List, custom lists, Form List
+const coordinationListOrder = (list, index) => {
+    if (list.is_main_list) {
+        const sectionIndex = COORDINATION_SECTIONS.findIndex(s => s.code === list.section);
+        return sectionIndex >= 0 ? sectionIndex : index;
+    }
+    if (list.is_waiting_list) return COORDINATION_SECTIONS.length;
+    if (list.name === 'Form List') return 1000;
+    return COORDINATION_SECTIONS.length + 1 + index;
+};
 
 const InfoLabel = ({label, description}) => (
     <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
@@ -76,7 +96,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const isOrganizer = Array.isArray(event?.organizers) && event.organizers.some(o => o.profile === currentProfileId);
 
     /* General event information block, at the top of the modal */
-    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef, onSubscriptionWindowChange}) {
+    const GeneralInfoBlock = function GeneralInfoBlock({isEdit, hasSubscriptions, dataRef, onSubscriptionWindowChange, onCoordinationChange}) {
         // Local state for UI only (fast typing, no parent re-render)
         const [localData, setLocalData] = useState(dataRef.current);
 
@@ -89,6 +109,26 @@ export default function EventModal({open, event, isEdit, onClose}) {
             };
             setLocalData(newData);
             dataRef.current = newData;
+        };
+
+        // Coordination type: only at creation. It rebuilds the lists and forces form + externals on.
+        const handleCoordinationChange = (event) => {
+            if (isEdit) return;
+            const enabled = event.target.checked;
+            const current = dataRef.current;
+            const newData = enabled
+                ? {
+                    ...current,
+                    is_coordination: true,
+                    is_allow_external: true,
+                    enable_form: true,
+                    form_programmed_open_time: current.form_programmed_open_time || dayjs().add(1, 'hour').toISOString(),
+                    lists: defaultCoordinationLists(),
+                }
+                : {...current, is_coordination: false, lists: defaultStandardLists()};
+            setLocalData(newData);
+            dataRef.current = newData;
+            onCoordinationChange(); // remount Lists and FormBlock
         };
 
         const handleEventDateChange = (date) => {
@@ -256,6 +296,22 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 </Grid>
                 <Grid container spacing={2} sx={{mt: 2, mb: 2}}>
                     <Grid size={{xs: 12, md: 3}}>
+                        <Tooltip title={isEdit ? "Il tipo di evento si sceglie solo alla creazione" : ""}>
+                            <FormControlLabel
+                                label={<InfoLabel label="Evento di coordinamento" description="Evento ESN Milano Unità: una Main List per ogni sezione partecipante, una sola Waiting List e il form di iscrizione con la scelta della sezione. Dopo il pagamento si entra nella Main List della propria sezione, oppure in Waiting List se è piena. Gli esterni sono sempre ammessi."/>}
+                                control={
+                                    <Switch
+                                        checked={!!localData.is_coordination}
+                                        onChange={handleCoordinationChange}
+                                        name="is_coordination"
+                                        color="secondary"
+                                        disabled={isEdit}
+                                    />
+                                }
+                            />
+                        </Tooltip>
+                    </Grid>
+                    <Grid size={{xs: 12, md: 3}}>
                         <FormControlLabel
                             label="Evento A Bando"
                             control={
@@ -277,6 +333,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                     onChange={handleInputChange}
                                     name="is_allow_external"
                                     color="primary"
+                                    disabled={!!localData.is_coordination}
                                 />
                             }
                         />
@@ -701,6 +758,145 @@ export default function EventModal({open, event, isEdit, onClose}) {
             </Box>
         )
     }
+
+    /* Lists block for coordination events: fixed section Main Lists, one Waiting List, optional custom lists */
+    const CoordinationLists = function CoordinationLists({dataRef, isEdit}) {
+        const [lists, setLists] = useState(dataRef.current.lists || []);
+
+        const commit = (updated) => {
+            setLists(updated);
+            dataRef.current = {...dataRef.current, lists: updated};
+        };
+        const isFormList = (list) => isEdit && list.name === 'Form List' && !list.is_main_list && !list.is_waiting_list;
+        const hasSubs = (list) => isEdit && Number(list?.subscription_count || 0) > 0;
+
+        const toggleSection = (section, checked) => {
+            if (checked) {
+                commit([...lists, {
+                    id: '', name: sectionListName(section.label), capacity: '',
+                    is_main_list: true, is_waiting_list: false, section: section.code
+                }]);
+            } else {
+                commit(lists.filter(l => !(l.is_main_list && l.section === section.code)));
+            }
+        };
+        const updateAt = (index, patch) => commit(lists.map((l, i) => (i === index ? {...l, ...patch} : l)));
+        const handleAddCustom = () => commit([
+            ...lists, {id: '', name: '', capacity: '', is_main_list: false, is_waiting_list: false, section: null}
+        ]);
+        const handleDeleteCustom = (index) => commit(lists.filter((_, i) => i !== index));
+
+        const waitingIndex = lists.findIndex(l => l.is_waiting_list);
+        const customIndexes = lists
+            .map((l, i) => ({l, i}))
+            .filter(({l}) => !l.is_main_list && !l.is_waiting_list)
+            .map(({i}) => i);
+
+        return (
+            <Box>
+                <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
+                    <Typography variant="h6">Liste per sezione</Typography>
+                </Grid>
+                <Alert severity="info" sx={{mt: 1}}>
+                    Seleziona le sezioni partecipanti: ognuna ha la propria Main List (capienza 0 = illimitata).
+                    Le iscrizioni dal form entrano nella Main List della sezione scelta dopo il pagamento,
+                    oppure nella Waiting List se la lista della sezione è piena.
+                </Alert>
+                {COORDINATION_SECTIONS.map(section => {
+                    const index = lists.findIndex(l => l.is_main_list && l.section === section.code);
+                    const list = index >= 0 ? lists[index] : null;
+                    return (
+                        <Grid container spacing={2} alignItems="center" sx={{mt: 1}} key={section.code}>
+                            <Grid size={{xs: 12, sm: 4}}>
+                                <Tooltip title={hasSubs(list) ? "La lista contiene iscrizioni" : ""}>
+                                    <FormControlLabel
+                                        label={section.label}
+                                        control={
+                                            <Checkbox
+                                                checked={!!list}
+                                                onChange={(e) => toggleSection(section, e.target.checked)}
+                                                disabled={hasSubs(list)}
+                                            />
+                                        }
+                                    />
+                                </Tooltip>
+                            </Grid>
+                            <Grid size={{xs: 12, sm: 4}}>
+                                <TextField
+                                    label={eventNames.list_capacity}
+                                    type="number"
+                                    value={list ? list.capacity : ''}
+                                    slotProps={{htmlInput: {min: "0", step: "1"}}}
+                                    onChange={(e) => updateAt(index, {capacity: e.target.value})}
+                                    placeholder="Inserisci 0 se illimitata"
+                                    required={!!list}
+                                    disabled={!list}
+                                    fullWidth
+                                />
+                            </Grid>
+                        </Grid>
+                    );
+                })}
+                {waitingIndex >= 0 && (
+                    <Grid container spacing={2} alignItems="center" sx={{mt: 1}}>
+                        <Grid size={{xs: 12, sm: 4}}>
+                            <Typography sx={{pl: 1}}>Waiting List</Typography>
+                        </Grid>
+                        <Grid size={{xs: 12, sm: 4}}>
+                            <TextField
+                                label={eventNames.list_capacity}
+                                type="number"
+                                value={lists[waitingIndex].capacity}
+                                slotProps={{htmlInput: {min: "0", step: "1"}}}
+                                onChange={(e) => updateAt(waitingIndex, {capacity: e.target.value})}
+                                placeholder="Inserisci 0 se illimitata"
+                                required
+                                fullWidth
+                            />
+                        </Grid>
+                    </Grid>
+                )}
+                <Grid container spacing={2} alignItems="center" sx={{display: 'flex', mt: 2}}>
+                    <Typography variant="subtitle1">Altre liste</Typography>
+                    <IconButton title="Aggiungi Lista" onClick={handleAddCustom} sx={{ml: -2}}><AddIcon/></IconButton>
+                </Grid>
+                {customIndexes.map(index => {
+                    const list = lists[index];
+                    const locked = isFormList(list);
+                    return (
+                        <Grid container spacing={2} alignItems="center" sx={{mt: 1}} key={`custom-${index}`}>
+                            <Grid>
+                                <TextField
+                                    label={eventNames.list_name}
+                                    value={list.name}
+                                    onChange={(e) => updateAt(index, {name: e.target.value})}
+                                    required
+                                    disabled={locked}
+                                />
+                            </Grid>
+                            <Grid>
+                                <TextField
+                                    label={eventNames.list_capacity}
+                                    type="number"
+                                    value={list.capacity}
+                                    slotProps={{htmlInput: {min: "0", step: "1"}}}
+                                    onChange={(e) => updateAt(index, {capacity: e.target.value})}
+                                    placeholder="Inserisci 0 se illimitata"
+                                    required
+                                    disabled={locked}
+                                />
+                            </Grid>
+                            <Grid size={{xs: 2}}>
+                                <IconButton onClick={() => handleDeleteCustom(index)} disabled={locked || hasSubs(list)}>
+                                    <DeleteIcon/>
+                                </IconButton>
+                            </Grid>
+                        </Grid>
+                    );
+                })}
+            </Box>
+        );
+    };
 
     /* Profile data */
     const ProfileData = function ProfileData({dataRef}) {
@@ -1567,7 +1763,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             <Switch
                                 checked={!!localData.enable_form}
                                 onChange={(e) => {
-                                    if (isEdit && hasSubscriptions) return;
+                                    if ((isEdit && hasSubscriptions) || localData.is_coordination) return;
                                     const enabled = e.target.checked;
                                     setLocalData({
                                         ...localData,
@@ -1583,11 +1779,17 @@ export default function EventModal({open, event, isEdit, onClose}) {
                                 }}
                                 name="enable_form"
                                 color="primary"
-                                disabled={isEdit && hasSubscriptions}
+                                disabled={(isEdit && hasSubscriptions) || !!localData.is_coordination}
                             />
                         }
                     />
                 </Grid>
+
+                {localData.is_coordination && (
+                    <Alert severity="info" sx={{mt: 1}}>
+                        Evento di coordinamento: il form è sempre attivo e chiede a ogni iscritto la propria sezione ESN.
+                    </Alert>
+                )}
 
                 {localData.enable_form && (
                     <Alert severity="info" sx={{mt: 1}}>
@@ -1716,13 +1918,14 @@ export default function EventModal({open, event, isEdit, onClose}) {
         subscription_end_date: dayjs().hour(24).minute(0),
         is_a_bando: false,
         is_allow_external: false,
+        is_coordination: false,
         is_variable_fee: false,
         allow_online_payment: false,
         notify_list: true,
         visible_to_board_only: false,
         reimbursements_by_organizers_only: false,
         organizers: [],
-        lists: [{id: '', name: 'Main List', capacity: '', is_main_list: true}], // set default as Main List type
+        lists: defaultStandardLists(), // set default as Main List type
         form_capacity: 0,
         profile_fields: [],
         fields: [],
@@ -1745,6 +1948,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
     const [, setSeed] = useState(0); // Used to trigger re-renders when displaying errors
     const [subscriptionWindowVersion, setSubscriptionWindowVersion] = useState(0); // triggers FormBlock remount on subscription window changes
     const [servicesVersion, setServicesVersion] = useState(0); // triggers ServicesBlock sync when services change
+    const [coordinationVersion, setCoordinationVersion] = useState(0); // remounts Lists/FormBlock when the coordination toggle changes
 
     useEffect(() => {
         if (isEdit) {
@@ -1819,15 +2023,18 @@ export default function EventModal({open, event, isEdit, onClose}) {
             cost: Number(rest.cost || 0).toFixed(2),
             deposit: Number(rest.deposit || 0).toFixed(2),
             form_capacity: Math.floor(Number(rest.form_capacity || 0)),
-            lists: (rest.lists || []).map(t => ({
+            lists: (rest.lists || []).map((t, index) => ({
                 id: t.id || null,
                 name: t.name,
                 capacity: Math.floor(Number(t.capacity || 0)),
                 is_main_list: !!t.is_main_list,
-                is_waiting_list: !!t.is_waiting_list
+                is_waiting_list: !!t.is_waiting_list,
+                section: rest.is_coordination && t.is_main_list ? (t.section || null) : null,
+                ...(rest.is_coordination ? {display_order: coordinationListOrder(t, index)} : {})
             })),
             is_a_bando: !!rest.is_a_bando,
-            is_allow_external: !!rest.is_allow_external,
+            is_coordination: !!rest.is_coordination,
+            is_allow_external: !!rest.is_allow_external || !!rest.is_coordination,
             notify_list: !!rest.notify_list,
             visible_to_board_only: !!rest.visible_to_board_only,
             reimbursements_by_organizers_only: !!rest.reimbursements_by_organizers_only,
@@ -1839,7 +2046,7 @@ export default function EventModal({open, event, isEdit, onClose}) {
                 price: Number(s.price || 0)
             })),
             allow_online_payment: !!rest.allow_online_payment,
-            enable_form: !!rest.enable_form,
+            enable_form: !!rest.enable_form || !!rest.is_coordination,
             form_note: typeof rest.form_note === 'string' ? rest.form_note : '',
             enable_whatsapp_link: !!rest.enable_whatsapp_link,
             whatsapp_group_link: (rest.whatsapp_group_link || '').trim(),
@@ -1941,6 +2148,12 @@ export default function EventModal({open, event, isEdit, onClose}) {
         errorsRef.current = {...errorsRef.current, listItems: listErrors, lists: [hasListErrors]};
         if (hasListErrors) {
             setStatusMessage({message: 'Errore campi Liste', state: 'error'});
+            scrollUp();
+            return;
+        }
+
+        if (dataRef.current.is_coordination && !dataRef.current.lists.some(l => l.is_main_list && l.section)) {
+            setStatusMessage({message: 'Seleziona almeno una sezione per l\'evento di coordinamento', state: 'error'});
             scrollUp();
             return;
         }
@@ -2055,16 +2268,19 @@ export default function EventModal({open, event, isEdit, onClose}) {
                             hasSubscriptions={isEdit && hasSubscriptions}
                             isEdit={isEdit}
                             onSubscriptionWindowChange={() => setSubscriptionWindowVersion(v => v + 1)}
+                            onCoordinationChange={() => setCoordinationVersion(v => v + 1)}
                         />
                         <ServicesBlock dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions} servicesVersion={servicesVersion}/>
                         <Description dataRef={dataRef}/>
                         <Organizers dataRef={dataRef}/>
-                        <Lists dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>
+                        {dataRef.current.is_coordination
+                            ? <CoordinationLists key={`coord-${coordinationVersion}`} dataRef={dataRef} isEdit={isEdit}/>
+                            : <Lists key={`lists-${coordinationVersion}`} dataRef={dataRef} errorsRef={errorsRef} isEdit={isEdit}/>}
                         <ProfileData dataRef={dataRef} formFieldsDisabled={isEdit && hasSubscriptions}/>
                         <AdditionalFields dataRef={dataRef} isEdit={isEdit} hasSubscriptions={hasSubscriptions}/>
                         <WhatsAppBlock dataRef={dataRef}/>
                         <FormBlock
-                            key={subscriptionWindowVersion} // force remount so minDate updates when subscription start date changes
+                            key={`${subscriptionWindowVersion}-${coordinationVersion}`} // force remount on subscription window / coordination changes
                             dataRef={dataRef}
                             errorsRef={errorsRef}
                             hasSubscriptions={hasSubscriptions}
