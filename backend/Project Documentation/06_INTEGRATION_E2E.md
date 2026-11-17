@@ -79,6 +79,8 @@ Test oracles:
 - `paid_at` unchanged after the payment account is changed
 - WhatsApp link never returned without a valid token or to non-eligible subscriptions
 
+Coordination events (`Event.is_coordination`, 03_EVENTS_MODULE.md 5.9): formsubmit requires `section`; the sold-out check and the post-payment auto-move use the subscriber's section Main List, then the single Waiting List. Oracles: a full section list never blocks or receives another section's subscriber; duplicate webhooks still move once and create one transaction (`CoordinationEventTests`).
+
 ### 2.4 Scenario D - Reimbursements (fee/deposit/services)
 
 Preconditions:
@@ -176,6 +178,7 @@ Minimum checklist for each release:
 9. CRUD content home
 10. whatsapp register end-to-end
 11. event WhatsApp group link: free-event form result, paid Main List result, move-to-Main email, office subscription (free or paid) email
+12. coordination event: create with section lists, form submit with section, payment routes to section list then Waiting List
 
 ## 5. Cross-Module Risk Register
 

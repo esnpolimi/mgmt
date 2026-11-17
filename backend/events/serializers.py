@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Min, Q
 from rest_framework import serializers
 
-from events.models import Event, EventList, Subscription, EventOrganizer
+from events.models import Event, EventList, Subscription, EventOrganizer, Section
 from profiles.models import Profile
 from treasury.models import Transaction
 
@@ -24,6 +24,38 @@ CANONICAL_PROFILE_ORDER = [
     'latest_document', 'course', 'matricola_expiration', 'person_code', 'matricola_number'
 ]
 FORM_LIST_NAME = 'Form List'
+SECTION_LIST_NAME_PREFIX = 'Main List - '
+
+
+def section_list_name(section):
+    """Fixed name of a coordination event's Main List for `section` (e.g. 'Main List - Polimi')."""
+    return f"{SECTION_LIST_NAME_PREFIX}{Section(section).label}"
+
+
+def event_sections(event):
+    """Section codes offered by a coordination event, in list display order ([] for normal events)."""
+    if not event or not event.is_coordination:
+        return []
+    return list(event.lists.filter(is_main_list=True, section__isnull=False)
+                .order_by('display_order', 'id').values_list('section', flat=True))
+
+
+def resolve_subscription_section(event, target_list, section):
+    """
+    Section stored on a Subscription: None for normal events; the list's section for section lists;
+    otherwise the requested section, which must be one of the event's sections.
+    """
+    if not event or not event.is_coordination:
+        return None
+    if target_list is not None and target_list.section:
+        return target_list.section
+    if not section:
+        raise serializers.ValidationError({
+            'section': "Seleziona la sezione: è obbligatoria per le iscrizioni a un evento di coordinamento."
+        })
+    if section not in event_sections(event):
+        raise serializers.ValidationError({'section': "Sezione non valida per questo evento."})
+    return section
 
 
 def order_profile_fields(fields):
@@ -91,12 +123,15 @@ class EventListSerializer(serializers.ModelSerializer):
     )
     event_names = serializers.SerializerMethodField()
     available_capacity = serializers.ReadOnlyField()
+    section = serializers.ChoiceField(choices=Section.choices, required=False, allow_null=True, allow_blank=True,
+                                      default=None)
+    section_label = serializers.CharField(source='get_section_display', read_only=True)
 
     class Meta:
         model = EventList
         fields = [
             'id', 'name', 'capacity', 'display_order', 'subscription_count',
-            'is_main_list', 'is_waiting_list',
+            'is_main_list', 'is_waiting_list', 'section', 'section_label',
             'event_ids', 'event_names', 'available_capacity'
         ]
 
@@ -119,7 +154,7 @@ class EventsListSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'name', 'date', 'cost', 'deposit', 'status',
-            'is_a_bando', 'is_allow_external',
+            'is_a_bando', 'is_allow_external', 'is_coordination',
             'lists_capacity', 'enable_form', 'form_programmed_open_time', 'form_note',
             'is_refa_done',
             'notify_list',
@@ -177,12 +212,14 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     notify_list = serializers.BooleanField(required=False, default=True)
     visible_to_board_only = serializers.BooleanField(required=False, default=False)
     reimbursements_by_organizers_only = serializers.BooleanField(required=False, default=False)
+    is_coordination = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Event
         fields = [
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
+            'is_coordination',
             'profile_fields', 'fields', 'services', 'enable_form',
             'form_capacity', 'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
             'enable_whatsapp_link', 'whatsapp_group_link',
@@ -213,22 +250,93 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                 'lists': "Il nome 'Form List' è riservato e non può essere usato manualmente. Questa lista viene creata automaticamente quando si attiva il form di iscrizione."
             })
 
+    @staticmethod
+    def _validate_standard_lists(lists_data):
+        if any(l.get('section') for l in lists_data):
+            raise serializers.ValidationError({
+                'lists': "Le sezioni sono disponibili solo per gli eventi di coordinamento."
+            })
+        for list_data in lists_data:
+            list_data['section'] = None
+        main_lists = [l for l in lists_data if l.get('is_main_list')]
+        waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
+        if len(main_lists) > 1:
+            raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
+        if len(waiting_lists) > 1:
+            raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
+        if len(main_lists) != 1:
+            raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
+
+    def _validate_coordination_lists(self, lists_data):
+        """
+        Coordination events: one Main List per participating section (name fixed from the section),
+        exactly one Waiting List, optional custom lists without section. Shared lists are not allowed.
+        """
+        seen_sections = set()
+        waiting_count = 0
+        for list_data in lists_data:
+            if list_data.get('id') and not self.instance:
+                raise serializers.ValidationError({
+                    'lists': "Gli eventi di coordinamento non possono usare liste condivise con altri eventi."
+                })
+            section = list_data.get('section') or None
+            list_data['section'] = section
+            if list_data.get('is_main_list'):
+                if list_data.get('is_waiting_list'):
+                    raise serializers.ValidationError({'lists': "Una lista non può essere sia principale che d'attesa."})
+                if not section:
+                    raise serializers.ValidationError({
+                        'lists': "Ogni lista principale di un evento di coordinamento deve avere una sezione."
+                    })
+                if section in seen_sections:
+                    raise serializers.ValidationError({
+                        'lists': f"La sezione {Section(section).label} ha più di una lista principale."
+                    })
+                seen_sections.add(section)
+                list_data['name'] = section_list_name(section)
+            else:
+                if section:
+                    raise serializers.ValidationError({
+                        'lists': "Solo le liste principali di sezione possono avere una sezione."
+                    })
+                if list_data.get('is_waiting_list'):
+                    waiting_count += 1
+        if not seen_sections:
+            raise serializers.ValidationError({
+                'lists': "Un evento di coordinamento deve avere almeno una sezione."
+            })
+        if waiting_count != 1:
+            raise serializers.ValidationError({
+                'lists': "Un evento di coordinamento deve avere esattamente una Waiting List."
+            })
+
     def validate(self, attrs):
+        # Read before super().validate(): the model-clean mixin copies attrs onto self.instance
+        original_is_coordination = bool(self.instance and self.instance.is_coordination)
         attrs = super().validate(attrs)
+        if self.instance is not None:
+            if 'is_coordination' in attrs and bool(attrs['is_coordination']) != original_is_coordination:
+                raise serializers.ValidationError({
+                    'is_coordination': "Il tipo evento di coordinamento può essere scelto solo alla creazione."
+                })
+            is_coordination = original_is_coordination
+        else:
+            is_coordination = bool(attrs.get('is_coordination', False))
+        attrs['is_coordination'] = is_coordination
+        if is_coordination:
+            # Coordination events always collect subscriptions through the form, mostly from other sections
+            attrs['enable_form'] = True
+            attrs['is_allow_external'] = True
         # Ensure global ordering of profile_fields
         if 'profile_fields' in attrs:
             attrs['profile_fields'] = order_profile_fields(attrs['profile_fields'])
         # Validate lists constraints early so the frontend gets a 400 with details
         lists_data = attrs.get('lists', None)
         if lists_data is not None:
-            main_lists = [l for l in lists_data if l.get('is_main_list')]
-            waiting_lists = [l for l in lists_data if l.get('is_waiting_list')]
-            if len(main_lists) > 1:
-                raise serializers.ValidationError({'lists': "Only one Main List is allowed per event."})
-            if len(waiting_lists) > 1:
-                raise serializers.ValidationError({'lists': "Only one Waiting List is allowed per event."})
-            if len(main_lists) != 1:
-                raise serializers.ValidationError({'lists': "An event must have exactly one Main List."})
+            if is_coordination:
+                self._validate_coordination_lists(lists_data)
+            else:
+                self._validate_standard_lists(lists_data)
             # Validate that manual creation/renaming to 'Form List' is not allowed
             for list_data in lists_data:
                 list_name = list_data.get('name')
@@ -637,6 +745,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                             el.is_main_list = False
                             # Force non-main/non-waiting
                             el.is_waiting_list = False
+                            el.section = None
                             el.save()
                         else:
                             # Validate that we're not renaming to 'Form List'
@@ -649,6 +758,12 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                             el.display_order = list_data.get('display_order', el.display_order)
                             el.is_main_list = list_data.get('is_main_list', el.is_main_list)
                             el.is_waiting_list = list_data.get('is_waiting_list', el.is_waiting_list)
+                            new_section = list_data.get('section', el.section) or None
+                            if new_section != el.section and el.subscriptions.exists():
+                                raise serializers.ValidationError({
+                                    'lists': f"Non è possibile cambiare la sezione della lista {el.name}: contiene delle iscrizioni"
+                                })
+                            el.section = new_section
                             el.save()
                     else:
                         raise serializers.ValidationError({
@@ -662,7 +777,8 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                             capacity=_normalize_capacity(list_data.get('capacity', 0)),
                             display_order=list_data.get('display_order', 0),
                             is_main_list=list_data.get('is_main_list', False),
-                            is_waiting_list=list_data.get('is_waiting_list', False)
+                            is_waiting_list=list_data.get('is_waiting_list', False),
+                            section=list_data.get('section') or None,
                         )
                         new_list.events.add(instance)
 
@@ -733,7 +849,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
-            'is_a_bando', 'is_allow_external',
+            'is_a_bando', 'is_allow_external', 'is_coordination',
             'profile_fields', 'fields', 'services',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
@@ -848,6 +964,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     profile_name = serializers.SerializerMethodField()
     list_id = serializers.PrimaryKeyRelatedField(source='list', read_only=True)
     list_name = serializers.CharField(source='list.name', read_only=True)
+    section = serializers.CharField(read_only=True)
+    section_label = serializers.CharField(source='get_section_display', read_only=True)
     account_id = serializers.SerializerMethodField()
     account_name = serializers.SerializerMethodField()
     deposit_reimbursement_transaction_id = serializers.SerializerMethodField()
@@ -878,6 +996,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'profile_id', 'profile_name', 'event', 'event_id', 'event_name', 'event_date',
             'list_id', 'list_name',
+            'section', 'section_label',
             'enable_refund', 'notes', 'created_by_form',
             'event_profile_fields', 'event_fields',
             'account_id', 'account_name',
@@ -1037,10 +1156,13 @@ class SubscriptionCreateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     class Meta:
         model = Subscription
         fields = ['profile', 'event', 'list', 'notes', 'account_id', 'pay_deposit', 'status_quota', 'status_cauzione',
-                  'status_services', 'external_name', 'email', 'form_data', 'additional_data', 'selected_services']
+                  'status_services', 'external_name', 'email', 'form_data', 'additional_data', 'selected_services',
+                  'section']
 
     def validate(self, attrs):
         event = attrs.get('event')
+        target_list = attrs.get('list')
+        attrs['section'] = resolve_subscription_section(event, target_list, attrs.get('section'))
         email = self.initial_data.get('email', '').strip()
         profile = attrs.get('profile', None)
         external_name = attrs.get('external_name', '').strip() if attrs.get('external_name') else ''
@@ -1084,7 +1206,8 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
     class Meta:
         model = Subscription
         fields = ['event', 'list', 'enable_refund', 'notes', 'account_id', 'status_quota', 'status_cauzione',
-                  'status_services', 'external_name', 'email', 'form_data', 'additional_data', 'selected_services']
+                  'status_services', 'external_name', 'email', 'form_data', 'additional_data', 'selected_services',
+                  'section']
 
     def validate(self, attrs):
         instance = self.instance
@@ -1102,6 +1225,14 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
             raise serializers.ValidationError({
                 'list': "La lista selezionata non è collegata all'evento indicato."
             })
+
+        if instance and new_event and new_event.id != instance.event_id and (
+                new_event.is_coordination or instance.event.is_coordination):
+            raise serializers.ValidationError({
+                'event': "Non è possibile spostare iscrizioni da o verso un evento di coordinamento."
+            })
+        requested_section = attrs.get('section', instance.section if instance else None)
+        attrs['section'] = resolve_subscription_section(new_event, new_list, requested_section)
 
         profile = instance.profile if instance else attrs.get('profile')
         external_name = attrs.get('external_name', instance.external_name if instance else None)
@@ -1145,7 +1276,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
-            'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
+            'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external', 'is_coordination',
             'profile_fields', 'fields', 'services', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',

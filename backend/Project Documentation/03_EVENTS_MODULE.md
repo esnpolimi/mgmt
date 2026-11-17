@@ -33,6 +33,9 @@ Main business attributes:
 - vCard contact exports avoid duplicating phone and WhatsApp prefixes already included in profile data.
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
+- `is_coordination` (bool, default `False`): Evento di coordinamento (5.9). Set only at creation; `EventCreationSerializer.validate` rejects any change on PATCH (400 `is_coordination`). When true, `enable_form` and `is_allow_external` are forced to `True`.
+
+`Section` (`TextChoices` in `backend/events/models.py`): `iulm`, `statale`, `unicatt`, `polimi`, `bocconi`, `bicocca` (labels `Iulm` … `Bicocca`). Frontend mirror: `frontend/src/utils/coordinationSections.js` (`COORDINATION_SECTIONS`); keep both in sync.
 
 ### 2.2 EventList
 
@@ -45,6 +48,9 @@ Attributes:
 - display_order
 - is_main_list
 - is_waiting_list
+- `section` (`Section` choice, nullable): set only on the Main Lists of a coordination event; null on every other list. Serialized with read-only `section_label`.
+
+`EventList.clean()`: one Main List per event, or one Main List per `section` for coordination events; one Waiting List per event.
 
 Computed metrics:
 
@@ -61,6 +67,7 @@ Attributes:
 - selected_services
 - created_by_form
 - sumup_checkout_id, sumup_transaction_id
+- `section` (`Section` choice, nullable): coordination events only; the section chosen by the subscriber (form) or implied by the list (office). Routes auto-move (5.9). Serialized with read-only `section_label`. Always null on normal events (`resolve_subscription_section`).
 - `additional_data['payment_failed']`: technical flag shown in the subscriber table as "Pagamento fallito"; it indicates that the latest online payment attempt failed and is cleared when a new checkout is created.
 
 Computed serializer fields (`SubscriptionSerializer`):
@@ -91,6 +98,8 @@ Base path: /backend/
 - GET /event/<event_id>/form/
 - GET /event/<event_id>/formstatus/
 - POST /event/<event_id>/formsubmit/
+
+`form` also returns `is_coordination` and `sections: [{code, label}]` (the event's section Main Lists in `display_order`, from `event_sections`). `formstatus` also returns `sections_full: {code: bool}` (empty for normal events). `formsubmit` accepts a top-level `section` (required for coordination events: 400 `"Section is required"` / `"Invalid section"` when missing or not one of the event's sections).
 
 `formsubmit` success response also returns `access_token` (the per-subscription signed token, see 5.7) and `whatsapp_link_url` (stable WhatsApp access URL, or `null` when the subscription is not eligible).
 
@@ -152,7 +161,7 @@ Transaction sync goes through `_upsert_transaction` in `backend/events/views.py`
 1. load `fields` schema from `Event`
 2. dynamic payload validation
 3. optional file upload (field type `l`) to Drive
-4. insertion into form list (always, even when Main/Waiting are full)
+4. insertion into form list (always, even when Main/Waiting are full); free coordination events are then placed immediately (5.9)
 5. confirmation email delivery
 6. optional online checkout trigger (payment remains a separate step)
 
@@ -190,6 +199,8 @@ When creating or updating an event with the public form enabled, `form_capacity`
 
 PATCH enabling an existing event form applies submitted `form_capacity` when creating a missing Form List.
 
+Coordination events: `main_list_full` is true only when every section Main List is full; per-section state is in `sections_full`. The default Form List capacity (when `form_capacity` is omitted) sums all section Main Lists + Waiting List.
+
 The subscriber grid supports selecting multiple rows and copying their visible values as tab-separated text for spreadsheets.
 
 Spreadsheet exports prefix subscriber-controlled values beginning with `=`, `+`, `-`, or `@` to prevent formula execution.
@@ -225,6 +236,8 @@ Eligibility (`_whatsapp_link_eligible`): sharing active (flag on and link non-em
 1. subscription total (`cost + deposit + selected services`) is 0, or
 2. payment fully registered (`_subscription_payment_already_registered`) AND subscription currently in the Main List.
 
+Coordination events share one group link across all sections: any section Main List counts as "the Main List" (check is `list.is_main_list`); Waiting/Form/custom lists are not eligible when payment is due.
+
 Partial office payments and waiting-list payers are not eligible.
 
 Security model:
@@ -250,6 +263,38 @@ Frontend pieces:
 - `frontend/src/Pages/events/EventWhatsApp.jsx` (route `/event/:id/whatsapp`): calls the resolve endpoint and redirects with `window.location.replace`
 - `frontend/src/Components/events/WhatsAppGroupCard.jsx`: button + QR code (desktop only) built with `qrcode.react`
 - `EventForm` -> `EventFormResult` -> `EventPayment` pass `accessToken` through router state; `EventPayment` also reads `t` from the query string and, after the SumUp widget reports paid, re-calls `process_payment` with `t` to get list placement and the link
+
+### 5.9 Coordination Events (Evento di coordinamento)
+
+Events for ESN Milano Unità with one Main List per participating section, one Waiting List, the auto Form List and optional custom lists. Issue #106.
+
+List rules (`EventCreationSerializer._validate_coordination_lists`, create and PATCH with `lists`):
+
+1. every `is_main_list` entry has a valid, unique `section`; its `name` is overwritten to `section_list_name(section)` = `"Main List - <Label>"` (`SECTION_LIST_NAME_PREFIX`)
+2. at least one section list; exactly one Waiting List (`section=None`)
+3. custom lists (`is_main_list=False`, `is_waiting_list=False`) are allowed and must have no `section`
+4. list `id`s on create are rejected (no shared lists); `link-lists` returns 400 if source or target is a coordination event and `available-for-sharing` excludes coordination events
+5. PATCH cannot change the `section` of a list that has subscriptions
+6. normal events reject any list with a `section` (`_validate_standard_lists`) and keep the "exactly one Main List" rule
+
+Section resolution (`resolve_subscription_section` in `backend/events/serializers.py`, used by `SubscriptionCreateSerializer` and `SubscriptionUpdateSerializer`): `None` for normal events; the list's `section` for section lists; otherwise the requested `section`, which is required and must be in `event_sections(event)` (400 `section`).
+
+Routing (`backend/events/views.py`):
+
+- `_get_main_waiting_lists(event, lock, section)`: for coordination events the Main List is the one with `section == section` (None if missing); the Waiting List is shared
+- `_subscription_section(sub)`: `sub.section`, falling back to `sub.list.section`
+- `attempt_move_from_form_list`: after payment, target order is the section Main List, then the Waiting List; if both are full the subscription stays (`no_capacity`); a coordination subscription without section stays with reason `no_section`. Moving into a section list also writes `sub.section`
+- `_is_payment_blocked_by_full_lists` / `_assign_form_capacity_label(event, total_cost, section)`: capacity checks use the subscriber's section list only (a full Polimi list does not block a Bocconi subscriber). The label for coordination events is the section list name, so `_send_form_subscription_email` still matches `'main'`
+- `event_form_submit`: validates `section`, stores it on the Form List subscription. Free coordination events (`cost + deposit + selected services == 0`) call `attempt_move_from_form_list` right after creation, so the subscriber lands in the section Main List, else the Waiting List, else stays in the Form List; no manual move. The response `assigned_list` and the confirmation email ("You have been assigned to the …") carry the list name only when `notify_list` is on. Paid coordination subscriptions wait in the Form List until payment. Normal free events are unchanged (they stay in the Form List)
+- `move_subscriptions`: target section list sets `sub.section`; moves across events into or out of a coordination event return 400 (also enforced on subscription PATCH `event`)
+
+Frontend:
+
+- `EventModal.jsx`: "Evento di coordinamento" switch in `GeneralInfoBlock` (create only; disabled in edit). Enabling it forces externals and form on, replaces `lists` with `defaultCoordinationLists()` (6 sections + Waiting List) and remounts `CoordinationLists`/`FormBlock` via `coordinationVersion`. `CoordinationLists` = section checkbox + capacity rows, Waiting List capacity, custom lists ("Altre liste"). `convert()` sends `is_coordination`, `section` and `display_order` (`coordinationListOrder`)
+- `EventForm.jsx`: required "ESN Section" select from `eventData.sections`, sent as top-level `section` (JSON and multipart)
+- `SubscriptionModal.jsx`: required "Sezione" select when the target list has no section; sends `section`
+- `EventListAccordions.jsx`: "Sezione" column (`section_label`) and `Main List · <Label>` chip
+- `EventsList.jsx`: Main capacity bar sums all section lists (any capacity 0 → unlimited)
 
 ### 5.8 Subscriber List Ordering
 
@@ -281,8 +326,9 @@ A list can be shared across multiple events.
 Invarianti:
 
 1. list capacity is a single cross-event pool
-2. `move-subscriptions` can change list and event in the same operation
-3. `unique(profile,event)` must remain valid after move
+2. coordination events never share lists (5.9)
+3. `move-subscriptions` can change list and event in the same operation (not into/out of coordination events)
+4. `unique(profile,event)` must remain valid after move
 
 ## 8. Integration Notes
 
@@ -298,6 +344,8 @@ Invarianti:
 4. regressions in dynamic-schema validation
 5. WhatsApp invite links can be forwarded once opened; organizers are advised to enable "approve new participants" in the WhatsApp group
 6. reintroducing delete+recreate in `_upsert_transaction` would reset `paid_at`
+7. code that picks "the" Main List with `.filter(is_main_list=True).first()` is wrong for coordination events; route through `_get_main_waiting_lists(..., section=...)`
+8. `Section` codes are duplicated in `frontend/src/utils/coordinationSections.js`
 
 ## 10. Testing Requirements
 
@@ -312,6 +360,7 @@ Invarianti:
 9. form submit vs payment separation: form list insertion must stay allowed, payment blocked only on full Main+Waiting
 10. `paid_at` exposure and preservation on payment-account change (`SubscriptionPaidAtTests`)
 11. WhatsApp link eligibility, token checks, email delivery paths, event-PATCH backfill, PATCH validation, event-level config without form, office free/no-payment-email paths, event change reset (`WhatsAppGroupLinkTests`)
+12. coordination events: list-layout validation, forced form/externals, free-event immediate placement (section list → Waiting List → Form List, `notify_list` respected), immutable `is_coordination`, form `section` validation, section routing for office PATCH/create, custom lists and SumUp webhook (idempotent), per-section payment block, section sync on move, cross-event move and sharing rejection, WhatsApp eligibility across section lists (`CoordinationEventTests`)
 
 Test reference: `backend/events/tests.py`.
 
@@ -342,3 +391,7 @@ Some local or legacy databases may still contain obsolete payment confirmation c
 
 1. PR #82: subscriber list ordering and `paid_at` / "Pagato il" column (5.8); `_upsert_transaction` now updates in place (5.1).
 2. PR #88: WhatsApp group link sharing (5.7); new model fields `enable_whatsapp_link`, `whatsapp_group_link` (migration `0003_event_whatsapp_group_link`; migrations are gitignored and generated on deploy by `makemigrations`); new frontend dependency `qrcode.react`.
+
+## 15. Recent Features (2026-11)
+
+1. Issue #106: coordination events (5.9); new model fields `Event.is_coordination`, `EventList.section`, `Subscription.section` and `Section` choices (local migration `0005_event_is_coordination_eventlist_section_and_more`; migrations are gitignored and generated on deploy by `makemigrations`).
