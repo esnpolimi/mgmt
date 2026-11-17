@@ -597,17 +597,22 @@ def _check_whatsapp_token(subscription, token):
 def _whatsapp_link_eligible(subscription):
     """
     The group link is shared only with subscribers holding a spot:
-      - free subscription (cost + deposit + selected services == 0), or
+      - free subscription (cost + deposit + selected services == 0) not in the Waiting List
+        (coordination events: only in a Main List, since free subscribers are auto-placed and
+        staying in the Form List means no spot was available), or
       - fully paid (quota, deposit and services) and currently in the Main List.
     """
     event = subscription.event
     if not event.enable_whatsapp_link or not (event.whatsapp_group_link or '').strip():
         return False
+    lst = subscription.list
     if _subscription_total(subscription) <= 0:
-        return True
+        if event.is_coordination:
+            return bool(lst and lst.is_main_list)
+        return not (lst and lst.is_waiting_list)
     if not _subscription_payment_already_registered(subscription):
         return False
-    return bool(subscription.list and subscription.list.is_main_list)
+    return bool(lst and lst.is_main_list)
 
 
 def _whatsapp_link_for(subscription):

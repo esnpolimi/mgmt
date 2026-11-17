@@ -2915,20 +2915,47 @@ class WhatsAppGroupLinkTests(EventsBaseTestCase):
 	def _wa_mails(self, recipient):
 		return [m for m in mail.outbox if recipient in m.to and "WhatsApp" in m.alternatives[0][0]]
 
-	def test_office_subscription_on_free_event_gets_link_in_any_list(self):
+	def test_office_subscription_on_free_event_gets_link_outside_waiting_list(self):
 		self._office_staff("office_free_wa@esnpolimi.it")
 		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
-		_create_event_list(event)
-		waiting = _create_event_list(event, name="Waiting List", is_main_list=False, is_waiting_list=True)
+		main_list = _create_event_list(event)
+		custom = _create_event_list(event, name="Staff", is_main_list=False)
 		profile = _create_profile("free_office_wa@uni.it", is_esner=False)
+		other = _create_profile("free_office_custom_wa@uni.it", is_esner=False)
+
+		for prof, lst in ((profile, main_list), (other, custom)):
+			response = self.client.post("/backend/subscription/", {
+				"profile": prof.pk, "event": event.pk, "list": lst.pk,
+			}, format="json")
+			self.assertEqual(response.status_code, 200)
+			self.assertTrue(Subscription.objects.get(pk=response.data["id"]).additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(len(self._wa_mails("free_office_wa@uni.it")), 1)
+		self.assertEqual(len(self._wa_mails("free_office_custom_wa@uni.it")), 1)
+
+	def test_free_waiting_list_subscriber_gets_link_only_when_moved_to_main(self):
+		"""Regression: a free subscription in the Waiting List holds no spot, so no WhatsApp link."""
+		self._office_staff("office_free_wl_wa@esnpolimi.it")
+		event = _create_event(enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		main_list = _create_event_list(event)
+		waiting = _create_event_list(event, name="Waiting List", is_main_list=False, is_waiting_list=True)
+		profile = _create_profile("free_wl_wa@uni.it", is_esner=False)
 
 		response = self.client.post("/backend/subscription/", {
 			"profile": profile.pk, "event": event.pk, "list": waiting.pk,
 		}, format="json")
-
 		self.assertEqual(response.status_code, 200)
-		self.assertTrue(Subscription.objects.get(pk=response.data["id"]).additional_data.get("whatsapp_link_email_sent"))
-		self.assertEqual(len(self._wa_mails("free_office_wa@uni.it")), 1)
+		sub = Subscription.objects.get(pk=response.data["id"])
+		self.assertFalse(sub.additional_data.get("whatsapp_link_email_sent"))
+		self.assertEqual(self._wa_mails("free_wl_wa@uni.it"), [])
+		self.assertEqual(self._resolve(sub, self._token(sub)).status_code, 404)
+
+		with self.captureOnCommitCallbacks(execute=True):
+			moved = self.client.post("/backend/move-subscriptions/", {
+				"subscriptionIds": [sub.pk], "targetListId": main_list.pk,
+			}, format="json")
+		self.assertEqual(moved.status_code, 200)
+		self.assertEqual(len(self._wa_mails("free_wl_wa@uni.it")), 1)
+		self.assertEqual(self._resolve(sub, self._token(sub)).status_code, 200)
 
 	def test_office_payment_sends_link_even_with_payment_email_disabled(self):
 		staff = self._office_staff("office_nomail_wa@esnpolimi.it")
@@ -3577,3 +3604,21 @@ class CoordinationEventTests(EventsBaseTestCase):
 		self.assertTrue(event_views._whatsapp_link_eligible(in_polimi))
 		self.assertTrue(event_views._whatsapp_link_eligible(in_bocconi))
 		self.assertFalse(event_views._whatsapp_link_eligible(in_waiting))
+
+	def test_free_form_whatsapp_link_only_for_main_list_placement(self):
+		"""Regression: free coordination subscribers overflowing to Waiting/Form List get no WhatsApp link."""
+		event, section_lists, waiting, form_list = _create_coordination_event(
+			enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		first = self._submit(event, "wa_free1@uni.it", section="polimi")
+		second = self._submit(event, "wa_free2@uni.it", section="polimi")
+		third = self._submit(event, "wa_free3@uni.it", section="polimi")
+
+		self.assertIsNotNone(first.data["whatsapp_link_url"])
+		self.assertIsNone(second.data["whatsapp_link_url"])
+		self.assertIsNone(third.data["whatsapp_link_url"])
+		for resp, email in ((second, "wa_free2@uni.it"), (third, "wa_free3@uni.it")):
+			mails = [m for m in mail.outbox if email in m.to]
+			self.assertTrue(mails)
+			self.assertFalse(any("WhatsApp" in m.alternatives[0][0] for m in mails))
+			self.assertFalse(Subscription.objects.get(pk=resp.data["subscription_id"]).additional_data.get("whatsapp_link_email_sent"))
+		self.assertTrue(any("WhatsApp" in m.alternatives[0][0] for m in mail.outbox if "wa_free1@uni.it" in m.to))

@@ -233,10 +233,12 @@ Per-event option to share a WhatsApp group invite with subscribers that hold a s
 
 Eligibility (`_whatsapp_link_eligible`): sharing active (flag on and link non-empty) AND either
 
-1. subscription total (`cost + deposit + selected services`) is 0, or
+1. subscription total (`cost + deposit + selected services`) is 0 AND subscription not in the Waiting List (`list.is_waiting_list`); on coordination events the free subscription must be in a Main List (`list.is_main_list`), because free coordination subscribers are auto-placed and remaining in the Form List means no spot was free, or
 2. payment fully registered (`_subscription_payment_already_registered`) AND subscription currently in the Main List.
 
-Coordination events share one group link across all sections: any section Main List counts as "the Main List" (check is `list.is_main_list`); Waiting/Form/custom lists are not eligible when payment is due.
+Coordination events share one group link across all sections: any section Main List counts as "the Main List" (check is `list.is_main_list`); Waiting/Form/custom lists are not eligible on coordination events (free or paid), and on normal events only when payment is due.
+
+Free Waiting List subscribers receive the link when moved into a Main List (`move-subscriptions` or office PATCH, delivery paths 3-4).
 
 Partial office payments and waiting-list payers are not eligible.
 
@@ -249,7 +251,7 @@ Security model:
 
 Delivery (each subscriber receives it once per event; tracked by `additional_data['whatsapp_link_email_sent']`). Invariant: every eligible subscriber with a recipient email receives it; `_maybe_send_whatsapp_link_email` is idempotent and re-checks eligibility, so it is safe to call after any mutation.
 
-1. free event: shown on the form result page (`WhatsAppGroupCard`) and included in the form confirmation email
+1. free event: shown on the form result page (`WhatsAppGroupCard`) and included in the form confirmation email, when eligible after placement (normal events: Form List; coordination events: only when placed in a section Main List, not Waiting/Form List)
 2. online payment that lands in the Main List: shown on the result page and included in the payment confirmation email (or sent by `_maybe_send_whatsapp_link_email` after `_handle_payment_status`, including webhook-only confirmations)
 3. office subscription create/PATCH: `_handle_payment_status` always calls `_maybe_send_whatsapp_link_email` (`send_whatsapp=True`), independently of `send_payment_email` and of whether a payment was registered (covers free events and PATCHes that move a paid subscription into the Main List)
 4. `move-subscriptions`: `_handle_payment_status(send_whatsapp=False)`, then `transaction.on_commit(_maybe_send_whatsapp_link_email)` for every moved subscription, so a rolled-back batch sends nothing
@@ -359,8 +361,8 @@ Invarianti:
 8. partial reimbursement: per-item error messages and selective retry
 9. form submit vs payment separation: form list insertion must stay allowed, payment blocked only on full Main+Waiting
 10. `paid_at` exposure and preservation on payment-account change (`SubscriptionPaidAtTests`)
-11. WhatsApp link eligibility, token checks, email delivery paths, event-PATCH backfill, PATCH validation, event-level config without form, office free/no-payment-email paths, event change reset (`WhatsAppGroupLinkTests`)
-12. coordination events: list-layout validation, forced form/externals, free-event immediate placement (section list → Waiting List → Form List, `notify_list` respected), immutable `is_coordination`, form `section` validation, section routing for office PATCH/create, custom lists and SumUp webhook (idempotent), per-section payment block, section sync on move, cross-event move and sharing rejection, WhatsApp eligibility across section lists (`CoordinationEventTests`)
+11. WhatsApp link eligibility, token checks, email delivery paths, event-PATCH backfill, PATCH validation, event-level config without form, office free/no-payment-email paths, free Waiting List exclusion until moved to Main, event change reset (`WhatsAppGroupLinkTests`)
+12. coordination events: list-layout validation, forced form/externals, free-event immediate placement (section list → Waiting List → Form List, `notify_list` respected), immutable `is_coordination`, form `section` validation, section routing for office PATCH/create, custom lists and SumUp webhook (idempotent), per-section payment block, section sync on move, cross-event move and sharing rejection, WhatsApp eligibility across section lists, free form overflow to Waiting/Form List gets no link (`CoordinationEventTests`)
 
 Test reference: `backend/events/tests.py`.
 

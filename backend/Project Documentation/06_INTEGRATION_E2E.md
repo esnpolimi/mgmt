@@ -177,7 +177,7 @@ Minimum checklist for each release:
 8. transaction export
 9. CRUD content home
 10. whatsapp register end-to-end
-11. event WhatsApp group link: free-event form result, paid Main List result, move-to-Main email, office subscription (free or paid) email
+11. event WhatsApp group link: free-event form result, paid Main List result, move-to-Main email, office subscription (free or paid) email; free Waiting List subscribers excluded until moved to Main
 12. coordination event: create with section lists, form submit with section, payment routes to section list then Waiting List
 
 ## 5. Cross-Module Risk Register
