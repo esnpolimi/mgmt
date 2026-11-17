@@ -3122,3 +3122,458 @@ class SubscriptionPaidAtTests(EventsBaseTestCase):
 		account_b.refresh_from_db()
 		self.assertEqual(account_a.balance, 0)
 		self.assertEqual(account_b.balance, 10)
+
+
+def _create_coordination_event(*, sections=("polimi", "bocconi"), capacity=1, waiting_capacity=1, **kwargs):
+	"""Create a coordination event with one Main List per section, a Waiting List and a Form List."""
+	kwargs.setdefault("enable_form", True)
+	kwargs.setdefault("is_allow_external", True)
+	event = _create_event(is_coordination=True, **kwargs)
+	section_lists = {}
+	for order, code in enumerate(sections):
+		lst = EventList.objects.create(
+			name=f"Main List - {code.title()}", capacity=capacity, is_main_list=True,
+			section=code, display_order=order,
+		)
+		lst.events.add(event)
+		section_lists[code] = lst
+	waiting = _create_event_list(event, name="Waiting List", capacity=waiting_capacity,
+								 is_main_list=False, is_waiting_list=True)
+	form_list = _create_event_list(event, name="Form List", capacity=0, is_main_list=False)
+	return event, section_lists, waiting, form_list
+
+
+class CoordinationEventTests(EventsBaseTestCase):
+	"""Evento di coordinamento: one Main List per section, routing by Subscription.section."""
+
+	def _creator(self, email="coord-creator@esnpolimi.it"):
+		user = _create_user(_create_profile(email))
+		user.user_permissions.add(self.perm_add_event, self.perm_change_event)
+		self.authenticate(user)
+		return user
+
+	def _office_staff(self, email="coord-office@esnpolimi.it"):
+		staff = _create_user(_create_profile(email))
+		staff.user_permissions.add(self.perm_add_subscription, self.perm_change_subscription, self.perm_change_event)
+		self.authenticate(staff)
+		return staff
+
+	def _create_payload(self, **overrides):
+		payload = {
+			"name": "Coordination Event",
+			"date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"is_coordination": True,
+			"form_programmed_open_time": None,
+			"lists": [
+				{"name": "Polimi", "capacity": 10, "is_main_list": True, "section": "polimi"},
+				{"name": "Bicocca", "capacity": 5, "is_main_list": True, "section": "bicocca"},
+				{"name": "Waiting List", "capacity": 3, "is_waiting_list": True},
+			],
+		}
+		payload.update(overrides)
+		return payload
+
+	def _submit(self, event, email, **extra):
+		data = {"email": email, "form_data": {}, "external_first_name": "Ext", "external_last_name": email.split("@")[0]}
+		data.update(extra)
+		return self.client.post(f"/backend/event/{event.pk}/formsubmit/", data, format="json")
+
+	# --- Creation -------------------------------------------------------------------------
+
+	def test_creation_requires_permission(self):
+		self.authenticate(_create_user(_create_profile("coord-noperm@esnpolimi.it")))
+		response = self.client.post("/backend/event/", self._create_payload(), format="json")
+		self.assertEqual(response.status_code, 403)
+
+	def test_creation_builds_section_waiting_and_form_lists(self):
+		self._creator()
+		response = self.client.post("/backend/event/", self._create_payload(enable_form=False), format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		event = Event.objects.get(name="Coordination Event")
+		self.assertTrue(event.is_coordination)
+		self.assertTrue(event.enable_form)  # forced
+		self.assertTrue(event.is_allow_external)  # forced
+		sections = {lst.section: lst for lst in event.lists.filter(is_main_list=True)}
+		self.assertEqual(set(sections), {"polimi", "bicocca"})
+		self.assertEqual(sections["polimi"].name, "Main List - Polimi")  # name fixed from the section
+		self.assertEqual(sections["bicocca"].capacity, 5)
+		self.assertEqual(event.lists.filter(is_waiting_list=True).count(), 1)
+		form_list = event.lists.get(name="Form List")
+		self.assertEqual(form_list.capacity, 18)  # default: sum of all section lists + waiting list
+
+	def test_creation_accepts_custom_lists(self):
+		self._creator()
+		payload = self._create_payload()
+		payload["lists"].append({"name": "Staff", "capacity": 4})
+		response = self.client.post("/backend/event/", payload, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		custom = EventList.objects.get(name="Staff", events__name="Coordination Event")
+		self.assertFalse(custom.is_main_list)
+		self.assertIsNone(custom.section)
+
+	def test_creation_rejects_invalid_list_layouts(self):
+		self._creator()
+		invalid_layouts = {
+			"duplicate section": [
+				{"name": "Section", "capacity": 1, "is_main_list": True, "section": "polimi"},
+				{"name": "Section", "capacity": 1, "is_main_list": True, "section": "polimi"},
+				{"name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+			],
+			"unknown section": [
+				{"name": "Section", "capacity": 1, "is_main_list": True, "section": "harvard"},
+				{"name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+			],
+			"main list without section": [
+				{"name": "Main List", "capacity": 1, "is_main_list": True},
+				{"name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+			],
+			"missing waiting list": [
+				{"name": "Section", "capacity": 1, "is_main_list": True, "section": "polimi"},
+			],
+			"two waiting lists": [
+				{"name": "Section", "capacity": 1, "is_main_list": True, "section": "polimi"},
+				{"name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+				{"name": "Waiting 2", "capacity": 1, "is_waiting_list": True},
+			],
+			"custom list with section": [
+				{"name": "Section", "capacity": 1, "is_main_list": True, "section": "polimi"},
+				{"name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+				{"name": "Staff", "capacity": 1, "section": "bocconi"},
+			],
+			"no sections": [
+				{"name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+			],
+		}
+		for label, lists in invalid_layouts.items():
+			with self.subTest(label):
+				response = self.client.post("/backend/event/", self._create_payload(lists=lists), format="json")
+				self.assertEqual(response.status_code, 400, response.data)
+		self.assertFalse(Event.objects.filter(name="Coordination Event").exists())
+
+	def test_creation_rejects_shared_lists(self):
+		self._creator()
+		other = _create_event(name="Other Event")
+		shared = _create_event_list(other)
+		payload = self._create_payload()
+		payload["lists"].append({"id": shared.pk, "name": shared.name, "capacity": 100})
+		response = self.client.post("/backend/event/", payload, format="json")
+		self.assertEqual(response.status_code, 400)
+
+	def test_normal_event_rejects_section(self):
+		self._creator()
+		response = self.client.post("/backend/event/", {
+			"name": "Normal Event",
+			"date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"lists": [{"name": "Main List", "capacity": 10, "is_main_list": True, "section": "polimi"}],
+		}, format="json")
+		self.assertEqual(response.status_code, 400)
+
+	def test_is_coordination_cannot_change_after_creation(self):
+		self._creator()
+		normal = _create_event(name="Normal Event")
+		_create_event_list(normal)
+		coordination, _, _, _ = _create_coordination_event(name="Coord Event")
+
+		to_coord = self.client.patch(f"/backend/event/{normal.pk}/", {"is_coordination": True}, format="json")
+		to_normal = self.client.patch(f"/backend/event/{coordination.pk}/", {"is_coordination": False}, format="json")
+
+		self.assertEqual(to_coord.status_code, 400)
+		self.assertEqual(to_normal.status_code, 400)
+		normal.refresh_from_db()
+		coordination.refresh_from_db()
+		self.assertFalse(normal.is_coordination)
+		self.assertTrue(coordination.is_coordination)
+
+	def test_patch_keeps_sections_and_adds_section(self):
+		self._creator()
+		event, section_lists, waiting, form_list = _create_coordination_event(name="Coord Patch")
+		lists = [
+			{"id": section_lists["polimi"].pk, "name": "x", "capacity": 4, "is_main_list": True, "section": "polimi"},
+			{"id": section_lists["bocconi"].pk, "name": "x", "capacity": 1, "is_main_list": True, "section": "bocconi"},
+			{"id": None, "name": "Iulm", "capacity": 2, "is_main_list": True, "section": "iulm"},
+			{"id": waiting.pk, "name": "Waiting List", "capacity": 1, "is_waiting_list": True},
+			{"id": form_list.pk, "name": "Form List", "capacity": 0},
+		]
+		response = self.client.patch(f"/backend/event/{event.pk}/", {"lists": lists}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		section_lists["polimi"].refresh_from_db()
+		self.assertEqual(section_lists["polimi"].capacity, 4)
+		self.assertEqual(section_lists["polimi"].name, "Main List - Polimi")
+		self.assertTrue(event.lists.filter(section="iulm", name="Main List - Iulm").exists())
+
+	# --- Public form ----------------------------------------------------------------------
+
+	def test_form_view_exposes_sections(self):
+		event, _, _, _ = _create_coordination_event()
+		response = self.client.get(f"/backend/event/{event.pk}/form/")
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["is_coordination"])
+		self.assertEqual(response.data["sections"], [
+			{"code": "polimi", "label": "Polimi"}, {"code": "bocconi", "label": "Bocconi"},
+		])
+
+	def test_form_status_reports_full_sections(self):
+		_create_account("SumUp", user=_create_user(_create_profile("coord-status@esnpolimi.it")))
+		event, section_lists, _, _ = _create_coordination_event()
+		Subscription.objects.create(external_name="A B", event=event, list=section_lists["polimi"], section="polimi")
+
+		response = self.client.get(f"/backend/event/{event.pk}/formstatus/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["sections_full"], {"polimi": True, "bocconi": False})
+		self.assertFalse(response.data["main_list_full"])
+
+	def test_form_submit_requires_valid_section(self):
+		event, _, _, _ = _create_coordination_event()
+		missing = self._submit(event, "nosection@uni.it")
+		invalid = self._submit(event, "badsection@uni.it", section="bicocca")  # not part of this event
+
+		self.assertEqual(missing.status_code, 400)
+		self.assertEqual(missing.data["error"], "Section is required")
+		self.assertEqual(invalid.status_code, 400)
+		self.assertEqual(invalid.data["error"], "Invalid section")
+		self.assertFalse(Subscription.objects.filter(event=event).exists())
+
+	def test_form_submit_external_lands_in_form_list_with_section(self):
+		event, _, _, form_list = _create_coordination_event(cost=10)
+		response = self._submit(event, "external@unibocconi.it", section="bocconi")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		sub = Subscription.objects.get(pk=response.data["subscription_id"])
+		self.assertEqual(sub.list, form_list)
+		self.assertEqual(sub.section, "bocconi")
+		self.assertIsNone(sub.profile)
+
+	def test_free_form_subscription_goes_to_section_list(self):
+		"""Free coordination events place form subscribers immediately: no manual move needed."""
+		event, section_lists, waiting, form_list = _create_coordination_event()
+		response = self._submit(event, "free@uni.it", section="polimi")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["assigned_list"], "Main List - Polimi")
+		sub = Subscription.objects.get(pk=response.data["subscription_id"])
+		self.assertEqual(sub.list, section_lists["polimi"])
+		self.assertIn("Main List - Polimi", mail.outbox[0].alternatives[0][0])
+
+	def test_free_form_subscription_overflows_to_waiting_then_form_list(self):
+		event, section_lists, waiting, form_list = _create_coordination_event()
+		first = self._submit(event, "free1@uni.it", section="polimi")
+		second = self._submit(event, "free2@uni.it", section="polimi")
+		third = self._submit(event, "free3@uni.it", section="polimi")
+
+		self.assertEqual(first.data["assigned_list"], "Main List - Polimi")
+		self.assertEqual(second.data["assigned_list"], "Waiting List")
+		self.assertEqual(Subscription.objects.get(pk=second.data["subscription_id"]).list, waiting)
+		self.assertEqual(Subscription.objects.get(pk=third.data["subscription_id"]).list, form_list)
+
+	def test_free_form_subscription_hides_list_when_notify_list_off(self):
+		event, section_lists, _, _ = _create_coordination_event(notify_list=False)
+		response = self._submit(event, "quiet@uni.it", section="bocconi")
+
+		self.assertEqual(response.data["assigned_list"], "")
+		self.assertEqual(Subscription.objects.get(pk=response.data["subscription_id"]).list, section_lists["bocconi"])
+		self.assertNotIn("Main List - Bocconi", mail.outbox[0].alternatives[0][0])
+
+	def test_paid_form_subscription_waits_in_form_list(self):
+		event, _, _, form_list = _create_coordination_event(cost=10)
+		response = self._submit(event, "paid@uni.it", section="polimi")
+		self.assertEqual(Subscription.objects.get(pk=response.data["subscription_id"]).list, form_list)
+
+	def test_free_normal_event_form_subscription_unchanged(self):
+		"""The immediate placement applies only to coordination events."""
+		event = _create_event(enable_form=True, is_allow_external=True)
+		_create_event_list(event, name="Main List", capacity=10)
+		form_list = _create_event_list(event, name="Form List", is_main_list=False)
+		response = self._submit(event, "normal@uni.it")
+		self.assertEqual(Subscription.objects.get(pk=response.data["subscription_id"]).list, form_list)
+
+	# --- Auto-move after payment ------------------------------------------------------------
+
+	def _pay_via_patch(self, sub, account, **extra):
+		data = {"account_id": account.pk, "status_quota": "paid", "status_cauzione": "pending"}
+		data.update(extra)
+		return self.client.patch(f"/backend/subscription/{sub.pk}/", data, format="json")
+
+	def test_office_payment_routes_to_section_then_waiting_then_stays(self):
+		staff = self._office_staff()
+		account = _create_account("Cassa Coord", user=staff)
+		event, section_lists, waiting, form_list = _create_coordination_event(cost=10)
+		subs = [
+			Subscription.objects.create(external_name=f"Ext {i}", event=event, list=form_list,
+										section="bocconi", created_by_form=True)
+			for i in range(3)
+		]
+
+		first = self._pay_via_patch(subs[0], account)
+		second = self._pay_via_patch(subs[1], account)
+		third = self._pay_via_patch(subs[2], account)
+
+		self.assertEqual(first.status_code, 200, first.data)
+		self.assertEqual(first.data["auto_move_list"], "Main List - Bocconi")
+		self.assertEqual(second.data["auto_move_list"], "Waiting List")
+		self.assertEqual(third.data["auto_move_status"], "stayed")
+		self.assertEqual(third.data["auto_move_reason"], "no_capacity")
+		for sub in subs:
+			sub.refresh_from_db()
+		self.assertEqual(subs[0].list, section_lists["bocconi"])
+		self.assertEqual(subs[1].list, waiting)
+		self.assertEqual(subs[2].list, form_list)
+		# Polimi's free spot is never used by a Bocconi subscriber
+		self.assertEqual(section_lists["polimi"].subscriptions.count(), 0)
+
+	def test_attempt_move_without_section_stays(self):
+		staff = _create_user(_create_profile("coord-nosection@esnpolimi.it"))
+		account = _create_account("Cassa NoSec", user=staff)
+		event, _, _, form_list = _create_coordination_event(cost=10)
+		sub = Subscription.objects.create(external_name="No Sec", event=event, list=form_list)
+		Transaction.objects.create(subscription=sub, account=account, executor=staff,
+								   type=Transaction.TransactionType.SUBSCRIPTION, amount=10, description="Quota")
+
+		result = event_views.attempt_move_from_form_list(sub)
+
+		self.assertEqual(result, {"status": "stayed", "reason": "no_section"})
+		sub.refresh_from_db()
+		self.assertEqual(sub.list, form_list)
+
+	def test_office_create_requires_section_outside_section_lists(self):
+		self._office_staff()
+		event, section_lists, waiting, _ = _create_coordination_event()
+
+		missing = self.client.post("/backend/subscription/", {
+			"event": event.pk, "list": waiting.pk, "external_name": "Ext Wait", "email": "wait@uni.it",
+		}, format="json")
+		with_section = self.client.post("/backend/subscription/", {
+			"event": event.pk, "list": waiting.pk, "external_name": "Ext Wait", "email": "wait@uni.it",
+			"section": "polimi",
+		}, format="json")
+		in_section_list = self.client.post("/backend/subscription/", {
+			"event": event.pk, "list": section_lists["bocconi"].pk, "external_name": "Ext Main",
+			"email": "main@uni.it", "section": "polimi",
+		}, format="json")
+
+		self.assertEqual(missing.status_code, 400)
+		self.assertEqual(with_section.status_code, 200, with_section.data)
+		self.assertEqual(with_section.data["section"], "polimi")
+		self.assertEqual(in_section_list.status_code, 200, in_section_list.data)
+		self.assertEqual(in_section_list.data["section"], "bocconi")  # a section list implies its section
+
+	def test_office_custom_list_payment_moves_to_section_list(self):
+		staff = self._office_staff()
+		account = _create_account("Cassa Custom", user=staff)
+		event, section_lists, _, _ = _create_coordination_event(cost=10)
+		custom = _create_event_list(event, name="Staff", capacity=0, is_main_list=False)
+
+		response = self.client.post("/backend/subscription/", {
+			"event": event.pk, "list": custom.pk, "external_name": "Ext Custom", "email": "custom@uni.it",
+			"section": "polimi", "account_id": account.pk, "status_quota": "paid",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["auto_move_list"], "Main List - Polimi")
+		self.assertEqual(response.data["list_id"], section_lists["polimi"].pk)
+
+	@patch("events.views.requests.get")
+	@patch("events.views.get_sumup_access_token")
+	def test_webhook_routes_to_section_list_idempotently(self, mock_token, mock_get):
+		mock_token.return_value = "token"
+		mock_get.return_value.status_code = 200
+		mock_get.return_value.json.return_value = {
+			"status": "PAID", "transactions": [{"status": "SUCCESSFUL", "id": "tx_coord"}],
+		}
+		_create_account("SumUp", user=_create_user(_create_profile("coord-sumup@esnpolimi.it")))
+		event, section_lists, _, form_list = _create_coordination_event(cost=10, allow_online_payment=True)
+		sub = Subscription.objects.create(external_name="Ext Pay", event=event, list=form_list, section="polimi",
+										  created_by_form=True, sumup_checkout_id="chk_coord")
+
+		self.client.post("/backend/sumup/webhook/", {"checkout_id": "chk_coord"}, format="json")
+		self.client.post("/backend/sumup/webhook/", {"checkout_id": "chk_coord"}, format="json")
+
+		sub.refresh_from_db()
+		self.assertEqual(sub.list, section_lists["polimi"])
+		self.assertEqual(Transaction.objects.filter(
+			subscription=sub, type=Transaction.TransactionType.SUBSCRIPTION).count(), 1)
+
+	def test_payment_block_checks_own_section_only(self):
+		event, section_lists, waiting, form_list = _create_coordination_event(cost=10, allow_online_payment=True)
+		Subscription.objects.create(external_name="Full P", event=event, list=section_lists["polimi"], section="polimi")
+		Subscription.objects.create(external_name="Full W", event=event, list=waiting, section="polimi")
+		polimi_sub = Subscription.objects.create(external_name="P2", event=event, list=form_list, section="polimi")
+		bocconi_sub = Subscription.objects.create(external_name="B1", event=event, list=form_list, section="bocconi")
+
+		self.assertTrue(event_views._is_payment_blocked_by_full_lists(polimi_sub))
+		self.assertFalse(event_views._is_payment_blocked_by_full_lists(bocconi_sub))
+
+	# --- Moves and sharing ------------------------------------------------------------------
+
+	def test_move_into_section_list_updates_section(self):
+		self._office_staff()
+		event, section_lists, waiting, _ = _create_coordination_event()
+		sub = Subscription.objects.create(external_name="Mover", event=event, list=waiting, section="polimi")
+
+		response = self.client.post("/backend/move-subscriptions/", {
+			"subscriptionIds": [sub.pk], "targetListId": section_lists["bocconi"].pk, "targetEventId": event.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		sub.refresh_from_db()
+		self.assertEqual(sub.list, section_lists["bocconi"])
+		self.assertEqual(sub.section, "bocconi")
+
+	def test_move_across_coordination_events_is_rejected(self):
+		self._office_staff()
+		event, _, waiting, _ = _create_coordination_event(name="Coord Source")
+		other = _create_event(name="Other Target")
+		other_main = _create_event_list(other)
+		sub = Subscription.objects.create(external_name="Mover", event=event, list=waiting, section="polimi")
+
+		response = self.client.post("/backend/move-subscriptions/", {
+			"subscriptionIds": [sub.pk], "targetListId": other_main.pk, "targetEventId": other.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		sub.refresh_from_db()
+		self.assertEqual(sub.event, event)
+
+	def test_list_sharing_excludes_coordination_events(self):
+		user = _create_user(_create_profile("coord-share@esnpolimi.it"))
+		user.user_permissions.add(self.perm_change_event, self.perm_view_event)
+		self.authenticate(user)
+		coordination, _, _, _ = _create_coordination_event(name="Coord Share")
+		normal = _create_event(name="Normal Share")
+		_create_event_list(normal)
+
+		link = self.client.post("/backend/link-lists/", {
+			"source_event_id": coordination.pk, "target_event_id": normal.pk,
+		}, format="json")
+		self.assertEqual(link.status_code, 400)
+
+		available = self.client.get("/backend/available-for-sharing/")
+		self.assertEqual(available.status_code, 200)
+		names = [e["name"] for e in available.data]
+		self.assertNotIn("Coord Share", names)
+		self.assertIn("Normal Share", names)
+
+	# --- WhatsApp ---------------------------------------------------------------------------
+
+	def test_whatsapp_link_for_any_section_list_not_waiting(self):
+		staff = _create_user(_create_profile("coord-wa@esnpolimi.it"))
+		account = _create_account("Cassa WA", user=staff)
+		event, section_lists, waiting, _ = _create_coordination_event(
+			cost=10, enable_whatsapp_link=True, whatsapp_group_link=WA_LINK)
+		in_polimi = Subscription.objects.create(external_name="WA P", event=event, list=section_lists["polimi"], section="polimi")
+		in_bocconi = Subscription.objects.create(external_name="WA B", event=event, list=section_lists["bocconi"], section="bocconi")
+		in_waiting = Subscription.objects.create(external_name="WA W", event=event, list=waiting, section="polimi")
+		for sub in (in_polimi, in_bocconi, in_waiting):
+			Transaction.objects.create(subscription=sub, account=account, executor=staff,
+									   type=Transaction.TransactionType.SUBSCRIPTION, amount=10, description="Quota")
+
+		self.assertTrue(event_views._whatsapp_link_eligible(in_polimi))
+		self.assertTrue(event_views._whatsapp_link_eligible(in_bocconi))
+		self.assertFalse(event_views._whatsapp_link_eligible(in_waiting))

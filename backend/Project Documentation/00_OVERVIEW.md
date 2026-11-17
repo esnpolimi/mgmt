@@ -59,6 +59,7 @@ The system covers ESN Polimi core processes:
 - public wishlist collection with Board-only review and status tracking
 - wishlist form sharing link and English public form interface
 - per-event WhatsApp group link sharing with eligible subscribers (events module)
+- coordination events (Evento di coordinamento): one Main List per ESN Milano Unità section, section chosen on the public form (events module)
 - maintenance state management
 
 Security maintenance:
@@ -246,6 +247,7 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 6. ESNcard revocation must preserve the original emission transaction and register a dedicated refund transaction.
 7. Subscription payment transactions are updated in place, never deleted and recreated, so `paid_at` keeps the original payment time.
 8. An event WhatsApp group link is only revealed through the signed per-subscription token to eligible subscribers (see 03_EVENTS_MODULE.md 5.7).
+9. Coordination events (`Event.is_coordination`, immutable after creation) have one Main List per `EventList.section`; capacity checks and auto-move route by `Subscription.section` through `_get_main_waiting_lists(..., section=...)`, never "the first Main List" (see 03_EVENTS_MODULE.md 5.9).
 
 ## 10. AI/Automation Notes
 

@@ -456,8 +456,17 @@ export default memo(function EventListAccordions({
                 muiTableHeadCellProps: {sx: {color: 'mediumvioletred'}}
             })) : [];
 
-            // Order: profile fields, form fields, form notes, additional fields
+            // Coordination events: section chosen by the subscriber (useful in Waiting/Form/custom lists)
+            const sectionColumns = data.is_coordination ? [{
+                accessorKey: 'section_label',
+                header: 'Sezione',
+                size: 50,
+                Cell: ({row}) => row.original.section_label || '',
+            }] : [];
+
+            // Order: section, profile fields, form fields, form notes, additional fields
             dynamicColumns = [
+                ...sectionColumns,
                 ...dynamicColumns,
                 ...formFieldColumns,
                 ...(formNotesColumn ? [formNotesColumn] : []),
@@ -1045,7 +1054,8 @@ export default memo(function EventListAccordions({
         const listObj = data.lists?.find(l => l.id === listId);
         let listLabel = null;
         if (listObj?.is_main_list) {
-            listLabel = <Chip label="Main List" color="primary" size="small" sx={{ml: 1}}/>;
+            const mainLabel = listObj.section_label ? `Main List · ${listObj.section_label}` : "Main List";
+            listLabel = <Chip label={mainLabel} color="primary" size="small" sx={{ml: 1}}/>;
         } else if (listObj?.is_waiting_list) {
             listLabel = <Chip label="Waiting List" color="warning" size="small" sx={{ml: 1}}/>;
         }

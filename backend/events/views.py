@@ -37,9 +37,10 @@ from utils.google_drive import get_drive_service, find_or_create_folder
 import json
 from xml.sax.saxutils import escape as xml_escape
 
-from events.models import Event, Subscription, EventOrganizer
+from events.models import Event, Subscription, EventOrganizer, Section
 from events.models import EventList, validate_field_data
 from events.serializers import (
+    event_sections,
     EventsListSerializer, EventCreationSerializer,
     SubscriptionCreateSerializer, SubscriptionUpdateSerializer,
     EventWithSubscriptionsSerializer, SubscriptionSerializer, PrintableLiberatoriaSerializer,
@@ -254,24 +255,38 @@ def _list_has_space(target_list):
     return target_list.subscription_count < target_list.capacity
 
 
-def _get_main_waiting_lists(event, lock=False):
+def _get_main_waiting_lists(event, lock=False, section=None):
+    """
+    Returns (main_list, waiting_list) for routing.
+    Coordination events: main_list is the Main List of `section` (None when section is missing/unknown).
+    """
     lists_qs = event.lists.all()
     if lock:
         # Evaluate to acquire row-level locks on all involved lists
         all_lists = list(lists_qs.select_for_update().order_by('id'))
-        main_list = next((lst for lst in all_lists if lst.is_main_list), None)
-        waiting_list = next((lst for lst in all_lists if lst.is_waiting_list), None)
-        return main_list, waiting_list
+    else:
+        all_lists = list(lists_qs.order_by('display_order', 'id'))
 
-    main_list = lists_qs.filter(is_main_list=True).first()
-    waiting_list = lists_qs.filter(is_waiting_list=True).first()
+    if event.is_coordination:
+        main_list = next((lst for lst in all_lists if lst.is_main_list and section and lst.section == section), None)
+    else:
+        main_list = next((lst for lst in all_lists if lst.is_main_list), None)
+    waiting_list = next((lst for lst in all_lists if lst.is_waiting_list), None)
     return main_list, waiting_list
+
+
+def _subscription_section(subscription):
+    """Section used to route a coordination subscription: the chosen one, else the current list's."""
+    if subscription.section:
+        return subscription.section
+    lst = subscription.list
+    return lst.section if lst else None
 
 
 def _is_payment_blocked_by_full_lists(subscription):
     """
     True when subscription is outside Main/Waiting and there is no space in both Main and Waiting.
-    Missing waiting list is treated as full.
+    Missing waiting list is treated as full. Coordination events check the subscriber's section Main List.
     """
     if not subscription or not subscription.event:
         return False
@@ -281,7 +296,8 @@ def _is_payment_blocked_by_full_lists(subscription):
         return False
 
     with transaction.atomic():
-        main_list, waiting_list = _get_main_waiting_lists(subscription.event, lock=True)
+        main_list, waiting_list = _get_main_waiting_lists(
+            subscription.event, lock=True, section=_subscription_section(subscription))
         if not main_list:
             return False
         main_full = not _list_has_space(main_list)
@@ -294,6 +310,8 @@ def attempt_move_from_form_list(subscription):
     """
     If the subscription is in a non-main/waiting list and a quota or deposit transaction exists
     (or event has no cost/deposit), move it to Main List (priority) else Waiting List.
+    Coordination events: the Main List is the one of the subscriber's section; without a section
+    the subscription stays (reason 'no_section').
     Returns outcome dict or None if not applicable.
     """
     try:
@@ -325,13 +343,21 @@ def attempt_move_from_form_list(subscription):
         if not paid_flag:
             return {'status': 'stayed', 'reason': 'not_paid'}
 
+        section = _subscription_section(subscription)
+        if event.is_coordination and not section:
+            return {'status': 'stayed', 'reason': 'no_section'}
+
         with transaction.atomic():
-            main_list, waiting_list = _get_main_waiting_lists(event, lock=True)
+            main_list, waiting_list = _get_main_waiting_lists(event, lock=True, section=section)
 
             for target in [main_list, waiting_list]:
                 if _list_has_space(target):
                     subscription.list = target
-                    subscription.save(update_fields=['list'])
+                    update_fields = ['list']
+                    if target.section:
+                        subscription.section = target.section
+                        update_fields.append('section')
+                    subscription.save(update_fields=update_fields)
                     return {'status': 'moved', 'list': target.name}
 
         return {'status': 'stayed', 'reason': 'no_capacity'}
@@ -467,6 +493,9 @@ def _send_form_subscription_email(subscription, assigned_label, online_payment_r
             )
     else:
         html_parts.append("<p>No payment is required for this event.</p>")
+        # Free coordination events place the subscriber at submit time (see event_form_submit)
+        if notify_lists and assigned_label:
+            html_parts.append(f"<p>You have been assigned to the <b>{xml_escape(assigned_label)}</b>.</p>")
     include_whatsapp = not ad.get('whatsapp_link_email_sent') and _whatsapp_link_eligible(subscription)
     if include_whatsapp:
         html_parts.append(_whatsapp_email_html(subscription))
@@ -1511,6 +1540,12 @@ def move_subscriptions(request):
         if not target_list.events.filter(id=target_event.id).exists():
             return Response({'error': "La lista selezionata non appartiene all'evento indicato"}, status=400)
 
+        # Sections only exist inside a coordination event: no moves across events into or out of one
+        if any(sub.event_id != target_event.id and (target_event.is_coordination or sub.event.is_coordination)
+               for sub in subscriptions):
+            return Response({'error': "Non è possibile spostare iscrizioni da o verso un evento di coordinamento"},
+                            status=400)
+
         # Check if moving the subscriptions would exceed the target list's capacity
         current_count = Subscription.objects.filter(list=target_list, event=target_event).count()
         if target_list.capacity > 0 and current_count + len(subscription_ids) > target_list.capacity:
@@ -1540,7 +1575,9 @@ def move_subscriptions(request):
                     _reset_whatsapp_link_sent(subscription)
                 subscription.list = target_list
                 subscription.event = target_event
-                subscription.save(update_fields=['list', 'event', 'additional_data'])
+                if target_list.section:
+                    subscription.section = target_list.section
+                subscription.save(update_fields=['list', 'event', 'additional_data', 'section'])
 
                 # Re-sync payment transactions to reflect the new event economics
                 quota_tx = Transaction.objects.filter(
@@ -2035,6 +2072,8 @@ def event_form_view(_, event_id):
             'allow_online_payment': event.allow_online_payment,
             'is_allow_external': event.is_allow_external,
             'form_note': event.form_note,
+            'is_coordination': event.is_coordination,
+            'sections': [{'code': code, 'label': Section(code).label} for code in event_sections(event)],
         }, status=200)
     except Event.DoesNotExist:
         return Response({'error': "Event not found"}, status=404)
@@ -2063,7 +2102,13 @@ def event_form_status(_, event_id):
                 return False  # unlimited
             return lst.subscriptions.count() >= lst.capacity
 
-        main_list_full = is_full(main_list)
+        sections_full = {}
+        if event.is_coordination:
+            section_lists = event_lists.filter(is_main_list=True, section__isnull=False)
+            sections_full = {lst.section: is_full(lst) for lst in section_lists}
+            main_list_full = all(sections_full.values()) if sections_full else True
+        else:
+            main_list_full = is_full(main_list)
         waiting_list_full = is_full(waiting_list)
         form_list_full = is_full(form_list)
 
@@ -2085,7 +2130,8 @@ def event_form_status(_, event_id):
             "form_list_full": form_list_full,
             "form_list_capacity": getattr(form_list, 'capacity', None),
             "form_list_subscriptions": form_list.subscriptions.count() if form_list else 0,
-            "form_message": form_message
+            "form_message": form_message,
+            "sections_full": sections_full,
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -2155,13 +2201,13 @@ def _apply_form_link_uploads(event, form_data, files):
     return form_data, None
 
 
-def _assign_form_capacity_label(event, total_cost):
+def _assign_form_capacity_label(event, total_cost, section=None):
     """Subscriptions always land in the Form List; this only decides the online-payment checkout eligibility."""
     if not (event.allow_online_payment and total_cost > 0):
         return '', False
-    main_list, waiting_list = _get_main_waiting_lists(event)
+    main_list, waiting_list = _get_main_waiting_lists(event, section=section)
     if _list_has_space(main_list):
-        return "Main List", False
+        return (main_list.name if event.is_coordination else "Main List"), False
     if _list_has_space(waiting_list):
         return "Waiting List", False
     return "Form List", True
@@ -2235,6 +2281,14 @@ def event_form_submit(request, event_id):
         if duplicate_error:
             return duplicate_error
 
+        section = None
+        if event.is_coordination:
+            section = (request.data.get("section") or "").strip() or None
+            if not section:
+                return Response({"error": "Section is required"}, status=400)
+            if section not in event_sections(event):
+                return Response({"error": "Invalid section"}, status=400)
+
         # --- Handle file uploads for 'l' type fields BEFORE validation ---
         form_data, upload_error = _apply_form_link_uploads(event, form_data, request.FILES)
         if upload_error:
@@ -2269,13 +2323,21 @@ def event_form_submit(request, event_id):
             external_last_name=external_last_name,
             external_has_esncard=external_has_esncard,
             external_esncard_number=external_esncard_number,
-            external_whatsapp_number=external_whatsapp_number
+            external_whatsapp_number=external_whatsapp_number,
+            section=section,
         )
 
         total_cost = (event.cost or Decimal('0')) + (event.deposit or Decimal('0')) + _services_total(normalized_selected)
 
         # --- Capacity check (must happen before SumUp checkout creation) ---
-        assigned_label, capacity_blocked = _assign_form_capacity_label(event, total_cost)
+        assigned_label, capacity_blocked = _assign_form_capacity_label(event, total_cost, section)
+
+        # Free coordination events: nothing to pay, so place the subscriber right away
+        # (section Main List, else Waiting List, else stays in the Form List)
+        if event.is_coordination and total_cost <= 0:
+            move_info = attempt_move_from_form_list(sub)
+            if move_info and move_info.get('status') == 'moved' and event.notify_list:
+                assigned_label = move_info.get('list') or ''
 
         # Do not create a remote checkout until ESNcard eligibility is known.
         payment_blocked = _form_payment_blocked_by_esncard(event, profile, total_cost)
@@ -2749,6 +2811,11 @@ def link_event_to_lists(request):
             'error': 'One or both events not found'
         }, status=404)
 
+    if source_event.is_coordination or target_event.is_coordination:
+        return Response({
+            'error': 'Coordination events cannot share lists with other events'
+        }, status=400)
+
     # Get all lists from source event
     source_lists = source_event.lists.all()
 
@@ -2799,7 +2866,8 @@ def available_events_for_sharing(request):
         return Response({'error': 'Non hai i permessi per visualizzare gli eventi disponibili per la condivisione.'}, status=403)
     
     # Get all events that have at least one list
-    events_with_lists = Event.objects.prefetch_related('lists').annotate(
+    # Coordination events never share their (section) lists
+    events_with_lists = Event.objects.filter(is_coordination=False).prefetch_related('lists').annotate(
         lists_count=Count('lists')
     ).filter(lists_count__gt=0).order_by('-date')
 

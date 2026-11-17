@@ -210,7 +210,12 @@ export default function EventsList() {
             size: 40,
             Cell: ({row}) => {
                 const lists = row.original?.lists_capacity || row.original?.lists || [];
-                const main = lists.find(l => l.is_main_list);
+                // Coordination events have one Main List per section: show their total (capacity 0 = unlimited)
+                const mainLists = lists.filter(l => l.is_main_list);
+                const main = mainLists.length > 1 ? {
+                    capacity: mainLists.some(l => !l.capacity) ? 0 : mainLists.reduce((t, l) => t + l.capacity, 0),
+                    subscription_count: mainLists.reduce((t, l) => t + (l.subscription_count ?? 0), 0),
+                } : mainLists[0];
                 const wait = lists.find(l => l.is_waiting_list);
 
                 const renderBar = (label, list) => {
