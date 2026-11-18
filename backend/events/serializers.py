@@ -40,6 +40,19 @@ def event_sections(event):
                 .order_by('display_order', 'id').values_list('section', flat=True))
 
 
+def lista_unica_representation(event):
+    """Read-only Lista Unica summary for coordination events, or None when disabled."""
+    if not (event.is_coordination and event.has_lista_unica):
+        return None
+    count = event.lista_unica_count()
+    capacity = event.lista_unica_capacity
+    return {
+        'capacity': capacity,
+        'subscription_count': count,
+        'is_full': bool(capacity) and count >= capacity,
+    }
+
+
 def resolve_subscription_section(event, target_list, section):
     """
     Section stored on a Subscription: None for normal events; the list's section for section lists;
@@ -143,6 +156,7 @@ class EventListSerializer(serializers.ModelSerializer):
 # Serializers for Event
 class EventsListSerializer(serializers.ModelSerializer):
     lists_capacity = serializers.SerializerMethodField()
+    lista_unica = serializers.SerializerMethodField()
     enable_form = serializers.BooleanField(read_only=True)
     form_programmed_open_time = serializers.DateTimeField(read_only=True)
     notify_list = serializers.BooleanField(read_only=True)
@@ -155,12 +169,17 @@ class EventsListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'date', 'cost', 'deposit', 'status',
             'is_a_bando', 'is_allow_external', 'is_coordination',
+            'has_lista_unica', 'lista_unica_capacity', 'lista_unica',
             'lists_capacity', 'enable_form', 'form_programmed_open_time', 'form_note',
             'is_refa_done',
             'notify_list',
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
         ]
+
+    @staticmethod
+    def get_lista_unica(obj):
+        return lista_unica_representation(obj)
 
     @staticmethod
     def get_lists_capacity(obj):
@@ -213,13 +232,15 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
     visible_to_board_only = serializers.BooleanField(required=False, default=False)
     reimbursements_by_organizers_only = serializers.BooleanField(required=False, default=False)
     is_coordination = serializers.BooleanField(required=False, default=False)
+    has_lista_unica = serializers.BooleanField(required=False, default=False)
+    lista_unica_capacity = serializers.IntegerField(required=False, default=0, min_value=0)
 
     class Meta:
         model = Event
         fields = [
             'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'lead_organizer',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external',
-            'is_coordination',
+            'is_coordination', 'has_lista_unica', 'lista_unica_capacity',
             'profile_fields', 'fields', 'services', 'enable_form',
             'form_capacity', 'allow_online_payment', 'form_note', 'form_programmed_open_time', 'is_refa_done',
             'enable_whatsapp_link', 'whatsapp_group_link',
@@ -327,6 +348,10 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
             # Coordination events always collect subscriptions through the form, mostly from other sections
             attrs['enable_form'] = True
             attrs['is_allow_external'] = True
+        else:
+            # Lista Unica only exists for coordination events
+            attrs['has_lista_unica'] = False
+            attrs['lista_unica_capacity'] = 0
         # Ensure global ordering of profile_fields
         if 'profile_fields' in attrs:
             attrs['profile_fields'] = order_profile_fields(attrs['profile_fields'])
@@ -662,6 +687,16 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
                     'subscription_end_date': "Non è possibile impostare una data fine iscrizioni minore di quella di inizio iscrizioni"
                 })
 
+        # Lista Unica capacity cannot drop below the subscribers already in the section Main Lists
+        new_has_lista_unica = validated_data.get('has_lista_unica', instance.has_lista_unica)
+        new_lista_unica_capacity = validated_data.get('lista_unica_capacity', instance.lista_unica_capacity)
+        if instance.is_coordination and new_has_lista_unica and new_lista_unica_capacity > 0:
+            lista_unica_count = instance.lista_unica_count()
+            if lista_unica_count > new_lista_unica_capacity:
+                raise serializers.ValidationError({
+                    'lista_unica_capacity': f"Non è possibile impostare una capacità Lista Unica minore del numero di iscritti nelle liste principali ({lista_unica_count})"
+                })
+
         # Handle list capacity validation against total subscriptions for the shared EventList
         if lists_data is not None:
             for list_data in lists_data:
@@ -830,6 +865,7 @@ class EventCreationSerializer(ModelCleanSerializerMixin, serializers.ModelSerial
 
 
 class EventDetailSerializer(serializers.ModelSerializer):
+    lista_unica = serializers.SerializerMethodField()
     lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
     profile_fields = serializers.ListField(read_only=True)
@@ -850,6 +886,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers',
             'subscription_start_date', 'subscription_end_date', 'created_at', 'updated_at', 'status',
             'is_a_bando', 'is_allow_external', 'is_coordination',
+            'has_lista_unica', 'lista_unica_capacity', 'lista_unica',
             'profile_fields', 'fields', 'services',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
@@ -858,6 +895,10 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
         ]
+
+    @staticmethod
+    def get_lista_unica(obj):
+        return lista_unica_representation(obj)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -1231,6 +1272,13 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
             raise serializers.ValidationError({
                 'event': "Non è possibile spostare iscrizioni da o verso un evento di coordinamento."
             })
+        entering_section_list = bool(new_list and new_list.is_main_list and new_list.section) and not (
+            instance and instance.list and instance.list.is_main_list and instance.list.section)
+        if entering_section_list and new_event and new_event.lista_unica_full_after(1):
+            raise serializers.ValidationError({
+                'list': "Lista Unica piena: non è possibile aggiungere nuove iscrizioni alle liste principali"
+            })
+
         requested_section = attrs.get('section', instance.section if instance else None)
         attrs['section'] = resolve_subscription_section(new_event, new_list, requested_section)
 
@@ -1257,6 +1305,7 @@ class SubscriptionUpdateSerializer(ModelCleanSerializerMixin, serializers.ModelS
 
 
 class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
+    lista_unica = serializers.SerializerMethodField()
     lists = EventListSerializer(many=True, read_only=True)
     organizers = EventOrganizerSerializer(many=True, read_only=True)
     subscriptions = serializers.SerializerMethodField(read_only=True)
@@ -1277,6 +1326,7 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'date', 'description', 'cost', 'deposit', 'lists', 'organizers', 'subscriptions',
             'subscription_start_date', 'subscription_end_date', 'is_a_bando', 'is_allow_external', 'is_coordination',
+            'has_lista_unica', 'lista_unica_capacity', 'lista_unica',
             'profile_fields', 'fields', 'services', 'enable_form',
             'allow_online_payment', 'form_programmed_open_time',
             'is_refa_done', 'form_note',
@@ -1285,6 +1335,10 @@ class EventWithSubscriptionsSerializer(serializers.ModelSerializer):
             'visible_to_board_only',
             'reimbursements_by_organizers_only',
         ]
+
+    @staticmethod
+    def get_lista_unica(obj):
+        return lista_unica_representation(obj)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

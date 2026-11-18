@@ -114,6 +114,7 @@ function extractFallbackRowValues(row) {
 }
 
 const DEFAULT_SORT = {criterion: 'subscribed_at', direction: 'desc'};
+const LISTA_UNICA_ID = 'lista-unica'; // virtual list id (never sent to the backend)
 
 const SORT_CRITERIA = [
     {value: 'subscribed_at', label: 'Data iscrizione (form)'},
@@ -332,8 +333,20 @@ export default memo(function EventListAccordions({
             return '';
         };
 
-        return data.lists.map(list => {
-            const listSubscriptions = data.subscriptions?.filter(sub => sub.list_id === list.id) || [];
+        // Lista Unica (coordination events): virtual read-only list with every subscriber of the section Main Lists
+        const sectionMainListIds = new Set((data.lists || []).filter(l => l.is_main_list && l.section).map(l => l.id));
+        const sourceLists = data.lista_unica ? [{
+            id: LISTA_UNICA_ID,
+            name: 'Lista Unica',
+            capacity: data.lista_unica.capacity,
+            subscription_count: data.lista_unica.subscription_count,
+            is_lista_unica: true,
+        }, ...data.lists] : data.lists;
+
+        return sourceLists.map(list => {
+            const listSubscriptions = (list.is_lista_unica
+                ? data.subscriptions?.filter(sub => sectionMainListIds.has(sub.list_id))
+                : data.subscriptions?.filter(sub => sub.list_id === list.id)) || [];
             const eventServices = Array.isArray(data?.services) ? data.services : [];
 
             const profileFieldSet = new Set(baseProfileFields);
@@ -720,7 +733,7 @@ export default memo(function EventListAccordions({
             };
             // Keep Copy first, and move Azioni to the last column
             columns.unshift(copyColumn);
-            columns = [...columns, actionsColumn];
+            if (!list.is_lista_unica) columns = [...columns, actionsColumn]; // Lista Unica is read-only
 
             const listSort = {...DEFAULT_SORT, ...sortByList[list.id]};
             const isAscending = listSort.direction === 'asc';
@@ -793,6 +806,7 @@ export default memo(function EventListAccordions({
 
             return {
                 listId: list.id,
+                isListaUnica: !!list.is_lista_unica,
                 listName: list.name,
                 capacity: list.capacity,
                 subscription_count: list.subscription_count,
@@ -955,24 +969,30 @@ export default memo(function EventListAccordions({
                     const capacity = config.capacity;
                     const subscription_count = config.subscription_count;
                     const {isActive} = handleSubscriptionStatus();
+                    const isListaUnica = config.isListaUnica;
+                    const listaUnicaFull = !!data.lista_unica?.is_full;
                     return (
                         <Box sx={{display: 'flex', gap: 1, p: 2, alignItems: 'center'}}>
                             <Box sx={{display: 'flex', gap: 1, flexGrow: 1}}>
-                                {selectedCount === 0 && (<>
-                                        <Button
-                                            variant="contained"
-                                            color="primary"
-                                            startIcon={<PersonAddIcon/>}
-                                            disabled={!((capacity === 0 || subscription_count < capacity) && isActive)}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onOpenSubscriptionModal(listId);
-                                            }}>
-                                            ISCRIVI
-                                        </Button>
+                                {selectedCount === 0 && !isListaUnica && (<>
+                                        <Tooltip title={listaUnicaFull ? "Lista Unica piena: nessuna nuova iscrizione possibile" : ""}>
+                                            <span>
+                                                <Button
+                                                    variant="contained"
+                                                    color="primary"
+                                                    startIcon={<PersonAddIcon/>}
+                                                    disabled={listaUnicaFull || !((capacity === 0 || subscription_count < capacity) && isActive)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenSubscriptionModal(listId);
+                                                    }}>
+                                                    ISCRIVI
+                                                </Button>
+                                            </span>
+                                        </Tooltip>
                                     </>
                                 )}
-                                {selectedCount >= 1 && (<>
+                                {selectedCount >= 1 && !isListaUnica && (<>
                                         <Button
                                             variant="outlined"
                                             color="primary"
@@ -983,7 +1003,7 @@ export default memo(function EventListAccordions({
                                         </Button>
                                     </>
                                 )}
-                                {selectedCount === 1 && (
+                                {selectedCount === 1 && !isListaUnica && (
                                     <Button
                                         variant="contained"
                                         color="primary"
@@ -1012,7 +1032,7 @@ export default memo(function EventListAccordions({
                                         Esporta contatti (vCard)
                                     </Button>
                                 )}
-                                {hasDeposit && canChangeTransactions && selectedCount === 0 && isBoardMember && (
+                                {hasDeposit && canChangeTransactions && selectedCount === 0 && isBoardMember && !isListaUnica && (
                                     <Button variant="contained"
                                             color="success"
                                             onClick={e => {
@@ -1024,7 +1044,7 @@ export default memo(function EventListAccordions({
                                         Rimborsa Cauzioni
                                     </Button>
                                 )}
-                                {hasQuota && selectedCount === 0 && (isBoardMember || isLeadOrganizer) && (
+                                {hasQuota && selectedCount === 0 && (isBoardMember || isLeadOrganizer) && !isListaUnica && (
                                     <Button variant="contained"
                                             color="info"
                                             onClick={e => {
@@ -1053,7 +1073,9 @@ export default memo(function EventListAccordions({
         // Add ML/WL label
         const listObj = data.lists?.find(l => l.id === listId);
         let listLabel = null;
-        if (listObj?.is_main_list) {
+        if (listConfig.isListaUnica) {
+            listLabel = <Chip label="Sola lettura" color="secondary" size="small" sx={{ml: 1}}/>;
+        } else if (listObj?.is_main_list) {
             const mainLabel = listObj.section_label ? `Main List · ${listObj.section_label}` : "Main List";
             listLabel = <Chip label={mainLabel} color="primary" size="small" sx={{ml: 1}}/>;
         } else if (listObj?.is_waiting_list) {

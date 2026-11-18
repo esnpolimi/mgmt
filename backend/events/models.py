@@ -239,6 +239,12 @@ class Event(BaseEntity):
     # Set at creation only.
     is_coordination = models.BooleanField(default=False)
 
+    # Coordination events only: Lista Unica is a read-only view of every subscriber in the section Main Lists.
+    # lista_unica_capacity (0 = unlimited) caps the event's total participants: once reached, no new
+    # subscriptions are accepted and nobody else can enter a section Main List.
+    has_lista_unica = models.BooleanField(default=False)
+    lista_unica_capacity = models.PositiveIntegerField(default=0)
+
     # Indicates whether a form is required for the event
     enable_form = models.BooleanField(default=False)
 
@@ -322,6 +328,25 @@ class Event(BaseEntity):
             raise ValidationError({
                 'form_programmed_open_time': 'Form opening time must be before subscription end date.'
             })
+
+    def lista_unica_count(self):
+        """Subscribers in the section Main Lists: what Lista Unica shows and caps."""
+        return Subscription.objects.filter(
+            event=self, list__is_main_list=True, list__section__isnull=False
+        ).count()
+
+    def lista_unica_full_after(self, entering):
+        """True when `entering` more subscribers in the section Main Lists would exceed the Lista Unica cap."""
+        if not (self.is_coordination and self.has_lista_unica and self.lista_unica_capacity) or entering <= 0:
+            return False
+        return self.lista_unica_count() + entering > self.lista_unica_capacity
+
+    @property
+    def lista_unica_full(self):
+        """Cap reached: no new subscriptions, nobody else may enter a section Main List."""
+        if not (self.is_coordination and self.has_lista_unica and self.lista_unica_capacity):
+            return False
+        return self.lista_unica_count() >= self.lista_unica_capacity
 
     @property
     def form_fields(self):

@@ -3622,3 +3622,211 @@ class CoordinationEventTests(EventsBaseTestCase):
 			self.assertFalse(any("WhatsApp" in m.alternatives[0][0] for m in mails))
 			self.assertFalse(Subscription.objects.get(pk=resp.data["subscription_id"]).additional_data.get("whatsapp_link_email_sent"))
 		self.assertTrue(any("WhatsApp" in m.alternatives[0][0] for m in mail.outbox if "wa_free1@uni.it" in m.to))
+
+
+class ListaUnicaTests(EventsBaseTestCase):
+	"""Lista Unica: read-only view of the section Main Lists of a coordination event, with a global cap."""
+
+	def _staff(self, email="lu-staff@esnpolimi.it"):
+		staff = _create_user(_create_profile(email))
+		staff.user_permissions.add(
+			self.perm_add_event, self.perm_change_event, self.perm_view_event,
+			self.perm_add_subscription, self.perm_change_subscription,
+		)
+		self.authenticate(staff)
+		return staff
+
+	def _event(self, *, lista_unica_capacity=2, has_lista_unica=True, **kwargs):
+		kwargs.setdefault("capacity", 5)
+		kwargs.setdefault("waiting_capacity", 5)
+		event, section_lists, waiting, form_list = _create_coordination_event(
+			has_lista_unica=has_lista_unica, lista_unica_capacity=lista_unica_capacity, **kwargs)
+		return event, section_lists, waiting, form_list
+
+	def _fill(self, event, section_lists, n, section="polimi"):
+		return [
+			Subscription.objects.create(external_name=f"Full {section} {i}", event=event,
+										list=section_lists[section], section=section)
+			for i in range(n)
+		]
+
+	def _submit(self, event, email, section="polimi"):
+		return self.client.post(f"/backend/event/{event.pk}/formsubmit/", {
+			"email": email, "form_data": {}, "section": section,
+			"external_first_name": "Ext", "external_last_name": email.split("@")[0],
+		}, format="json")
+
+	# --- Configuration ------------------------------------------------------------------
+
+	def test_create_coordination_event_with_lista_unica(self):
+		self._staff()
+		response = self.client.post("/backend/event/", {
+			"name": "LU Event", "date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"is_coordination": True, "has_lista_unica": True, "lista_unica_capacity": 30,
+			"lists": [
+				{"name": "Polimi", "capacity": 20, "is_main_list": True, "section": "polimi"},
+				{"name": "Bocconi", "capacity": 20, "is_main_list": True, "section": "bocconi"},
+				{"name": "Waiting List", "capacity": 5, "is_waiting_list": True},
+			],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		event = Event.objects.get(name="LU Event")
+		self.assertTrue(event.has_lista_unica)
+		self.assertEqual(event.lista_unica_capacity, 30)  # need not equal the sum of section capacities
+
+	def test_normal_event_cannot_enable_lista_unica(self):
+		self._staff()
+		response = self.client.post("/backend/event/", {
+			"name": "Normal LU", "date": "2026-06-01",
+			"subscription_start_date": "2026-05-01T00:00:00Z",
+			"subscription_end_date": "2026-05-31T23:59:59Z",
+			"has_lista_unica": True, "lista_unica_capacity": 10,
+			"lists": [{"name": "Main List", "capacity": 10, "is_main_list": True}],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		event = Event.objects.get(name="Normal LU")
+		self.assertFalse(event.has_lista_unica)
+		self.assertEqual(event.lista_unica_capacity, 0)
+
+	def test_patch_capacity_below_current_count_rejected(self):
+		self._staff()
+		event, section_lists, _, _ = self._event(lista_unica_capacity=5)
+		self._fill(event, section_lists, 3)
+
+		too_low = self.client.patch(f"/backend/event/{event.pk}/", {"lista_unica_capacity": 2}, format="json")
+		ok = self.client.patch(f"/backend/event/{event.pk}/", {"lista_unica_capacity": 3}, format="json")
+
+		self.assertEqual(too_low.status_code, 400)
+		self.assertIn("lista_unica_capacity", too_low.data)
+		self.assertEqual(ok.status_code, 200, ok.data)
+
+	def test_detail_counts_only_section_main_lists(self):
+		self._staff()
+		event, section_lists, waiting, form_list = self._event(lista_unica_capacity=10)
+		self._fill(event, section_lists, 2, "polimi")
+		self._fill(event, section_lists, 1, "bocconi")
+		Subscription.objects.create(external_name="Waiting", event=event, list=waiting, section="polimi")
+		Subscription.objects.create(external_name="Form", event=event, list=form_list, section="polimi")
+
+		response = self.client.get(f"/backend/event/{event.pk}/")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["lista_unica"], {"capacity": 10, "subscription_count": 3, "is_full": False})
+
+	def test_detail_lista_unica_null_when_disabled(self):
+		self._staff()
+		event, _, _, _ = self._event(has_lista_unica=False)
+		response = self.client.get(f"/backend/event/{event.pk}/")
+		self.assertIsNone(response.data["lista_unica"])
+
+	# --- Full cap -----------------------------------------------------------------------
+
+	def test_full_cap_closes_form(self):
+		_create_account("SumUp", user=_create_user(_create_profile("lu-sumup@esnpolimi.it")))
+		event, section_lists, _, _ = self._event()
+		self._fill(event, section_lists, 2)
+
+		status_response = self.client.get(f"/backend/event/{event.pk}/formstatus/")
+		submit = self._submit(event, "late@uni.it", section="bocconi")  # bocconi still has room
+
+		self.assertTrue(status_response.data["lista_unica_full"])
+		self.assertTrue(status_response.data["form_list_full"])
+		self.assertEqual(submit.status_code, 400)
+		self.assertEqual(submit.data["error"], "Event is full")
+		self.assertFalse(Subscription.objects.filter(external_name__startswith="Ext late").exists())
+
+	def test_full_cap_blocks_office_subscription_on_any_list(self):
+		self._staff()
+		event, section_lists, waiting, _ = self._event()
+		self._fill(event, section_lists, 2)
+
+		response = self.client.post("/backend/subscription/", {
+			"event": event.pk, "list": waiting.pk, "external_name": "Ext Office",
+			"email": "office@uni.it", "section": "bocconi",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("Lista Unica", response.data["error"])
+
+	def test_full_cap_sends_form_list_payer_to_waiting_list(self):
+		staff = self._staff()
+		account = _create_account("Cassa LU", user=staff)
+		event, section_lists, waiting, form_list = self._event(cost=10)
+		payer = Subscription.objects.create(external_name="Payer", event=event, list=form_list,
+											section="bocconi", created_by_form=True)
+		self._fill(event, section_lists, 2)
+
+		response = self.client.patch(f"/backend/subscription/{payer.pk}/", {
+			"account_id": account.pk, "status_quota": "paid", "status_cauzione": "pending",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["auto_move_list"], "Waiting List")
+		payer.refresh_from_db()
+		self.assertEqual(payer.list, waiting)
+		# the Waiting List still has room, so later payers are not sold out
+		late = Subscription.objects.create(external_name="Late", event=event, list=form_list, section="bocconi")
+		self.assertFalse(event_views._is_payment_blocked_by_full_lists(late))
+
+	def test_full_cap_payment_block_when_waiting_also_full(self):
+		event, section_lists, waiting, form_list = self._event(cost=10, waiting_capacity=1, allow_online_payment=True)
+		self._fill(event, section_lists, 2)
+		Subscription.objects.create(external_name="W", event=event, list=waiting, section="polimi")
+		sub = Subscription.objects.create(external_name="Late", event=event, list=form_list, section="bocconi")
+		self.assertTrue(event_views._is_payment_blocked_by_full_lists(sub))
+
+	# --- Moves --------------------------------------------------------------------------
+
+	def _move(self, subs, target_list, event):
+		return self.client.post("/backend/move-subscriptions/", {
+			"subscriptionIds": [s.pk for s in subs], "targetListId": target_list.pk, "targetEventId": event.pk,
+		}, format="json")
+
+	def test_moves_into_section_lists_respect_cap(self):
+		self._staff()
+		event, section_lists, waiting, _ = self._event()
+		in_polimi = self._fill(event, section_lists, 2)
+		waiting_sub = Subscription.objects.create(external_name="Wait", event=event, list=waiting, section="bocconi")
+
+		into_section = self._move([waiting_sub], section_lists["bocconi"], event)
+		between_sections = self._move([in_polimi[0]], section_lists["bocconi"], event)
+		out_to_waiting = self._move([in_polimi[1]], waiting, event)
+
+		self.assertEqual(into_section.status_code, 400)
+		self.assertIn("Lista Unica", into_section.data["error"])
+		self.assertEqual(between_sections.status_code, 200, between_sections.data)
+		self.assertEqual(out_to_waiting.status_code, 200, out_to_waiting.data)
+		# a spot was freed: the waiting subscriber can now enter
+		self.assertEqual(self._move([waiting_sub], section_lists["bocconi"], event).status_code, 200)
+
+	def test_patch_into_section_list_respects_cap(self):
+		self._staff()
+		event, section_lists, waiting, _ = self._event()
+		self._fill(event, section_lists, 2)
+		waiting_sub = Subscription.objects.create(external_name="Wait", event=event, list=waiting, section="bocconi")
+
+		response = self.client.patch(f"/backend/subscription/{waiting_sub.pk}/", {
+			"list": section_lists["bocconi"].pk, "status_quota": "pending", "status_cauzione": "pending",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		waiting_sub.refresh_from_db()
+		self.assertEqual(waiting_sub.list, waiting)
+
+	# --- No cap -------------------------------------------------------------------------
+
+	def test_unlimited_or_disabled_lista_unica_never_blocks(self):
+		for label, kwargs in {"unlimited": {"lista_unica_capacity": 0}, "disabled": {"has_lista_unica": False}}.items():
+			with self.subTest(label):
+				event, section_lists, _, form_list = self._event(name=f"LU {label}", **kwargs)
+				self._fill(event, section_lists, 5)
+				self.assertFalse(event.lista_unica_full)
+				response = self._submit(event, f"{label}@uni.it", section="bocconi")
+				self.assertEqual(response.status_code, 200, response.data)
+				# free event: placed straight into the section list
+				self.assertEqual(Subscription.objects.get(pk=response.data["subscription_id"]).list,
+								 section_lists["bocconi"])

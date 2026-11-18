@@ -34,6 +34,7 @@ Main business attributes:
 - dynamic configuration: `fields`, `profile_fields`, `services`
 - governance: `notify_list`, `visible_to_board_only`, `reimbursements_by_organizers_only`
 - `is_coordination` (bool, default `False`): Evento di coordinamento (5.9). Set only at creation; `EventCreationSerializer.validate` rejects any change on PATCH (400 `is_coordination`). When true, `enable_form` and `is_allow_external` are forced to `True`.
+- `has_lista_unica` (bool, default `False`), `lista_unica_capacity` (int ≥ 0, default 0 = unlimited): Lista Unica (5.10). Coordination events only; `EventCreationSerializer.validate` forces `False`/`0` on normal events. Methods: `Event.lista_unica_count()`, `Event.lista_unica_full` (property), `Event.lista_unica_full_after(entering)`.
 
 `Section` (`TextChoices` in `backend/events/models.py`): `iulm`, `statale`, `unicatt`, `polimi`, `bocconi`, `bicocca` (labels `Iulm` … `Bicocca`). Frontend mirror: `frontend/src/utils/coordinationSections.js` (`COORDINATION_SECTIONS`); keep both in sync.
 
@@ -99,7 +100,7 @@ Base path: /backend/
 - GET /event/<event_id>/formstatus/
 - POST /event/<event_id>/formsubmit/
 
-`form` also returns `is_coordination` and `sections: [{code, label}]` (the event's section Main Lists in `display_order`, from `event_sections`). `formstatus` also returns `sections_full: {code: bool}` (empty for normal events). `formsubmit` accepts a top-level `section` (required for coordination events: 400 `"Section is required"` / `"Invalid section"` when missing or not one of the event's sections).
+`form` also returns `is_coordination` and `sections: [{code, label}]` (the event's section Main Lists in `display_order`, from `event_sections`). `formstatus` also returns `sections_full: {code: bool}` (empty for normal events) and `lista_unica_full` (when true, `form_list_full` is also true and `form_message` is `LISTA_UNICA_FULL_FORM_MESSAGE`). `formsubmit` returns 400 `"Event is full"` when the Lista Unica cap is reached. `formsubmit` accepts a top-level `section` (required for coordination events: 400 `"Section is required"` / `"Invalid section"` when missing or not one of the event's sections).
 
 `formsubmit` success response also returns `access_token` (the per-subscription signed token, see 5.7) and `whatsapp_link_url` (stable WhatsApp access URL, or `null` when the subscription is not eligible).
 
@@ -298,6 +299,29 @@ Frontend:
 - `EventListAccordions.jsx`: "Sezione" column (`section_label`) and `Main List · <Label>` chip
 - `EventsList.jsx`: Main capacity bar sums all section lists (any capacity 0 → unlimited)
 
+### 5.10 Lista Unica (coordination events)
+
+Optional read-only view of every subscriber in the section Main Lists of a coordination event, plus an optional cap on total participants. Requested during #106 testing; committed directly on `staging`.
+
+- Virtual: not an `EventList`; no `Subscription` points to it, so nobody can be moved into or out of it. Event serializers (`EventsListSerializer`, `EventDetailSerializer`, `EventWithSubscriptionsSerializer`) expose `has_lista_unica`, `lista_unica_capacity` and read-only `lista_unica` = `{capacity, subscription_count, is_full}` or `null` when disabled (`lista_unica_representation` in `backend/events/serializers.py`).
+- Counted: subscriptions in section Main Lists only (`list.is_main_list` and `list.section` set). Waiting, Form and custom lists are excluded. The cap need not equal the sum of section capacities.
+- PATCH cannot set `lista_unica_capacity` below the current count (400 `lista_unica_capacity`).
+
+When the cap is reached (`Event.lista_unica_full`):
+
+1. `_get_main_waiting_lists` returns `main_list=None` for coordination events, so `attempt_move_from_form_list` sends payers (and free auto-placement) to the Waiting List, or they stay (`no_capacity`)
+2. `_is_payment_blocked_by_full_lists`: for coordination events a missing section Main List counts as full, so online payment is `sold_out` only when the Waiting List is also full
+3. `event_form_status` reports `lista_unica_full` and closes the form (`form_list_full=true`); `event_form_submit` returns 400 `"Event is full"`
+4. `subscription_create` (office) returns 400 `LISTA_UNICA_FULL_ERROR` on any list
+5. `move_subscriptions` and subscription PATCH `list` reject entering section Main Lists from outside them when `Event.lista_unica_full_after(n)`; moves between section lists and out of them stay allowed
+
+Frontend:
+
+- `EventModal.jsx` `CoordinationLists`: "Lista Unica" checkbox + "Capienza totale" (0 = illimitata); `convert()` sends `has_lista_unica`, `lista_unica_capacity`
+- `EventListAccordions.jsx`: virtual list `LISTA_UNICA_ID = 'lista-unica'` rendered first with the section Main List subscriptions; no actions column, no ISCRIVI/Move/Edit/reimburse/liberatorie, copy and vCard export only. When `lista_unica.is_full`, ISCRIVI is disabled on every list
+- `EventsList.jsx`: the Main capacity bar uses `lista_unica` when its capacity > 0
+- `EventFormLogin.jsx`: unchanged; it closes on `form_list_full` and shows `form_message`
+
 ### 5.8 Subscriber List Ordering
 
 `EventListAccordions.jsx` sorts each list client-side with a per-list "Ordina per" selector and asc/desc toggle (state `sortByList`, keyed by list id; default `subscribed_at` desc):
@@ -363,6 +387,7 @@ Invarianti:
 10. `paid_at` exposure and preservation on payment-account change (`SubscriptionPaidAtTests`)
 11. WhatsApp link eligibility, token checks, email delivery paths, event-PATCH backfill, PATCH validation, event-level config without form, office free/no-payment-email paths, free Waiting List exclusion until moved to Main, event change reset (`WhatsAppGroupLinkTests`)
 12. coordination events: list-layout validation, forced form/externals, free-event immediate placement (section list → Waiting List → Form List, `notify_list` respected), immutable `is_coordination`, form `section` validation, section routing for office PATCH/create, custom lists and SumUp webhook (idempotent), per-section payment block, section sync on move, cross-event move and sharing rejection, WhatsApp eligibility across section lists, free form overflow to Waiting/Form List gets no link (`CoordinationEventTests`)
+13. Lista Unica: config on coordination vs normal events, capacity floor on PATCH, count limited to section Main Lists, full cap closes the form and blocks office create on any list, Form List payer goes to Waiting List, sold-out only when Waiting is also full, moves/PATCH into section lists capped while section-to-section and outbound moves stay allowed, unlimited/disabled never block (`ListaUnicaTests`)
 
 Test reference: `backend/events/tests.py`.
 
@@ -397,3 +422,4 @@ Some local or legacy databases may still contain obsolete payment confirmation c
 ## 15. Recent Features (2026-11)
 
 1. Issue #106: coordination events (5.9); new model fields `Event.is_coordination`, `EventList.section`, `Subscription.section` and `Section` choices (local migration `0005_event_is_coordination_eventlist_section_and_more`; migrations are gitignored and generated on deploy by `makemigrations`).
+2. Lista Unica (5.10), committed on `staging` during #106 testing: `Event.has_lista_unica`, `Event.lista_unica_capacity` (local migration `0006_event_has_lista_unica_event_lista_unica_capacity`).

@@ -247,7 +247,7 @@ safe address. Production uses the normal SMTP backend and ignores this variable.
 6. ESNcard revocation must preserve the original emission transaction and register a dedicated refund transaction.
 7. Subscription payment transactions are updated in place, never deleted and recreated, so `paid_at` keeps the original payment time.
 8. An event WhatsApp group link is only revealed through the signed per-subscription token to eligible subscribers (see 03_EVENTS_MODULE.md 5.7).
-9. Coordination events (`Event.is_coordination`, immutable after creation) have one Main List per `EventList.section`; capacity checks and auto-move route by `Subscription.section` through `_get_main_waiting_lists(..., section=...)`, never "the first Main List" (see 03_EVENTS_MODULE.md 5.9).
+9. Coordination events (`Event.is_coordination`, immutable after creation) have one Main List per `EventList.section`; capacity checks and auto-move route by `Subscription.section` through `_get_main_waiting_lists(..., section=...)`, never "the first Main List" (see 03_EVENTS_MODULE.md 5.9). The optional Lista Unica cap (`Event.lista_unica_full`) counts only section Main List subscribers; once reached, no new subscriptions and no entry into section Main Lists (5.10).
 
 ## 10. AI/Automation Notes
 

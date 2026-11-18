@@ -212,7 +212,8 @@ export default function EventsList() {
                 const lists = row.original?.lists_capacity || row.original?.lists || [];
                 // Coordination events have one Main List per section: show their total (capacity 0 = unlimited)
                 const mainLists = lists.filter(l => l.is_main_list);
-                const main = mainLists.length > 1 ? {
+                const listaUnica = row.original?.lista_unica;
+                const main = listaUnica && listaUnica.capacity > 0 ? listaUnica : mainLists.length > 1 ? {
                     capacity: mainLists.some(l => !l.capacity) ? 0 : mainLists.reduce((t, l) => t + l.capacity, 0),
                     subscription_count: mainLists.reduce((t, l) => t + (l.subscription_count ?? 0), 0),
                 } : mainLists[0];

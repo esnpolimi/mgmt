@@ -1,6 +1,6 @@
 # Test Coverage Report - ESN Polimi Management
 
-Last update date: 2026-11-17  
+Last update date: 2026-11-18  
 Scope: Django backend (users, profiles, events, treasury, content)
 
 ## 1. Quality Scope
@@ -19,13 +19,13 @@ Methodology note:
 | backend/users/tests.py | 44 |
 | backend/users/test_integration.py | 14 |
 | backend/profiles/tests.py | 81 |
-| backend/events/tests.py | 173 |
+| backend/events/tests.py | 185 |
 | backend/treasury/tests.py | 98 |
 | backend/content/tests.py | 57 |
 | backend/maintenance/tests.py | 1 |
 | backend/utils/tests.py | 5 |
 | backend/test_integration_e2e.py | 6 |
-| Total | 479 |
+| Total | 491 |
 
 ## 3. Functional Coverage Matrix
 
@@ -59,6 +59,7 @@ Methodology note:
 - `paid_at` exposure and preservation when the payment account changes
 - event WhatsApp group link: eligibility, signed token, email delivery paths, event-PATCH backfill, link validation, link configured without form, office free and no-payment-email delivery, event change reset
 - coordination events (`CoordinationEventTests`): section list layout validation, free-event immediate placement after form submit, forced form/externals, immutable `is_coordination`, form `section` validation, routing to section list then Waiting List (office PATCH/create, custom list, SumUp webhook idempotent), per-section payment block, section sync on move, cross-event move and list-sharing rejection, WhatsApp eligibility across section lists (free subscribers only in a section Main List)
+- Lista Unica (`ListaUnicaTests`): config limited to coordination events, capacity floor, count of section Main Lists only, full cap closes form and office create, payers to Waiting List, sold-out only with Waiting full, capped moves/PATCH into section lists, unlimited/disabled never block
 
 ### 3.4 Treasury
 

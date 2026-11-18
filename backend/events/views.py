@@ -52,6 +52,9 @@ from treasury.models import Transaction, Account
 
 logger = logging.getLogger(__name__)
 
+LISTA_UNICA_FULL_FORM_MESSAGE = "The event is full. No further subscriptions are possible."
+LISTA_UNICA_FULL_ERROR = "Lista Unica piena: non è possibile aggiungere nuove iscrizioni alle liste principali"
+
 PAYMENT_SOLD_OUT_MESSAGE = (
     "All spots are currently sold out unfortunately, so we cannot accept your subscription at the moment. "
     "Thank you for filling out the form. Please wait for any notifications from the ESN team."
@@ -258,7 +261,8 @@ def _list_has_space(target_list):
 def _get_main_waiting_lists(event, lock=False, section=None):
     """
     Returns (main_list, waiting_list) for routing.
-    Coordination events: main_list is the Main List of `section` (None when section is missing/unknown).
+    Coordination events: main_list is the Main List of `section` (None when section is missing/unknown,
+    or when the Lista Unica cap is reached: nobody else may enter a section Main List).
     """
     lists_qs = event.lists.all()
     if lock:
@@ -269,10 +273,16 @@ def _get_main_waiting_lists(event, lock=False, section=None):
 
     if event.is_coordination:
         main_list = next((lst for lst in all_lists if lst.is_main_list and section and lst.section == section), None)
+        if main_list is not None and event.lista_unica_full:
+            main_list = None
     else:
         main_list = next((lst for lst in all_lists if lst.is_main_list), None)
     waiting_list = next((lst for lst in all_lists if lst.is_waiting_list), None)
     return main_list, waiting_list
+
+
+def _is_section_main_list(lst):
+    return bool(lst and lst.is_main_list and lst.section)
 
 
 def _subscription_section(subscription):
@@ -298,7 +308,8 @@ def _is_payment_blocked_by_full_lists(subscription):
     with transaction.atomic():
         main_list, waiting_list = _get_main_waiting_lists(
             subscription.event, lock=True, section=_subscription_section(subscription))
-        if not main_list:
+        # Coordination events: no section Main List available (Lista Unica cap reached) counts as full
+        if not main_list and not subscription.event.is_coordination:
             return False
         main_full = not _list_has_space(main_list)
         waiting_full = not _list_has_space(waiting_list) if waiting_list else True
@@ -1280,6 +1291,8 @@ def subscription_create(request):
             return Response({'error': "Il profilo è già iscritto all'evento"}, status=400)
         if external_name and Subscription.objects.filter(external_name=external_name, event=event_id).exists():
             return Response({'error': "Il nominativo esterno è già iscritto all'evento"}, status=400)
+        if event.lista_unica_full:
+            return Response({'error': LISTA_UNICA_FULL_ERROR}, status=400)
         if not profile and not external_name:
             if event.is_allow_external:
                 return Response({'error': "Devi inserire un nominativo esterno se non selezioni un profilo."},
@@ -1550,6 +1563,11 @@ def move_subscriptions(request):
                for sub in subscriptions):
             return Response({'error': "Non è possibile spostare iscrizioni da o verso un evento di coordinamento"},
                             status=400)
+
+        # Lista Unica cap: count only subscriptions entering the section Main Lists from outside them
+        if target_list.is_main_list and target_list.section and target_event.lista_unica_full_after(
+                sum(1 for sub in subscriptions if not _is_section_main_list(sub.list))):
+            return Response({'error': LISTA_UNICA_FULL_ERROR}, status=400)
 
         # Check if moving the subscriptions would exceed the target list's capacity
         current_count = Subscription.objects.filter(list=target_list, event=target_event).count()
@@ -2126,6 +2144,11 @@ def event_form_status(_, event_id):
         form_message = ""
         if form_list_full:
             form_message = "The Form List is full. No further online subscriptions are possible."
+        # Lista Unica cap reached: the whole coordination event is full, so the form closes
+        lista_unica_full = event.lista_unica_full
+        if lista_unica_full:
+            form_list_full = True
+            form_message = LISTA_UNICA_FULL_FORM_MESSAGE
 
         return Response({
             "account_status": sumup_account.status,
@@ -2137,6 +2160,7 @@ def event_form_status(_, event_id):
             "form_list_subscriptions": form_list.subscriptions.count() if form_list else 0,
             "form_message": form_message,
             "sections_full": sections_full,
+            "lista_unica_full": lista_unica_full,
         }, status=200)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
@@ -2285,6 +2309,9 @@ def event_form_submit(request, event_id):
         duplicate_error = _check_duplicate_form_subscription(event, profile, external_name)
         if duplicate_error:
             return duplicate_error
+
+        if event.lista_unica_full:
+            return Response({"error": "Event is full", "message": LISTA_UNICA_FULL_FORM_MESSAGE}, status=400)
 
         section = None
         if event.is_coordination:

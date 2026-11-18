@@ -762,6 +762,16 @@ export default function EventModal({open, event, isEdit, onClose}) {
     /* Lists block for coordination events: fixed section Main Lists, one Waiting List, optional custom lists */
     const CoordinationLists = function CoordinationLists({dataRef, isEdit}) {
         const [lists, setLists] = useState(dataRef.current.lists || []);
+        // Lista Unica: read-only view of all section Main Lists + optional cap on total participants
+        const [listaUnica, setListaUnica] = useState({
+            has_lista_unica: !!dataRef.current.has_lista_unica,
+            lista_unica_capacity: dataRef.current.lista_unica_capacity ?? '',
+        });
+        const updateListaUnica = (patch) => {
+            const updated = {...listaUnica, ...patch};
+            setListaUnica(updated);
+            dataRef.current = {...dataRef.current, ...updated};
+        };
 
         const commit = (updated) => {
             setLists(updated);
@@ -837,6 +847,32 @@ export default function EventModal({open, event, isEdit, onClose}) {
                         </Grid>
                     );
                 })}
+                <Grid container spacing={2} alignItems="center" sx={{mt: 2}}>
+                    <Grid size={{xs: 12, sm: 4}}>
+                        <FormControlLabel
+                            label={<InfoLabel label="Lista Unica" description="Vista in sola lettura con tutti gli iscritti delle Main List di sezione, utile per l'organizzazione. Non si possono spostare persone da o verso la Lista Unica. La sua capienza è il numero massimo totale di partecipanti: quando è raggiunta il form si chiude, non si accettano nuove iscrizioni e chi paga dopo finisce in Waiting List. Non deve per forza coincidere con la somma delle capienze delle sezioni."/>}
+                            control={
+                                <Checkbox
+                                    checked={listaUnica.has_lista_unica}
+                                    onChange={(e) => updateListaUnica({has_lista_unica: e.target.checked})}
+                                />
+                            }
+                        />
+                    </Grid>
+                    <Grid size={{xs: 12, sm: 4}}>
+                        <TextField
+                            label="Capienza totale"
+                            type="number"
+                            value={listaUnica.lista_unica_capacity}
+                            slotProps={{htmlInput: {min: "0", step: "1"}}}
+                            onChange={(e) => updateListaUnica({lista_unica_capacity: e.target.value})}
+                            placeholder="Inserisci 0 se illimitata"
+                            required={listaUnica.has_lista_unica}
+                            disabled={!listaUnica.has_lista_unica}
+                            fullWidth
+                        />
+                    </Grid>
+                </Grid>
                 {waitingIndex >= 0 && (
                     <Grid container spacing={2} alignItems="center" sx={{mt: 1}}>
                         <Grid size={{xs: 12, sm: 4}}>
@@ -1919,6 +1955,8 @@ export default function EventModal({open, event, isEdit, onClose}) {
         is_a_bando: false,
         is_allow_external: false,
         is_coordination: false,
+        has_lista_unica: false,
+        lista_unica_capacity: '',
         is_variable_fee: false,
         allow_online_payment: false,
         notify_list: true,
@@ -2034,6 +2072,9 @@ export default function EventModal({open, event, isEdit, onClose}) {
             })),
             is_a_bando: !!rest.is_a_bando,
             is_coordination: !!rest.is_coordination,
+            has_lista_unica: !!rest.is_coordination && !!rest.has_lista_unica,
+            lista_unica_capacity: rest.is_coordination && rest.has_lista_unica
+                ? Math.floor(Number(rest.lista_unica_capacity || 0)) : 0,
             is_allow_external: !!rest.is_allow_external || !!rest.is_coordination,
             notify_list: !!rest.notify_list,
             visible_to_board_only: !!rest.visible_to_board_only,
@@ -2148,6 +2189,13 @@ export default function EventModal({open, event, isEdit, onClose}) {
         errorsRef.current = {...errorsRef.current, listItems: listErrors, lists: [hasListErrors]};
         if (hasListErrors) {
             setStatusMessage({message: 'Errore campi Liste', state: 'error'});
+            scrollUp();
+            return;
+        }
+
+        if (dataRef.current.is_coordination && dataRef.current.has_lista_unica
+            && (dataRef.current.lista_unica_capacity === '' || dataRef.current.lista_unica_capacity === null)) {
+            setStatusMessage({message: 'Inserisci la capienza totale della Lista Unica (0 = illimitata)', state: 'error'});
             scrollUp();
             return;
         }
